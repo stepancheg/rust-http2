@@ -147,6 +147,12 @@ impl HttpClient {
     }
 }
 
+impl HttpService for HttpClient {
+    fn new_request(&self, headers: Headers, req: HttpPartFutureStreamSend) -> HttpResponse {
+        unimplemented!()
+    }
+}
+
 // Event loop entry point
 fn run_client_event_loop(
     socket_addr: SocketAddr,
