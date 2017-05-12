@@ -88,16 +88,27 @@ pub fn recv_raw_frame_sync(read: &mut Read) -> HttpResult<RawFrame> {
     Ok(recv_raw_frame(SyncRead(read)).wait()?.1)
 }
 
-pub fn recv_settings_frame<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R, SettingsFrame)> {
-    Box::new(recv_raw_frame(read)
-        .then(|result| {
-            result.and_then(|(read, raw_frame)| {
-                match HttpFrame::from_raw(&raw_frame) {
-                    Ok(HttpFrame::Settings(f)) => Ok((read, f)),
-                    Ok(f) => Err(HttpError::InvalidFrame(format!("unexpected frame, expected SETTINGS, got {:?}", f.frame_type()))),
-                    Err(e) => Err(e),
+pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R)
+    -> Box<Future<Item=(R, HttpFrame), Error=HttpError> + 'r>
+{
+    Box::new(recv_raw_frame(read).and_then(|(read, raw_frame)| {
+        Ok((read, HttpFrame::from_raw(&raw_frame)?))
+    }))
+}
+
+pub fn recv_settings_frame<'r, R : AsyncRead + 'r>(read: R)
+    -> Box<Future<Item=(R, SettingsFrame), Error=HttpError> + 'r>
+{
+    Box::new(recv_http_frame(read)
+        .and_then(|(read, http_frame)| {
+            match http_frame {
+                HttpFrame::Settings(f) => {
+                    Ok((read, f))
                 }
-            })
+                f => {
+                    Err(HttpError::InvalidFrame(format!("unexpected frame, expected SETTINGS, got {:?}", f.frame_type())))
+                }
+            }
         }))
 }
 

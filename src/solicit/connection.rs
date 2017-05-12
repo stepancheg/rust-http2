@@ -80,7 +80,7 @@ impl HttpFrame{
     ///
     /// Failing to decode the given `Frame` from the `raw_frame`, an
     /// `HttpError::InvalidFrame` error is returned.
-    #[inline]
+    #[inline] // TODO: take by value
     fn parse_frame<F: Frame>(raw_frame: &RawFrame) -> HttpResult<F> {
         // TODO: The reason behind being unable to decode the frame should be
         //       extracted to allow an appropriate connection-level action to be
