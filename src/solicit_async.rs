@@ -1,3 +1,4 @@
+use std::io;
 use std::io::Read;
 use std::net::SocketAddr;
 
@@ -46,7 +47,9 @@ impl<T> AsMut<[T]> for VecWithPos<T> {
     }
 }
 
-pub fn recv_raw_frame<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R, RawFrame)> {
+pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R)
+    -> Box<Future<Item=(R, RawFrame), Error=HttpError> + 'r>
+{
     let header = read_exact(read, [0; FRAME_HEADER_LEN]);
     let frame_buf = header.and_then(|(read, raw_header)| {
         let header = unpack_header(&raw_header);
@@ -69,20 +72,20 @@ pub fn recv_raw_frame<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R,
         .map_err(|e| e.into()))
 }
 
+struct SyncRead<'r, R : Read + ?Sized + 'r>(&'r mut R);
+
+impl<'r, R : Read + ?Sized + 'r> Read for SyncRead<'r, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+impl<'r, R : Read + ?Sized + 'r> AsyncRead for SyncRead<'r, R> {
+}
+
+
 pub fn recv_raw_frame_sync(read: &mut Read) -> HttpResult<RawFrame> {
-    // TODO: copy-paste
-    let mut raw_header = [0; FRAME_HEADER_LEN];
-    read.read_exact(&mut raw_header)?;
-    let header = unpack_header(&raw_header);
-
-    let total_len = FRAME_HEADER_LEN + header.length as usize;
-    let mut full_frame = Vec::new();
-    full_frame.extend_from_slice(&raw_header);
-    full_frame.resize(total_len, 0);
-
-    read.read_exact(&mut full_frame[FRAME_HEADER_LEN..])?;
-
-    Ok(RawFrame::from(full_frame))
+    Ok(recv_raw_frame(SyncRead(read)).wait()?.1)
 }
 
 pub fn recv_settings_frame<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R, SettingsFrame)> {
