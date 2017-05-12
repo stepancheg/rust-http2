@@ -385,12 +385,12 @@ impl HttpClientConnectionAsync {
 
         let (req_tx, req_rx) = futures::sync::mpsc::unbounded();
 
-        if let Err(e) = call_tx.send(ClientToWriteMessage::Start(StartRequestMessage {
+        if let Err(_) = call_tx.send(ClientToWriteMessage::Start(StartRequestMessage {
             headers: headers,
             body: body,
             response_handler: req_tx,
         })) {
-            return HttpResponse::err(HttpError::Other(format!("send request to client {:?}", e).into()));
+            return HttpResponse::err(HttpError::Other("client died"));
         }
 
         let req_rx = req_rx.map_err(|()| HttpError::from(io::Error::new(io::ErrorKind::Other, "req")));

@@ -204,7 +204,7 @@ pub enum HttpError {
     /// Shutdown of local client or server
     Shutdown,
     HandlerPanicked(String),
-    Other(Box<Error + Send + Sync>),
+    Other(&'static str),
 }
 
 /// Implement the trait that allows us to automatically convert `io::Error`s
@@ -255,33 +255,10 @@ impl Error for HttpError {
 
     fn cause(&self) -> Option<&Error> {
         match *self {
-            HttpError::Other(ref e) => Some(&**e),
             HttpError::IoError(ref e) => Some(e),
+            HttpError::TlsError(ref e) => Some(e),
             HttpError::PeerConnectionError(ref e) => Some(e),
             _ => None,
-        }
-    }
-}
-
-/// Implementation of the `PartialEq` trait as a convenience for tests.
-/// TODO: drop it
-impl PartialEq for HttpError {
-    fn eq(&self, other: &HttpError) -> bool {
-        match (self, other) {
-            (&HttpError::IoError(ref e1), &HttpError::IoError(ref e2)) => {
-                e1.kind() == e2.kind() && e1.description() == e2.description()
-            }
-            (&HttpError::InvalidFrame(ref a), &HttpError::InvalidFrame(ref b)) => a == b,
-            (&HttpError::CompressionError(ref e1),
-             &HttpError::CompressionError(ref e2)) => e1 == e2,
-            (&HttpError::UnknownStreamId, &HttpError::UnknownStreamId) => true,
-            (&HttpError::UnableToConnect, &HttpError::UnableToConnect) => true,
-            (&HttpError::MalformedResponse, &HttpError::MalformedResponse) => true,
-            (&HttpError::ConnectionTimeout, &HttpError::ConnectionTimeout) => true,
-            (&HttpError::Other(ref e1), &HttpError::Other(ref e2)) => {
-                e1.description() == e2.description()
-            }
-            _ => false,
         }
     }
 }

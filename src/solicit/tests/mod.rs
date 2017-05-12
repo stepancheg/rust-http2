@@ -31,14 +31,18 @@ mod root_tests {
                                      vec![(b"key".to_vec(), b"val".to_vec()),
                                           (b":status".to_vec(), b"200".to_vec())],
                                      vec![]);
-            assert_eq!(resp.status_code().err().unwrap(),
-                       HttpError::MalformedResponse);
+            if let HttpError::MalformedResponse = resp.status_code().err().unwrap() {
+            } else {
+                panic!();
+            }
         }
         {
             // No headers at all => Malformed
             let resp = Response::new(1, Vec::<Header>::new(), vec![]);
-            assert_eq!(resp.status_code().err().unwrap(),
-                       HttpError::MalformedResponse);
+            if let HttpError::MalformedResponse = resp.status_code().err().unwrap() {
+            } else {
+                panic!();
+            }
         }
     }
 
