@@ -2,51 +2,57 @@
 extern crate log;
 #[macro_use]
 extern crate futures;
-extern crate bytes;
-extern crate futures_cpupool;
+extern crate native_tls;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate tokio_tls;
-extern crate base64;
+extern crate tokio_timer;
 
-extern crate protobuf;
+extern crate net2;
+extern crate bytes;
 
-extern crate httpbis;
+pub mod solicit;
 
+pub mod client_conf;
+pub mod client_conn;
+mod client_tls;
 pub mod client;
+pub mod server_conf;
+pub mod server_conn;
+mod server_tls;
 pub mod server;
+pub mod http_common;
+pub mod message;
 
-mod grpc;
-mod grpc_frame;
-mod grpc_http_to_response;
+pub mod futures_misc;
 
-pub mod method;
-pub mod grpc_protobuf;
-pub mod marshall;
-pub mod futures_grpc;
-pub mod result;
-pub mod error;
-pub mod iter;
-pub mod rt;
-pub mod metadata;
-mod stream_item;
-mod req;
+mod tokio_oneshot;
+pub mod assert_types;
+
+pub mod hpack;
+pub mod solicit_async;
+pub mod solicit_misc;
+pub mod bytesx;
+
+pub mod misc;
+
 mod resp;
-mod chars;
 
-
-pub use stream_item::GrpcItemOrMetadata;
-pub use resp::GrpcSingleResponse;
-pub use resp::GrpcStreamingResponse;
-pub use req::GrpcRequestOptions;
-pub use req::GrpcStreamingRequest;
-
-pub use metadata::GrpcMetadata;
-
+pub use solicit::HttpScheme;
+pub use solicit::HttpError;
+pub use solicit::header::Header;
+pub use solicit::header::Headers;
+pub use resp::HttpResponse;
 
 pub mod for_test {
-    pub use httpbis::server_conn::*;
-    pub use httpbis::client_conn::*;
-    pub use httpbis::http_common::*;
-    pub use httpbis::solicit_async::*;
-    pub use httpbis::futures_misc::*;
+    pub use server_conf::*;
+    pub use server_conn::*;
+    pub use server::*;
+    pub use client_conf::*;
+    pub use client_conn::*;
+    pub use client::*;
+    pub use http_common::*;
+    pub use solicit_async::*;
+    pub use futures_misc::*;
+    pub use message::*;
 }

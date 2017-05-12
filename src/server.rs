@@ -1,510 +1,234 @@
-use std::sync::Arc;
+use std::thread;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use std::panic::catch_unwind;
-use std::panic::AssertUnwindSafe;
+use std::collections::HashMap;
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::io;
 
-use futures_cpupool::CpuPool;
+use tokio_core::reactor;
+use tokio_core::net::TcpListener;
 
-use bytes::Bytes;
-
-use httpbis::HttpError;
-use httpbis::Header;
-use httpbis::Headers;
-use httpbis::server::HttpServer;
-use httpbis::server::ServerTlsOption;
-
-use futures::Future;
+use futures;
 use futures::stream;
-use futures::stream::Stream;
+use futures::Stream;
+use futures::Future;
+use futures::future::join_all;
 
-use method::*;
-use error::*;
-use httpbis::futures_misc::*;
-use grpc::*;
-use grpc_frame::*;
-use httpbis::http_common::*;
-use httpbis::server_conf::*;
-use httpbis::misc::any_to_string;
-use req::*;
-use resp::*;
-use metadata::GrpcMetadata;
+use solicit::HttpError;
+
+use solicit_async::*;
+
+use futures_misc::*;
+
+use net2;
+
+use super::server_conn::*;
+use super::http_common::*;
+
+use server_conf::*;
+
+pub use server_tls::ServerTlsOption;
 
 
-pub trait MethodHandler<Req, Resp>
-    where
-        Req : Send + 'static,
-        Resp : Send + 'static,
+struct LoopToServer {
+    shutdown: ShutdownSignal,
+    local_addr: SocketAddr,
+}
+
+
+
+pub struct HttpServer {
+    state: Arc<Mutex<HttpServerState>>,
+    loop_to_server: LoopToServer,
+    alive_rx: mpsc::Receiver<()>,
+    thread_join_handle: Option<thread::JoinHandle<()>>,
+}
+
+#[derive(Default)]
+struct HttpServerState {
+    last_conn_id: u64,
+    conns: HashMap<u64, HttpServerConnectionAsync>,
+}
+
+impl HttpServerState {
+    fn snapshot(&self) -> HttpFutureSend<HttpServerStateSnapshot> {
+        let futures: Vec<_> = self.conns.iter()
+            .map(|(&id, conn)| conn.dump_state().map(move |state| (id, state)))
+            .collect();
+
+        Box::new(join_all(futures)
+            .map(|states| HttpServerStateSnapshot {
+                conns: states.into_iter().collect(),
+            }))
+    }
+}
+
+pub struct HttpServerStateSnapshot {
+    pub conns: HashMap<u64, ConnectionStateSnapshot>,
+}
+
+#[cfg(unix)]
+fn configure_tcp(tcp: &net2::TcpBuilder, conf: &HttpServerConf) -> io::Result<()> {
+    use net2::unix::UnixTcpBuilderExt;
+    if let Some(reuse_port) = conf.reuse_port {
+        tcp.reuse_port(reuse_port)?;
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn configure_tcp(_tcp: &net2::TcpBuilder, conf: &HttpServerConf) -> io::Result<()> {
+    Ok(())
+}
+
+fn listener(
+    addr: &SocketAddr,
+    handle: &reactor::Handle,
+    conf: &HttpServerConf)
+        -> io::Result<TcpListener>
 {
-    fn handle(&self, m: GrpcRequestOptions, req: GrpcStreamingRequest<Req>) -> GrpcStreamingResponse<Resp>;
+    let listener = match *addr {
+        SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
+        SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
+    };
+    configure_tcp(&listener, conf)?;
+    listener.reuse_address(true)?;
+    listener.bind(addr)?;
+    let backlog = conf.backlog.unwrap_or(1024);
+    let listener = listener.listen(backlog)?;
+    TcpListener::from_listener(listener, addr, handle)
 }
 
-pub struct MethodHandlerUnary<F> {
-    f: Arc<F>
-}
-
-pub struct MethodHandlerServerStreaming<F> {
-    f: Arc<F>
-}
-
-pub struct MethodHandlerClientStreaming<F> {
-    f: Arc<F>
-}
-
-pub struct MethodHandlerBidi<F> {
-    f: Arc<F>
-}
-
-impl<F> GrpcStreamingFlavor for MethodHandlerUnary<F> {
-    type Flavor = GrpcStreamingUnary;
-
-    fn streaming() -> GrpcStreaming {
-        GrpcStreaming::Unary
-    }
-}
-
-impl<F> GrpcStreamingFlavor for MethodHandlerClientStreaming<F> {
-    type Flavor = GrpcStreamingClientStreaming;
-
-    fn streaming() -> GrpcStreaming {
-        GrpcStreaming::ClientStreaming
-    }
-}
-
-impl<F> GrpcStreamingFlavor for MethodHandlerServerStreaming<F> {
-    type Flavor = GrpcStreamingServerStreaming;
-
-    fn streaming() -> GrpcStreaming {
-        GrpcStreaming::ServerStreaming
-    }
-}
-
-impl<F> GrpcStreamingFlavor for MethodHandlerBidi<F> {
-    type Flavor = GrpcStreamingBidi;
-
-    fn streaming() -> GrpcStreaming {
-        GrpcStreaming::Bidi
-    }
-}
-
-
-impl<F> MethodHandlerUnary<F> {
-    pub fn new<Req, Resp>(f: F) -> Self
-        where
-            Req : Send + 'static,
-            Resp : Send + 'static,
-            F : Fn(GrpcRequestOptions, Req) -> GrpcSingleResponse<Resp> + Send + 'static,
-    {
-        MethodHandlerUnary {
-            f: Arc::new(f),
-        }
-    }
-}
-
-impl<F> MethodHandlerClientStreaming<F> {
-    pub fn new<Req, Resp>(f: F) -> Self
-        where
-            Req : Send + 'static,
-            Resp : Send + 'static,
-            F : Fn(GrpcRequestOptions, GrpcStreamingRequest<Req>) -> GrpcSingleResponse<Resp> + Send + 'static,
-    {
-        MethodHandlerClientStreaming {
-            f: Arc::new(f),
-        }
-    }
-}
-
-impl<F> MethodHandlerServerStreaming<F> {
-    pub fn new<Req, Resp>(f: F) -> Self
-        where
-            Req : Send + 'static,
-            Resp : Send + 'static,
-            F : Fn(GrpcRequestOptions, Req) -> GrpcStreamingResponse<Resp> + Send + 'static,
-    {
-        MethodHandlerServerStreaming {
-            f: Arc::new(f),
-        }
-    }
-}
-
-impl<F> MethodHandlerBidi<F> {
-    pub fn new<Req, Resp>(f: F) -> Self
-        where
-            Req : Send + 'static,
-            Resp : Send + 'static,
-            F : Fn(GrpcRequestOptions, GrpcStreamingRequest<Req>) -> GrpcStreamingResponse<Resp> + Send + 'static,
-    {
-        MethodHandlerBidi {
-            f: Arc::new(f),
-        }
-    }
-}
-
-impl<Req, Resp, F> MethodHandler<Req, Resp> for MethodHandlerUnary<F>
-    where
-        Req : Send + 'static,
-        Resp : Send + 'static,
-        F : Fn(GrpcRequestOptions, Req) -> GrpcSingleResponse<Resp> + Send + Sync + 'static,
+fn run_server_event_loop<S>(
+    listen_addr: SocketAddr,
+    state: Arc<Mutex<HttpServerState>>,
+    tls: ServerTlsOption,
+    conf: HttpServerConf,
+    service: S,
+    send_to_back: mpsc::Sender<LoopToServer>,
+    _alive_tx: mpsc::Sender<()>)
+        where S : HttpService,
 {
-    fn handle(&self, m: GrpcRequestOptions, req: GrpcStreamingRequest<Req>) -> GrpcStreamingResponse<Resp> {
-        let f = self.f.clone();
-        GrpcSingleResponse::new(
-            stream_single(req.0).and_then(move |req| f(m, req).0))
-                .into_stream()
-    }
-}
+    let service = Arc::new(service);
 
-impl<Req : Send + 'static, Resp : Send + 'static, F> MethodHandler<Req, Resp> for MethodHandlerClientStreaming<F>
-    where
-        Resp : Send + 'static,
-        F : Fn(GrpcRequestOptions, GrpcStreamingRequest<Req>) -> GrpcSingleResponse<Resp> + Send + Sync + 'static,
-{
-    fn handle(&self, m: GrpcRequestOptions, req: GrpcStreamingRequest<Req>) -> GrpcStreamingResponse<Resp> {
-        ((self.f)(m, req)).into_stream()
-    }
-}
+    let mut lp = reactor::Core::new().expect("http2server");
 
-impl<Req, Resp, F> MethodHandler<Req, Resp> for MethodHandlerServerStreaming<F>
-    where
-        Req : Send + 'static,
-        Resp : Send + 'static,
-        F : Fn(GrpcRequestOptions, Req) -> GrpcStreamingResponse<Resp> + Send + Sync + 'static,
-{
-    fn handle(&self, o: GrpcRequestOptions, req: GrpcStreamingRequest<Req>) -> GrpcStreamingResponse<Resp> {
-        let f = self.f.clone();
-        GrpcStreamingResponse(Box::new(
-            stream_single(req.0)
-                .and_then(move |req| f(o, req).0)))
-    }
-}
+    let (shutdown_signal, shutdown_future) = shutdown_signal();
 
-impl<Req, Resp, F> MethodHandler<Req, Resp> for MethodHandlerBidi<F>
-    where
-        Req : Send + 'static,
-        Resp : Send + 'static,
-        F : Fn(GrpcRequestOptions, GrpcStreamingRequest<Req>) -> GrpcStreamingResponse<Resp> + Send + Sync + 'static,
-{
-    fn handle(&self, m: GrpcRequestOptions, req: GrpcStreamingRequest<Req>) -> GrpcStreamingResponse<Resp> {
-        (self.f)(m, req)
-    }
-}
+    let listen = listener(&listen_addr, &lp.handle(), &conf).unwrap();
 
+    let stuff = stream::repeat((lp.handle(), service, state, tls, conf));
 
-trait MethodHandlerDispatch {
-    fn start_request(&self, m: GrpcRequestOptions, grpc_frames: GrpcStreamingRequest<Vec<u8>>)
-        -> GrpcStreamingResponse<Vec<u8>>;
-}
+    let local_addr = listen.local_addr().unwrap();
+    send_to_back
+        .send(LoopToServer { shutdown: shutdown_signal, local_addr: local_addr })
+        .expect("send back");
 
-struct MethodHandlerDispatchImpl<Req, Resp> {
-    desc: Arc<MethodDescriptor<Req, Resp>>,
-    method_handler: Box<MethodHandler<Req, Resp> + Sync + Send>,
-}
+    let loop_run = listen.incoming().map_err(HttpError::from).zip(stuff)
+        .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
+            info!("accepted connection from {}", peer_addr);
 
-impl<Req, Resp> MethodHandlerDispatch for MethodHandlerDispatchImpl<Req, Resp>
-    where
-        Req : Send + 'static,
-        Resp : Send + 'static,
-{
-    fn start_request(&self, o: GrpcRequestOptions, req_grpc_frames: GrpcStreamingRequest<Vec<u8>>)
-        -> GrpcStreamingResponse<Vec<u8>>
-    {
-        let desc = self.desc.clone();
-        let req = req_grpc_frames.0.and_then(move |frame| desc.req_marshaller.read(&frame));
-        let resp =
-            catch_unwind(AssertUnwindSafe(|| self.method_handler.handle(o, GrpcStreamingRequest::new(req))));
-        match resp {
-            Ok(resp) => {
-                let desc_copy = self.desc.clone();
-                resp.and_then_items(move |resp| {
-                    desc_copy.resp_marshaller.write(&resp)
+            let no_delay = conf.no_delay.unwrap_or(true);
+            socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
+
+            let (conn, future) = HttpServerConnectionAsync::new(&loop_handle, socket, tls, conf, service);
+
+            let conn_id = {
+                let mut g = state.lock().expect("lock");
+                g.last_conn_id += 1;
+                let conn_id = g.last_conn_id;
+                let prev = g.conns.insert(conn_id, conn);
+                assert!(prev.is_none());
+                conn_id
+            };
+
+            loop_handle.spawn(future
+                .then(move |r| {
+                    let mut g = state.lock().expect("lock");
+                    let removed = g.conns.remove(&conn_id);
+                    assert!(removed.is_some());
+                    r
                 })
-            }
-            Err(e) => {
-                let message = any_to_string(e);
-                GrpcStreamingResponse::err(GrpcError::Panic(message))
-            }
-        }
-    }
+                .map_err(|e| { warn!("connection end: {:?}", e); () }));
+            Ok(())
+        });
+
+    let shutdown_future = shutdown_future
+        .then(move |_| {
+            // Must complete with error,
+            // so `join` with this future cancels another future.
+            futures::failed::<(), _>(HttpError::Shutdown)
+        });
+
+    // Wait for either completion of connection (i. e. error)
+    // or shutdown signal.
+    let done = loop_run.join(shutdown_future);
+
+    // TODO: do not ignore error
+    lp.run(done).ok();
 }
 
-pub struct ServerMethod {
-    name: String,
-    dispatch: Box<MethodHandlerDispatch + Sync + Send>,
-}
-
-impl ServerMethod {
-    pub fn new<Req, Resp, H>(method: Arc<MethodDescriptor<Req, Resp>>, handler: H) -> ServerMethod
-        where
-            Req : Send + 'static,
-            Resp : Send + 'static,
-            H : MethodHandler<Req, Resp> + 'static + Sync + Send,
+impl HttpServer {
+    pub fn new<A: ToSocketAddrs, S>(addr: A, tls: ServerTlsOption, conf: HttpServerConf, service: S) -> HttpServer
+        where S : HttpService
     {
-        ServerMethod {
-            name: method.name.clone(),
-            dispatch: Box::new(MethodHandlerDispatchImpl {
-                desc: method,
-                method_handler: Box::new(handler),
-            }),
-        }
-    }
-}
+        let listen_addr = addr.to_socket_addrs().unwrap().next().unwrap();
 
-pub struct ServerServiceDefinition {
-    methods: Vec<ServerMethod>,
-}
+        let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
+        let (alive_tx, alive_rx) = mpsc::channel();
 
-impl ServerServiceDefinition {
-    pub fn new(methods: Vec<ServerMethod>) -> ServerServiceDefinition {
-        ServerServiceDefinition {
-            methods: methods,
-        }
-    }
+        let state: Arc<Mutex<HttpServerState>> = Default::default();
 
-    /// Join multiple service definitions into one
-    pub fn join<I>(iter: I) -> ServerServiceDefinition
-        where I : IntoIterator<Item=ServerServiceDefinition>
-    {
-        ServerServiceDefinition {
-            methods: iter.into_iter().flat_map(|s| s.methods).collect()
-        }
-    }
+        let state_copy = state.clone();
 
-    pub fn find_method(&self, name: &str) -> &ServerMethod {
-        self.methods.iter()
-            .filter(|m| m.name == name)
-            .next()
-            .expect(&format!("unknown method: {}", name))
-    }
-
-    pub fn handle_method(&self, name: &str, o: GrpcRequestOptions, message: GrpcStreamingRequest<Vec<u8>>)
-        -> GrpcStreamingResponse<Vec<u8>>
-    {
-        self.find_method(name).dispatch.start_request(o, message)
-    }
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct GrpcServerConf {
-    pub http: HttpServerConf,
-}
-
-
-pub struct GrpcServer {
-    server: HttpServer,
-}
-
-impl GrpcServer {
-    /// Without TLS
-    pub fn new_plain<A : ToSocketAddrs>(
-        addr: A,
-        conf: GrpcServerConf,
-        service_definition: ServerServiceDefinition)
-            -> GrpcServer
-    {
-        GrpcServer::new(addr, ServerTlsOption::Plain, conf, service_definition)
-    }
-
-    /// Without TLS and execute handler in given CpuPool
-    pub fn new_plain_pool<A : ToSocketAddrs>(
-        addr: A,
-        conf: GrpcServerConf,
-        service_definition: ServerServiceDefinition,
-        cpu_pool: CpuPool)
-            -> GrpcServer
-    {
-        GrpcServer::new_pool(addr, ServerTlsOption::Plain, conf, service_definition, cpu_pool)
-    }
-
-    pub fn new<A : ToSocketAddrs>(
-        addr: A,
-        tls: ServerTlsOption,
-        conf: GrpcServerConf,
-        service_definition: ServerServiceDefinition)
-            -> GrpcServer
-    {
-        GrpcServer::with_starter(addr, tls, conf, service_definition, CallStarterSync)
-    }
-
-    pub fn new_pool<A : ToSocketAddrs>(
-        addr: A,
-        tls: ServerTlsOption,
-        conf: GrpcServerConf,
-        service_definition: ServerServiceDefinition,
-        cpu_pool: CpuPool)
-            -> GrpcServer
-    {
-        GrpcServer::with_starter(addr, tls, conf, service_definition, CallStarterCpupool {
-            cpu_pool: cpu_pool,
-        })
-    }
-
-    fn with_starter<A : ToSocketAddrs, S : CallStarter>(
-        addr: A,
-        tls: ServerTlsOption,
-        conf: GrpcServerConf,
-        service_definition: ServerServiceDefinition,
-        call_starter: S)
-            -> GrpcServer
-    {
-        let mut conf = conf;
-        conf.http.thread_name =
-            Some(conf.http.thread_name.unwrap_or_else(|| "grpc-server-loop".to_owned()));
-
-        let service_definition = Arc::new(service_definition);
-        GrpcServer {
-            server: HttpServer::new(addr, tls, conf.http, GrpcHttpService {
-                service_definition: service_definition.clone(),
-                call_starter: call_starter,
+        let join_handle = thread::Builder::new()
+            .name(conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
+            .spawn(move || {
+                run_server_event_loop(
+                    listen_addr,
+                    state_copy,
+                    tls,
+                    conf, service,
+                    get_from_loop_tx,
+                    alive_tx);
             })
+            .expect("spawn");
+
+        let loop_to_server = get_from_loop_rx.recv().unwrap();
+
+        HttpServer {
+            state: state,
+            loop_to_server: loop_to_server,
+            thread_join_handle: Some(join_handle),
+            alive_rx: alive_rx,
         }
     }
 
     pub fn local_addr(&self) -> &SocketAddr {
-        self.server.local_addr()
+        &self.loop_to_server.local_addr
     }
 
     pub fn is_alive(&self) -> bool {
-        self.server.is_alive()
+        self.alive_rx.try_recv() != Err(mpsc::TryRecvError::Disconnected)
+    }
+
+    // for tests
+    pub fn dump_state(&self) -> HttpFutureSend<HttpServerStateSnapshot> {
+        let g = self.state.lock().expect("lock");
+        g.snapshot()
     }
 }
 
-/// Utility to start a call
-trait CallStarter : Send + 'static {
-    fn start(
-        &self,
-        service_definition: &Arc<ServerServiceDefinition>,
-        name: &str,
-        o: GrpcRequestOptions,
-        message: GrpcStreamingRequest<Vec<u8>>)
-            -> GrpcStreamingResponse<Vec<u8>>;
-}
+// We shutdown the server in the destructor.
+impl Drop for HttpServer {
+    fn drop(&mut self) {
+        self.loop_to_server.shutdown.shutdown();
 
-/// Start a call in current task
-struct CallStarterSync;
-
-impl CallStarter for CallStarterSync {
-    fn start(
-        &self,
-        service_definition: &Arc<ServerServiceDefinition>,
-        name: &str,
-        o: GrpcRequestOptions,
-        message: GrpcStreamingRequest<Vec<u8>>)
-            -> GrpcStreamingResponse<Vec<u8>>
-    {
-        service_definition.handle_method(name, o, message)
+        // do not ignore errors of take
+        // ignore errors of join, it means that server event loop crashed
+        drop(self.thread_join_handle.take().unwrap().join());
     }
 }
 
-/// Start a call in cpupool
-struct CallStarterCpupool {
-    cpu_pool: CpuPool,
-}
-
-impl CallStarter for CallStarterCpupool {
-    fn start(
-        &self,
-        service_definition: &Arc<ServerServiceDefinition>,
-        name: &str,
-        o: GrpcRequestOptions,
-        message: GrpcStreamingRequest<Vec<u8>>)
-            -> GrpcStreamingResponse<Vec<u8>>
-    {
-        let service_definition = service_definition.clone();
-        let name = name.to_owned();
-        let f = self.cpu_pool.spawn_fn(move || {
-            service_definition.handle_method(&name, o, message).0
-        });
-        GrpcStreamingResponse::new(f)
-    }
-}
-
-/// Implementation of gRPC over http2 HttpService
-struct GrpcHttpService<S : CallStarter> {
-    service_definition: Arc<ServerServiceDefinition>,
-    call_starter: S,
-}
-
-
-/// Create HTTP response for gRPC error
-fn http_response_500(message: &str) -> HttpResponse {
-    // TODO: HttpResponse::headers
-    let headers = Headers(vec![
-        Header::new(":status", "500"),
-        Header::new(HEADER_GRPC_MESSAGE, message.to_owned()),
-    ]);
-    HttpResponse::headers_and_stream(headers, stream::empty())
-}
-
-impl<S : CallStarter> HttpService for GrpcHttpService<S> {
-    fn new_request(&self, headers: Headers, req: HttpPartFutureStreamSend) -> HttpResponse {
-
-        let path = match headers.get_opt(":path") {
-            Some(path) => path.to_owned(),
-            None => return http_response_500("no :path header"),
-        };
-
-        let grpc_request = GrpcFrameFromHttpFramesStreamRequest::new(req);
-
-        let metadata = match GrpcMetadata::from_headers(headers) {
-            Ok(metadata) => metadata,
-            Err(_) => return http_response_500("decode metadata error"),
-        };
-
-        // TODO: catch unwind
-        let grpc_response = self.call_starter.start(
-            &self.service_definition,
-            &path,
-            GrpcRequestOptions { metadata: metadata },
-            GrpcStreamingRequest::new(grpc_request));
-
-        HttpResponse::new(grpc_response.0.map_err(HttpError::from).map(|(metadata, grpc_frames)| {
-            let mut init_headers = Headers(vec![
-                Header::new(":status", "200"),
-                Header::new("content-type", "application/grpc"),
-            ]);
-
-            init_headers.extend(metadata.into_headers());
-
-            let s2 = grpc_frames
-                .drop_metadata() // TODO
-                .map(|frame| HttpStreamPart::intermediate_data(Bytes::from(write_grpc_frame_to_vec(&frame))))
-                .then(|result| {
-                    match result {
-                        Ok(part) => {
-                            let r: Result<_, HttpError> = Ok(part);
-                            r
-                        }
-                        Err(e) =>
-                            Ok(HttpStreamPart::last_headers(
-                                match e {
-                                    GrpcError::GrpcMessage(GrpcMessageError { grpc_status, grpc_message }) => {
-                                        Headers(vec![
-                                            Header::new(":status", "500"),
-                                            // TODO: check nonzero
-                                            Header::new(HEADER_GRPC_STATUS, format!("{}", grpc_status)),
-                                            // TODO: escape invalid
-                                            Header::new(HEADER_GRPC_MESSAGE, grpc_message),
-                                        ])
-                                    }
-                                    e => {
-                                        Headers(vec![
-                                            Header::new(":status", "500"),
-                                            Header::new(HEADER_GRPC_MESSAGE, format!("error: {:?}", e)),
-                                        ])
-                                    }
-                                }
-                            ))
-                    }
-                })
-                .map_err(HttpError::from);
-
-            let s3 = stream::once(Ok(HttpStreamPart::last_headers(Headers(vec![
-                Header::new(HEADER_GRPC_STATUS, "0"),
-            ]))));
-
-            let http_parts: HttpPartFutureStreamSend = Box::new(s2.chain(s3));
-
-            (init_headers, http_parts)
-        }))
-    }
-}

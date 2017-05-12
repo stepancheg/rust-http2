@@ -1,38 +1,29 @@
 [package]
-
-name = "grpc"
+name = "httpbis" # because name "http2" has already been claimed by another user
 version = "0.1.4"
 authors = ["Stepan Koltsov <stepan.koltsov@gmail.com>"]
 license = "MIT/Apache-2.0"
-description = "Rust implementation of gRPC"
+description = "Rust implementation of HTTP/2 protocol"
 repository = "https://github.com/stepancheg/grpc-rust"
-readme = "README.md"
-keywords = ["grpc"]
-
-[dependencies]
-log             = "0.*"
-#protobuf       = { path = "../rust-protobuf" }
-#protobuf        = { git = "http://github.com/stepancheg/rust-protobuf" }
-protobuf         = "1.*"
-#futures         = { git = "https://github.com/alexcrichton/futures-rs" }
-futures         = "0.*"
-#futures-cpupool = { git = "https://github.com/alexcrichton/futures-rs" }
-futures-cpupool = "0.*"
-tokio-core      = "0.*"
-tokio-io        = "0.*"
-tokio-tls       = "0.*"
-httpbis         = { path = "http2", version = "0.1.4" }
-bytes = "0.*"
-base64          = "0.*"
+keywords = ["http2"]
 
 [lib]
 doctest = false
 
-[workspace]
-members = [
-    "grpc-examples",
-    "grpc-compiler",
-    "long-tests/with-rust",
-    "interop",
-]
+[dependencies]
 
+log            = "0.*"
+futures         = "0.*"
+#futures-cpupool = { git = "https://github.com/alexcrichton/futures-rs" }
+futures-cpupool = "0.*"
+native-tls      = "0.*"
+tokio-core      = "0.*"
+tokio-io        = "0.*"
+tokio-timer     = "0.*"
+tokio-tls       = "0.*"
+net2 = "0.2"
+bytes = "0.*"
+
+[dev-dependencies]
+
+env_logger = "0.*"
