@@ -111,7 +111,7 @@ impl<F : HttpService> ServerInner<F> {
         let req_rx = stream_with_eof_and_error(req_rx, || HttpError::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
 
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            self.session_state.factory.new_request(headers, HttpPartStream::new(req_rx))
+            self.session_state.factory.start_request(headers, HttpPartStream::new(req_rx))
         }));
 
         let response = response.unwrap_or_else(|e| {
@@ -422,7 +422,7 @@ impl HttpServerConnectionAsync {
         impl<F> HttpService for HttpServiceFn<F>
             where F : Fn(Headers, HttpPartStream) -> HttpResponse + Send + 'static
         {
-            fn new_request(&self, headers: Headers, req: HttpPartStream) -> HttpResponse {
+            fn start_request(&self, headers: Headers, req: HttpPartStream) -> HttpResponse {
                 (self.0)(headers, req)
             }
         }

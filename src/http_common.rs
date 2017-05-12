@@ -181,7 +181,7 @@ pub use resp::HttpResponse;
 
 
 pub trait HttpService: Send + 'static {
-    fn new_request(&self, headers: Headers, req: HttpPartStream) -> HttpResponse;
+    fn start_request(&self, headers: Headers, req: HttpPartStream) -> HttpResponse;
 }
 
 

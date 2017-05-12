@@ -147,7 +147,7 @@ unsafe impl Sync for HttpClientConnectionAsync {}
 
 struct StartRequestMessage {
     headers: Headers,
-    body: HttpFutureStreamSend<Bytes>,
+    body: HttpPartStream,
     response_handler: futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, HttpError>>,
 }
 
@@ -193,6 +193,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         self.inner.with(|inner: &mut ClientInner| {
             let future = body
+                .check_only_data() // TODO: headers too
                 .fold((), move |(), chunk| {
                     to_write_tx_1.send(ClientToWriteMessage::BodyChunk(BodyChunkMessage {
                         stream_id: stream_id,
@@ -375,7 +376,7 @@ impl HttpClientConnectionAsync {
     pub fn start_request(
         &self,
         headers: Headers,
-        body: HttpFutureStreamSend<Bytes>)
+        body: HttpPartStream)
             -> HttpResponse
     {
         let (tx, rx) = futures::oneshot();

@@ -9,7 +9,6 @@ use bytes::Bytes;
 
 use futures;
 use futures::Future;
-use futures::stream;
 
 use tokio_core::reactor;
 
@@ -90,16 +89,6 @@ impl HttpClient {
         })
     }
 
-    pub fn start_request(
-        &self,
-        headers: Headers,
-        body: HttpFutureStreamSend<Bytes>)
-            -> HttpResponse
-    {
-        debug!("start request {:?}", headers);
-        self.loop_to_client.http_conn.start_request(headers, body)
-    }
-
     pub fn start_request_simple(
         &self,
         headers: Headers,
@@ -108,7 +97,7 @@ impl HttpClient {
     {
         self.start_request(
             headers,
-            Box::new(stream::once(Ok(body))))
+            HttpPartStream::once_bytes(body))
     }
 
     pub fn start_get(
@@ -148,8 +137,14 @@ impl HttpClient {
 }
 
 impl HttpService for HttpClient {
-    fn new_request(&self, _headers: Headers, _req: HttpPartStream) -> HttpResponse {
-        unimplemented!()
+    fn start_request(
+        &self,
+        headers: Headers,
+        body: HttpPartStream)
+            -> HttpResponse
+    {
+        debug!("start request {:?}", headers);
+        self.loop_to_client.http_conn.start_request(headers, body)
     }
 }
 
