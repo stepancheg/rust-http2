@@ -15,7 +15,7 @@ struct EchoService {
 }
 
 impl HttpService for EchoService {
-    fn new_request(&self, _headers: Headers, req: HttpPartFutureStreamSend) -> HttpResponse {
+    fn new_request(&self, _headers: Headers, req: HttpPartStream) -> HttpResponse {
         let headers = Headers::ok_200();
         HttpResponse::headers_and_stream(headers, req)
     }

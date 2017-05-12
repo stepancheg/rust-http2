@@ -13,28 +13,26 @@ use message::SimpleHttpMessage;
 use solicit::HttpError;
 
 /// Convenient wrapper around async HTTP response future/stream
-pub struct HttpResponse(pub HttpFutureSend<(Headers, HttpFutureStreamSend<HttpStreamPart>)>);
+pub struct HttpResponse(pub HttpFutureSend<(Headers, HttpPartStream)>);
 
 impl HttpResponse {
     // constructors
 
     pub fn new<F>(future: F) -> HttpResponse
-        where F : Future<Item=(Headers, HttpFutureStreamSend<HttpStreamPart>), Error=HttpError> + Send + 'static
+        where F : Future<Item=(Headers, HttpPartStream), Error=HttpError> + Send + 'static
     {
         HttpResponse(Box::new(future))
     }
 
-    pub fn headers_and_stream<S>(headers: Headers, stream: S) -> HttpResponse
-        where S : Stream<Item=HttpStreamPart, Error=HttpError> + Send + 'static
+    pub fn headers_and_stream(headers: Headers, stream: HttpPartStream) -> HttpResponse
     {
-        let stream: HttpFutureStreamSend<HttpStreamPart> = Box::new(stream);
         HttpResponse::new(future::ok((headers, stream)))
     }
 
     pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> HttpResponse
         where S : Stream<Item=Bytes, Error=HttpError> + Send + 'static
     {
-        HttpResponse::headers_and_stream(headers, content.map(HttpStreamPart::intermediate_data))
+        HttpResponse::headers_and_stream(headers, HttpPartStream::bytes(content))
     }
 
     pub fn headers_and_bytes(header: Headers, content: Bytes) -> HttpResponse {
@@ -49,8 +47,7 @@ impl HttpResponse {
                 Some(part) => {
                     match part.content {
                         HttpStreamPartContent::Headers(headers) => {
-                            let rem: HttpFutureStreamSend<HttpStreamPart> = Box::new(rem);
-                            Ok((headers, rem))
+                            Ok((headers, HttpPartStream::new(rem)))
                         },
                         HttpStreamPartContent::Data(..) => {
                             Err(HttpError::InvalidFrame("data before headers".to_owned()))

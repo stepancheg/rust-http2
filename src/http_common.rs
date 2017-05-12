@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::cmp;
+use std::io;
 
+use futures::stream;
 use futures::stream::Stream;
 use futures::Future;
 use futures::future;
+use futures::Poll;
 use futures;
 
 use bytes::Bytes;
@@ -91,19 +94,90 @@ impl HttpStreamPart {
     }
 }
 
+
+/// Stream of DATA of HEADER frames
+pub struct HttpPartStream(
+    pub HttpFutureStreamSend<HttpStreamPart>
+);
+
+impl HttpPartStream {
+    // constructors
+
+    pub fn new<S>(s: S) -> HttpPartStream
+        where S : Stream<Item=HttpStreamPart, Error=HttpError> + Send + 'static
+    {
+        HttpPartStream(Box::new(s))
+    }
+
+    pub fn bytes<S>(bytes: S) -> HttpPartStream
+        where S : Stream<Item=Bytes, Error=HttpError> + Send + 'static
+    {
+        HttpPartStream::new(bytes.map(HttpStreamPart::intermediate_data))
+    }
+
+    pub fn once(part: HttpStreamPartContent) -> HttpPartStream {
+        HttpPartStream::new(stream::once(Ok(HttpStreamPart { content: part, last: true })))
+    }
+
+    pub fn once_bytes<B>(bytes: B) -> HttpPartStream
+        where B : Into<Bytes>
+    {
+        HttpPartStream::once(HttpStreamPartContent::Data(bytes.into()))
+    }
+
+    // getters
+
+    /// Create a stream without "last" flag
+    pub fn drop_last_flag(self) -> HttpFutureStreamSend<HttpStreamPartContent> {
+        Box::new(self.map(|HttpStreamPart { content, .. }| content))
+    }
+
+    /// Take only `DATA` frames from the stream
+    pub fn filter_data(self) -> HttpFutureStreamSend<Bytes> {
+        Box::new(self.filter_map(|HttpStreamPart { content, .. }| {
+            match content {
+                HttpStreamPartContent::Data(data) => Some(data),
+                _ => None,
+            }
+        }))
+    }
+
+    /// Take only `DATA` frames, return an error on header frames
+    pub fn check_only_data(self) -> HttpFutureStreamSend<Bytes> {
+        Box::new(self.and_then(|HttpStreamPart { content, .. }| {
+            match content {
+                HttpStreamPartContent::Data(data) => {
+                    Ok(data)
+                },
+                HttpStreamPartContent::Headers(..) => {
+                    Err(HttpError::from(io::Error::new(io::ErrorKind::Other, "expecting only DATA frames")))
+                },
+            }
+        }))
+    }
+}
+
+impl Stream for HttpPartStream {
+    type Item = HttpStreamPart;
+    type Error = HttpError;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        self.0.poll()
+    }
+}
+
+
 pub enum HttpStreamCommand {
     Headers(Headers, EndStream),
     Data(Bytes, EndStream),
     Rst(ErrorCode),
 }
 
-pub type HttpPartFutureStreamSend = Box<Stream<Item=HttpStreamPart, Error=HttpError> + Send>;
-
 pub use resp::HttpResponse;
 
 
 pub trait HttpService: Send + 'static {
-    fn new_request(&self, headers: Headers, req: HttpPartFutureStreamSend) -> HttpResponse;
+    fn new_request(&self, headers: Headers, req: HttpPartStream) -> HttpResponse;
 }
 
 
