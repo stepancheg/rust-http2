@@ -109,6 +109,10 @@ impl HttpPartStream {
         HttpPartStream(Box::new(s))
     }
 
+    pub fn empty() -> HttpPartStream {
+        HttpPartStream::new(stream::empty())
+    }
+
     pub fn bytes<S>(bytes: S) -> HttpPartStream
         where S : Stream<Item=Bytes, Error=HttpError> + Send + 'static
     {

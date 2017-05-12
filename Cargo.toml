@@ -1,6 +1,6 @@
 [package]
 name = "httpbis" # because name "http2" has already been claimed by another user
-version = "0.1.6"
+version = "0.1.7"
 authors = ["Stepan Koltsov <stepan.koltsov@gmail.com>"]
 license = "MIT/Apache-2.0"
 description = "Rust implementation of HTTP/2 protocol"
@@ -14,7 +14,6 @@ doctest = false
 
 log            = "0.*"
 futures         = "0.*"
-#futures-cpupool = { git = "https://github.com/alexcrichton/futures-rs" }
 futures-cpupool = "0.*"
 native-tls      = "0.*"
 tokio-core      = "0.*"
