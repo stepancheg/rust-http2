@@ -148,7 +148,7 @@ impl HttpClient {
 }
 
 impl HttpService for HttpClient {
-    fn new_request(&self, headers: Headers, req: HttpPartFutureStreamSend) -> HttpResponse {
+    fn new_request(&self, _headers: Headers, _req: HttpPartFutureStreamSend) -> HttpResponse {
         unimplemented!()
     }
 }

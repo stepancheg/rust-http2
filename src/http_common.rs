@@ -97,7 +97,6 @@ pub enum HttpStreamCommand {
     Rst(ErrorCode),
 }
 
-pub type HttpPartFutureStream = Box<Stream<Item=HttpStreamPart, Error=HttpError>>;
 pub type HttpPartFutureStreamSend = Box<Stream<Item=HttpStreamPart, Error=HttpError> + Send>;
 
 pub use resp::HttpResponse;
