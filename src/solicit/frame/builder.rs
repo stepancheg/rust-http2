@@ -72,11 +72,12 @@ mod tests {
     use std::io::{self, Write};
 
     use solicit::frame::pack_header;
+    use solicit::frame::FrameHeader;
 
     #[test]
     fn test_write_header_empty_buffer() {
         let mut buf = io::Cursor::new(Vec::new());
-        let header = (10, 0x1, 0x0, 3);
+        let header = FrameHeader::new(10, 0x1, 0x0, 3);
         let expected = pack_header(&header);
 
         buf.write_header(header).unwrap();
@@ -88,7 +89,7 @@ mod tests {
     #[test]
     fn test_write_header_and_payload_empty() {
         let mut buf = io::Cursor::new(Vec::new());
-        let header = (10, 0x1, 0x0, 3);
+        let header = FrameHeader::new(10, 0x1, 0x0, 3);
         let expected = {
             let mut buf = Vec::new();
             buf.extend(pack_header(&header).to_vec());
@@ -106,8 +107,8 @@ mod tests {
     #[test]
     fn test_rewrite_header_after_payload() {
         let mut buf = io::Cursor::new(Vec::new());
-        let original_header = (10, 0x1, 0x0, 3);
-        let actual_header = (5, 0x0, 0x0, 5);
+        let original_header = FrameHeader::new(10, 0x1, 0x0, 3);
+        let actual_header = FrameHeader::new(5, 0x0, 0x0, 5);
         let expected = {
             let mut buf = Vec::new();
             buf.extend(pack_header(&actual_header).to_vec());

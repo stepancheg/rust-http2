@@ -517,7 +517,18 @@ pub trait LoopInner: 'static {
         self.send_frame(SettingsFrame::new_ack());
     }
 
-    fn process_headers_frame(&mut self, frame: HeadersFrame);
+    fn process_headers_frame(&mut self, frame: HeadersFrame) {
+        let headers = self.common().conn.decoder
+            .decode(&frame.header_fragment())
+            .map_err(HttpError::CompressionError).unwrap(); // TODO: do not panic
+        let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
+
+        let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
+
+        self.process_headers(frame.stream_id, end_stream, headers);
+    }
+
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers);
 
     fn process_settings_global(&mut self, frame: SettingsFrame) {
         if frame.is_ack() {
@@ -666,6 +677,7 @@ pub trait LoopInner: 'static {
             HttpFrameStream::Headers(headers) => self.process_headers_frame(headers),
             HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst),
             HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update),
+            HttpFrameStream::Continuation(_continuation) => unimplemented!(),
         };
         if end_of_stream {
             self.close_remote(stream_id);
@@ -676,7 +688,7 @@ pub trait LoopInner: 'static {
     }
 
     fn process_raw_frame(&mut self, raw_frame: RawFrame) {
-        let frame = HttpFrameClassified::from_raw(&raw_frame).unwrap();
+        let frame = HttpFrameClassified::from_raw(&raw_frame).unwrap(); // TODO: do not panic
         debug!("received frame: {:?}", frame);
         match frame {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),

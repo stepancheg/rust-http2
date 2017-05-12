@@ -42,6 +42,7 @@ fn parse_stream_id(buf: &[u8]) -> u32 {
 pub const FRAME_HEADER_LEN: usize = 9;
 
 pub mod builder;
+pub mod continuation;
 pub mod data;
 pub mod headers;
 pub mod rst_stream;
@@ -63,13 +64,32 @@ pub use self::settings::{SettingsFlag, SettingsFrame, HttpSetting};
 pub use self::goaway::GoawayFrame;
 pub use self::ping::PingFrame;
 pub use self::window_update::WindowUpdateFrame;
+pub use self::continuation::ContinuationFrame;
 
 /// An alias for the 9-byte buffer that each HTTP/2 frame header must be stored
 /// in.
 pub type FrameHeaderBuffer = [u8; 9];
 /// An alias for the 4-tuple representing the components of each HTTP/2 frame
 /// header.
-pub type FrameHeader = (u32, u8, u8, u32);
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct FrameHeader {
+    /// payload length
+    pub length: u32,
+    pub frame_type: u8,
+    pub flags: u8,
+    pub stream_id: u32,
+}
+
+impl FrameHeader {
+    pub fn new(length: u32, frame_type: u8, flags: u8, stream_id: u32) -> FrameHeader {
+        FrameHeader {
+            length: length,
+            frame_type: frame_type,
+            flags: flags,
+            stream_id: stream_id,
+        }
+    }
+}
 
 /// Deconstructs a `FrameHeader` into its corresponding 4 components,
 /// represented as a 4-tuple: `(length, frame_type, flags, stream_id)`.
@@ -83,12 +103,12 @@ pub fn unpack_header(header: &FrameHeaderBuffer) -> FrameHeader {
     let flags = header[4];
     let stream_id = parse_stream_id(&header[5..]);
 
-    (length, frame_type, flags, stream_id)
+    FrameHeader { length, frame_type, flags, stream_id }
 }
 
 /// Constructs a buffer of 9 bytes that represents the given `FrameHeader`.
 pub fn pack_header(header: &FrameHeader) -> FrameHeaderBuffer {
-    let &(length, frame_type, flags, stream_id) = header;
+    let &FrameHeader { length, frame_type, flags, stream_id } = header;
 
     [(((length >> 16) & 0x000000FF) as u8),
      (((length >>  8) & 0x000000FF) as u8),
@@ -250,7 +270,7 @@ impl RawFrame {
             mem::transmute(buf.as_ptr())
         });
 
-        let payload_len = header.0 as usize;
+        let payload_len = header.length as usize;
         if buf[9..].len() < payload_len {
             return None;
         }
@@ -293,7 +313,7 @@ impl RawFrame {
     }
 
     pub fn get_stream_id(&self) -> StreamId {
-        self.header().3
+        self.header().stream_id
     }
 
     /// Returns a slice representing the payload of the `RawFrame`.
@@ -338,7 +358,7 @@ impl FrameIR for RawFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{unpack_header, pack_header, RawFrame, FrameIR};
+    use super::{unpack_header, pack_header, RawFrame, FrameIR, FrameHeader};
     use std::io;
 
     /// Tests that the `unpack_header` function correctly returns the
@@ -346,46 +366,41 @@ mod tests {
     #[test]
     fn test_unpack_header() {
         {
-            let header = [0; 9];
-            assert_eq!((0, 0, 0, 0), unpack_header(&header));
-        }
-        {
             let header = [0, 0, 1, 2, 3, 0, 0, 0, 4];
-            assert_eq!((1, 2, 3, 4), unpack_header(&header));
-        }
-        {
-            let header = [0, 0, 1, 200, 100, 0, 0, 0, 4];
-            assert_eq!((1, 200, 100, 4), unpack_header(&header));
-        }
-        {
-            let header = [0, 0, 1, 0, 0, 0, 0, 0, 0];
-            assert_eq!((1, 0, 0, 0), unpack_header(&header));
+            assert_eq!(
+                FrameHeader { length: 1, frame_type: 2, flags: 3, stream_id: 4 },
+                unpack_header(&header));
         }
         {
             let header = [0, 1, 0, 0, 0, 0, 0, 0, 0];
-            assert_eq!((256, 0, 0, 0), unpack_header(&header));
+            assert_eq!(
+                FrameHeader { length: 256, frame_type: 0, flags: 0, stream_id: 0 },
+                unpack_header(&header));
         }
         {
             let header = [1, 0, 0, 0, 0, 0, 0, 0, 0];
-            assert_eq!((256 * 256, 0, 0, 0), unpack_header(&header));
-        }
-        {
-            let header = [0, 0, 0, 0, 0, 0, 0, 0, 1];
-            assert_eq!((0, 0, 0, 1), unpack_header(&header));
+            assert_eq!(
+                FrameHeader { length: 256 * 256, frame_type: 0, flags: 0, stream_id: 0 },
+            unpack_header(&header));
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 1];
-            assert_eq!(((1 << 24) - 1, 0, 0, 1), unpack_header(&header));
+            assert_eq!(
+                FrameHeader { length:(1 << 24) - 1, frame_type: 0, flags: 0, stream_id: 1 },
+                unpack_header(&header));
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 1, 1, 1, 1];
-            assert_eq!(((1 << 24) - 1, 0, 0, 1 + (1 << 8) + (1 << 16) + (1 << 24)),
-                       unpack_header(&header));
+            assert_eq!(
+                FrameHeader { length: (1 << 24) - 1, frame_type: 0, flags: 0, stream_id: 1 + (1 << 8) + (1 << 16) + (1 << 24) },
+                unpack_header(&header));
         }
         {
             // Ignores reserved bit within the stream id (the most significant bit)
             let header = [0, 0, 1, 0, 0, 0x80, 0, 0, 1];
-            assert_eq!((1, 0, 0, 1), unpack_header(&header));
+            assert_eq!(
+                FrameHeader { length: 1, frame_type: 0, flags: 0, stream_id: 1 },
+                unpack_header(&header));
         }
     }
 
@@ -395,39 +410,39 @@ mod tests {
     fn test_pack_header() {
         {
             let header = [0; 9];
-            assert_eq!(pack_header(&(0, 0, 0, 0)), header);
+            assert_eq!(pack_header(&FrameHeader::new(0, 0, 0, 0)), header);
         }
         {
             let header = [0, 0, 1, 2, 3, 0, 0, 0, 4];
-            assert_eq!(pack_header(&(1, 2, 3, 4)), header);
+            assert_eq!(pack_header(&FrameHeader::new(1, 2, 3, 4)), header);
         }
         {
             let header = [0, 0, 1, 200, 100, 0, 0, 0, 4];
-            assert_eq!(pack_header(&(1, 200, 100, 4)), header);
+            assert_eq!(pack_header(&FrameHeader::new(1, 200, 100, 4)), header);
         }
         {
             let header = [0, 0, 1, 0, 0, 0, 0, 0, 0];
-            assert_eq!(pack_header(&(1, 0, 0, 0)), header);
+            assert_eq!(pack_header(&FrameHeader::new(1, 0, 0, 0)), header);
         }
         {
             let header = [0, 1, 0, 0, 0, 0, 0, 0, 0];
-            assert_eq!(pack_header(&(256, 0, 0, 0)), header);
+            assert_eq!(pack_header(&FrameHeader::new(256, 0, 0, 0)), header);
         }
         {
             let header = [1, 0, 0, 0, 0, 0, 0, 0, 0];
-            assert_eq!(pack_header(&(256 * 256, 0, 0, 0)), header);
+            assert_eq!(pack_header(&FrameHeader::new(256 * 256, 0, 0, 0)), header);
         }
         {
             let header = [0, 0, 0, 0, 0, 0, 0, 0, 1];
-            assert_eq!(pack_header(&(0, 0, 0, 1)), header);
+            assert_eq!(pack_header(&FrameHeader::new(0, 0, 0, 1)), header);
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 1];
-            assert_eq!(pack_header(&((1 << 24) - 1, 0, 0, 1)), header);
+            assert_eq!(pack_header(&FrameHeader::new((1 << 24) - 1, 0, 0, 1)), header);
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 1, 1, 1, 1];
-            let header_components = ((1 << 24) - 1, 0, 0, 1 + (1 << 8) + (1 << 16) + (1 << 24));
+            let header_components = FrameHeader::new((1 << 24) - 1, 0, 0, 1 + (1 << 8) + (1 << 16) + (1 << 24));
             assert_eq!(pack_header(&header_components), header);
         }
     }
@@ -462,7 +477,12 @@ mod tests {
     #[test]
     fn test_raw_frame_serialize() {
         let data = b"123";
-        let header = (data.len() as u32, 0x1, 0, 1);
+        let header = FrameHeader {
+            length: data.len() as u32,
+            frame_type: 0x1,
+            flags: 0,
+            stream_id: 1,
+        };
         let buf = {
             let mut buf = Vec::new();
             buf.extend(pack_header(&header).to_vec().into_iter());
@@ -479,7 +499,7 @@ mod tests {
     #[test]
     fn test_raw_frame_as_frame_ir() {
         let data = b"123";
-        let header = (data.len() as u32, 0x1, 0, 1);
+        let header = FrameHeader::new(data.len() as u32, 0x1, 0, 1);
         let buf = {
             let mut buf = Vec::new();
             buf.extend(pack_header(&header).to_vec().into_iter());

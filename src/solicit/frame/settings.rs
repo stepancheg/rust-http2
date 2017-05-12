@@ -236,7 +236,7 @@ impl Frame for SettingsFrame {
     /// Otherwise, returns a newly constructed `SettingsFrame`.
     fn from_raw(raw_frame: &RawFrame) -> Option<SettingsFrame> {
         // Unpack the header
-        let (len, frame_type, flags, stream_id) = raw_frame.header();
+        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != 0x4 {
             return None;
@@ -244,7 +244,7 @@ impl Frame for SettingsFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (len as usize) != raw_frame.payload().len() {
+        if (length as usize) != raw_frame.payload().len() {
             return None;
         }
         // Check that the SETTINGS frame is associated to stream 0
@@ -252,7 +252,7 @@ impl Frame for SettingsFrame {
             return None;
         }
         if (flags & SettingsFlag::Ack.bitmask()) != 0 {
-            return if len == 0 {
+            return if length == 0 {
                 // Ack is set and there's no payload => just an Ack frame
                 Some(SettingsFrame {
                     settings: Vec::new(),
@@ -289,7 +289,12 @@ impl Frame for SettingsFrame {
 
     /// Returns a `FrameHeader` based on the current state of the `Frame`.
     fn get_header(&self) -> FrameHeader {
-        (self.payload_len(), 0x4, self.flags.0, 0)
+        FrameHeader {
+            length: self.payload_len(),
+            frame_type: 0x4,
+            flags: self.flags.0,
+            stream_id: 0
+        }
     }
 }
 
@@ -308,7 +313,7 @@ impl FrameIR for SettingsFrame {
 mod tests {
     use super::{HttpSetting, SettingsFrame};
     use solicit::tests::common::{raw_frame_from_parts, serialize_frame};
-    use solicit::frame::{pack_header, Frame};
+    use solicit::frame::{pack_header, Frame, FrameHeader};
 
     /// Tests that a `SettingsFrame` correctly handles a SETTINGS frame with
     /// no ACK flag and only a single setting.
@@ -316,7 +321,7 @@ mod tests {
     fn test_settings_frame_parse_no_ack_one_setting() {
         let payload = [0, 1, 0, 0, 0, 1];
         // A header with the flag indicating no padding
-        let header = (payload.len() as u32, 4, 0, 0);
+        let header = FrameHeader::new(payload.len() as u32, 4, 0, 0);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: SettingsFrame = Frame::from_raw(&raw).unwrap();
@@ -344,7 +349,7 @@ mod tests {
 
             res
         };
-        let header = (payload.len() as u32, 4, 0, 0);
+        let header = FrameHeader::new(payload.len() as u32, 4, 0, 0);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: SettingsFrame = Frame::from_raw(&raw).unwrap();
@@ -374,7 +379,7 @@ mod tests {
 
             res
         };
-        let header = (payload.len() as u32, 4, 0, 0);
+        let header = FrameHeader::new(payload.len() as u32, 4, 0, 0);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: SettingsFrame = Frame::from_raw(&raw).unwrap();
@@ -407,7 +412,7 @@ mod tests {
 
             res
         };
-        let header = (payload.len() as u32, 4, 0, 0);
+        let header = FrameHeader::new(payload.len() as u32, 4, 0, 0);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: SettingsFrame = Frame::from_raw(&raw).unwrap();
@@ -426,7 +431,12 @@ mod tests {
     #[test]
     fn test_settings_frame_parse_ack_no_settings() {
         let payload = [];
-        let header = (payload.len() as u32, 4, 1, 0);
+        let header = FrameHeader {
+            length: payload.len() as u32,
+            frame_type: 4,
+            flags: 1,
+            stream_id: 0,
+        };
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: SettingsFrame = Frame::from_raw(&raw).unwrap();
@@ -453,7 +463,7 @@ mod tests {
 
             res
         };
-        let header = (payload.len() as u32, 4, 1, 0);
+        let header = FrameHeader::new(payload.len() as u32, 4, 1, 0);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<SettingsFrame> = Frame::from_raw(&raw);
@@ -467,7 +477,7 @@ mod tests {
     fn test_settings_frame_parse_not_stream_zero() {
         let payload = vec![];
         // Header indicates that it is associated to stream 1
-        let header = (payload.len() as u32, 4, 1, 1);
+        let header = FrameHeader::new(payload.len() as u32, 4, 1, 1);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<SettingsFrame> = Frame::from_raw(&raw);
@@ -481,7 +491,7 @@ mod tests {
     fn test_settings_frame_parse_not_multiple_of_six() {
         let payload = vec![1, 2, 3];
 
-        let header = (payload.len() as u32, 4, 0, 0);
+        let header = FrameHeader::new(payload.len() as u32, 4, 0, 0);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<SettingsFrame> = Frame::from_raw(&raw);
@@ -497,7 +507,9 @@ mod tests {
         frame.add_setting(HttpSetting::EnablePush(0));
         let expected = {
             let mut res: Vec<u8> = Vec::new();
-            res.extend(pack_header(&(6, 4, 0, 0)).to_vec().into_iter());
+            res.extend(pack_header(
+                &FrameHeader { length: 6, frame_type: 4, flags: 0, stream_id: 0 })
+                    .to_vec().into_iter());
             res.extend(HttpSetting::EnablePush(0).serialize().to_vec().into_iter());
 
             res
@@ -517,7 +529,9 @@ mod tests {
         frame.add_setting(HttpSetting::MaxHeaderListSize(0));
         let expected = {
             let mut res: Vec<u8> = Vec::new();
-            res.extend(pack_header(&(6 * 2, 4, 0, 0)).to_vec().into_iter());
+            res.extend(pack_header(
+                &FrameHeader { length: 6 * 2, frame_type: 4, flags: 0, stream_id: 0 })
+                    .to_vec().into_iter());
             res.extend(HttpSetting::EnablePush(0).serialize().to_vec().into_iter());
             res.extend(HttpSetting::MaxHeaderListSize(0).serialize().to_vec().into_iter());
 
@@ -534,7 +548,9 @@ mod tests {
     #[test]
     fn test_settings_frame_serialize_ack() {
         let frame = SettingsFrame::new_ack();
-        let expected = pack_header(&(0, 4, 1, 0)).to_vec();
+        let expected = pack_header(
+            &FrameHeader { length: 0, frame_type: 4, flags: 1, stream_id: 0 })
+                .to_vec();
 
         let serialized = serialize_frame(&frame);
 

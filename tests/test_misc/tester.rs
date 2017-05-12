@@ -119,7 +119,7 @@ impl HttpConnectionTester {
 
     pub fn recv_frame_settings(&mut self) -> SettingsFrame {
         match self.recv_frame() {
-            HttpFrame::SettingsFrame(settings) => settings,
+            HttpFrame::Settings(settings) => settings,
             f => panic!("unexpected frame: {:?}", f),
         }
     }
@@ -151,7 +151,7 @@ impl HttpConnectionTester {
 
     pub fn recv_rst_frame(&mut self) -> RstStreamFrame {
         match self.recv_frame() {
-            HttpFrame::RstStreamFrame(rst) => rst,
+            HttpFrame::RstStream(rst) => rst,
             f => panic!("unexpected frame: {:?}", f),
         }
     }
@@ -164,14 +164,14 @@ impl HttpConnectionTester {
 
     pub fn recv_frame_headers(&mut self) -> HeadersFrame {
         match self.recv_frame() {
-            HttpFrame::HeadersFrame(headers) => headers,
+            HttpFrame::Headers(headers) => headers,
             f => panic!("unexpected frame: {:?}", f),
         }
     }
 
     pub fn recv_frame_data(&mut self) -> DataFrame {
         match self.recv_frame() {
-            HttpFrame::DataFrame(data) => data,
+            HttpFrame::Data(data) => data,
             f => panic!("unexpected frame: {:?}", f),
         }
     }
@@ -202,14 +202,14 @@ impl HttpConnectionTester {
             let frame = self.recv_frame();
             assert_eq!(stream_id, frame.get_stream_id());
             let end_of_stream = match frame {
-                HttpFrame::HeadersFrame(headers_frame) => {
+                HttpFrame::Headers(headers_frame) => {
                     let end_of_stream = headers_frame.is_end_of_stream();
                     let headers = self.conn.decoder.decode(headers_frame.header_fragment()).expect("decode");
                     let headers = Headers(headers.into_iter().map(|(n, v)| Header::new(n, v)).collect());
                     r.headers.extend(headers);
                     end_of_stream
                 }
-                HttpFrame::DataFrame(data_frame) => {
+                HttpFrame::Data(data_frame) => {
                     let end_of_stream = data_frame.is_end_of_stream();
                     bytes_extend_with(&mut r.body, data_frame.data);
                     end_of_stream

@@ -76,8 +76,8 @@ impl Frame for GoawayFrame {
     type FlagType = NoFlag;
 
     fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
-        let (payload_len, frame_type, flags, stream_id) = raw_frame.header();
-        if payload_len < GOAWAY_MIN_FRAME_LEN {
+        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        if length < GOAWAY_MIN_FRAME_LEN {
             return None;
         }
         if frame_type != GOAWAY_FRAME_TYPE {
@@ -89,7 +89,7 @@ impl Frame for GoawayFrame {
 
         let last_stream_id = parse_stream_id(&raw_frame.payload());
         let error = unpack_octets_4!(raw_frame.payload(), 4, u32);
-        let debug_data = if payload_len > GOAWAY_MIN_FRAME_LEN {
+        let debug_data = if length > GOAWAY_MIN_FRAME_LEN {
             Some(raw_frame.payload().slice_from(GOAWAY_MIN_FRAME_LEN as usize))
         } else {
             None
@@ -106,11 +106,18 @@ impl Frame for GoawayFrame {
     fn is_set(&self, _: NoFlag) -> bool {
         false
     }
+
     fn get_stream_id(&self) -> StreamId {
         0
     }
+
     fn get_header(&self) -> FrameHeader {
-        (self.payload_len(), GOAWAY_FRAME_TYPE, self.flags.0, 0)
+        FrameHeader {
+            length: self.payload_len(),
+            frame_type: GOAWAY_FRAME_TYPE,
+            flags: self.flags.0,
+            stream_id: 0,
+        }
     }
 }
 
@@ -133,12 +140,13 @@ mod tests {
     use solicit::tests::common::{serialize_frame, raw_frame_from_parts};
     use solicit::ErrorCode;
     use solicit::frame::Frame;
+    use solicit::frame::FrameHeader;
 
     use bytes::Bytes;
 
     #[test]
     fn test_parse_valid_no_debug_data() {
-        let raw = raw_frame_from_parts((8, 0x7, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1]);
+        let raw = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1]);
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0);
@@ -147,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_no_debug_data_2() {
-        let raw = raw_frame_from_parts((8, 0x7, 0, 0), vec![0, 0, 1, 0, 0, 0, 0, 1]);
+        let raw = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 0), vec![0, 0, 1, 0, 0, 0, 0, 1]);
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0x00000100);
@@ -156,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_with_debug_data() {
-        let raw = raw_frame_from_parts((12, 0x7, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4]);
+        let raw = raw_frame_from_parts(FrameHeader::new(12, 0x7, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4]);
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0);
@@ -165,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_parse_ignores_reserved_bit() {
-        let raw = raw_frame_from_parts((8, 0x7, 0, 0), vec![0x80, 0, 0, 0, 0, 0, 0, 1]);
+        let raw = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 0), vec![0x80, 0, 0, 0, 0, 0, 0, 1]);
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0);
@@ -174,13 +182,13 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_id() {
-        let raw = raw_frame_from_parts((12, 0x1, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4]);
+        let raw = raw_frame_from_parts(FrameHeader::new(12, 0x1, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4]);
         assert!(GoawayFrame::from_raw(&raw).is_none(), "expected invalid id");
     }
 
     #[test]
     fn test_parse_invalid_stream_id() {
-        let raw = raw_frame_from_parts((8, 0x7, 0, 3), vec![0, 0, 0, 0, 0, 0, 0, 1]);
+        let raw = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 3), vec![0, 0, 0, 0, 0, 0, 0, 1]);
         assert!(GoawayFrame::from_raw(&raw).is_none(),
                 "expected invalid stream id");
     }
@@ -188,14 +196,14 @@ mod tests {
     #[test]
     fn test_parse_invalid_length() {
         // Too short!
-        let raw = raw_frame_from_parts((7, 0x1, 0, 0), vec![0, 0, 0, 0, 0, 0, 1]);
+        let raw = raw_frame_from_parts(FrameHeader::new(7, 0x1, 0, 0), vec![0, 0, 0, 0, 0, 0, 1]);
         assert!(GoawayFrame::from_raw(&raw).is_none(), "expected too short");
     }
 
     #[test]
     fn test_serialize_no_debug_data() {
         let frame = GoawayFrame::new(0, ErrorCode::ProtocolError);
-        let expected: Vec<u8> = raw_frame_from_parts((8, 0x7, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1])
+        let expected: Vec<u8> = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1])
                                     .as_ref().to_owned();
         let raw = serialize_frame(&frame);
 
@@ -206,7 +214,7 @@ mod tests {
     fn test_serialize_with_debug_data() {
         let frame = GoawayFrame::with_debug_data(
             0, ErrorCode::ProtocolError.into(), Bytes::from_static(b"Hi!"));
-        let expected: Vec<u8> = raw_frame_from_parts((11, 0x7, 0, 0),
+        let expected: Vec<u8> = raw_frame_from_parts(FrameHeader::new(11, 0x7, 0, 0),
                                                      vec![0, 0, 0, 0, 0, 0, 0, 1, b'H', b'i',
                                                           b'!'])
                                     .as_ref().to_owned();
@@ -218,7 +226,7 @@ mod tests {
     #[test]
     fn test_serialize_raw_error() {
         let frame = GoawayFrame::with_debug_data(1, 0x0001AA, Bytes::new());
-        let expected: Vec<u8> = raw_frame_from_parts((8, 0x7, 0, 0),
+        let expected: Vec<u8> = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 0),
                                                      vec![0, 0, 0, 1, 0, 0, 0x1, 0xAA])
                                     .as_ref().to_owned();
         let raw = serialize_frame(&frame);

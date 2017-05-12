@@ -3,12 +3,11 @@ use std::sync::Arc;
 use std::io;
 
 use solicit::ErrorCode;
-use solicit::frame::*;
 use solicit::StreamId;
 use solicit::HttpScheme;
 use solicit::HttpError;
 use solicit::header::*;
-use hpack;
+use solicit::connection::EndStream;
 
 use bytes::Bytes;
 
@@ -77,7 +76,6 @@ impl HttpClientStream {
 
 struct HttpClientSessionState {
     next_stream_id: StreamId,
-    decoder: hpack::Decoder<'static>,
     loop_handle: reactor::Handle,
 }
 
@@ -110,13 +108,8 @@ impl LoopInner for ClientInner {
             .expect("read to write common");
     }
 
-    fn process_headers_frame(&mut self, frame: HeadersFrame) {
-        let headers = self.session_state.decoder
-                               .decode(&frame.header_fragment())
-                               .map_err(HttpError::CompressionError).unwrap();
-        let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
-
-        let mut stream: &mut HttpClientStream = match self.common.get_stream_mut(frame.get_stream_id()) {
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
+        let mut stream: &mut HttpClientStream = match self.common.get_stream_mut(stream_id) {
             None => {
                 // TODO(mlalic): This means that the server's header is not associated to any
                 //               request made by the client nor any server-initiated stream (pushed)
@@ -130,7 +123,7 @@ impl LoopInner for ClientInner {
             if let Some(ref mut response_handler) = stream.response_handler {
                 response_handler.send(ResultOrEof::Item(HttpStreamPart {
                     content: HttpStreamPartContent::Headers(headers),
-                    last: frame.is_end_of_stream(),
+                    last: end_stream == EndStream::Yes,
                 })).unwrap();
             }
         }
@@ -300,7 +293,6 @@ impl HttpClientConnectionAsync {
                 to_write_tx: to_write_tx.clone(),
                 session_state: HttpClientSessionState {
                     next_stream_id: 1,
-                    decoder: hpack::Decoder::new(),
                     loop_handle: lh,
                 }
             });

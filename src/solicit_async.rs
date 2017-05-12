@@ -50,7 +50,7 @@ pub fn recv_raw_frame<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R,
     let header = read_exact(read, [0; FRAME_HEADER_LEN]);
     let frame_buf = header.and_then(|(read, raw_header)| {
         let header = unpack_header(&raw_header);
-        let total_len = FRAME_HEADER_LEN + header.0 as usize;
+        let total_len = FRAME_HEADER_LEN + header.length as usize;
         let mut full_frame = VecWithPos {
             vec: Vec::with_capacity(total_len),
             pos: 0,
@@ -75,7 +75,7 @@ pub fn recv_raw_frame_sync(read: &mut Read) -> HttpResult<RawFrame> {
     read.read_exact(&mut raw_header)?;
     let header = unpack_header(&raw_header);
 
-    let total_len = FRAME_HEADER_LEN + header.0 as usize;
+    let total_len = FRAME_HEADER_LEN + header.length as usize;
     let mut full_frame = Vec::new();
     full_frame.extend_from_slice(&raw_header);
     full_frame.resize(total_len, 0);
@@ -85,18 +85,12 @@ pub fn recv_raw_frame_sync(read: &mut Read) -> HttpResult<RawFrame> {
     Ok(RawFrame::from(full_frame))
 }
 
-#[allow(dead_code)]
-pub fn recv_raw_frame_stream<R : Read + Send + 'static>(_read: R) -> HttpFutureStream<RawFrame> {
-    // https://users.rust-lang.org/t/futures-rs-how-to-generate-a-stream-from-futures/7020
-    panic!();
-}
-
 pub fn recv_settings_frame<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R, SettingsFrame)> {
     Box::new(recv_raw_frame(read)
         .then(|result| {
             result.and_then(|(read, raw_frame)| {
                 match HttpFrame::from_raw(&raw_frame) {
-                    Ok(HttpFrame::SettingsFrame(f)) => Ok((read, f)),
+                    Ok(HttpFrame::Settings(f)) => Ok((read, f)),
                     Ok(f) => Err(HttpError::InvalidFrame(format!("unexpected frame, expected SETTINGS, got {:?}", f.frame_type()))),
                     Err(e) => Err(e),
                 }

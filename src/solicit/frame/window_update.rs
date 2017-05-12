@@ -50,8 +50,8 @@ impl Frame for WindowUpdateFrame {
     type FlagType = NoFlag;
 
     fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
-        let (payload_len, frame_type, flags, stream_id) = raw_frame.header();
-        if payload_len != WINDOW_UPDATE_FRAME_LEN {
+        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        if length != WINDOW_UPDATE_FRAME_LEN {
             return None;
         }
         if frame_type != WINDOW_UPDATE_FRAME_TYPE {
@@ -76,10 +76,12 @@ impl Frame for WindowUpdateFrame {
         self.stream_id
     }
     fn get_header(&self) -> FrameHeader {
-        (WINDOW_UPDATE_FRAME_LEN,
-         WINDOW_UPDATE_FRAME_TYPE,
-         self.flags.0,
-         self.get_stream_id())
+        FrameHeader {
+            length: WINDOW_UPDATE_FRAME_LEN,
+            frame_type: WINDOW_UPDATE_FRAME_TYPE,
+            flags: 0,
+            stream_id: self.stream_id,
+        }
     }
 }
 
@@ -97,10 +99,11 @@ mod tests {
 
     use solicit::tests::common::{serialize_frame, raw_frame_from_parts};
     use solicit::frame::Frame;
+    use solicit::frame::FrameHeader;
 
     #[test]
     fn test_parse_valid_connection_level() {
-        let raw = raw_frame_from_parts((4, 0x8, 0, 0), vec![0, 0, 0, 1]);
+        let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 0), vec![0, 0, 0, 1]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
         assert_eq!(frame.increment(), 1);
         assert_eq!(frame.get_stream_id(), 0);
@@ -108,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_max_increment() {
-        let raw = raw_frame_from_parts((4, 0x8, 0, 0), vec![0xff, 0xff, 0xff, 0xff]);
+        let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 0), vec![0xff, 0xff, 0xff, 0xff]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("valid WINDOW_UPDATE");
         // Automatically ignores the reserved bit...
         assert_eq!(frame.increment(), 0x7FFFFFFF);
@@ -116,7 +119,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_stream_level() {
-        let raw = raw_frame_from_parts((4, 0x8, 0, 1), vec![0, 0, 0, 1]);
+        let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 1]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
         assert_eq!(frame.increment(), 1);
         assert_eq!(frame.get_stream_id(), 1);
@@ -126,7 +129,7 @@ mod tests {
     /// increment is invalid.
     #[test]
     fn test_parse_increment_zero() {
-        let raw = raw_frame_from_parts((4, 0x8, 0, 1), vec![0, 0, 0, 0]);
+        let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 0]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
         assert_eq!(frame.increment(), 0);
         assert_eq!(frame.get_stream_id(), 1);
@@ -135,7 +138,7 @@ mod tests {
     #[test]
     fn test_serialize_connection_level() {
         let frame = WindowUpdateFrame::for_connection(10);
-        let expected: Vec<u8> = raw_frame_from_parts((4, 0x8, 0, 0), vec![0, 0, 0, 10]).as_ref().to_owned();
+        let expected: Vec<u8> = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 0), vec![0, 0, 0, 10]).as_ref().to_owned();
         let serialized = serialize_frame(&frame);
 
         assert_eq!(expected, serialized);
@@ -144,7 +147,7 @@ mod tests {
     #[test]
     fn test_serialize_stream_level() {
         let frame = WindowUpdateFrame::for_stream(1, 10);
-        let expected = raw_frame_from_parts((4, 0x8, 0, 1), vec![0, 0, 0, 10]).as_ref().to_owned();
+        let expected = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 10]).as_ref().to_owned();
         let serialized = serialize_frame(&frame);
 
         assert_eq!(expected, serialized);

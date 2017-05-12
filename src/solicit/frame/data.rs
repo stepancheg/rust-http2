@@ -163,7 +163,7 @@ impl Frame for DataFrame {
     /// constructed from the given `RawFrame`.
     fn from_raw(raw_frame: &RawFrame) -> Option<DataFrame> {
         // Unpack the header
-        let (len, frame_type, flags, stream_id) = raw_frame.header();
+        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != 0x0 {
             return None;
@@ -171,7 +171,7 @@ impl Frame for DataFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (len as usize) != raw_frame.payload().len() {
+        if (length as usize) != raw_frame.payload().len() {
             return None;
         }
         // A DATA frame cannot be associated to the connection itself.
@@ -218,7 +218,12 @@ impl Frame for DataFrame {
 
     /// Returns a `FrameHeader` based on the current state of the frame.
     fn get_header(&self) -> FrameHeader {
-        (self.payload_len(), 0x0, self.flags.0, self.stream_id)
+        FrameHeader {
+            length: self.payload_len(),
+            frame_type: 0x0,
+            flags: self.flags.0,
+            stream_id: self.stream_id,
+        }
     }
 }
 
@@ -243,6 +248,7 @@ mod tests {
     use solicit::frame::tests::build_padded_frame_payload;
     use solicit::tests::common::{raw_frame_from_parts, serialize_frame};
     use solicit::frame::{pack_header, Frame};
+    use solicit::frame::FrameHeader;
 
     /// Tests that the `DataFrame` struct correctly interprets a DATA frame
     /// with no padding set.
@@ -251,7 +257,7 @@ mod tests {
         let data = b"asdf";
         let payload = data.to_vec();
         // A header with the flag indicating no padding
-        let header = (payload.len() as u32, 0u8, 0u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 0u8, 1u32);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: DataFrame = Frame::from_raw(&raw).unwrap();
@@ -279,7 +285,7 @@ mod tests {
         let data = b"asdf";
         let payload = build_padded_frame_payload(data, 5);
         // A header with the flag indicating padding
-        let header = (payload.len() as u32, 0u8, 8u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: DataFrame = Frame::from_raw(&raw).unwrap();
@@ -303,7 +309,7 @@ mod tests {
         let data = b"";
         let payload = data.to_vec();
         // A header with the flag indicating no padding
-        let header = (payload.len() as u32, 0u8, 0u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 0u8, 1u32);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: DataFrame = Frame::from_raw(&raw).unwrap();
@@ -321,7 +327,7 @@ mod tests {
     fn test_data_frame_padding_invalid() {
         let payload = vec![5, b'a', b's', b'd', b'f'];
         // A header with the flag indicating padding
-        let header = (payload.len() as u32, 0u8, 8u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<DataFrame> = Frame::from_raw(&raw);
@@ -337,7 +343,7 @@ mod tests {
         let data = b"asdf";
         let payload = data.to_vec();
         // Stream 0
-        let header = (payload.len() as u32, 0u8, 0u8, 0u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 0u8, 0u32);
 
         let raw = raw_frame_from_parts(header, payload.to_vec());
         let frame: Option<DataFrame> = Frame::from_raw(&raw);
@@ -351,7 +357,7 @@ mod tests {
     #[test]
     fn test_data_frame_no_padding_empty() {
         let payload = [];
-        let header = (payload.len() as u32, 0u8, 0u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 0u8, 1u32);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: DataFrame = Frame::from_raw(&raw).unwrap();
@@ -367,7 +373,7 @@ mod tests {
     #[test]
     fn test_data_frame_padding_empty_payload() {
         let payload = vec![];
-        let header = (payload.len() as u32, 0u8, 8u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<DataFrame> = Frame::from_raw(&raw);
@@ -384,7 +390,7 @@ mod tests {
         let data = b"test string";
         let payload = build_padded_frame_payload(data, 0);
         // A header with the flag indicating padding
-        let header = (payload.len() as u32, 0u8, 8u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 0u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: DataFrame = Frame::from_raw(&raw).unwrap();
@@ -403,7 +409,7 @@ mod tests {
         let data = b"dummy";
         let payload = build_padded_frame_payload(data, 0);
         // The header has an invalid type (0x1 instead of 0x0).
-        let header = (payload.len() as u32, 1u8, 8u8, 1u32);
+        let header = FrameHeader::new(payload.len() as u32, 1u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<DataFrame> = Frame::from_raw(&raw);
@@ -417,7 +423,7 @@ mod tests {
     fn test_data_frame_serialize_no_padding_empty() {
         let frame = DataFrame::new(1);
         let expected = {
-            let headers = pack_header(&(0, 0, 0, 1));
+            let headers = pack_header(&FrameHeader::new(0, 0, 0, 1));
             let mut res: Vec<u8> = Vec::new();
             res.extend(headers.to_vec());
 
@@ -436,7 +442,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 100];
         let frame = DataFrame::with_data(1, &data[..]);
         let expected = {
-            let headers = pack_header(&(6, 0, 0, 1));
+            let headers = pack_header(&FrameHeader::new(6, 0, 0, 1));
             let mut res: Vec<u8> = Vec::new();
             res.extend(headers.to_vec());
             res.extend(data.clone());
@@ -457,7 +463,7 @@ mod tests {
         let mut frame = DataFrame::with_data(1, &data[..]);
         frame.set_padding(5);
         let expected = {
-            let headers = pack_header(&(6 + 1 + 5, 0, 8, 1));
+            let headers = pack_header(&FrameHeader::new(6 + 1 + 5, 0, 8, 1));
             let mut res: Vec<u8> = Vec::new();
             // Headers
             res.extend(headers.to_vec());
@@ -487,7 +493,7 @@ mod tests {
         let mut frame = DataFrame::with_data(1, data);
         frame.set_flag(DataFlag::Padded);
         let expected = {
-            let headers = pack_header(&(6 + 1, 0, 8, 1));
+            let headers = pack_header(&FrameHeader::new(6 + 1, 0, 8, 1));
             let mut res: Vec<u8> = Vec::new();
             // Headers
             res.extend(headers.to_vec());

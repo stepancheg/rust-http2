@@ -190,16 +190,18 @@ pub enum HttpFrameStream {
     Headers(HeadersFrame),
     RstStream(RstStreamFrame),
     WindowUpdate(WindowUpdateFrame),
+    Continuation(ContinuationFrame),
 }
 
 impl HttpFrameStream {
     #[allow(dead_code)]
     pub fn into_frame(self) -> HttpFrame {
         match self {
-            HttpFrameStream::WindowUpdate(f) => HttpFrame::WindowUpdateFrame(f),
-            HttpFrameStream::Data(f) => HttpFrame::DataFrame(f),
-            HttpFrameStream::Headers(f) => HttpFrame::HeadersFrame(f),
-            HttpFrameStream::RstStream(f) => HttpFrame::RstStreamFrame(f),
+            HttpFrameStream::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
+            HttpFrameStream::Data(f) => HttpFrame::Data(f),
+            HttpFrameStream::Headers(f) => HttpFrame::Headers(f),
+            HttpFrameStream::RstStream(f) => HttpFrame::RstStream(f),
+            HttpFrameStream::Continuation(f) => HttpFrame::Continuation(f),
         }
     }
 
@@ -210,6 +212,7 @@ impl HttpFrameStream {
             &HttpFrameStream::Data(ref f) => f.get_stream_id(),
             &HttpFrameStream::Headers(ref f) => f.get_stream_id(),
             &HttpFrameStream::RstStream(ref f) => f.get_stream_id(),
+            &HttpFrameStream::Continuation(ref f) => f.get_stream_id(),
         }
     }
 
@@ -220,6 +223,7 @@ impl HttpFrameStream {
             &HttpFrameStream::Data(ref f) => f.is_end_of_stream(),
             &HttpFrameStream::Headers(ref f) => f.is_end_of_stream(),
             &HttpFrameStream::RstStream(..) => true,
+            &HttpFrameStream::Continuation(..) => panic!("end of stream is defined in HEADERS"),
         }
     }
 
@@ -238,10 +242,10 @@ impl HttpFrameConn {
     #[allow(dead_code)]
     pub fn into_frame(self) -> HttpFrame {
         match self {
-            HttpFrameConn::Settings(f) => HttpFrame::SettingsFrame(f),
-            HttpFrameConn::Ping(f) => HttpFrame::PingFrame(f),
-            HttpFrameConn::Goaway(f) => HttpFrame::GoawayFrame(f),
-            HttpFrameConn::WindowUpdate(f) => HttpFrame::WindowUpdateFrame(f),
+            HttpFrameConn::Settings(f) => HttpFrame::Settings(f),
+            HttpFrameConn::Ping(f) => HttpFrame::Ping(f),
+            HttpFrameConn::Goaway(f) => HttpFrame::Goaway(f),
+            HttpFrameConn::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
         }
     }
 }
@@ -256,20 +260,21 @@ pub enum HttpFrameClassified {
 impl HttpFrameClassified {
     pub fn from(frame: HttpFrame) -> Self {
         match frame {
-            HttpFrame::DataFrame(f) => HttpFrameClassified::Stream(HttpFrameStream::Data(f)),
-            HttpFrame::HeadersFrame(f) => HttpFrameClassified::Stream(HttpFrameStream::Headers(f)),
-            HttpFrame::RstStreamFrame(f) => HttpFrameClassified::Stream(HttpFrameStream::RstStream(f)),
-            HttpFrame::SettingsFrame(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
-            HttpFrame::PingFrame(f) => HttpFrameClassified::Conn(HttpFrameConn::Ping(f)),
-            HttpFrame::GoawayFrame(f) => HttpFrameClassified::Conn(HttpFrameConn::Goaway(f)),
-            HttpFrame::WindowUpdateFrame(f) => {
+            HttpFrame::Data(f) => HttpFrameClassified::Stream(HttpFrameStream::Data(f)),
+            HttpFrame::Headers(f) => HttpFrameClassified::Stream(HttpFrameStream::Headers(f)),
+            HttpFrame::RstStream(f) => HttpFrameClassified::Stream(HttpFrameStream::RstStream(f)),
+            HttpFrame::Settings(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
+            HttpFrame::Ping(f) => HttpFrameClassified::Conn(HttpFrameConn::Ping(f)),
+            HttpFrame::Goaway(f) => HttpFrameClassified::Conn(HttpFrameConn::Goaway(f)),
+            HttpFrame::WindowUpdate(f) => {
                 if f.get_stream_id() != 0 {
                     HttpFrameClassified::Stream(HttpFrameStream::WindowUpdate(f))
                 } else {
                     HttpFrameClassified::Conn(HttpFrameConn::WindowUpdate(f))
                 }
             },
-            HttpFrame::UnknownFrame(f) => HttpFrameClassified::Unknown(f),
+            HttpFrame::Continuation(f) => HttpFrameClassified::Stream(HttpFrameStream::Continuation(f)),
+            HttpFrame::Unknown(f) => HttpFrameClassified::Unknown(f),
         }
     }
 

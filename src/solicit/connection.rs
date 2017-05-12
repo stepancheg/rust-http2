@@ -21,8 +21,7 @@ use std::borrow::Borrow;
 use solicit::{StreamId, HttpError, HttpResult, HttpScheme, WindowSize,
            ErrorCode, INITIAL_CONNECTION_WINDOW_SIZE};
 use solicit::header::Header;
-use solicit::frame::{Frame, FrameIR, RawFrame, DataFrame, DataFlag, HeadersFrame, HeadersFlag,
-                  SettingsFrame, RstStreamFrame, PingFrame, GoawayFrame, WindowUpdateFrame};
+use solicit::frame::*;
 use hpack;
 
 #[derive(Debug)]
@@ -34,6 +33,7 @@ pub enum HttpFrameType {
     Ping,
     Goaway,
     WindowUpdate,
+    Continuation,
     Unknown(u8),
 }
 
@@ -45,27 +45,29 @@ pub enum HttpFrameType {
 #[derive(Debug)]
 #[derive(Clone)]
 pub enum HttpFrame {
-    DataFrame(DataFrame),
-    HeadersFrame(HeadersFrame),
-    RstStreamFrame(RstStreamFrame),
-    SettingsFrame(SettingsFrame),
-    PingFrame(PingFrame),
-    GoawayFrame(GoawayFrame),
-    WindowUpdateFrame(WindowUpdateFrame),
-    UnknownFrame(RawFrame),
+    Data(DataFrame),
+    Headers(HeadersFrame),
+    RstStream(RstStreamFrame),
+    Settings(SettingsFrame),
+    Ping(PingFrame),
+    Goaway(GoawayFrame),
+    WindowUpdate(WindowUpdateFrame),
+    Continuation(ContinuationFrame),
+    Unknown(RawFrame),
 }
 
 impl HttpFrame{
     pub fn from_raw(raw_frame: &RawFrame) -> HttpResult<HttpFrame> {
-        let frame = match raw_frame.header().1 {
-            0x0 => HttpFrame::DataFrame(HttpFrame::parse_frame(&raw_frame)?),
-            0x1 => HttpFrame::HeadersFrame(HttpFrame::parse_frame(&raw_frame)?),
-            0x3 => HttpFrame::RstStreamFrame(HttpFrame::parse_frame(&raw_frame)?),
-            0x4 => HttpFrame::SettingsFrame(HttpFrame::parse_frame(&raw_frame)?),
-            0x6 => HttpFrame::PingFrame(HttpFrame::parse_frame(&raw_frame)?),
-            0x7 => HttpFrame::GoawayFrame(HttpFrame::parse_frame(&raw_frame)?),
-            0x8 => HttpFrame::WindowUpdateFrame(HttpFrame::parse_frame(&raw_frame)?),
-            _ => HttpFrame::UnknownFrame(raw_frame.as_ref().into()),
+        let frame = match raw_frame.header().frame_type {
+            0x0 => HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
+            0x1 => HttpFrame::Headers(HttpFrame::parse_frame(&raw_frame)?),
+            0x3 => HttpFrame::RstStream(HttpFrame::parse_frame(&raw_frame)?),
+            0x4 => HttpFrame::Settings(HttpFrame::parse_frame(&raw_frame)?),
+            0x6 => HttpFrame::Ping(HttpFrame::parse_frame(&raw_frame)?),
+            0x7 => HttpFrame::Goaway(HttpFrame::parse_frame(&raw_frame)?),
+            0x8 => HttpFrame::WindowUpdate(HttpFrame::parse_frame(&raw_frame)?),
+            0x9 => HttpFrame::Continuation(HttpFrame::parse_frame(&raw_frame)?),
+            _ => HttpFrame::Unknown(raw_frame.as_ref().into()),
         };
 
         Ok(frame)
@@ -83,33 +85,39 @@ impl HttpFrame{
         // TODO: The reason behind being unable to decode the frame should be
         //       extracted to allow an appropriate connection-level action to be
         //       taken (e.g. responding with a PROTOCOL_ERROR).
-        Frame::from_raw(&raw_frame).ok_or(HttpError::InvalidFrame("failed to parse frame".to_owned()))
+        match Frame::from_raw(&raw_frame) {
+            Some(f) => Ok(f),
+            None => Err(HttpError::InvalidFrame(
+                format!("failed to parse frame {:?}", raw_frame.header()))),
+        }
     }
 
     /// Get stream id, zero for special frames
     pub fn get_stream_id(&self) -> StreamId {
         match self {
-            &HttpFrame::DataFrame(ref f) => f.get_stream_id(),
-            &HttpFrame::HeadersFrame(ref f) => f.get_stream_id(),
-            &HttpFrame::RstStreamFrame(ref f) => f.get_stream_id(),
-            &HttpFrame::SettingsFrame(ref f) => f.get_stream_id(),
-            &HttpFrame::PingFrame(ref f) => f.get_stream_id(),
-            &HttpFrame::GoawayFrame(ref f) => f.get_stream_id(),
-            &HttpFrame::WindowUpdateFrame(ref f) => f.get_stream_id(),
-            &HttpFrame::UnknownFrame(ref f) => f.get_stream_id(),
+            &HttpFrame::Data(ref f) => f.get_stream_id(),
+            &HttpFrame::Headers(ref f) => f.get_stream_id(),
+            &HttpFrame::RstStream(ref f) => f.get_stream_id(),
+            &HttpFrame::Settings(ref f) => f.get_stream_id(),
+            &HttpFrame::Ping(ref f) => f.get_stream_id(),
+            &HttpFrame::Goaway(ref f) => f.get_stream_id(),
+            &HttpFrame::WindowUpdate(ref f) => f.get_stream_id(),
+            &HttpFrame::Continuation(ref f) => f.get_stream_id(),
+            &HttpFrame::Unknown(ref f) => f.get_stream_id(),
         }
     }
 
     pub fn frame_type(&self) -> HttpFrameType {
         match self {
-            &HttpFrame::DataFrame(..) => HttpFrameType::Data,
-            &HttpFrame::HeadersFrame(..) => HttpFrameType::Headers,
-            &HttpFrame::RstStreamFrame(..) => HttpFrameType::RstStream,
-            &HttpFrame::SettingsFrame(..) => HttpFrameType::Settings,
-            &HttpFrame::PingFrame(..) => HttpFrameType::Ping,
-            &HttpFrame::GoawayFrame(..) => HttpFrameType::Goaway,
-            &HttpFrame::WindowUpdateFrame(..) => HttpFrameType::WindowUpdate,
-            &HttpFrame::UnknownFrame(ref f) => HttpFrameType::Unknown(f.frame_type()),
+            &HttpFrame::Data(..) => HttpFrameType::Data,
+            &HttpFrame::Headers(..) => HttpFrameType::Headers,
+            &HttpFrame::RstStream(..) => HttpFrameType::RstStream,
+            &HttpFrame::Settings(..) => HttpFrameType::Settings,
+            &HttpFrame::Ping(..) => HttpFrameType::Ping,
+            &HttpFrame::Goaway(..) => HttpFrameType::Goaway,
+            &HttpFrame::WindowUpdate(..) => HttpFrameType::WindowUpdate,
+            &HttpFrame::Continuation(..) => HttpFrameType::Continuation,
+            &HttpFrame::Unknown(ref f) => HttpFrameType::Unknown(f.frame_type()),
         }
     }
 }

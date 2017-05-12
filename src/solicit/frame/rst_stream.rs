@@ -54,8 +54,8 @@ impl Frame for RstStreamFrame {
     type FlagType = NoFlag;
 
     fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
-        let (payload_len, frame_type, flags, stream_id) = raw_frame.header();
-        if payload_len != RST_STREAM_FRAME_LEN {
+        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        if length != RST_STREAM_FRAME_LEN {
             return None;
         }
         if frame_type != RST_STREAM_FRAME_TYPE {
@@ -77,14 +77,18 @@ impl Frame for RstStreamFrame {
     fn is_set(&self, _: NoFlag) -> bool {
         false
     }
+
     fn get_stream_id(&self) -> StreamId {
         self.stream_id
     }
+
     fn get_header(&self) -> FrameHeader {
-        (RST_STREAM_FRAME_LEN,
-         RST_STREAM_FRAME_TYPE,
-         self.flags.0,
-         self.stream_id)
+        FrameHeader {
+            length: RST_STREAM_FRAME_LEN,
+            frame_type: RST_STREAM_FRAME_TYPE,
+            flags: self.flags.0,
+            stream_id: self.stream_id,
+        }
     }
 }
 
@@ -115,7 +119,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid() {
-        let raw = prepare_frame_bytes((4, 0x3, 0, 1), vec![0, 0, 0, 1]);
+        let raw = prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 1), vec![0, 0, 0, 1]);
         let rst = RstStreamFrame::from_raw(&raw.into()).expect("Valid frame expected");
         assert_eq!(rst.error_code(), ErrorCode::ProtocolError);
         assert_eq!(rst.get_stream_id(), 1);
@@ -123,18 +127,18 @@ mod tests {
 
     #[test]
     fn test_parse_valid_with_unknown_flags() {
-        let raw = prepare_frame_bytes((4, 0x3, 0x80, 1), vec![0, 0, 0, 1]);
+        let raw = prepare_frame_bytes(FrameHeader::new(4, 0x3, 0x80, 1), vec![0, 0, 0, 1]);
         let rst = RstStreamFrame::from_raw(&raw.into()).expect("Valid frame expected");
         assert_eq!(rst.error_code(), ErrorCode::ProtocolError);
         assert_eq!(rst.get_stream_id(), 1);
         // The raw flag set is correctly reported from the header, but the parsed frame itself does
         // not know how to interpret them.
-        assert_eq!(rst.get_header().2, 0x80);
+        assert_eq!(rst.get_header().flags, 0x80);
     }
 
     #[test]
     fn test_parse_unknown_error_code() {
-        let raw = prepare_frame_bytes((4, 0x3, 0x80, 1), vec![1, 0, 0, 1]);
+        let raw = prepare_frame_bytes(FrameHeader::new(4, 0x3, 0x80, 1), vec![1, 0, 0, 1]);
         let rst = RstStreamFrame::from_raw(&raw.into()).expect("Valid frame expected");
         // Unknown error codes are considered equivalent to an internal error.
         assert_eq!(rst.error_code(), ErrorCode::InternalError);
@@ -145,19 +149,19 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_stream_id() {
-        let raw = prepare_frame_bytes((4, 0x3, 0x80, 0), vec![0, 0, 0, 1]);
+        let raw = prepare_frame_bytes(FrameHeader::new(4, 0x3, 0x80, 0), vec![0, 0, 0, 1]);
         assert!(RstStreamFrame::from_raw(&raw.into()).is_none());
     }
 
     #[test]
     fn test_parse_invalid_payload_size() {
-        let raw = prepare_frame_bytes((5, 0x3, 0x00, 2), vec![0, 0, 0, 1, 0]);
+        let raw = prepare_frame_bytes(FrameHeader::new(5, 0x3, 0x00, 2), vec![0, 0, 0, 1, 0]);
         assert!(RstStreamFrame::from_raw(&raw.into()).is_none());
     }
 
     #[test]
     fn test_parse_invalid_id() {
-        let raw = prepare_frame_bytes((4, 0x1, 0x00, 2), vec![0, 0, 0, 1, 0]);
+        let raw = prepare_frame_bytes(FrameHeader::new(4, 0x1, 0x00, 2), vec![0, 0, 0, 1, 0]);
         assert!(RstStreamFrame::from_raw(&raw.into()).is_none());
     }
 
@@ -165,14 +169,14 @@ mod tests {
     fn test_serialize_protocol_error() {
         let frame = RstStreamFrame::new(1, ErrorCode::ProtocolError);
         let raw = serialize_frame(&frame);
-        assert_eq!(raw, prepare_frame_bytes((4, 0x3, 0, 1), vec![0, 0, 0, 1]));
+        assert_eq!(raw, prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 1), vec![0, 0, 0, 1]));
     }
 
     #[test]
     fn test_serialize_stream_closed() {
         let frame = RstStreamFrame::new(2, ErrorCode::StreamClosed);
         let raw = serialize_frame(&frame);
-        assert_eq!(raw, prepare_frame_bytes((4, 0x3, 0, 2), vec![0, 0, 0, 0x5]));
+        assert_eq!(raw, prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 2), vec![0, 0, 0, 0x5]));
     }
 
     #[test]
@@ -180,7 +184,7 @@ mod tests {
         let frame = RstStreamFrame::with_raw_error_code(3, 1024);
         let raw = serialize_frame(&frame);
         assert_eq!(raw,
-                   prepare_frame_bytes((4, 0x3, 0, 3), vec![0, 0, 0x04, 0]));
+                   prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 3), vec![0, 0, 0x04, 0]));
     }
 
     #[test]

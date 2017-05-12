@@ -229,7 +229,7 @@ impl Frame for HeadersFrame {
     /// Otherwise, returns a newly constructed `HeadersFrame`.
     fn from_raw(raw_frame: &RawFrame) -> Option<HeadersFrame> {
         // Unpack the header
-        let (len, frame_type, flags, stream_id) = raw_frame.header();
+        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != 0x1 {
             return None;
@@ -237,7 +237,7 @@ impl Frame for HeadersFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (len as usize) != raw_frame.payload().len() {
+        if (length as usize) != raw_frame.payload().len() {
             return None;
         }
         // Check that the HEADERS frame is not associated to stream 0
@@ -289,7 +289,12 @@ impl Frame for HeadersFrame {
 
     /// Returns a `FrameHeader` based on the current state of the `Frame`.
     fn get_header(&self) -> FrameHeader {
-        (self.payload_len(), 0x1, self.flags.0, self.stream_id)
+        FrameHeader {
+            length: self.payload_len(),
+            frame_type: 0x1,
+            flags: self.flags.0,
+            stream_id: self.stream_id,
+        }
     }
 }
 
@@ -325,6 +330,7 @@ mod tests {
     use solicit::frame::tests::build_padded_frame_payload;
     use solicit::tests::common::{raw_frame_from_parts, serialize_frame};
     use solicit::frame::{pack_header, Frame};
+    use solicit::frame::FrameHeader;
 
     /// Tests that a stream dependency structure can be correctly parsed by the
     /// `StreamDependency::parse` method.
@@ -412,7 +418,7 @@ mod tests {
     fn test_headers_frame_parse_simple() {
         let data = b"123";
         let payload = data.to_vec();
-        let header = (payload.len() as u32, 0x1, 0, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0, 1);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: HeadersFrame = Frame::from_raw(&raw).unwrap();
@@ -429,7 +435,7 @@ mod tests {
     fn test_headers_frame_parse_with_padding() {
         let data = b"123";
         let payload = build_padded_frame_payload(data, 6);
-        let header = (payload.len() as u32, 0x1, 0x08, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0x08, 1);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: HeadersFrame = Frame::from_raw(&raw).unwrap();
@@ -454,7 +460,7 @@ mod tests {
 
             buf
         };
-        let header = (payload.len() as u32, 0x1, 0x20, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0x20, 1);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: HeadersFrame = Frame::from_raw(&raw).unwrap();
@@ -480,7 +486,7 @@ mod tests {
             buf
         };
         let payload = build_padded_frame_payload(&full, 4);
-        let header = (payload.len() as u32, 0x1, 0x20 | 0x8, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0x20 | 0x8, 1);
 
         let raw = raw_frame_from_parts(header.clone(), payload.to_vec());
         let frame: HeadersFrame = Frame::from_raw(&raw).unwrap();
@@ -497,7 +503,7 @@ mod tests {
     fn test_headers_frame_parse_invalid_stream_id() {
         let data = b"123";
         let payload = data.to_vec();
-        let header = (payload.len() as u32, 0x1, 0, 0);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0, 0);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<HeadersFrame> = Frame::from_raw(&raw);
@@ -511,7 +517,7 @@ mod tests {
     fn test_headers_frame_parse_invalid_type() {
         let data = b"123";
         let payload = data.to_vec();
-        let header = (payload.len() as u32, 0x2, 0, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x2, 0, 1);
 
         let raw = raw_frame_from_parts(header, payload);
         let frame: Option<HeadersFrame> = Frame::from_raw(&raw);
@@ -525,7 +531,7 @@ mod tests {
     fn test_headers_frame_serialize_simple() {
         let data = b"123";
         let payload = data.to_vec();
-        let header = (payload.len() as u32, 0x1, 0, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0, 1);
         let expected = {
             let headers = pack_header(&header);
             let mut res: Vec<u8> = Vec::new();
@@ -546,7 +552,7 @@ mod tests {
     fn test_headers_frame_serialize_with_padding() {
         let data = b"123";
         let payload = build_padded_frame_payload(data, 6);
-        let header = (payload.len() as u32, 0x1, 0x08, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0x08, 1);
         let expected = {
             let headers = pack_header(&header);
             let mut res: Vec<u8> = Vec::new();
@@ -575,7 +581,7 @@ mod tests {
 
             buf
         };
-        let header = (payload.len() as u32, 0x1, 0x20, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0x20, 1);
         let expected = {
             let headers = pack_header(&header);
             let mut res: Vec<u8> = Vec::new();
@@ -605,7 +611,7 @@ mod tests {
             buf
         };
         let payload = build_padded_frame_payload(&full, 4);
-        let header = (payload.len() as u32, 0x1, 0x20 | 0x8, 1);
+        let header = FrameHeader::new(payload.len() as u32, 0x1, 0x20 | 0x8, 1);
         let expected = {
             let headers = pack_header(&header);
             let mut res: Vec<u8> = Vec::new();

@@ -3,12 +3,12 @@ use std::io;
 use std::sync::Arc;
 use std::panic;
 
-use solicit::frame::*;
 use solicit::ErrorCode;
 use solicit::StreamId;
 use solicit::HttpScheme;
 use solicit::HttpError;
 use solicit::header::*;
+use solicit::connection::EndStream;
 
 use bytes::Bytes;
 
@@ -209,16 +209,11 @@ impl<F : HttpService> LoopInner for ServerInner<F> {
             .expect("read to write common");
     }
 
-    fn process_headers_frame(&mut self, frame: HeadersFrame) {
-        let headers = self.common.conn.decoder
-                               .decode(&frame.header_fragment())
-                               .map_err(HttpError::CompressionError).unwrap();
-        let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
-
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
         let _stream = self.get_or_create_stream(
-            frame.get_stream_id(),
+            stream_id,
             headers,
-            frame.is_end_of_stream());
+            end_stream == EndStream::Yes);
 
         // TODO: drop stream if closed on both ends
     }
