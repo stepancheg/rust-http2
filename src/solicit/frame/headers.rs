@@ -132,7 +132,7 @@ pub struct HeadersFrame {
     /// The ID of the stream with which this frame is associated
     pub stream_id: StreamId,
     /// The header fragment bytes stored within the frame.
-    header_fragment: Bytes,
+    pub header_fragment: Bytes,
     /// The stream dependency information, if any.
     pub stream_dep: Option<StreamDependency>,
     /// The length of the padding, if any.

@@ -3,6 +3,7 @@ use std::io::Read;
 use std::net::SocketAddr;
 
 use futures::done;
+use futures::future;
 use futures::future::Future;
 use futures::future::BoxFuture;
 use futures::stream::Stream;
@@ -21,10 +22,14 @@ use solicit::frame::FRAME_HEADER_LEN;
 use solicit::frame::RawFrame;
 use solicit::frame::RawFrameRef;
 use solicit::frame::FrameIR;
+use solicit::frame::headers::HeadersFlag;
+use solicit::frame::headers::HeadersFrame;
 use solicit::frame::unpack_header;
 use solicit::frame::settings::SettingsFrame;
 use solicit::frame::settings::HttpSetting;
 use solicit::connection::HttpFrame;
+
+use bytesx::*;
 
 
 pub type HttpFuture<T> = Box<Future<Item=T, Error=HttpError>>;
@@ -88,11 +93,60 @@ pub fn recv_raw_frame_sync(read: &mut Read) -> HttpResult<RawFrame> {
     Ok(recv_raw_frame(SyncRead(read)).wait()?.1)
 }
 
+/// Recieve HTTP frame from reader.
 pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R)
     -> Box<Future<Item=(R, HttpFrame), Error=HttpError> + 'r>
 {
     Box::new(recv_raw_frame(read).and_then(|(read, raw_frame)| {
         Ok((read, HttpFrame::from_raw(&raw_frame)?))
+    }))
+}
+
+/// Recieve HTTP frame, joining CONTINUATION frame with preceding HEADER frames.
+pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
+    -> Box<Future<Item=(R, HttpFrame), Error=HttpError> + 'r>
+{
+    Box::new(future::loop_fn::<(R, Option<HeadersFrame>), _, _, _>((read, None), |(read, header_opt)| {
+        recv_http_frame(read).and_then(move |(read, frame)| {
+            match frame {
+                HttpFrame::Headers(h) => {
+                    if let Some(_) = header_opt {
+                        Err(HttpError::Other("expecting CONTINUATION frame, got HEADER"))
+                    } else {
+                        if h.is_headers_end() {
+                            Ok(future::Loop::Break((read, HttpFrame::Headers(h))))
+                        } else {
+                            Ok(future::Loop::Continue((read, Some(h))))
+                        }
+                    }
+                }
+                HttpFrame::Continuation(c) => {
+                    if let Some(mut h) = header_opt {
+                        if h.stream_id != c.stream_id {
+                            Err(HttpError::Other("CONTINUATION frame with different stream id"))
+                        } else {
+                            let header_end = c.is_headers_end();
+                            bytes_extend_with(&mut h.header_fragment, c.header_fragment);
+                            if header_end {
+                                h.set_flag(HeadersFlag::EndHeaders);
+                                Ok(future::Loop::Break((read, HttpFrame::Headers(h))))
+                            } else {
+                                Ok(future::Loop::Continue((read, Some(h))))
+                            }
+                        }
+                    } else {
+                        Err(HttpError::Other("CONTINUATION frame without headers"))
+                    }
+                }
+                f => {
+                    if let Some(_) = header_opt {
+                        Err(HttpError::Other("expecting CONTINUATION frame"))
+                    } else {
+                        Ok(future::Loop::Break((read, f)))
+                    }
+                },
+            }
+        })
     }))
 }
 

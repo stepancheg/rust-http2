@@ -30,6 +30,7 @@ use solicit::INITIAL_CONNECTION_WINDOW_SIZE;
 use solicit::connection::EndStream;
 use solicit::connection::HttpConnection;
 use solicit::connection::SendFrame;
+use solicit::connection::HttpFrame;
 
 use futures_misc::*;
 
@@ -677,7 +678,7 @@ pub trait LoopInner: 'static {
             HttpFrameStream::Headers(headers) => self.process_headers_frame(headers),
             HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst),
             HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update),
-            HttpFrameStream::Continuation(_continuation) => unimplemented!(),
+            HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),
         };
         if end_of_stream {
             self.close_remote(stream_id);
@@ -687,10 +688,10 @@ pub trait LoopInner: 'static {
         }
     }
 
-    fn process_raw_frame(&mut self, raw_frame: RawFrame) {
-        let frame = HttpFrameClassified::from_raw(&raw_frame).unwrap(); // TODO: do not panic
+    fn process_http_frame(&mut self, frame: HttpFrame) {
+        // TODO: decode headers
         debug!("received frame: {:?}", frame);
-        match frame {
+        match HttpFrameClassified::from(frame) {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
             HttpFrameClassified::Stream(f) => self.process_stream_frame(f),
             HttpFrameClassified::Unknown(_f) => {},
@@ -762,16 +763,15 @@ impl<I, N> ReadLoopData<I, N>
         N : LoopInner,
 {
     /// Recv a frame from the network
-    fn recv_raw_frame(self) -> HttpFuture<(Self, RawFrame)> {
+    fn recv_http_frame(self) -> HttpFuture<(Self, HttpFrame)> {
         let ReadLoopData { read, inner } = self;
-        Box::new(recv_raw_frame(read)
-            .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame))
-            .map_err(HttpError::from))
+        Box::new(recv_http_frame_join_cont(read)
+            .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame)))
     }
 
     fn read_process_frame(self) -> HttpFuture<Self> {
-        Box::new(self.recv_raw_frame()
-            .and_then(move |(lp, frame)| lp.process_raw_frame(frame)))
+        Box::new(self.recv_http_frame()
+            .and_then(move |(lp, frame)| lp.process_http_frame(frame)))
     }
 
     pub fn run(self) -> HttpFuture<()> {
@@ -782,9 +782,9 @@ impl<I, N> ReadLoopData<I, N>
         Box::new(future)
     }
 
-    fn process_raw_frame(self, frame: RawFrame) -> HttpFuture<Self> {
+    fn process_http_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
         self.inner.with(move |inner| {
-            inner.process_raw_frame(frame);
+            inner.process_http_frame(frame);
         });
         Box::new(futures::finished(self))
     }

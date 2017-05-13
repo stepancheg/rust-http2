@@ -56,6 +56,13 @@ impl ContinuationFrame {
     fn payload_len(&self) -> u32 {
         self.header_fragment.len() as u32
     }
+
+    /// Returns whether this frame ends the headers. If not, there MUST be a
+    /// number of follow up CONTINUATION frames that send the rest of the
+    /// header data.
+    pub fn is_headers_end(&self) -> bool {
+        self.is_set(ContinuationFlag::EndHeaders)
+    }
 }
 
 impl Frame for ContinuationFrame {
