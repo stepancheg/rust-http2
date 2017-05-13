@@ -142,9 +142,9 @@ pub struct HeadersFrame {
 impl HeadersFrame {
     /// Creates a new `HeadersFrame` with the given header fragment and stream
     /// ID. No padding, no stream dependency, and no flags are set.
-    pub fn new(fragment: Vec<u8>, stream_id: StreamId) -> HeadersFrame {
+    pub fn new<B : Into<Bytes>>(fragment: B, stream_id: StreamId) -> HeadersFrame {
         HeadersFrame {
-            header_fragment: Bytes::from(fragment),
+            header_fragment: fragment.into(),
             stream_id: stream_id,
             stream_dep: None,
             padding_len: None,

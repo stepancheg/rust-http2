@@ -1,9 +1,13 @@
+use std::io;
+
 use bytes::Bytes;
 
 use solicit::StreamId;
 use solicit::frame::RawFrame;
 use solicit::frame::Frame;
+use solicit::frame::FrameIR;
 use solicit::frame::FrameHeader;
+use solicit::frame::builder::FrameBuilder;
 
 use super::flags::Flag;
 use super::flags::Flags;
@@ -51,6 +55,14 @@ pub struct ContinuationFrame {
 }
 
 impl ContinuationFrame {
+    pub fn new<B : Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
+        ContinuationFrame {
+            header_fragment: fragment.into(),
+            stream_id: stream_id,
+            flags: Flags::default(),
+        }
+    }
+
     /// Returns the length of the payload of the current frame, including any
     /// possible padding in the number of bytes.
     fn payload_len(&self) -> u32 {
@@ -62,6 +74,11 @@ impl ContinuationFrame {
     /// header data.
     pub fn is_headers_end(&self) -> bool {
         self.is_set(ContinuationFlag::EndHeaders)
+    }
+
+    /// Sets the given flag for the frame.
+    pub fn set_flag(&mut self, flag: ContinuationFlag) {
+        self.flags.set(&flag);
     }
 }
 
@@ -108,5 +125,15 @@ impl Frame for ContinuationFrame {
             flags: self.flags.0,
             stream_id: self.stream_id,
         }
+    }
+}
+
+impl FrameIR for ContinuationFrame {
+    fn serialize_into<B : FrameBuilder>(self, b: &mut B) -> io::Result<()> {
+        b.write_header(self.get_header())?;
+        // Now the actual headers fragment
+        b.write_all(&self.header_fragment)?;
+
+        Ok(())
     }
 }

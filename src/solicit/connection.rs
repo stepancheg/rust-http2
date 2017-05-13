@@ -17,10 +17,15 @@
 
 use std::borrow::Cow;
 use std::borrow::Borrow;
+use std::cmp;
+
+use bytes::Bytes;
 
 use solicit::{StreamId, HttpError, HttpResult, HttpScheme, WindowSize,
            ErrorCode, INITIAL_CONNECTION_WINDOW_SIZE};
+use solicit::DEFAULT_MAX_FRAME_SIZE;
 use solicit::header::Header;
+use solicit::frame::continuation::ContinuationFlag;
 use solicit::frame::*;
 use hpack;
 
@@ -287,17 +292,37 @@ impl<'a, S> HttpConnectionSender<'a, S>
         let headers_fragment = self.conn
                                    .encoder
                                    .encode(headers.into().iter().map(|h| (h.name(), h.value())));
-        // For now, sending header fragments larger than 16kB is not supported
-        // (i.e. the encoded representation cannot be split into CONTINUATION
-        // frames).
-        let mut frame = HeadersFrame::new(headers_fragment, stream_id);
-        frame.set_flag(HeadersFlag::EndHeaders);
 
-        if end_stream == EndStream::Yes {
-            frame.set_flag(HeadersFlag::EndStream);
+        let headers_fragment = Bytes::from(headers_fragment);
+        let mut pos = 0;
+        while pos == 0 || pos < headers_fragment.len() {
+            let end = cmp::min(pos + DEFAULT_MAX_FRAME_SIZE as usize, headers_fragment.len());
+
+            let end_headers = end == headers_fragment.len();
+
+            let part = headers_fragment.slice(pos, end);
+
+            if pos == 0 {
+                let mut frame = HeadersFrame::new(part, stream_id);
+                if end_headers {
+                    frame.set_flag(HeadersFlag::EndHeaders);
+                }
+                if end_stream == EndStream::Yes {
+                    frame.set_flag(HeadersFlag::EndStream);
+                }
+                self.send_frame(frame)?;
+            } else {
+                let mut frame = ContinuationFrame::new(part, stream_id);
+                if end_headers {
+                    frame.set_flag(ContinuationFlag::EndHeaders);
+                }
+                self.send_frame(frame)?;
+            }
+
+            pos = end;
         }
 
-        self.send_frame(frame)
+        Ok(())
     }
 
     /// A helper function that inserts a frame representing the given data into the `SendFrame`

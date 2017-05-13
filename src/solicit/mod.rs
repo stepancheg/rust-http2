@@ -21,6 +21,16 @@ use self::header::Header;
 /// The initial size of the connections' flow control window.
 pub const INITIAL_CONNECTION_WINDOW_SIZE: i32 = 65_535;
 
+/// SETTINGS_MAX_FRAME_SIZE (0x5):
+///
+/// Indicates the size of the largest frame payload that the sender is willing to receive, in octets.
+///
+/// The initial value is 214 (16,384) octets. The value advertised by an endpoint MUST be
+/// between this initial value and the maximum allowed frame size (2^24-1 or 16,777,215 octets),
+/// inclusive. Values outside this range MUST be treated as a connection error (Section 5.4.1)
+/// of type PROTOCOL_ERROR.
+pub const DEFAULT_MAX_FRAME_SIZE: u32 = 16_384;
+
 /// An alias for the type that represents the ID of an HTTP/2 stream
 pub type StreamId = u32;
 
