@@ -1,3 +1,4 @@
+extern crate bytes;
 extern crate futures;
 extern crate httpbis;
 extern crate httpbis_interop;
@@ -5,11 +6,22 @@ extern crate httpbis_interop;
 extern crate log;
 extern crate env_logger;
 extern crate clap;
+extern crate native_tls;
+
+use std::sync::Arc;
+use std::net::SocketAddr;
+use std::net::IpAddr;
+
+use bytes::Bytes;
+
+use native_tls::TlsConnector;
+use native_tls::Certificate;
 
 use futures::future::Future;
 
 use httpbis::client::HttpClient;
 use httpbis::client_conf::HttpClientConf;
+use httpbis::client::ClientTlsOption;
 
 use httpbis_interop::PORT;
 
@@ -21,8 +33,15 @@ fn not_found(client: HttpClient) {
     assert_eq!(404, r.headers.status());
 }
 
+fn found(client: HttpClient) {
+    let r = client.start_get("/200", "localhost").collect().wait().expect("get");
+    assert_eq!(200, r.headers.status());
+    assert_eq!(Bytes::from("200 200 200"), r.body);
+}
+
 const TESTS: &'static [(&'static str, fn(HttpClient))] = &[
     ("not_found", not_found),
+    ("found",     found),
 ];
 
 fn find_test_case(name: &str) -> Option<fn(HttpClient)> {
@@ -34,8 +53,21 @@ fn find_test_case(name: &str) -> Option<fn(HttpClient)> {
     None
 }
 
+fn test_tls_connector() -> TlsConnector {
+    let root_ca = include_bytes!("../../root-ca.der");
+    let root_ca = Certificate::from_der(root_ca).unwrap();
+
+    let mut builder = TlsConnector::builder().unwrap();
+    builder.add_root_certificate(root_ca).expect("add_root_certificate");
+    builder.build().unwrap()
+}
+
 fn new_http_client() -> HttpClient {
-    HttpClient::new("localhost", PORT, false, HttpClientConf::new()).expect("client")
+    HttpClient::new_expl(
+        &SocketAddr::from(("::1".parse::<IpAddr>().unwrap(), PORT)),
+        ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
+        HttpClientConf::new())
+            .expect("client")
 }
 
 fn run_test_case(name: &str) {

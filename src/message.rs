@@ -50,6 +50,13 @@ impl SimpleHttpMessage {
         }
     }
 
+    pub fn found_200_plain_text(body: &str) -> SimpleHttpMessage {
+        SimpleHttpMessage {
+            headers: Headers::ok_200(),
+            body: Bytes::from(body),
+        }
+    }
+
     pub fn add(&mut self, part: HttpStreamPartContent) {
         match part {
             HttpStreamPartContent::Headers(headers) => {

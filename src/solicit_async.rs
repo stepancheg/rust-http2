@@ -29,6 +29,8 @@ use solicit::frame::settings::SettingsFrame;
 use solicit::frame::settings::HttpSetting;
 use solicit::connection::HttpFrame;
 
+use misc::BsDebug;
+
 use bytesx::*;
 
 
@@ -234,7 +236,11 @@ pub fn server_handshake<I : AsyncRead + AsyncWrite + Send + 'static>(conn: I) ->
             done(if preface_buf == PREFACE {
                 Ok((conn))
             } else {
-                Err(HttpError::InvalidFrame("wrong preface".to_owned()))
+                if preface_buf[0] == 0x16 {
+                    Err(HttpError::InvalidFrame(format!("wrong preface, likely TLS: {:?}", BsDebug(&preface_buf))))
+                } else {
+                    Err(HttpError::InvalidFrame(format!("wrong preface: {:?}", BsDebug(&preface_buf))))
+                }
             })
         });
 

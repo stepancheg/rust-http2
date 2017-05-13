@@ -28,4 +28,4 @@ bytes = "0.*"
 env_logger = "0.*"
 
 [workspace]
-members = ["inteop/with-rust"]
+members = ["interop/with-rust"]
