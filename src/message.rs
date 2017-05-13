@@ -43,6 +43,13 @@ impl SimpleHttpMessage {
         r
     }
 
+    pub fn not_found_404(message: &str) -> SimpleHttpMessage {
+        SimpleHttpMessage {
+            headers: Headers::not_found_404(),
+            body: Bytes::from(message),
+        }
+    }
+
     pub fn add(&mut self, part: HttpStreamPartContent) {
         match part {
             HttpStreamPartContent::Headers(headers) => {

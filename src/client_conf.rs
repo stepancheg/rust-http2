@@ -7,3 +7,9 @@ pub struct HttpClientConf {
     pub thread_name: Option<String>,
     pub connection_timeout: Option<Duration>
 }
+
+impl HttpClientConf {
+    pub fn new() -> HttpClientConf {
+        Default::default()
+    }
+}

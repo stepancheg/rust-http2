@@ -39,6 +39,10 @@ impl HttpResponse {
         HttpResponse::headers_and_bytes_stream(header, stream::once(Ok(content)))
     }
 
+    pub fn message(message: SimpleHttpMessage) -> HttpResponse {
+        HttpResponse::headers_and_bytes(message.headers, message.body)
+    }
+
     pub fn from_stream<S>(stream: S) -> HttpResponse
         where S : Stream<Item=HttpStreamPart, Error=HttpError> + Send + 'static
     {

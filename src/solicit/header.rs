@@ -144,16 +144,22 @@ impl Headers {
         Default::default()
     }
 
-    pub fn ok_200() -> Headers {
+    pub fn from_status(code: u32) -> Headers {
         Headers(vec![
-            Header::new(":status", "200"),
+            Header::new(":status", format!("{}", code)),
         ])
     }
 
+    pub fn ok_200() -> Headers {
+        Headers::from_status(200)
+    }
+
+    pub fn not_found_404() -> Headers {
+        Headers::from_status(404)
+    }
+
     pub fn internal_error_500() -> Headers {
-        Headers(vec![
-            Header::new(":status", "500"),
-        ])
+        Headers::from_status(500)
     }
 
     pub fn get_opt<'a>(&'a self, name: &str) -> Option<&'a str> {

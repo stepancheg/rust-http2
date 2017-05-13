@@ -7,3 +7,9 @@ pub struct HttpServerConf {
     pub reuse_port: Option<bool>,
     pub backlog: Option<i32>,
 }
+
+impl HttpServerConf {
+    pub fn new() -> HttpServerConf {
+        Default::default()
+    }
+}
