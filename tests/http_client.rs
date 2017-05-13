@@ -125,4 +125,6 @@ fn client_call_dropped() {
         assert_eq!(200, resp.headers.status());
     }
 
+    let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
+    assert_eq!(0, state.streams.len(), "{:?}", state);
 }
