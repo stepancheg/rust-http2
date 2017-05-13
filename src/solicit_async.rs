@@ -111,7 +111,7 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = header_opt {
-                        Err(HttpError::Other("expecting CONTINUATION frame, got HEADER"))
+                        Err(HttpError::Other("expecting CONTINUATION frame, got HEADERS"))
                     } else {
                         if h.is_headers_end() {
                             Ok(future::Loop::Break((read, HttpFrame::Headers(h))))
