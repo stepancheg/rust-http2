@@ -49,11 +49,13 @@ impl HttpClient {
     pub fn new(host: &str, port: u16, tls: bool, conf: HttpClientConf) -> HttpResult<HttpClient> {
         // TODO: sync
         // TODO: try connect to all addrs
-        let socket_addr = (host, port).to_socket_addrs()?.next().unwrap();
+        let socket_addr = (host, port).to_socket_addrs()?.next().expect("resolve host/port");
 
         let tls_enabled = match tls {
             true => {
-                let connector = Arc::new(TlsConnector::builder().unwrap().build().unwrap());
+                let tls_connector = TlsConnector::builder().expect("TlsConnector::Builder")
+                    .build().expect("TlsConnectorBuilder::build");
+                let connector = Arc::new(tls_connector);
                 ClientTlsOption::Tls(host.to_owned(), connector)
             },
             false => ClientTlsOption::Plain,
@@ -156,7 +158,7 @@ fn run_client_event_loop(
     send_to_back: mpsc::Sender<LoopToClient>)
 {
     // Create an event loop.
-    let mut lp = reactor::Core::new().unwrap();
+    let mut lp = reactor::Core::new().expect("Core::new");
 
     // Create a channel to receive shutdown signal.
     let (shutdown_signal, shutdown_future) = shutdown_signal();

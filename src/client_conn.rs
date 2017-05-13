@@ -49,17 +49,18 @@ impl HttpStream for HttpClientStream {
 
     fn new_data_chunk(&mut self, data: &[u8], last: bool) {
         if let Some(ref mut response_handler) = self.response_handler {
-            response_handler.send(ResultOrEof::Item(HttpStreamPart {
+            // TODO: reset stream if called is dead
+            drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                 content: HttpStreamPartContent::Data(Bytes::from(data)),
                 last: last,
-            })).unwrap();
+            })));
         }
     }
 
     fn rst(&mut self, error_code: ErrorCode) {
         if let Some(ref mut response_handler) = self.response_handler {
-            response_handler.send(ResultOrEof::Error(HttpError::CodeError(error_code)))
-                .unwrap();
+            // TODO: reset stream if called is dead
+            drop(response_handler.send(ResultOrEof::Error(HttpError::CodeError(error_code))));
         }
     }
 
@@ -121,10 +122,11 @@ impl LoopInner for ClientInner {
         if headers.0.len() != 0 {
 
             if let Some(ref mut response_handler) = stream.response_handler {
-                response_handler.send(ResultOrEof::Item(HttpStreamPart {
+                // TODO: reset stream if called is dead
+                drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                     content: HttpStreamPartContent::Headers(headers),
                     last: end_stream == EndStream::Yes,
-                })).unwrap();
+                })));
             }
         }
     }
@@ -191,14 +193,14 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                     to_write_tx_1.send(ClientToWriteMessage::BodyChunk(BodyChunkMessage {
                         stream_id: stream_id,
                         chunk: chunk,
-                    })).unwrap();
+                    })).expect("client must be dead");
                     futures::finished::<_, HttpError>(())
                 });
             let future = future
                 .and_then(move |()| {
                     to_write_tx_2.send(ClientToWriteMessage::End(EndRequestMessage {
                         stream_id: stream_id,
-                    })).unwrap();
+                    })).expect("client must be dead");
                     futures::finished::<_, HttpError>(())
                 });
 

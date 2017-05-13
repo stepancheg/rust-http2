@@ -32,7 +32,12 @@ pub struct HttpServerTester(net::TcpListener);
 
 impl HttpServerTester {
     pub fn new() -> HttpServerTester {
-        HttpServerTester(net::TcpListener::bind("[::1]:0".parse::<net::SocketAddr>().unwrap()).unwrap())
+        let socket = net::TcpListener::bind("[::1]:0".parse::<net::SocketAddr>().unwrap()).unwrap();
+        let server = HttpServerTester(socket);
+
+        debug!("started HttpServerTester on {}", server.port());
+
+        server
     }
 
     pub fn port(&self) -> u16 {

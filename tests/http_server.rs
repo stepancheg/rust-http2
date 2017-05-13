@@ -4,6 +4,7 @@ extern crate native_tls;
 extern crate tokio_core;
 extern crate tokio_tls;
 extern crate httpbis;
+#[macro_use]
 extern crate log;
 extern crate env_logger;
 

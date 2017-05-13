@@ -29,8 +29,6 @@ fn stream_count() {
 
     let server = HttpServerTester::new();
 
-    debug!("started server on {}", server.port());
-
     let client: HttpClient =
         HttpClient::new("::1", server.port(), false, Default::default()).expect("connect");
 
@@ -71,8 +69,6 @@ fn rst_is_error() {
 
     let server = HttpServerTester::new();
 
-    debug!("started server on {}", server.port());
-
     let client: HttpClient =
         HttpClient::new("::1", server.port(), false, Default::default()).expect("connect");
 
@@ -96,4 +92,37 @@ fn rst_is_error() {
 
     let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len(), "{:?}", state);
+}
+
+#[test]
+fn client_call_dropped() {
+    env_logger::init().ok();
+
+    let server = HttpServerTester::new();
+
+    let client: HttpClient =
+        HttpClient::new("::1", server.port(), false, Default::default()).expect("connect");
+
+    let mut server_tester = server.accept();
+    server_tester.recv_preface();
+    server_tester.settings_xchg();
+
+    {
+        let req = client.start_get("/fgfg", "localhost");
+
+        server_tester.recv_message(1);
+
+        drop(req);
+
+        server_tester.send_headers(1, Headers::ok_200(), true);
+    }
+
+    {
+        let req = client.start_get("/fgfg", "localhost").collect();
+        server_tester.recv_message(3);
+        server_tester.send_headers(3, Headers::ok_200(), true);
+        let resp = req.wait().expect("OK");
+        assert_eq!(200, resp.headers.status());
+    }
+
 }
