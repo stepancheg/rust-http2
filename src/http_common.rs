@@ -536,25 +536,40 @@ pub trait LoopInner: 'static {
             return;
         }
 
-        for setting in frame.settings {
-            self.common().conn.peer_settings.apply(setting);
+        let mut out_window_increased = false;
 
-            if let HttpSetting::InitialWindowSize(_) = setting {
-                for _ in &mut self.common().streams {
-                    // In addition to changing the flow-control window for streams
-                    // that are not yet active, a SETTINGS frame can alter the initial
-                    // flow-control window size for streams with active flow-control windows
-                    // (that is, streams in the "open" or "half-closed (remote)" state).
-                    // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
-                    // a receiver MUST adjust the size of all stream flow-control windows
-                    // that it maintains by the difference between the new value
-                    // and the old value.
-                    unimplemented!()
+        for setting in frame.settings {
+            if let HttpSetting::InitialWindowSize(new_size) = setting {
+                let old_size = self.common().conn.peer_settings.initial_window_size;
+                let delta = (new_size as i32) - (old_size as i32);
+
+                if delta != 0 {
+                    for (_, s) in &mut self.common().streams {
+                        // In addition to changing the flow-control window for streams
+                        // that are not yet active, a SETTINGS frame can alter the initial
+                        // flow-control window size for streams with active flow-control windows
+                        // (that is, streams in the "open" or "half-closed (remote)" state).
+                        // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
+                        // a receiver MUST adjust the size of all stream flow-control windows
+                        // that it maintains by the difference between the new value
+                        // and the old value.
+                        s.common_mut().out_window_size.0 += delta;
+                    }
+
+                    if !self.common().streams.is_empty() && delta > 0 {
+                        out_window_increased = true;
+                    }
                 }
             }
+
+            self.common().conn.peer_settings.apply(setting);
         }
 
         self.ack_settings();
+
+        if out_window_increased {
+            self.out_window_increased(None);
+        }
     }
 
     fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame) {

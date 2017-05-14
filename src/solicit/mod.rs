@@ -282,7 +282,7 @@ pub type HttpResult<T> = Result<T, HttpError>;
 /// It exposes methods that allow the manipulation of window sizes, such that they can never
 /// overflow the spec-mandated upper bound.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct WindowSize(i32);
+pub struct WindowSize(pub i32);
 impl WindowSize {
     /// Tries to increase the window size by the given delta. If the WindowSize would overflow the
     /// maximum allowed value (2^31 - 1), returns an error case. If the increase succeeds, returns
