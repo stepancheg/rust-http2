@@ -297,7 +297,9 @@ impl<'a, S> HttpConnectionSender<'a, S>
         let headers_fragment = Bytes::from(headers_fragment);
         let mut pos = 0;
         while pos == 0 || pos < headers_fragment.len() {
-            let end = cmp::min(pos + DEFAULT_SETTINGS.max_frame_size as usize, headers_fragment.len());
+            let end = cmp::min(
+                pos + self.conn.peer_settings.max_frame_size as usize,
+                headers_fragment.len());
 
             let end_headers = end == headers_fragment.len();
 
@@ -332,6 +334,9 @@ impl<'a, S> HttpConnectionSender<'a, S>
     pub fn send_data(&mut self, chunk: DataChunk) -> HttpResult<()> {
         // Prepare the frame...
         let DataChunk { data, stream_id, end_stream } = chunk;
+
+        assert!(data.len() <= self.conn.peer_settings.max_frame_size as usize);
+
         let mut frame = DataFrame::with_data(stream_id, data.as_ref());
         if end_stream == EndStream::Yes {
             frame.set_flag(DataFlag::EndStream);
