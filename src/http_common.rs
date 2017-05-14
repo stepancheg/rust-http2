@@ -538,6 +538,20 @@ pub trait LoopInner: 'static {
 
         for setting in frame.settings {
             self.common().conn.peer_settings.apply(setting);
+
+            if let HttpSetting::InitialWindowSize(_) = setting {
+                for _ in &mut self.common().streams {
+                    // In addition to changing the flow-control window for streams
+                    // that are not yet active, a SETTINGS frame can alter the initial
+                    // flow-control window size for streams with active flow-control windows
+                    // (that is, streams in the "open" or "half-closed (remote)" state).
+                    // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
+                    // a receiver MUST adjust the size of all stream flow-control windows
+                    // that it maintains by the difference between the new value
+                    // and the old value.
+                    unimplemented!()
+                }
+            }
         }
 
         self.ack_settings();
