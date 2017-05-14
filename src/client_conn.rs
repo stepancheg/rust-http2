@@ -174,7 +174,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
             let mut stream = HttpClientStream {
-                common: HttpStreamCommon::new(inner.common.conn.initial_out_window_size),
+                common: HttpStreamCommon::new(inner.common.conn.peer_settings.initial_window_size),
                 response_handler: Some(response_handler),
             };
 

@@ -209,7 +209,7 @@ static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 fn send_settings<W : AsyncWrite + Send + 'static>(conn: W) -> HttpFuture<W> {
     let settings = {
         let mut frame = SettingsFrame::new();
-        frame.add_setting(HttpSetting::EnablePush(0));
+        frame.add_setting(HttpSetting::EnablePush(false));
         frame
     };
 

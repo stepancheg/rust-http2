@@ -3,6 +3,9 @@ name = "httpbis-interop"
 authors = ["Stepan Koltsov <stepan.koltsov@gmail.com>"]
 version = "0.0.0"
 
+[lib]
+doctest = false
+
 [[bin]]
 name = "http2-rust-interop-server"
 path = "src/interop_server.rs"

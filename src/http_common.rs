@@ -26,7 +26,7 @@ use solicit::StreamId;
 use solicit::HttpError;
 use solicit::WindowSize;
 use solicit::HttpScheme;
-use solicit::INITIAL_CONNECTION_WINDOW_SIZE;
+use solicit::DEFAULT_SETTINGS;
 use solicit::connection::EndStream;
 use solicit::connection::HttpConnection;
 use solicit::connection::SendFrame;
@@ -205,7 +205,7 @@ impl HttpStreamCommon {
     pub fn new(out_window_size: u32) -> HttpStreamCommon {
         HttpStreamCommon {
             state: StreamState::Open,
-            in_window_size: WindowSize::new(INITIAL_CONNECTION_WINDOW_SIZE),
+            in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: VecDeque::new(),
             outgoing_end: None,
@@ -537,29 +537,8 @@ pub trait LoopInner: 'static {
         }
 
         for setting in frame.settings {
-            match setting {
-                HttpSetting::HeaderTableSize(..) => { /* TODO */ }
-                HttpSetting::EnablePush(..) => { /* TODO */ }
-                HttpSetting::MaxConcurrentStreams(..) => { /* TODO */ }
-                HttpSetting::InitialWindowSize(size) => {
-                    self.common().conn.initial_out_window_size = size;
-                    for _ in &mut self.common().streams {
-                        // In addition to changing the flow-control window for streams
-                        // that are not yet active, a SETTINGS frame can alter the initial
-                        // flow-control window size for streams with active flow-control windows
-                        // (that is, streams in the "open" or "half-closed (remote)" state).
-                        // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
-                        // a receiver MUST adjust the size of all stream flow-control windows
-                        // that it maintains by the difference between the new value
-                        // and the old value.
-                        unimplemented!()
-                    }
-                }
-                HttpSetting::MaxFrameSize(..) => { /* TODO */ }
-                HttpSetting::MaxHeaderListSize(..) => { /* TODO */ }
-            }
+            self.common().conn.peer_settings.apply(setting);
         }
-        // TODO: apply settings
 
         self.ack_settings();
     }
@@ -603,8 +582,9 @@ pub trait LoopInner: 'static {
             .expect("failed to decrease conn win");
 
         let increment_conn =
-            if self.common().conn.in_window_size() < INITIAL_CONNECTION_WINDOW_SIZE / 2 {
-                let increment = INITIAL_CONNECTION_WINDOW_SIZE as u32;
+            // TODO: need something better
+            if self.common().conn.in_window_size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
+                let increment = DEFAULT_SETTINGS.initial_window_size;
                 self.common().conn.in_window_size.try_increase(increment).expect("failed to increase");
 
                 Some(increment)
@@ -620,8 +600,8 @@ pub trait LoopInner: 'static {
                 .expect("failed to decrease stream win");
 
             let increment_stream =
-                if stream.common_mut().in_window_size.size() < INITIAL_CONNECTION_WINDOW_SIZE / 2 {
-                    let increment = INITIAL_CONNECTION_WINDOW_SIZE as u32;
+                if stream.common_mut().in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
+                    let increment = DEFAULT_SETTINGS.initial_window_size;
                     stream.common_mut().in_window_size.try_increase(increment).expect("failed to increase");
 
                     Some(increment)

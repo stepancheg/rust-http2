@@ -15,7 +15,7 @@ use solicit::frame::flags::*;
 #[derive(Copy)]
 pub enum HttpSetting {
     HeaderTableSize(u32),
-    EnablePush(u32),
+    EnablePush(bool),
     MaxConcurrentStreams(u32),
     InitialWindowSize(u32),
     MaxFrameSize(u32),
@@ -29,7 +29,7 @@ impl HttpSetting {
     pub fn from_id(id: u16, val: u32) -> Option<HttpSetting> {
         match id {
             1 => Some(HttpSetting::HeaderTableSize(val)),
-            2 => Some(HttpSetting::EnablePush(val)),
+            2 => Some(HttpSetting::EnablePush(val != 0)),
             3 => Some(HttpSetting::MaxConcurrentStreams(val)),
             4 => Some(HttpSetting::InitialWindowSize(val)),
             5 => Some(HttpSetting::MaxFrameSize(val)),
@@ -71,12 +71,13 @@ impl HttpSetting {
     /// Gets the setting value by unpacking it from the wrapped `u32`.
     pub fn get_val(&self) -> u32 {
         match *self {
-            HttpSetting::HeaderTableSize(ref val) |
-            HttpSetting::EnablePush(ref val) |
-            HttpSetting::MaxConcurrentStreams(ref val) |
-            HttpSetting::InitialWindowSize(ref val) |
-            HttpSetting::MaxFrameSize(ref val) |
-            HttpSetting::MaxHeaderListSize(ref val) => *val,
+            HttpSetting::HeaderTableSize(val)      |
+            HttpSetting::MaxConcurrentStreams(val) |
+            HttpSetting::InitialWindowSize(val)    |
+            HttpSetting::MaxFrameSize(val)         |
+            HttpSetting::MaxHeaderListSize(val)    => val,
+            HttpSetting::EnablePush(true)  => 1,
+            HttpSetting::EnablePush(false) => 0,
         }
     }
 
@@ -90,6 +91,29 @@ impl HttpSetting {
          (((val >> 16) & 0x000000FF) as u8),
          (((val >>  8) & 0x000000FF) as u8),
          (((val      ) & 0x000000FF) as u8)]
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct HttpSettings {
+    pub header_table_size: u32,
+    pub enable_push: bool,
+    pub max_concurrent_streams: u32,
+    pub initial_window_size: u32,
+    pub max_frame_size: u32,
+    pub max_header_list_size: u32,
+}
+
+impl HttpSettings {
+    pub fn apply(&mut self, setting: HttpSetting) {
+        match setting {
+            HttpSetting::HeaderTableSize(s) => self.header_table_size = s,
+            HttpSetting::EnablePush(e) => self.enable_push = e,
+            HttpSetting::MaxConcurrentStreams(m) => self.max_concurrent_streams = m,
+            HttpSetting::InitialWindowSize(s) => self.initial_window_size = s,
+            HttpSetting::MaxFrameSize(s) => self.max_frame_size = s,
+            HttpSetting::MaxHeaderListSize(s) => self.max_header_list_size = s,
+        }
     }
 }
 
@@ -339,7 +363,7 @@ mod tests {
         let settings = vec![
             HttpSetting::HeaderTableSize(1),
             HttpSetting::MaxHeaderListSize(5),
-            HttpSetting::EnablePush(0),
+            HttpSetting::EnablePush(false),
         ];
         let payload = {
             let mut res: Vec<u8> = Vec::new();
@@ -368,7 +392,7 @@ mod tests {
         let settings = vec![
             HttpSetting::HeaderTableSize(1),
             HttpSetting::MaxHeaderListSize(5),
-            HttpSetting::EnablePush(0),
+            HttpSetting::EnablePush(false),
             HttpSetting::HeaderTableSize(2),
         ];
         let payload = {
@@ -454,7 +478,7 @@ mod tests {
     /// considered invalid.
     #[test]
     fn test_settings_frame_parse_ack_with_settings() {
-        let settings = [HttpSetting::EnablePush(0)];
+        let settings = [HttpSetting::EnablePush(false)];
         let payload = {
             let mut res: Vec<u8> = Vec::new();
             for s in settings.iter().map(|s| s.serialize()) {
@@ -504,13 +528,13 @@ mod tests {
     #[test]
     fn test_settings_frame_serialize_no_ack_settings() {
         let mut frame = SettingsFrame::new();
-        frame.add_setting(HttpSetting::EnablePush(0));
+        frame.add_setting(HttpSetting::EnablePush(false));
         let expected = {
             let mut res: Vec<u8> = Vec::new();
             res.extend(pack_header(
                 &FrameHeader { length: 6, frame_type: 4, flags: 0, stream_id: 0 })
                     .to_vec().into_iter());
-            res.extend(HttpSetting::EnablePush(0).serialize().to_vec().into_iter());
+            res.extend(HttpSetting::EnablePush(false).serialize().to_vec().into_iter());
 
             res
         };
@@ -525,14 +549,14 @@ mod tests {
     #[test]
     fn test_settings_frame_serialize_no_ack_multiple_settings() {
         let mut frame = SettingsFrame::new();
-        frame.add_setting(HttpSetting::EnablePush(0));
+        frame.add_setting(HttpSetting::EnablePush(false));
         frame.add_setting(HttpSetting::MaxHeaderListSize(0));
         let expected = {
             let mut res: Vec<u8> = Vec::new();
             res.extend(pack_header(
                 &FrameHeader { length: 6 * 2, frame_type: 4, flags: 0, stream_id: 0 })
                     .to_vec().into_iter());
-            res.extend(HttpSetting::EnablePush(0).serialize().to_vec().into_iter());
+            res.extend(HttpSetting::EnablePush(false).serialize().to_vec().into_iter());
             res.extend(HttpSetting::MaxHeaderListSize(0).serialize().to_vec().into_iter());
 
             res
@@ -573,7 +597,7 @@ mod tests {
 
             let setting = HttpSetting::parse_setting(&buf).unwrap();
 
-            assert_eq!(setting, HttpSetting::EnablePush(1));
+            assert_eq!(setting, HttpSetting::EnablePush(true));
         }
         {
             let buf = [0, 3, 0, 0, 0, 0];
@@ -633,7 +657,7 @@ mod tests {
         {
             let buf = [0, 2, 0, 0, 0, 1];
 
-            let setting = HttpSetting::EnablePush(1);
+            let setting = HttpSetting::EnablePush(true);
 
             assert_eq!(buf, setting.serialize());
         }

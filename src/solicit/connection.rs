@@ -22,11 +22,12 @@ use std::cmp;
 use bytes::Bytes;
 
 use solicit::{StreamId, HttpError, HttpResult, HttpScheme, WindowSize,
-           ErrorCode, INITIAL_CONNECTION_WINDOW_SIZE};
-use solicit::DEFAULT_MAX_FRAME_SIZE;
+           ErrorCode};
+use solicit::DEFAULT_SETTINGS;
 use solicit::header::Header;
 use solicit::frame::continuation::ContinuationFlag;
 use solicit::frame::*;
+use solicit::frame::settings::HttpSettings;
 use hpack;
 
 #[derive(Debug)]
@@ -147,8 +148,8 @@ pub struct HttpConnection {
     pub out_window_size: WindowSize,
     /// Tracks the size of the inbound flow control window
     pub in_window_size: WindowSize,
-    /// Initial stream window size
-    pub initial_out_window_size: u32,
+    /// Last known peer settings
+    pub peer_settings: HttpSettings,
     /// The scheme of the connection
     pub scheme: HttpScheme,
 }
@@ -296,7 +297,7 @@ impl<'a, S> HttpConnectionSender<'a, S>
         let headers_fragment = Bytes::from(headers_fragment);
         let mut pos = 0;
         while pos == 0 || pos < headers_fragment.len() {
-            let end = cmp::min(pos + DEFAULT_MAX_FRAME_SIZE as usize, headers_fragment.len());
+            let end = cmp::min(pos + DEFAULT_SETTINGS.max_frame_size as usize, headers_fragment.len());
 
             let end_headers = end == headers_fragment.len();
 
@@ -351,9 +352,9 @@ impl HttpConnection {
             scheme: scheme,
             decoder: hpack::Decoder::new(),
             encoder: hpack::Encoder::new(),
-            initial_out_window_size: INITIAL_CONNECTION_WINDOW_SIZE as u32,
-            in_window_size: WindowSize::new(INITIAL_CONNECTION_WINDOW_SIZE),
-            out_window_size: WindowSize::new(INITIAL_CONNECTION_WINDOW_SIZE),
+            peer_settings: DEFAULT_SETTINGS,
+            in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
+            out_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
         }
     }
 
