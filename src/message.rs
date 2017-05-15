@@ -4,8 +4,7 @@ use solicit::header::*;
 
 use bytesx::*;
 
-use http_common::*;
-
+use stream_part::*;
 
 pub struct SimpleHttpMessage {
     pub headers: Headers,
@@ -28,7 +27,7 @@ impl SimpleHttpMessage {
     }
 
     pub fn from_parts<I>(iter: I) -> SimpleHttpMessage
-        where I : IntoIterator<Item= HttpStreamPart>
+        where I : IntoIterator<Item=HttpStreamPart>
     {
         SimpleHttpMessage::from_part_content(iter.into_iter().map(|c| c.content))
     }

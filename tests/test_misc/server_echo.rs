@@ -1,29 +1,30 @@
 #![allow(dead_code)]
 
-use httpbis::server::HttpServer;
+use httpbis;
+use httpbis::server::Server;
 use httpbis::server::ServerTlsOption;
-use httpbis::http_common::*;
+use httpbis::conn::*;
 use httpbis::Headers;
 
 
 pub struct HttpServerEcho {
-    server: HttpServer,
+    server: Server,
     pub port: u16,
 }
 
 struct EchoService {
 }
 
-impl HttpService for EchoService {
-    fn start_request(&self, _headers: Headers, req: HttpPartStream) -> HttpResponse {
+impl httpbis::Service for EchoService {
+    fn start_request(&self, _headers: Headers, req: httpbis::HttpPartStream) -> Response {
         let headers = Headers::ok_200();
-        HttpResponse::headers_and_stream(headers, req)
+        Response::headers_and_stream(headers, req)
     }
 }
 
 impl HttpServerEcho {
     pub fn new() -> HttpServerEcho {
-        let http_server = HttpServer::new("[::1]:0", ServerTlsOption::Plain, Default::default(), EchoService {});
+        let http_server = Server::new("[::1]:0", ServerTlsOption::Plain, Default::default(), EchoService {});
         let port = http_server.local_addr().port();
         HttpServerEcho {
             server: http_server,

@@ -21,8 +21,10 @@ use std::cmp;
 
 use bytes::Bytes;
 
-use solicit::{StreamId, HttpError, HttpResult, HttpScheme, WindowSize,
-           ErrorCode};
+use error::Error;
+use error::ErrorCode;
+use result::Result;
+use solicit::{StreamId, HttpScheme, WindowSize};
 use solicit::DEFAULT_SETTINGS;
 use solicit::header::Header;
 use solicit::frame::continuation::ContinuationFlag;
@@ -63,7 +65,7 @@ pub enum HttpFrame {
 }
 
 impl HttpFrame{
-    pub fn from_raw(raw_frame: &RawFrame) -> HttpResult<HttpFrame> {
+    pub fn from_raw(raw_frame: &RawFrame) -> Result<HttpFrame> {
         let frame = match raw_frame.header().frame_type {
             0x0 => HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
             0x1 => HttpFrame::Headers(HttpFrame::parse_frame(&raw_frame)?),
@@ -87,13 +89,13 @@ impl HttpFrame{
     /// Failing to decode the given `Frame` from the `raw_frame`, an
     /// `HttpError::InvalidFrame` error is returned.
     #[inline] // TODO: take by value
-    fn parse_frame<F: Frame>(raw_frame: &RawFrame) -> HttpResult<F> {
+    fn parse_frame<F: Frame>(raw_frame: &RawFrame) -> Result<F> {
         // TODO: The reason behind being unable to decode the frame should be
         //       extracted to allow an appropriate connection-level action to be
         //       taken (e.g. responding with a PROTOCOL_ERROR).
         match Frame::from_raw(&raw_frame) {
             Some(f) => Ok(f),
-            None => Err(HttpError::InvalidFrame(
+            None => Err(Error::InvalidFrame(
                 format!("failed to parse frame {:?}", raw_frame.header()))),
         }
     }
@@ -161,7 +163,7 @@ pub trait SendFrame {
     /// individual `SendFrame` implementation to correctly serialize the given `FrameIR` into an
     /// appropriate buffer and make sure that the frame is subsequently eventually pushed to the
     /// peer.
-    fn send_frame<F: FrameIR>(&mut self, frame: F) -> HttpResult<()>;
+    fn send_frame<F: FrameIR>(&mut self, frame: F) -> Result<()>;
 }
 
 /// A trait that should be implemented by types that can provide the functionality
@@ -169,7 +171,7 @@ pub trait SendFrame {
 pub trait ReceiveFrame {
     /// Return a new `HttpFrame` instance. Unknown frames can be wrapped in the
     /// `HttpFrame::UnknownFrame` variant (i.e. their `RawFrame` representation).
-    fn recv_frame(&mut self) -> HttpResult<HttpFrame>;
+    fn recv_frame(&mut self) -> Result<HttpFrame>;
 }
 
 /// The struct represents a chunk of data that should be sent to the peer on a particular stream.
@@ -246,27 +248,27 @@ impl<'a, S> HttpConnectionSender<'a, S>
     ///
     /// If the frame is successfully written, returns a unit Ok (`Ok(())`).
     #[inline]
-    fn send_frame<F: FrameIR>(&mut self, frame: F) -> HttpResult<()> {
+    fn send_frame<F: FrameIR>(&mut self, frame: F) -> Result<()> {
         self.sender.send_frame(frame)
     }
 
     /// Send a RST_STREAM frame for the given frame id
-    pub fn send_rst_stream(&mut self, id: StreamId, code: ErrorCode) -> HttpResult<()> {
+    pub fn send_rst_stream(&mut self, id: StreamId, code: ErrorCode) -> Result<()> {
         self.send_frame(RstStreamFrame::new(id, code))
     }
 
     /// Sends a SETTINGS acknowledge frame to the peer.
-    pub fn send_settings_ack(&mut self) -> HttpResult<()> {
+    pub fn send_settings_ack(&mut self) -> Result<()> {
         self.send_frame(SettingsFrame::new_ack())
     }
 
     /// Sends a PING ack
-    pub fn send_ping_ack(&mut self, bytes: u64) -> HttpResult<()> {
+    pub fn send_ping_ack(&mut self, bytes: u64) -> Result<()> {
         self.send_frame(PingFrame::new_ack(bytes))
     }
 
     /// Sends a PING request
-    pub fn send_ping(&mut self, bytes: u64) -> HttpResult<()> {
+    pub fn send_ping(&mut self, bytes: u64) -> Result<()> {
         self.send_frame(PingFrame::with_data(bytes))
     }
 
@@ -288,7 +290,7 @@ impl<'a, S> HttpConnectionSender<'a, S>
         headers: H,
         stream_id: StreamId,
         end_stream: EndStream)
-            -> HttpResult<()>
+            -> Result<()>
     {
         let headers_fragment = self.conn
                                    .encoder
@@ -331,7 +333,7 @@ impl<'a, S> HttpConnectionSender<'a, S>
     /// A helper function that inserts a frame representing the given data into the `SendFrame`
     /// stream. In doing so, the connection's outbound flow control window is adjusted
     /// appropriately.
-    pub fn send_data(&mut self, chunk: DataChunk) -> HttpResult<()> {
+    pub fn send_data(&mut self, chunk: DataChunk) -> Result<()> {
         // Prepare the frame...
         let DataChunk { data, stream_id, end_stream } = chunk;
 
@@ -386,18 +388,18 @@ impl HttpConnection {
     }
 
     /// Internal helper method that decreases the outbound flow control window size.
-    pub fn decrease_out_window(&mut self, size: u32) -> HttpResult<()> {
+    pub fn decrease_out_window(&mut self, size: u32) -> Result<()> {
         // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
         // reach here only after sending a DATA frame, whose payload also cannot be larger than
         // that, but we assert it just in case.
         debug_assert!(size < 0x80000000);
         self.out_window_size
             .try_decrease(size as i32)
-            .map_err(|_| HttpError::WindowSizeOverflow)
+            .map_err(|_| Error::WindowSizeOverflow)
     }
 
     /// Internal helper method that decreases the inbound flow control window size.
-    pub fn decrease_in_window(&mut self, size: u32) -> HttpResult<()> {
+    pub fn decrease_in_window(&mut self, size: u32) -> Result<()> {
         // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
         // reach here only after receiving a DATA frame, which would have been validated when
         // parsed from the raw frame to have the correct payload size, but we assert it just in
@@ -405,6 +407,6 @@ impl HttpConnection {
         debug_assert!(size < 0x80000000);
         self.in_window_size
             .try_decrease(size as i32)
-            .map_err(|_| HttpError::WindowSizeOverflow)
+            .map_err(|_| Error::WindowSizeOverflow)
     }
 }

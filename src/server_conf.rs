@@ -1,5 +1,5 @@
 #[derive(Default, Debug, Clone)]
-pub struct HttpServerConf {
+pub struct ServerConf {
     /// TCP_NODELAY
     pub no_delay: Option<bool>,
     pub thread_name: Option<String>,
@@ -8,8 +8,8 @@ pub struct HttpServerConf {
     pub backlog: Option<i32>,
 }
 
-impl HttpServerConf {
-    pub fn new() -> HttpServerConf {
+impl ServerConf {
+    pub fn new() -> ServerConf {
         Default::default()
     }
 }

@@ -15,9 +15,8 @@ use native_tls::TlsAcceptor;
 use tokio_core;
 use tokio_core::reactor;
 
-//use tokio_tls;
+use httpbis;
 
-use httpbis::solicit::HttpError;
 use httpbis::solicit::header::*;
 
 use httpbis::for_test::*;
@@ -38,20 +37,20 @@ struct FromLoop {
 
 impl HttpServerOneConn {
     pub fn new_fn<S>(port: u16, service: S) -> Self
-        where S : Fn(Headers, HttpPartStream) -> HttpResponse + Send + 'static
+        where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
     {
         HttpServerOneConn::new_fn_impl(port, None, service)
     }
 
     pub fn new_tls_fn<S>(port: u16, server_context: TlsAcceptor, service: S) -> Self
-        where S : Fn(Headers, HttpPartStream) -> HttpResponse + Send + 'static
+        where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
     {
         HttpServerOneConn::new_fn_impl(port, Some(server_context), service)
     }
 
     #[allow(dead_code)]
     fn new_fn_impl<S>(port: u16, server_context: Option<TlsAcceptor>, service: S) -> Self
-        where S : Fn(Headers, HttpPartStream) -> HttpResponse + Send + 'static
+        where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
     {
         let (from_loop_tx, from_loop_rx) = futures::oneshot();
         let (shutdown_tx, shutdown_rx) = futures::oneshot::<()>();
@@ -73,7 +72,7 @@ impl HttpServerOneConn {
             let handle = lp.handle();
 
             let future = listener.incoming().into_future()
-                .map_err(|_| HttpError::from(io::Error::new(io::ErrorKind::Other, "something")))
+                .map_err(|_| httpbis::Error::from(io::Error::new(io::ErrorKind::Other, "something")))
                 .and_then(move |(conn, listener)| {
                     // incoming stream is endless
                     let (conn, _) = conn.unwrap();

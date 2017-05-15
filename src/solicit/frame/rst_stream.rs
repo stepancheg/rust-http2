@@ -1,9 +1,11 @@
 //! The module contains the implementation of the `RST_STREAM` frame.
 use std::io;
 
-use solicit::{ErrorCode, StreamId};
+use solicit::StreamId;
 use solicit::frame::{Frame, FrameIR, FrameBuilder, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
+
+use error::ErrorCode;
 
 /// The total allowed size for the `RST_STREAM` frame payload.
 pub const RST_STREAM_FRAME_LEN: u32 = 4;
@@ -105,7 +107,7 @@ mod tests {
     use super::RstStreamFrame;
 
     use solicit::tests::common::serialize_frame;
-    use solicit::ErrorCode;
+    use error::ErrorCode;
     use solicit::frame::{pack_header, FrameHeader, Frame};
 
     /// A helper function that creates a new Vec containing the serialized representation of the

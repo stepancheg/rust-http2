@@ -16,7 +16,7 @@ use futures::Stream;
 use futures::Future;
 use futures::future::join_all;
 
-use solicit::HttpError;
+use error::Error;
 
 use solicit_async::*;
 
@@ -25,7 +25,9 @@ use futures_misc::*;
 use net2;
 
 use super::server_conn::*;
-use super::http_common::*;
+use super::conn::*;
+
+use service::Service;
 
 use server_conf::*;
 
@@ -39,20 +41,20 @@ struct LoopToServer {
 
 
 
-pub struct HttpServer {
-    state: Arc<Mutex<HttpServerState>>,
+pub struct Server {
+    state: Arc<Mutex<ServerState>>,
     loop_to_server: LoopToServer,
     alive_rx: mpsc::Receiver<()>,
     thread_join_handle: Option<thread::JoinHandle<()>>,
 }
 
 #[derive(Default)]
-struct HttpServerState {
+struct ServerState {
     last_conn_id: u64,
     conns: HashMap<u64, HttpServerConnectionAsync>,
 }
 
-impl HttpServerState {
+impl ServerState {
     fn snapshot(&self) -> HttpFutureSend<HttpServerStateSnapshot> {
         let futures: Vec<_> = self.conns.iter()
             .map(|(&id, conn)| conn.dump_state().map(move |state| (id, state)))
@@ -70,7 +72,7 @@ pub struct HttpServerStateSnapshot {
 }
 
 #[cfg(unix)]
-fn configure_tcp(tcp: &net2::TcpBuilder, conf: &HttpServerConf) -> io::Result<()> {
+fn configure_tcp(tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
     use net2::unix::UnixTcpBuilderExt;
     if let Some(reuse_port) = conf.reuse_port {
         tcp.reuse_port(reuse_port)?;
@@ -79,14 +81,14 @@ fn configure_tcp(tcp: &net2::TcpBuilder, conf: &HttpServerConf) -> io::Result<()
 }
 
 #[cfg(windows)]
-fn configure_tcp(_tcp: &net2::TcpBuilder, conf: &HttpServerConf) -> io::Result<()> {
+fn configure_tcp(_tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
     Ok(())
 }
 
 fn listener(
     addr: &SocketAddr,
     handle: &reactor::Handle,
-    conf: &HttpServerConf)
+    conf: &ServerConf)
         -> io::Result<TcpListener>
 {
     let listener = match *addr {
@@ -103,13 +105,13 @@ fn listener(
 
 fn run_server_event_loop<S>(
     listen_addr: SocketAddr,
-    state: Arc<Mutex<HttpServerState>>,
+    state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption,
-    conf: HttpServerConf,
+    conf: ServerConf,
     service: S,
     send_to_back: mpsc::Sender<LoopToServer>,
     _alive_tx: mpsc::Sender<()>)
-        where S : HttpService,
+        where S : Service,
 {
     let service = Arc::new(service);
 
@@ -126,7 +128,7 @@ fn run_server_event_loop<S>(
         .send(LoopToServer { shutdown: shutdown_signal, local_addr: local_addr })
         .expect("send back");
 
-    let loop_run = listen.incoming().map_err(HttpError::from).zip(stuff)
+    let loop_run = listen.incoming().map_err(Error::from).zip(stuff)
         .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
             info!("accepted connection from {}", peer_addr);
 
@@ -159,7 +161,7 @@ fn run_server_event_loop<S>(
         .then(move |_| {
             // Must complete with error,
             // so `join` with this future cancels another future.
-            futures::failed::<(), _>(HttpError::Shutdown)
+            futures::failed::<(), _>(Error::Shutdown)
         });
 
     // Wait for either completion of connection (i. e. error)
@@ -170,16 +172,16 @@ fn run_server_event_loop<S>(
     lp.run(done).ok();
 }
 
-impl HttpServer {
-    pub fn new<A: ToSocketAddrs, S>(addr: A, tls: ServerTlsOption, conf: HttpServerConf, service: S) -> HttpServer
-        where S : HttpService
+impl Server {
+    pub fn new<A: ToSocketAddrs, S>(addr: A, tls: ServerTlsOption, conf: ServerConf, service: S) -> Server
+        where S : Service
     {
         let listen_addr = addr.to_socket_addrs().unwrap().next().unwrap();
 
         let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
         let (alive_tx, alive_rx) = mpsc::channel();
 
-        let state: Arc<Mutex<HttpServerState>> = Default::default();
+        let state: Arc<Mutex<ServerState>> = Default::default();
 
         let state_copy = state.clone();
 
@@ -198,7 +200,7 @@ impl HttpServer {
 
         let loop_to_server = get_from_loop_rx.recv().unwrap();
 
-        HttpServer {
+        Server {
             state: state,
             loop_to_server: loop_to_server,
             thread_join_handle: Some(join_handle),
@@ -222,7 +224,7 @@ impl HttpServer {
 }
 
 // We shutdown the server in the destructor.
-impl Drop for HttpServer {
+impl Drop for Server {
     fn drop(&mut self) {
         self.loop_to_server.shutdown.shutdown();
 

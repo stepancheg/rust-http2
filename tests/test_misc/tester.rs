@@ -13,7 +13,7 @@ use httpbis;
 use httpbis::message::SimpleHttpMessage;
 use httpbis::bytesx::*;
 use httpbis::solicit::StreamId;
-use httpbis::solicit::ErrorCode;
+use httpbis::error::ErrorCode;
 use httpbis::solicit::HttpScheme;
 use httpbis::solicit::header::*;
 use httpbis::solicit::frame::FrameIR;

@@ -3,6 +3,8 @@ use std::str::FromStr;
 use std::fmt;
 use std::borrow::Cow;
 
+use assert_types::*;
+
 use bytes::Bytes;
 
 /// A convenience struct representing a part of a header (either the name or the value).
@@ -107,6 +109,11 @@ pub struct Header {
     pub value: Bytes,
 }
 
+fn _assert_header_sync_send() {
+    assert_sync::<Header>();
+    assert_send::<Header>();
+}
+
 impl Header {
     /// Creates a new `Header` with the given name and value.
     ///
@@ -197,4 +204,30 @@ impl Headers {
         self.0.extend(headers.0);
     }
 
+}
+
+#[cfg(test)]
+mod test {
+    use solicit::header::Header;
+
+    #[test]
+    fn test_partial_eq_of_headers() {
+        let fully_static = Header::new(b":method", b"GET");
+        let static_name = Header::new(b":method", b"GET".to_vec());
+        let other = Header::new(b":path", b"/");
+
+        assert!(fully_static == static_name);
+        assert!(fully_static != other);
+        assert!(static_name != other);
+    }
+
+    #[test]
+    fn test_debug() {
+        assert_eq!(
+            "Header { name: b\":method\", value: b\"GET\" }",
+            format!("{:?}", Header::new(b":method", b"GET")));
+        assert_eq!(
+            "Header { name: b\":method\", value: b\"\\xcd\" }",
+            format!("{:?}", Header::new(b":method", b"\xcd")));
+    }
 }

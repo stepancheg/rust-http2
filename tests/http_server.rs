@@ -19,7 +19,8 @@ use futures::stream;
 
 use httpbis::solicit::header::*;
 
-use httpbis::for_test::*;
+use httpbis::*;
+use httpbis::stream_part::HttpStreamPart;
 
 use test_misc::*;
 
@@ -29,7 +30,7 @@ fn simple_new() {
     env_logger::init().ok();
 
     let server = HttpServerOneConn::new_fn(0, |_headers, req| {
-        HttpResponse::headers_and_stream(Headers::ok_200(), req)
+        Response::headers_and_stream(Headers::ok_200(), req)
     });
 
     let mut tester = HttpConnectionTester::connect(server.port());
@@ -59,7 +60,7 @@ fn panic_in_handler() {
         if headers.path() == "/panic" {
             panic!("requested");
         } else {
-            HttpResponse::headers_and_bytes(Headers::ok_200(), Bytes::from("hi there"))
+            Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hi there"))
         }
     });
 
@@ -93,14 +94,14 @@ fn panic_in_stream() {
 
     let server = HttpServerOneConn::new_fn(0, |headers, _req| {
         if headers.path() == "/panic" {
-            HttpResponse::from_stream(stream::iter((0..2).map(|i| {
+            Response::from_stream(stream::iter((0..2).map(|i| {
                 match i {
                     0 => Ok(HttpStreamPart::intermediate_headers(Headers::ok_200())),
                     _ => panic!("should reset stream"),
                 }
             })))
         } else {
-            HttpResponse::headers_and_bytes(Headers::ok_200(), Bytes::from("hi there"))
+            Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hi there"))
         }
     });
 
@@ -145,10 +146,10 @@ fn response_large() {
     let large_resp_copy = large_resp.clone();
 
     let server = HttpServerOneConn::new_fn(0, move |_headers, _req| {
-        HttpResponse::headers_and_bytes(Headers::ok_200(), Bytes::from(large_resp_copy.clone()))
+        Response::headers_and_bytes(Headers::ok_200(), Bytes::from(large_resp_copy.clone()))
     });
 
-    let client = HttpClient::new("::1", server.port(), false, Default::default()).expect("connect");
+    let client = Client::new("::1", server.port(), false, Default::default()).expect("connect");
     let resp = client.start_post("/foobar", "localhost", Bytes::from(&b""[..])).collect().wait().expect("wait");
     assert_eq!(large_resp.len(), resp.body.len());
     assert_eq!((large_resp.len(), &large_resp[..]), (resp.body.len(), &resp.body[..]));

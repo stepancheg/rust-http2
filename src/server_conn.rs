@@ -3,10 +3,11 @@ use std::io;
 use std::sync::Arc;
 use std::panic;
 
-use solicit::ErrorCode;
+use error::ErrorCode;
+
 use solicit::StreamId;
 use solicit::HttpScheme;
-use solicit::HttpError;
+use error::Error;
 use solicit::header::*;
 use solicit::connection::EndStream;
 
@@ -26,7 +27,9 @@ use tokio_tls::TlsAcceptorExt;
 use futures_misc::*;
 
 use solicit_async::*;
-use http_common::*;
+use conn::*;
+use service::Service;
+use stream_part::*;
 
 use server_tls::*;
 use server_conf::*;
@@ -34,13 +37,13 @@ use server_conf::*;
 use misc::any_to_string;
 
 
-struct HttpServerStream<F : HttpService> {
+struct HttpServerStream<F : Service> {
     common: HttpStreamCommon,
-    request_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, HttpError>>>,
+    request_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
     _marker: marker::PhantomData<F>,
 }
 
-impl<F : HttpService> HttpStream for HttpServerStream<F> {
+impl<F : Service> HttpStream for HttpServerStream<F> {
     fn common(&self) -> &HttpStreamCommon {
         &self.common
     }
@@ -63,7 +66,7 @@ impl<F : HttpService> HttpStream for HttpServerStream<F> {
     fn rst(&mut self, error_code: ErrorCode) {
         if let Some(ref mut sender) = self.request_handler {
             // ignore error
-            sender.send(ResultOrEof::Error(HttpError::CodeError(error_code))).ok();
+            sender.send(ResultOrEof::Error(Error::CodeError(error_code))).ok();
         }
     }
 
@@ -75,7 +78,7 @@ impl<F : HttpService> HttpStream for HttpServerStream<F> {
     }
 }
 
-impl<F : HttpService> HttpServerStream<F> {
+impl<F : Service> HttpServerStream<F> {
     fn set_headers(&mut self, headers: Headers, last: bool) {
         if let Some(ref mut sender) = self.request_handler {
             let part = HttpStreamPart {
@@ -89,26 +92,26 @@ impl<F : HttpService> HttpServerStream<F> {
 
 }
 
-struct HttpServerSessionState<F : HttpService> {
+struct HttpServerSessionState<F : Service> {
     factory: Arc<F>,
     to_write_tx: futures::sync::mpsc::UnboundedSender<ServerToWriteMessage<F>>,
     loop_handle: reactor::Handle,
 }
 
 
-struct ServerInner<F : HttpService> {
+struct ServerInner<F : Service> {
     common: LoopInnerCommon<HttpServerStream<F>>,
     session_state: HttpServerSessionState<F>,
 }
 
-impl<F : HttpService> ServerInner<F> {
+impl<F : Service> ServerInner<F> {
     fn new_request(&mut self, stream_id: StreamId, headers: Headers)
-        -> futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, HttpError>>
+        -> futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>
     {
         let (req_tx, req_rx) = futures::sync::mpsc::unbounded();
 
-        let req_rx = req_rx.map_err(|()| HttpError::from(io::Error::new(io::ErrorKind::Other, "req")));
-        let req_rx = stream_with_eof_and_error(req_rx, || HttpError::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
+        let req_rx = req_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
+        let req_rx = stream_with_eof_and_error(req_rx, || Error::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
 
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             self.session_state.factory.start_request(headers, HttpPartStream::new(req_rx))
@@ -119,7 +122,7 @@ impl<F : HttpService> ServerInner<F> {
             warn!("handler panicked: {}", e);
 
             let headers = Headers::internal_error_500();
-            HttpResponse::from_stream(stream::iter(vec![
+            Response::from_stream(stream::iter(vec![
                 Ok(HttpStreamPart::intermediate_headers(headers)),
                 Ok(HttpStreamPart::last_data(Bytes::from(format!("handler panicked: {}", e)))),
             ]))
@@ -132,7 +135,7 @@ impl<F : HttpService> ServerInner<F> {
                     let e = any_to_string(e);
                     // TODO: send plain text error if headers weren't sent yet
                     warn!("handler panicked: {}", e);
-                    Err(HttpError::HandlerPanicked(e))
+                    Err(Error::HandlerPanicked(e))
                 },
             }
         });
@@ -197,7 +200,7 @@ impl<F : HttpService> ServerInner<F> {
     }
 }
 
-impl<F : HttpService> LoopInner for ServerInner<F> {
+impl<F : Service> LoopInner for ServerInner<F> {
     type LoopHttpStream = HttpServerStream<F>;
 
     fn common(&mut self) -> &mut LoopInnerCommon<HttpServerStream<F>> {
@@ -225,7 +228,7 @@ type ServerWriteLoop<F, I> = WriteLoopData<I, ServerInner<F>>;
 type ServerCommandLoop<F> = CommandLoopData<ServerInner<F>>;
 
 
-enum ServerToWriteMessage<F : HttpService> {
+enum ServerToWriteMessage<F : Service> {
     _Dummy(F),
     ResponsePart(StreamId, HttpStreamPart),
     // send when user provided handler completed the stream
@@ -238,7 +241,7 @@ enum ServerCommandMessage {
 }
 
 
-impl<F : HttpService, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
+impl<F : Service, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
     fn _loop_handle(&self) -> reactor::Handle {
         self.inner.with(move |inner: &mut ServerInner<F>| inner.session_state.loop_handle.clone())
     }
@@ -304,7 +307,7 @@ impl<F : HttpService, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
     }
 
     fn run(self, requests: HttpFutureStream<ServerToWriteMessage<F>>) -> HttpFuture<()> {
-        let requests = requests.map_err(HttpError::from);
+        let requests = requests.map_err(Error::from);
         Box::new(requests
             .fold(self, move |wl, message: ServerToWriteMessage<F>| {
                 wl.process_message(message)
@@ -313,7 +316,7 @@ impl<F : HttpService, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
     }
 }
 
-impl<F : HttpService> ServerCommandLoop<F> {
+impl<F : Service> ServerCommandLoop<F> {
     fn process_dump_state(self, sender: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) -> HttpFuture<Self> {
         // ignore send error, client might be already dead
         drop(sender.send(self.inner.with(|inner| inner.common.dump_state())));
@@ -327,7 +330,7 @@ impl<F : HttpService> ServerCommandLoop<F> {
     }
 
     fn run(self, requests: HttpFutureStreamSend<ServerCommandMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(HttpError::from);
+        let requests = requests.map_err(Error::from);
         Box::new(requests
             .fold(self, move |l, message: ServerCommandMessage| {
                 l.process_message(message)
@@ -342,10 +345,10 @@ pub struct HttpServerConnectionAsync {
 }
 
 impl HttpServerConnectionAsync {
-    fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, _conf: HttpServerConf, service: Arc<F>)
+    fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, _conf: ServerConf, service: Arc<F>)
                        -> (HttpServerConnectionAsync, HttpFuture<()>)
         where
-            F : HttpService,
+            F : Service,
             I : AsyncRead + AsyncWrite + Send + 'static,
     {
         let lh = lh.clone();
@@ -353,8 +356,8 @@ impl HttpServerConnectionAsync {
         let (to_write_tx, to_write_rx) = futures::sync::mpsc::unbounded::<ServerToWriteMessage<F>>();
         let (command_tx, command_rx) = futures::sync::mpsc::unbounded::<ServerCommandMessage>();
 
-        let to_write_rx = to_write_rx.map_err(|()| HttpError::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
-        let command_rx = Box::new(command_rx.map_err(|()| HttpError::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
+        let to_write_rx = to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
+        let command_rx = Box::new(command_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
 
         let handshake = socket.and_then(server_handshake);
 
@@ -384,10 +387,10 @@ impl HttpServerConnectionAsync {
         }, future)
     }
 
-    pub fn new<S>(lh: &reactor::Handle, socket: TcpStream, tls: ServerTlsOption, conf: HttpServerConf, service: Arc<S>)
+    pub fn new<S>(lh: &reactor::Handle, socket: TcpStream, tls: ServerTlsOption, conf: ServerConf, service: Arc<S>)
                   -> (HttpServerConnectionAsync, HttpFuture<()>)
         where
-            S : HttpService,
+            S : Service,
     {
         match tls {
             ServerTlsOption::Plain =>
@@ -395,29 +398,29 @@ impl HttpServerConnectionAsync {
                     lh, Box::new(futures::finished(socket)), conf, service),
             ServerTlsOption::Tls(acceptor) =>
                 HttpServerConnectionAsync::connected(
-                    lh, Box::new(acceptor.accept_async(socket).map_err(HttpError::from)), conf, service),
+                    lh, Box::new(acceptor.accept_async(socket).map_err(Error::from)), conf, service),
         }
     }
 
-    pub fn new_plain<S>(lh: &reactor::Handle, socket: TcpStream, conf: HttpServerConf, service: Arc<S>)
-            -> (HttpServerConnectionAsync, HttpFuture<()>)
+    pub fn new_plain<S>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, service: Arc<S>)
+                        -> (HttpServerConnectionAsync, HttpFuture<()>)
         where
-            S : HttpService,
+            S : Service,
     {
         HttpServerConnectionAsync::new(lh, socket, ServerTlsOption::Plain, conf, service)
     }
 
-    pub fn new_plain_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: HttpServerConf, f: F)
-            -> (HttpServerConnectionAsync, HttpFuture<()>)
+    pub fn new_plain_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
+                           -> (HttpServerConnectionAsync, HttpFuture<()>)
         where
-            F : Fn(Headers, HttpPartStream) -> HttpResponse + Send + 'static,
+            F : Fn(Headers, HttpPartStream) -> Response + Send + 'static,
     {
         struct HttpServiceFn<F>(F);
 
-        impl<F> HttpService for HttpServiceFn<F>
-            where F : Fn(Headers, HttpPartStream) -> HttpResponse + Send + 'static
+        impl<F> Service for HttpServiceFn<F>
+            where F : Fn(Headers, HttpPartStream) -> Response + Send + 'static
         {
-            fn start_request(&self, headers: Headers, req: HttpPartStream) -> HttpResponse {
+            fn start_request(&self, headers: Headers, req: HttpPartStream) -> Response {
                 (self.0)(headers, req)
             }
         }
@@ -432,7 +435,7 @@ impl HttpServerConnectionAsync {
         self.command_tx.clone().send(ServerCommandMessage::DumpState(tx))
             .expect("send request to dump state");
 
-        let rx = rx.map_err(|_| HttpError::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
 
         Box::new(rx)
     }

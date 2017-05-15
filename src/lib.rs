@@ -13,15 +13,21 @@ extern crate bytes;
 
 pub mod solicit;
 
+pub mod error;
+
+mod result;
+
 pub mod client_conf;
 pub mod client_conn;
 mod client_tls;
+mod service;
 pub mod client;
 pub mod server_conf;
 pub mod server_conn;
 mod server_tls;
 pub mod server;
-pub mod http_common;
+pub mod conn;
+pub mod stream_part;
 pub mod message;
 
 pub mod futures_misc;
@@ -39,10 +45,24 @@ pub mod misc;
 mod resp;
 
 pub use solicit::HttpScheme;
-pub use solicit::HttpError;
 pub use solicit::header::Header;
 pub use solicit::header::Headers;
-pub use resp::HttpResponse;
+
+pub use service::Service;
+
+pub use client::Client;
+pub use client_conf::ClientConf;
+pub use client_tls::ClientTlsOption;
+
+pub use server::Server;
+pub use server_conf::ServerConf;
+pub use server_tls::ServerTlsOption;
+
+pub use resp::Response;
+pub use stream_part::HttpPartStream;
+
+pub use error::Error;
+pub use result::Result;
 
 pub mod for_test {
     pub use server_conf::*;
@@ -51,7 +71,7 @@ pub mod for_test {
     pub use client_conf::*;
     pub use client_conn::*;
     pub use client::*;
-    pub use http_common::*;
+    pub use conn::*;
     pub use solicit_async::*;
     pub use futures_misc::*;
     pub use message::*;

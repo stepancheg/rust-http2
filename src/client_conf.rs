@@ -1,15 +1,15 @@
 use std::time::Duration;
 
 #[derive(Default, Debug, Clone)]
-pub struct HttpClientConf {
+pub struct ClientConf {
     /// TCP_NODELAY
     pub no_delay: Option<bool>,
     pub thread_name: Option<String>,
     pub connection_timeout: Option<Duration>
 }
 
-impl HttpClientConf {
-    pub fn new() -> HttpClientConf {
+impl ClientConf {
+    pub fn new() -> ClientConf {
         Default::default()
     }
 }

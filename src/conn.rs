@@ -1,13 +1,9 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::cmp;
-use std::io;
 
-use futures::stream;
-use futures::stream::Stream;
 use futures::Future;
 use futures::future;
-use futures::Poll;
 use futures;
 
 use bytes::Bytes;
@@ -18,12 +14,13 @@ use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 use tokio_io::io as tokio_io;
 
+use error::Error;
+use error::ErrorCode;
+
 use solicit::session::StreamState;
-use solicit::ErrorCode;
 use solicit::frame::*;
 use solicit::header::*;
 use solicit::StreamId;
-use solicit::HttpError;
 use solicit::WindowSize;
 use solicit::HttpScheme;
 use solicit::DEFAULT_SETTINGS;
@@ -32,59 +29,27 @@ use solicit::connection::HttpConnection;
 use solicit::connection::SendFrame;
 use solicit::connection::HttpFrame;
 
+use stream_part::*;
+
 use futures_misc::*;
 
 use solicit_misc::*;
 use solicit_async::*;
 
 
-#[derive(Debug)]
-pub enum HttpStreamPartContent {
-    Headers(Headers),
-    Data(Bytes),
+pub enum HttpStreamCommand {
+    Headers(Headers, EndStream),
+    Data(Bytes, EndStream),
+    Rst(ErrorCode),
 }
 
-pub struct HttpStreamPart {
-    pub content: HttpStreamPartContent,
-    /// END_STREAM
-    pub last: bool,
-}
-
-impl HttpStreamPart {
-    pub fn last_headers(headers: Headers) -> Self {
-        HttpStreamPart {
-            content: HttpStreamPartContent::Headers(headers),
-            last: true,
-        }
-    }
-
-    pub fn intermediate_headers(headers: Headers) -> Self {
-        HttpStreamPart {
-            content: HttpStreamPartContent::Headers(headers),
-            last: false,
-        }
-    }
-
-    pub fn intermediate_data(data: Bytes) -> Self {
-        HttpStreamPart {
-            content: HttpStreamPartContent::Data(data),
-            last: false,
-        }
-    }
-
-    pub fn last_data(data: Bytes) -> Self {
-        HttpStreamPart {
-            content: HttpStreamPartContent::Data(data),
-            last: true,
-        }
-    }
-
-    fn into_command(self) -> HttpStreamCommand {
-        let end_stream = match self.last {
+impl HttpStreamCommand {
+    fn from(part: HttpStreamPart) -> HttpStreamCommand {
+        let end_stream = match part.last {
             true => EndStream::Yes,
             false => EndStream::No,
         };
-        match self.content {
+        match part.content {
             HttpStreamPartContent::Data(data) => {
                 HttpStreamCommand::Data(data, end_stream)
             },
@@ -95,95 +60,7 @@ impl HttpStreamPart {
     }
 }
 
-
-/// Stream of DATA of HEADER frames
-pub struct HttpPartStream(
-    pub HttpFutureStreamSend<HttpStreamPart>
-);
-
-impl HttpPartStream {
-    // constructors
-
-    pub fn new<S>(s: S) -> HttpPartStream
-        where S : Stream<Item=HttpStreamPart, Error=HttpError> + Send + 'static
-    {
-        HttpPartStream(Box::new(s))
-    }
-
-    pub fn empty() -> HttpPartStream {
-        HttpPartStream::new(stream::empty())
-    }
-
-    pub fn bytes<S>(bytes: S) -> HttpPartStream
-        where S : Stream<Item=Bytes, Error=HttpError> + Send + 'static
-    {
-        HttpPartStream::new(bytes.map(HttpStreamPart::intermediate_data))
-    }
-
-    pub fn once(part: HttpStreamPartContent) -> HttpPartStream {
-        HttpPartStream::new(stream::once(Ok(HttpStreamPart { content: part, last: true })))
-    }
-
-    pub fn once_bytes<B>(bytes: B) -> HttpPartStream
-        where B : Into<Bytes>
-    {
-        HttpPartStream::once(HttpStreamPartContent::Data(bytes.into()))
-    }
-
-    // getters
-
-    /// Create a stream without "last" flag
-    pub fn drop_last_flag(self) -> HttpFutureStreamSend<HttpStreamPartContent> {
-        Box::new(self.map(|HttpStreamPart { content, .. }| content))
-    }
-
-    /// Take only `DATA` frames from the stream
-    pub fn filter_data(self) -> HttpFutureStreamSend<Bytes> {
-        Box::new(self.filter_map(|HttpStreamPart { content, .. }| {
-            match content {
-                HttpStreamPartContent::Data(data) => Some(data),
-                _ => None,
-            }
-        }))
-    }
-
-    /// Take only `DATA` frames, return an error on header frames
-    pub fn check_only_data(self) -> HttpFutureStreamSend<Bytes> {
-        Box::new(self.and_then(|HttpStreamPart { content, .. }| {
-            match content {
-                HttpStreamPartContent::Data(data) => {
-                    Ok(data)
-                },
-                HttpStreamPartContent::Headers(..) => {
-                    Err(HttpError::from(io::Error::new(io::ErrorKind::Other, "expecting only DATA frames")))
-                },
-            }
-        }))
-    }
-}
-
-impl Stream for HttpPartStream {
-    type Item = HttpStreamPart;
-    type Error = HttpError;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.0.poll()
-    }
-}
-
-
-pub enum HttpStreamCommand {
-    Headers(Headers, EndStream),
-    Data(Bytes, EndStream),
-    Rst(ErrorCode),
-}
-
-pub use resp::HttpResponse;
-
-
-pub trait HttpService: Send + 'static {
-    fn start_request(&self, headers: Headers, req: HttpPartStream) -> HttpResponse;
-}
+pub use resp::Response;
 
 
 pub enum CommonToWriteMessage {
@@ -257,10 +134,10 @@ impl HttpStreamCommon {
             if last {
                 self.close_local();
             }
-            return Some(HttpStreamPart {
+            return Some(HttpStreamCommand::from(HttpStreamPart {
                 content: r,
                 last: last,
-            }.into_command())
+            }))
         }
 
         if self.out_window_size.size() <= 0 {
@@ -292,10 +169,10 @@ impl HttpStreamCommon {
             self.close_local();
         }
 
-        Some(HttpStreamPart {
+        Some(HttpStreamCommand::from(HttpStreamPart {
             content: HttpStreamPartContent::Data(data),
             last: last,
-        }.into_command())
+        }))
     }
 
     pub fn pop_outg_all(&mut self, conn_out_window_size: &mut WindowSize) -> Vec<HttpStreamCommand> {
@@ -521,7 +398,7 @@ pub trait LoopInner: 'static {
     fn process_headers_frame(&mut self, frame: HeadersFrame) {
         let headers = self.common().conn.decoder
             .decode(&frame.header_fragment())
-            .map_err(HttpError::CompressionError).unwrap(); // TODO: do not panic
+            .map_err(Error::CompressionError).unwrap(); // TODO: do not panic
         let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
 
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
@@ -810,7 +687,7 @@ impl<I, N> WriteLoopData<I, N>
 
         Box::new(tokio_io::write_all(write, buf)
             .map(move |(write, _)| WriteLoopData { write: write, inner: inner })
-            .map_err(HttpError::from))
+            .map_err(Error::from))
     }
 
     fn with_inner<G, R>(&self, f: G) -> R

@@ -7,46 +7,48 @@ use bytes::Bytes;
 
 use solicit_async::*;
 use solicit::header::Headers;
-use http_common::*;
 use message::SimpleHttpMessage;
 
-use solicit::HttpError;
+use error::Error;
+
+use stream_part::*;
+
 
 /// Convenient wrapper around async HTTP response future/stream
-pub struct HttpResponse(pub HttpFutureSend<(Headers, HttpPartStream)>);
+pub struct Response(pub HttpFutureSend<(Headers, HttpPartStream)>);
 
-impl HttpResponse {
+impl Response {
     // constructors
 
-    pub fn new<F>(future: F) -> HttpResponse
-        where F : Future<Item=(Headers, HttpPartStream), Error=HttpError> + Send + 'static
+    pub fn new<F>(future: F) -> Response
+        where F : Future<Item=(Headers, HttpPartStream), Error=Error> + Send + 'static
     {
-        HttpResponse(Box::new(future))
+        Response(Box::new(future))
     }
 
-    pub fn headers_and_stream(headers: Headers, stream: HttpPartStream) -> HttpResponse
+    pub fn headers_and_stream(headers: Headers, stream: HttpPartStream) -> Response
     {
-        HttpResponse::new(future::ok((headers, stream)))
+        Response::new(future::ok((headers, stream)))
     }
 
-    pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> HttpResponse
-        where S : Stream<Item=Bytes, Error=HttpError> + Send + 'static
+    pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> Response
+        where S : Stream<Item=Bytes, Error=Error> + Send + 'static
     {
-        HttpResponse::headers_and_stream(headers, HttpPartStream::bytes(content))
+        Response::headers_and_stream(headers, HttpPartStream::bytes(content))
     }
 
-    pub fn headers_and_bytes(header: Headers, content: Bytes) -> HttpResponse {
-        HttpResponse::headers_and_bytes_stream(header, stream::once(Ok(content)))
+    pub fn headers_and_bytes(header: Headers, content: Bytes) -> Response {
+        Response::headers_and_bytes_stream(header, stream::once(Ok(content)))
     }
 
-    pub fn message(message: SimpleHttpMessage) -> HttpResponse {
-        HttpResponse::headers_and_bytes(message.headers, message.body)
+    pub fn message(message: SimpleHttpMessage) -> Response {
+        Response::headers_and_bytes(message.headers, message.body)
     }
 
-    pub fn from_stream<S>(stream: S) -> HttpResponse
-        where S : Stream<Item=HttpStreamPart, Error=HttpError> + Send + 'static
+    pub fn from_stream<S>(stream: S) -> Response
+        where S : Stream<Item=HttpStreamPart, Error=Error> + Send + 'static
     {
-        HttpResponse::new(stream.into_future().map_err(|(p, _s)| p).and_then(|(first, rem)| {
+        Response::new(stream.into_future().map_err(|(p, _s)| p).and_then(|(first, rem)| {
             match first {
                 Some(part) => {
                     match part.content {
@@ -54,19 +56,19 @@ impl HttpResponse {
                             Ok((headers, HttpPartStream::new(rem)))
                         },
                         HttpStreamPartContent::Data(..) => {
-                            Err(HttpError::InvalidFrame("data before headers".to_owned()))
+                            Err(Error::InvalidFrame("data before headers".to_owned()))
                         }
                     }
                 }
                 None => {
-                    Err(HttpError::InvalidFrame("empty response, expecting headers".to_owned()))
+                    Err(Error::InvalidFrame("empty response, expecting headers".to_owned()))
                 }
             }
         }))
     }
 
-    pub fn err(err: HttpError) -> HttpResponse {
-        HttpResponse::new(future::err(err))
+    pub fn err(err: Error) -> Response {
+        Response::new(future::err(err))
     }
 
     // getters
@@ -85,7 +87,7 @@ impl HttpResponse {
     pub fn collect(self) -> HttpFutureSend<SimpleHttpMessage> {
         Box::new(self.into_stream().fold(SimpleHttpMessage::new(), |mut c, p| {
             c.add(p);
-            Ok::<_, HttpError>(c)
+            Ok::<_, Error>(c)
         }))
     }
 }

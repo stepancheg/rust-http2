@@ -4,7 +4,8 @@ use std::io;
 
 use bytes::Bytes;
 
-use solicit::{ErrorCode, StreamId};
+use error::ErrorCode;
+use solicit::StreamId;
 use solicit::frame::{Frame, FrameIR, FrameBuilder, FrameHeader, RawFrame, parse_stream_id};
 use solicit::frame::flags::*;
 
@@ -138,7 +139,7 @@ mod tests {
     use super::GoawayFrame;
 
     use solicit::tests::common::{serialize_frame, raw_frame_from_parts};
-    use solicit::ErrorCode;
+    use error::ErrorCode;
     use solicit::frame::Frame;
     use solicit::frame::FrameHeader;
 

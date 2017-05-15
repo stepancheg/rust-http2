@@ -17,11 +17,11 @@ use futures::Future;
 mod test_misc;
 
 use httpbis::solicit::header::*;
-use httpbis::solicit::HttpError;
+use httpbis::error::Error;
 
 use test_misc::*;
 use httpbis::for_test::*;
-use httpbis::solicit::ErrorCode;
+use httpbis::error::ErrorCode;
 
 #[test]
 fn stream_count() {
@@ -29,8 +29,8 @@ fn stream_count() {
 
     let server = HttpServerTester::new();
 
-    let client: HttpClient =
-        HttpClient::new("::1", server.port(), false, Default::default()).expect("connect");
+    let client: Client =
+        Client::new("::1", server.port(), false, Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -69,8 +69,8 @@ fn rst_is_error() {
 
     let server = HttpServerTester::new();
 
-    let client: HttpClient =
-        HttpClient::new("::1", server.port(), false, Default::default()).expect("connect");
+    let client: Client =
+        Client::new("::1", server.port(), false, Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -86,7 +86,7 @@ fn rst_is_error() {
 
     match req.wait() {
         Ok(..) => panic!("expected error"),
-        Err(HttpError::CodeError(ErrorCode::InadequateSecurity)) => {},
+        Err(Error::CodeError(ErrorCode::InadequateSecurity)) => {},
         Err(e) => panic!("wrong error: {:?}", e),
     }
 
@@ -100,8 +100,8 @@ fn client_call_dropped() {
 
     let server = HttpServerTester::new();
 
-    let client: HttpClient =
-        HttpClient::new("::1", server.port(), false, Default::default()).expect("connect");
+    let client: Client =
+        Client::new("::1", server.port(), false, Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();

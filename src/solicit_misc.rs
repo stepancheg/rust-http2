@@ -4,8 +4,8 @@ use std::cmp;
 
 use solicit::header::Header;
 use solicit::StreamId;
-use solicit::ErrorCode;
-use solicit::HttpResult;
+use error::ErrorCode;
+use result::Result;
 use solicit::frame::*;
 use solicit::connection::HttpFrame;
 use solicit::connection::SendFrame;
@@ -13,13 +13,13 @@ use solicit::connection::HttpConnection;
 use solicit::connection::EndStream;
 use solicit::connection::DataChunk;
 
-use http_common::*;
+use stream_part::*;
 
 
 pub struct VecSendFrame(pub Vec<u8>);
 
 impl SendFrame for VecSendFrame {
-    fn send_frame<F : FrameIR>(&mut self, frame: F) -> HttpResult<()> {
+    fn send_frame<F : FrameIR>(&mut self, frame: F) -> Result<()> {
         let pos = self.0.len();
         let mut cursor = io::Cursor::new(mem::replace(&mut self.0, Vec::new()));
         cursor.set_position(pos as u64);
@@ -38,13 +38,13 @@ pub trait HttpConnectionEx {
         send: &mut S,
         stream_id: StreamId,
         error_code: ErrorCode)
-            -> HttpResult<()>
+            -> Result<()>
     {
         self.conn().sender(send).send_rst_stream(stream_id, error_code)
     }
 
     fn send_rst_to_vec(&mut self, stream_id: StreamId, error_code: ErrorCode)
-        -> HttpResult<Vec<u8>>
+        -> Result<Vec<u8>>
     {
         let mut send = VecSendFrame(Vec::new());
         self.send_rst(&mut send, stream_id, error_code)?;
@@ -57,7 +57,7 @@ pub trait HttpConnectionEx {
         stream_id: StreamId,
         headers: &[Header],
         end_stream: EndStream)
-            -> HttpResult<()>
+            -> Result<()>
     {
         self.conn().sender(send).send_headers(headers, stream_id, end_stream)
     }
@@ -67,7 +67,7 @@ pub trait HttpConnectionEx {
         stream_id: StreamId,
         headers: &[Header],
         end_stream: EndStream)
-             -> HttpResult<Vec<u8>>
+             -> Result<Vec<u8>>
     {
         let mut send = VecSendFrame(Vec::new());
         self.send_headers(&mut send, stream_id, headers, end_stream)?;
@@ -80,7 +80,7 @@ pub trait HttpConnectionEx {
         stream_id: StreamId,
         chunk: &[u8],
         end_stream: EndStream)
-            -> HttpResult<()>
+            -> Result<()>
     {
         let data_chunk = DataChunk::new_borrowed(chunk, stream_id, end_stream);
         self.conn().sender(send).send_data(data_chunk)
@@ -92,7 +92,7 @@ pub trait HttpConnectionEx {
         stream_id: StreamId,
         data: &[u8],
         end_stream: EndStream)
-            -> HttpResult<()>
+            -> Result<()>
     {
         // if client requested end of stream,
         // we must send at least one frame with end stream flag
@@ -125,7 +125,7 @@ pub trait HttpConnectionEx {
         stream_id: StreamId,
         data: &[u8],
         end_stream: EndStream)
-            -> HttpResult<Vec<u8>>
+            -> Result<Vec<u8>>
     {
         let mut send = VecSendFrame(Vec::new());
         self.send_data_frames(&mut send, stream_id, data, end_stream)?;
@@ -136,12 +136,12 @@ pub trait HttpConnectionEx {
         &mut self,
         send: &mut S,
         stream_id: StreamId)
-            -> HttpResult<()>
+            -> Result<()>
     {
         self.send_data_frame(send, stream_id, &Vec::new(), EndStream::Yes)
     }
 
-    fn send_end_of_stream_to_vec(&mut self, stream_id: StreamId) -> HttpResult<Vec<u8>> {
+    fn send_end_of_stream_to_vec(&mut self, stream_id: StreamId) -> Result<Vec<u8>> {
         let mut send = VecSendFrame(Vec::new());
         self.send_end_of_stream(&mut send, stream_id)?;
         Ok(send.0)
@@ -152,7 +152,7 @@ pub trait HttpConnectionEx {
         send: &mut S,
         stream_id: StreamId,
         part: &HttpStreamPart)
-            -> HttpResult<()>
+            -> Result<()>
     {
         let end_stream = if part.last { EndStream::Yes } else { EndStream::No };
         match part.content {
@@ -169,7 +169,7 @@ pub trait HttpConnectionEx {
         &mut self,
         stream_id: StreamId,
         part: &HttpStreamPart)
-            -> HttpResult<Vec<u8>>
+            -> Result<Vec<u8>>
     {
         let mut send = VecSendFrame(Vec::new());
         self.send_part(&mut send, stream_id, part)?;
@@ -278,7 +278,7 @@ impl HttpFrameClassified {
         }
     }
 
-    pub fn from_raw(raw_frame: &RawFrame) -> HttpResult<HttpFrameClassified> {
+    pub fn from_raw(raw_frame: &RawFrame) -> Result<HttpFrameClassified> {
         Ok(HttpFrameClassified::from(HttpFrame::from_raw(raw_frame)?))
     }
 }

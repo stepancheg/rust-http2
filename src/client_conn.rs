@@ -2,10 +2,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::io;
 
-use solicit::ErrorCode;
+use error::ErrorCode;
+use error::Error;
+
 use solicit::StreamId;
 use solicit::HttpScheme;
-use solicit::HttpError;
 use solicit::header::*;
 use solicit::connection::EndStream;
 
@@ -28,14 +29,15 @@ use futures_misc::*;
 
 use solicit_async::*;
 
-use http_common::*;
+use conn::*;
+use stream_part::*;
 use client_conf::*;
 use client_tls::*;
 
 
 struct HttpClientStream {
     common: HttpStreamCommon,
-    response_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, HttpError>>>,
+    response_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
 }
 
 impl HttpStream for HttpClientStream {
@@ -60,7 +62,7 @@ impl HttpStream for HttpClientStream {
     fn rst(&mut self, error_code: ErrorCode) {
         if let Some(ref mut response_handler) = self.response_handler {
             // TODO: reset stream if called is dead
-            drop(response_handler.send(ResultOrEof::Error(HttpError::CodeError(error_code))));
+            drop(response_handler.send(ResultOrEof::Error(Error::CodeError(error_code))));
         }
     }
 
@@ -143,7 +145,7 @@ unsafe impl Sync for HttpClientConnectionAsync {}
 struct StartRequestMessage {
     headers: Headers,
     body: HttpPartStream,
-    response_handler: futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, HttpError>>,
+    response_handler: futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>,
 }
 
 struct BodyChunkMessage {
@@ -194,14 +196,14 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                         stream_id: stream_id,
                         chunk: chunk,
                     })).expect("client must be dead");
-                    futures::finished::<_, HttpError>(())
+                    futures::finished::<_, Error>(())
                 });
             let future = future
                 .and_then(move |()| {
                     to_write_tx_2.send(ClientToWriteMessage::End(EndRequestMessage {
                         stream_id: stream_id,
                     })).expect("client must be dead");
-                    futures::finished::<_, HttpError>(())
+                    futures::finished::<_, Error>(())
                 });
 
             let future = future.map_err(|e| {
@@ -253,7 +255,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     }
 
     fn run(self, requests: HttpFutureStreamSend<ClientToWriteMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(HttpError::from);
+        let requests = requests.map_err(Error::from);
         Box::new(requests
             .fold(self, move |wl, message: ClientToWriteMessage| {
                 wl.process_message(message)
@@ -269,14 +271,14 @@ type ClientCommandLoop = CommandLoopData<ClientInner>;
 
 impl HttpClientConnectionAsync {
     fn connected<I : AsyncWrite + AsyncRead + Send + 'static>(
-        lh: reactor::Handle, connect: HttpFutureSend<I>, _conf: HttpClientConf)
+        lh: reactor::Handle, connect: HttpFutureSend<I>, _conf: ClientConf)
             -> (Self, HttpFuture<()>)
     {
         let (to_write_tx, to_write_rx) = futures::sync::mpsc::unbounded();
         let (command_tx, command_rx) = futures::sync::mpsc::unbounded();
 
-        let to_write_rx = Box::new(to_write_rx.map_err(|()| HttpError::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
-        let command_rx = Box::new(command_rx.map_err(|()| HttpError::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
+        let to_write_rx = Box::new(to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
+        let command_rx = Box::new(command_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
 
         let c = HttpClientConnectionAsync {
             _remote: lh.remote().clone(),
@@ -309,7 +311,7 @@ impl HttpClientConnectionAsync {
         (c, Box::new(future))
     }
 
-    pub fn new(lh: reactor::Handle, addr: &SocketAddr, tls: ClientTlsOption, conf: HttpClientConf) -> (Self, HttpFuture<()>) {
+    pub fn new(lh: reactor::Handle, addr: &SocketAddr, tls: ClientTlsOption, conf: ClientConf) -> (Self, HttpFuture<()>) {
         match tls {
             ClientTlsOption::Plain =>
                 HttpClientConnectionAsync::new_plain(lh, addr, conf),
@@ -318,7 +320,7 @@ impl HttpClientConnectionAsync {
         }
     }
 
-    pub fn new_plain(lh: reactor::Handle, addr: &SocketAddr, conf: HttpClientConf) -> (Self, HttpFuture<()>) {
+    pub fn new_plain(lh: reactor::Handle, addr: &SocketAddr, conf: ClientConf) -> (Self, HttpFuture<()>) {
         let addr = addr.clone();
 
         let no_delay = conf.no_delay.unwrap_or(true);
@@ -346,7 +348,7 @@ impl HttpClientConnectionAsync {
         domain: &str,
         connector: Arc<TlsConnector>,
         addr: &SocketAddr,
-        conf: HttpClientConf)
+        conf: ClientConf)
             -> (Self, HttpFuture<()>)
     {
         let domain = domain.to_owned();
@@ -358,11 +360,11 @@ impl HttpClientConnectionAsync {
 
         let tls_conn = connect.and_then(move |conn| {
             connector.connect_async(&domain, conn).map_err(|e| {
-                HttpError::IoError(io::Error::new(io::ErrorKind::Other, e))
+                Error::IoError(io::Error::new(io::ErrorKind::Other, e))
             })
         });
 
-        let tls_conn = tls_conn.map_err(HttpError::from);
+        let tls_conn = tls_conn.map_err(Error::from);
 
         HttpClientConnectionAsync::connected(lh, Box::new(tls_conn), conf)
     }
@@ -371,7 +373,7 @@ impl HttpClientConnectionAsync {
         &self,
         headers: Headers,
         body: HttpPartStream)
-            -> HttpResponse
+            -> Response
     {
         let (tx, rx) = futures::oneshot();
 
@@ -384,19 +386,19 @@ impl HttpClientConnectionAsync {
             body: body,
             response_handler: req_tx,
         })) {
-            return HttpResponse::err(HttpError::Other("client died"));
+            return Response::err(Error::Other("client died"));
         }
 
-        let req_rx = req_rx.map_err(|()| HttpError::from(io::Error::new(io::ErrorKind::Other, "req")));
+        let req_rx = req_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
 
         // TODO: future is no longer needed here
-        if let Err(_) = tx.send(stream_with_eof_and_error(req_rx, || HttpError::from(io::Error::new(io::ErrorKind::Other, "client is likely died")))) {
-            return HttpResponse::err(HttpError::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+        if let Err(_) = tx.send(stream_with_eof_and_error(req_rx, || Error::from(io::Error::new(io::ErrorKind::Other, "client is likely died")))) {
+            return Response::err(Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
         }
 
-        let rx = rx.map_err(|_| HttpError::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
 
-        HttpResponse::from_stream(rx.flatten_stream())
+        Response::from_stream(rx.flatten_stream())
     }
 
     /// For tests
@@ -406,7 +408,7 @@ impl HttpClientConnectionAsync {
         self.command_tx.clone().send(ClientCommandMessage::DumpState(tx))
             .expect("send request to dump state");
 
-        let rx = rx.map_err(|_| HttpError::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
 
         Box::new(rx)
     }
@@ -426,7 +428,7 @@ impl ClientCommandLoop {
     }
 
     fn run(self, requests: HttpFutureStreamSend<ClientCommandMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(HttpError::from);
+        let requests = requests.map_err(Error::from);
         Box::new(requests
             .fold(self, move |l, message: ClientCommandMessage| {
                 l.process_message(message)

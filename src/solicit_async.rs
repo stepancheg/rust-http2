@@ -16,8 +16,8 @@ use tokio_core::reactor;
 use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
 
-use solicit::HttpError;
-use solicit::HttpResult;
+use error::Error;
+use result::Result;
 use solicit::frame::FRAME_HEADER_LEN;
 use solicit::frame::RawFrame;
 use solicit::frame::RawFrameRef;
@@ -34,13 +34,13 @@ use misc::BsDebug;
 use bytesx::*;
 
 
-pub type HttpFuture<T> = Box<Future<Item=T, Error=HttpError>>;
+pub type HttpFuture<T> = Box<Future<Item=T, Error=Error>>;
 // Type is called `HttpFutureStream`, not just `HttpStream`
 // to avoid confusion with streams from HTTP/2 spec
-pub type HttpFutureStream<T> = Box<Stream<Item=T, Error=HttpError>>;
+pub type HttpFutureStream<T> = Box<Stream<Item=T, Error=Error>>;
 
-pub type HttpFutureSend<T> = BoxFuture<T, HttpError>;
-pub type HttpFutureStreamSend<T> = BoxStream<T, HttpError>;
+pub type HttpFutureSend<T> = BoxFuture<T, Error>;
+pub type HttpFutureStreamSend<T> = BoxStream<T, Error>;
 
 
 struct VecWithPos<T> {
@@ -55,7 +55,7 @@ impl<T> AsMut<[T]> for VecWithPos<T> {
 }
 
 pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R)
-    -> Box<Future<Item=(R, RawFrame), Error=HttpError> + 'r>
+    -> Box<Future<Item=(R, RawFrame), Error=Error> + 'r>
 {
     let header = read_exact(read, [0; FRAME_HEADER_LEN]);
     let frame_buf = header.and_then(|(read, raw_header)| {
@@ -91,13 +91,13 @@ impl<'r, R : Read + ?Sized + 'r> AsyncRead for SyncRead<'r, R> {
 }
 
 
-pub fn recv_raw_frame_sync(read: &mut Read) -> HttpResult<RawFrame> {
+pub fn recv_raw_frame_sync(read: &mut Read) -> Result<RawFrame> {
     Ok(recv_raw_frame(SyncRead(read)).wait()?.1)
 }
 
 /// Recieve HTTP frame from reader.
 pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R)
-    -> Box<Future<Item=(R, HttpFrame), Error=HttpError> + 'r>
+    -> Box<Future<Item=(R, HttpFrame), Error=Error> + 'r>
 {
     Box::new(recv_raw_frame(read).and_then(|(read, raw_frame)| {
         Ok((read, HttpFrame::from_raw(&raw_frame)?))
@@ -106,14 +106,14 @@ pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R)
 
 /// Recieve HTTP frame, joining CONTINUATION frame with preceding HEADER frames.
 pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
-    -> Box<Future<Item=(R, HttpFrame), Error=HttpError> + 'r>
+    -> Box<Future<Item=(R, HttpFrame), Error=Error> + 'r>
 {
     Box::new(future::loop_fn::<(R, Option<HeadersFrame>), _, _, _>((read, None), |(read, header_opt)| {
         recv_http_frame(read).and_then(move |(read, frame)| {
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = header_opt {
-                        Err(HttpError::Other("expecting CONTINUATION frame, got HEADERS"))
+                        Err(Error::Other("expecting CONTINUATION frame, got HEADERS"))
                     } else {
                         if h.is_headers_end() {
                             Ok(future::Loop::Break((read, HttpFrame::Headers(h))))
@@ -125,7 +125,7 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
                 HttpFrame::Continuation(c) => {
                     if let Some(mut h) = header_opt {
                         if h.stream_id != c.stream_id {
-                            Err(HttpError::Other("CONTINUATION frame with different stream id"))
+                            Err(Error::Other("CONTINUATION frame with different stream id"))
                         } else {
                             let header_end = c.is_headers_end();
                             bytes_extend_with(&mut h.header_fragment, c.header_fragment);
@@ -137,12 +137,12 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
                             }
                         }
                     } else {
-                        Err(HttpError::Other("CONTINUATION frame without headers"))
+                        Err(Error::Other("CONTINUATION frame without headers"))
                     }
                 }
                 f => {
                     if let Some(_) = header_opt {
-                        Err(HttpError::Other("expecting CONTINUATION frame"))
+                        Err(Error::Other("expecting CONTINUATION frame"))
                     } else {
                         Ok(future::Loop::Break((read, f)))
                     }
@@ -153,7 +153,7 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
 }
 
 pub fn recv_settings_frame<'r, R : AsyncRead + 'r>(read: R)
-    -> Box<Future<Item=(R, SettingsFrame), Error=HttpError> + 'r>
+    -> Box<Future<Item=(R, SettingsFrame), Error=Error> + 'r>
 {
     Box::new(recv_http_frame(read)
         .and_then(|(read, http_frame)| {
@@ -162,7 +162,7 @@ pub fn recv_settings_frame<'r, R : AsyncRead + 'r>(read: R)
                     Ok((read, f))
                 }
                 f => {
-                    Err(HttpError::InvalidFrame(format!("unexpected frame, expected SETTINGS, got {:?}", f.frame_type())))
+                    Err(Error::InvalidFrame(format!("unexpected frame, expected SETTINGS, got {:?}", f.frame_type())))
                 }
             }
         }))
@@ -173,7 +173,7 @@ pub fn recv_settings_frame_ack<R : AsyncRead + Send + 'static>(read: R) -> HttpF
         if frame.is_ack() {
             Ok((read, frame))
         } else {
-            Err(HttpError::InvalidFrame("expecting SETTINGS with ack, got without ack".to_owned()))
+            Err(Error::InvalidFrame("expecting SETTINGS with ack, got without ack".to_owned()))
         }
     }))
 }
@@ -183,7 +183,7 @@ pub fn recv_settings_frame_set<R : AsyncRead + Send + 'static>(read: R) -> HttpF
         if !frame.is_ack() {
             Ok((read, frame))
         } else {
-            Err(HttpError::InvalidFrame("expecting SETTINGS without ack, got with ack".to_owned()))
+            Err(Error::InvalidFrame("expecting SETTINGS without ack, got with ack".to_owned()))
         }
     }))
 }
@@ -237,9 +237,9 @@ pub fn server_handshake<I : AsyncRead + AsyncWrite + Send + 'static>(conn: I) ->
                 Ok((conn))
             } else {
                 if preface_buf[0] == 0x16 {
-                    Err(HttpError::InvalidFrame(format!("wrong preface, likely TLS: {:?}", BsDebug(&preface_buf))))
+                    Err(Error::InvalidFrame(format!("wrong preface, likely TLS: {:?}", BsDebug(&preface_buf))))
                 } else {
-                    Err(HttpError::InvalidFrame(format!("wrong preface: {:?}", BsDebug(&preface_buf))))
+                    Err(Error::InvalidFrame(format!("wrong preface: {:?}", BsDebug(&preface_buf))))
                 }
             })
         });

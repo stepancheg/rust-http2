@@ -15,9 +15,7 @@ use std::net::SocketAddr;
 use futures::future::Future;
 
 use httpbis::solicit::header::Headers;
-use httpbis::server::*;
-use httpbis::client::*;
-use httpbis::http_common::*;
+use httpbis::*;
 use httpbis::message::SimpleHttpMessage;
 
 use native_tls::TlsAcceptor;
@@ -48,19 +46,19 @@ fn tls() {
     struct ServiceImpl {
     }
 
-    impl HttpService for ServiceImpl {
-        fn start_request(&self, _headers: Headers, _req: HttpPartStream) -> HttpResponse {
-            HttpResponse::headers_and_bytes(Headers::ok_200(), Bytes::from("hello"))
+    impl Service for ServiceImpl {
+        fn start_request(&self, _headers: Headers, _req: HttpPartStream) -> Response {
+            Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hello"))
         }
     }
 
-    let server = HttpServer::new(
+    let server = Server::new(
         "[::1]:0".parse::<SocketAddr>().unwrap(),
         ServerTlsOption::Tls(Arc::new(test_tls_acceptor())),
         Default::default(),
         ServiceImpl {});
 
-    let client: HttpClient = HttpClient::new_expl(
+    let client: Client = Client::new_expl(
         server.local_addr(),
         ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
         Default::default())

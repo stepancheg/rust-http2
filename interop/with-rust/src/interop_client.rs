@@ -19,32 +19,32 @@ use native_tls::Certificate;
 
 use futures::future::Future;
 
-use httpbis::client::HttpClient;
-use httpbis::client_conf::HttpClientConf;
-use httpbis::client::ClientTlsOption;
+use httpbis::Client;
+use httpbis::ClientConf;
+use httpbis::ClientTlsOption;
 
 use httpbis_interop::PORT;
 
 use clap::App;
 use clap::Arg;
 
-fn not_found(client: HttpClient) {
+fn not_found(client: Client) {
     let r = client.start_get("/404", "localhost").collect().wait().expect("get");
     assert_eq!(404, r.headers.status());
 }
 
-fn found(client: HttpClient) {
+fn found(client: Client) {
     let r = client.start_get("/200", "localhost").collect().wait().expect("get");
     assert_eq!(200, r.headers.status());
     assert_eq!(Bytes::from("200 200 200"), r.body);
 }
 
-const TESTS: &'static [(&'static str, fn(HttpClient))] = &[
+const TESTS: &'static [(&'static str, fn(Client))] = &[
     ("not_found", not_found),
     ("found",     found),
 ];
 
-fn find_test_case(name: &str) -> Option<fn(HttpClient)> {
+fn find_test_case(name: &str) -> Option<fn(Client)> {
     for &(next_name, test) in TESTS {
         if next_name == name {
             return Some(test);
@@ -62,11 +62,11 @@ fn test_tls_connector() -> TlsConnector {
     builder.build().unwrap()
 }
 
-fn new_http_client() -> HttpClient {
-    HttpClient::new_expl(
+fn new_http_client() -> Client {
+    Client::new_expl(
         &SocketAddr::from(("::1".parse::<IpAddr>().unwrap(), PORT)),
         ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
-        HttpClientConf::new())
+        ClientConf::new())
             .expect("client")
 }
 
