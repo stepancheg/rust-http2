@@ -1,4 +1,6 @@
 use std::str;
+use std::thread;
+use std::time::Duration;
 
 extern crate bytes;
 extern crate httpbis;
@@ -127,4 +129,47 @@ fn client_call_dropped() {
 
     let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len(), "{:?}", state);
+}
+
+#[test]
+fn reconnect() {
+    env_logger::init().ok();
+
+    let server = HttpServerTester::new();
+
+    let client: Client =
+        Client::new("::1", server.port(), false, Default::default()).expect("connect");
+
+    let mut server_tester = server.accept();
+    server_tester.recv_preface();
+    server_tester.settings_xchg();
+
+    {
+        let req = client.start_get("/111", "localhost").collect();
+        server_tester.recv_message(1);
+        server_tester.send_headers(1, Headers::ok_200(), true);
+        let resp = req.wait().expect("OK");
+        assert_eq!(200, resp.headers.status());
+    }
+
+    // drop server connection
+    drop(server_tester);
+
+    // waiting for client connection to die
+    while let Ok(_) = client.dump_state().wait() {
+        thread::sleep(Duration::from_millis(1));
+    }
+
+    {
+        let req = client.start_get("/222", "localhost").collect();
+
+        let mut server_tester = server.accept();
+        server_tester.recv_preface();
+        server_tester.settings_xchg_but_ack();
+
+        server_tester.recv_message(1);
+        server_tester.send_headers(1, Headers::ok_200(), true);
+        let resp = req.wait().expect("OK");
+        assert_eq!(200, resp.headers.status());
+    }
 }

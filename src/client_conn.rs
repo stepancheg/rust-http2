@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::io;
 
+use error;
 use error::ErrorCode;
 use error::Error;
 
@@ -142,10 +143,10 @@ pub struct HttpClientConnectionAsync {
 
 unsafe impl Sync for HttpClientConnectionAsync {}
 
-struct StartRequestMessage {
-    headers: Headers,
-    body: HttpPartStream,
-    response_handler: futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>,
+pub struct StartRequestMessage {
+    pub headers: Headers,
+    pub body: HttpPartStream,
+    pub resp_tx: futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>,
 }
 
 struct BodyChunkMessage {
@@ -171,13 +172,13 @@ enum ClientCommandMessage {
 
 impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_start(self, start: StartRequestMessage) -> HttpFuture<Self> {
-        let StartRequestMessage { headers, body, response_handler } = start;
+        let StartRequestMessage { headers, body, resp_tx } = start;
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
             let mut stream = HttpClientStream {
                 common: HttpStreamCommon::new(inner.common.conn.peer_settings.initial_window_size),
-                response_handler: Some(response_handler),
+                response_handler: Some(resp_tx),
             };
 
             stream.common.outgoing.push_back(HttpStreamPartContent::Headers(headers));
@@ -369,44 +370,55 @@ impl HttpClientConnectionAsync {
         HttpClientConnectionAsync::connected(lh, Box::new(tls_conn), conf)
     }
 
+    pub fn start_request_with_resp_sender(
+        &self,
+        start: StartRequestMessage)
+            -> Result<(), StartRequestMessage>
+    {
+        self.call_tx.send(ClientToWriteMessage::Start(start))
+            .map_err(|send_error| {
+                match send_error.into_inner() {
+                    ClientToWriteMessage::Start(start) => start,
+                    _ => unreachable!(),
+                }
+            })
+    }
+
     pub fn start_request(
         &self,
         headers: Headers,
         body: HttpPartStream)
             -> Response
     {
-        let (tx, rx) = futures::oneshot();
+        let (resp_tx, resp_rx) = futures::sync::mpsc::unbounded();
 
-        let call_tx = self.call_tx.clone();
-
-        let (req_tx, req_rx) = futures::sync::mpsc::unbounded();
-
-        if let Err(_) = call_tx.send(ClientToWriteMessage::Start(StartRequestMessage {
+        let start = StartRequestMessage {
             headers: headers,
             body: body,
-            response_handler: req_tx,
-        })) {
-            return Response::err(Error::Other("client died"));
+            resp_tx: resp_tx,
+        };
+
+        if let Err(_) = self.start_request_with_resp_sender(start) {
+            return Response::err(error::Error::Other("client died"));
         }
 
-        let req_rx = req_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
+        let req_rx = resp_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
 
-        // TODO: future is no longer needed here
-        if let Err(_) = tx.send(stream_with_eof_and_error(req_rx, || Error::from(io::Error::new(io::ErrorKind::Other, "client is likely died")))) {
-            return Response::err(Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
-        }
+        let req_rx = stream_with_eof_and_error(req_rx, || error::Error::Other("client is likely died"));
 
-        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+        Response::from_stream(req_rx)
+    }
 
-        Response::from_stream(rx.flatten_stream())
+    pub fn dump_state_with_resp_sender(&self, tx: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) {
+        // ignore error
+        drop(self.command_tx.send(ClientCommandMessage::DumpState(tx)));
     }
 
     /// For tests
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
         let (tx, rx) = futures::oneshot();
 
-        self.command_tx.clone().send(ClientCommandMessage::DumpState(tx))
-            .expect("send request to dump state");
+        self.dump_state_with_resp_sender(tx);
 
         let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
 

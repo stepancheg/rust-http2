@@ -9,6 +9,7 @@ use bytes::Bytes;
 
 use futures;
 use futures::Future;
+use futures::stream::Stream;
 
 use tokio_core::reactor;
 
@@ -16,6 +17,7 @@ use native_tls::TlsConnector;
 
 use futures_misc::*;
 
+use error;
 use error::Error;
 use result::Result;
 
@@ -38,7 +40,7 @@ struct LoopToClient {
     // used only once to send shutdown signal
     shutdown: ShutdownSignal,
     _loop_handle: reactor::Remote,
-    http_conn: Arc<HttpClientConnectionAsync>,
+    controller_tx: futures::sync::mpsc::UnboundedSender<ControllerCommand>,
 }
 
 pub struct Client {
@@ -137,20 +139,98 @@ impl Client {
     }
 
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
-        self.loop_to_client.http_conn.dump_state()
+        let (tx, rx) = futures::sync::oneshot::channel();
+        // ignore error
+        drop(self.loop_to_client.controller_tx.send(ControllerCommand::DumpState(tx)));
+        Box::new(rx.map_err(|_| error::Error::Other("conn died")))
     }
 }
 
 impl Service for Client {
+    // TODO: copy-paste with HttpClientConnectionAsync
     fn start_request(
         &self,
         headers: Headers,
         body: HttpPartStream)
             -> Response
     {
-        debug!("start request {:?}", headers);
-        self.loop_to_client.http_conn.start_request(headers, body)
+        let (resp_tx, resp_rx) = futures::sync::mpsc::unbounded();
+
+        let start = StartRequestMessage {
+            headers: headers,
+            body: body,
+            resp_tx: resp_tx,
+        };
+
+        if let Err(_) = self.loop_to_client.controller_tx.send(ControllerCommand::StartRequest(start)) {
+            return Response::err(error::Error::Other("client controller died"));
+        }
+
+        let req_rx = resp_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
+
+        let req_rx = stream_with_eof_and_error(req_rx, || error::Error::Other("client is likely died"));
+
+        Response::from_stream(req_rx)
+    }}
+
+enum ControllerCommand {
+    _GoAway,
+    StartRequest(StartRequestMessage),
+    DumpState(futures::sync::oneshot::Sender<ConnectionStateSnapshot>),
+}
+
+struct ControllerState {
+    handle: reactor::Handle,
+    socket_addr: SocketAddr,
+    tls: ClientTlsOption,
+    conf: ClientConf,
+    // current connection
+    conn: Arc<HttpClientConnectionAsync>,
+}
+
+impl ControllerState {
+    fn init_conn(&mut self) {
+        let (conn, future) = HttpClientConnectionAsync::new(
+            self.handle.clone(),
+            &self.socket_addr,
+            self.tls.clone(),
+            self.conf.clone());
+
+        self.handle.spawn(future.map_err(|e| { warn!("client error: {:?}", e); () }));
+
+        self.conn = Arc::new(conn);
     }
+
+    fn iter(mut self, cmd: ControllerCommand) -> ControllerState {
+        match cmd {
+            ControllerCommand::_GoAway => unimplemented!(),
+            ControllerCommand::StartRequest(start) => {
+                if let Err(start) = self.conn.start_request_with_resp_sender(start) {
+                    self.init_conn();
+                    if let Err(start) = self.conn.start_request_with_resp_sender(start) {
+                        let err = error::Error::Other("client died and reconnect failed");
+                        // ignore error
+                        drop(start.resp_tx.send(ResultOrEof::Error(err)));
+                    }
+                }
+            }
+            ControllerCommand::DumpState(tx) => {
+                self.conn.dump_state_with_resp_sender(tx);
+            }
+        }
+        self
+    }
+}
+
+fn controller(init: ControllerState, rx: futures::sync::mpsc::UnboundedReceiver<ControllerCommand>)
+    -> HttpFuture<()>
+{
+    let rx = rx.map_err(|_| error::Error::Other("channel died"));
+    let r = rx.fold(init, |state, cmd| {
+        Ok::<_, error::Error>(state.iter(cmd))
+    });
+    let r = r.map(|_| ());
+    Box::new(r)
 }
 
 // Event loop entry point
@@ -161,20 +241,34 @@ fn run_client_event_loop(
     send_to_back: mpsc::Sender<LoopToClient>)
 {
     // Create an event loop.
-    let mut lp = reactor::Core::new().expect("Core::new");
+    let mut lp: reactor::Core = reactor::Core::new().expect("Core::new");
 
     // Create a channel to receive shutdown signal.
     let (shutdown_signal, shutdown_future) = shutdown_signal();
 
-    let (http_conn, http_conn_future) =
-        HttpClientConnectionAsync::new(lp.handle(), &socket_addr, tls, conf);
+    let (http_conn, conn_future) =
+        HttpClientConnectionAsync::new(lp.handle(), &socket_addr, tls.clone(), conf.clone());
+
+    lp.handle().spawn(conn_future.map_err(|e| { warn!("client error: {:?}", e); () }));
+
+    let init = ControllerState {
+        handle: lp.handle(),
+        socket_addr: socket_addr.clone(),
+        tls: tls,
+        conf: conf,
+        conn: Arc::new(http_conn),
+    };
+
+    let (controller_tx, controller_rx) = futures::sync::mpsc::unbounded();
+
+    let controller_future = controller(init, controller_rx);
 
     // Send channels back to Http2Client
     send_to_back
         .send(LoopToClient {
             shutdown: shutdown_signal,
             _loop_handle: lp.remote(),
-            http_conn: Arc::new(http_conn),
+            controller_tx: controller_tx,
         })
         .expect("send back");
 
@@ -187,7 +281,7 @@ fn run_client_event_loop(
 
     // Wait for either completion of connection (i. e. error)
     // or shutdown signal.
-    let done = http_conn_future.join(shutdown_future);
+    let done = controller_future.join(shutdown_future);
 
     match lp.run(done) {
         Ok(_) => {}

@@ -31,8 +31,8 @@ use httpbis::solicit::connection::HttpConnection;
 pub struct HttpServerTester(net::TcpListener);
 
 impl HttpServerTester {
-    pub fn new() -> HttpServerTester {
-        let socket = net::TcpListener::bind("[::1]:0".parse::<net::SocketAddr>().unwrap()).unwrap();
+    pub fn on_port(port: u16) -> HttpServerTester {
+        let socket = net::TcpListener::bind(("::1", port)).expect("bind");
         let server = HttpServerTester(socket);
 
         debug!("started HttpServerTester on {}", server.port());
@@ -40,15 +40,23 @@ impl HttpServerTester {
         server
     }
 
+    pub fn new() -> HttpServerTester {
+        HttpServerTester::on_port(0)
+    }
+
     pub fn port(&self) -> u16 {
         self.0.local_addr().unwrap().port()
     }
 
     pub fn accept(&self) -> HttpConnectionTester {
-        HttpConnectionTester {
+        debug!("accept connection...");
+        let r = HttpConnectionTester {
             tcp: self.0.accept().unwrap().0,
             conn: HttpConnection::new(HttpScheme::Http),
-        }
+            waiting_settings_ack: true,
+        };
+        debug!("accept connection.");
+        r
     }
 }
 
@@ -57,6 +65,7 @@ static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 pub struct HttpConnectionTester {
     tcp: net::TcpStream,
     conn: HttpConnection,
+    waiting_settings_ack: bool,
 }
 
 impl HttpConnectionTester {
@@ -65,6 +74,7 @@ impl HttpConnectionTester {
             tcp: net::TcpStream::connect(("::1", port).to_socket_addrs().unwrap().next().unwrap())
                 .expect("connect"),
             conn: HttpConnection::new(HttpScheme::Http),
+            waiting_settings_ack: true,
         }
     }
 
@@ -117,15 +127,31 @@ impl HttpConnectionTester {
         httpbis::solicit_async::recv_raw_frame_sync(&mut self.tcp).expect("recv_raw_frame")
     }
 
-    pub fn recv_frame(&mut self) -> HttpFrame {
+    pub fn fn_recv_frame_no_check_ack(&mut self) -> HttpFrame {
         let raw_frame = self.recv_raw_frame();
-        HttpFrame::from_raw(&raw_frame).expect("parse frame")
+        let frame = HttpFrame::from_raw(&raw_frame).expect("parse frame");
+        debug!("received frame: {:?}", frame);
+        frame
+    }
+
+    pub fn recv_frame(&mut self) -> HttpFrame {
+        loop {
+            let frame = self.fn_recv_frame_no_check_ack();
+            if let HttpFrame::Settings(ref f) = frame {
+                if self.waiting_settings_ack && f.is_ack() {
+                    self.waiting_settings_ack = false;
+                    continue;
+                }
+                continue;
+            }
+            return frame;
+        }
     }
 
     pub fn recv_frame_settings(&mut self) -> SettingsFrame {
-        match self.recv_frame() {
+        match self.fn_recv_frame_no_check_ack() {
             HttpFrame::Settings(settings) => settings,
-            f => panic!("unexpected frame: {:?}", f),
+            f => panic!("expecting SETTINGS, got: {:?}", f),
         }
     }
 
@@ -136,8 +162,10 @@ impl HttpConnectionTester {
     }
 
     pub fn recv_frame_settings_ack(&mut self) -> SettingsFrame {
+        assert!(self.waiting_settings_ack);
         let settings = self.recv_frame_settings();
         assert!(settings.is_ack());
+        self.waiting_settings_ack = false;
         settings
     }
 
@@ -147,17 +175,23 @@ impl HttpConnectionTester {
         self.recv_message(stream_id)
     }
 
-    pub fn settings_xchg(&mut self) {
+    // Perform handshape, but do not wait for ACK of my SETTINGS
+    // Useful, because ACK may come e.g. after first request HEADERS
+    pub fn settings_xchg_but_ack(&mut self) {
         self.send_frame(SettingsFrame::new());
         self.recv_frame_settings_set();
         self.send_frame(SettingsFrame::new_ack());
+    }
+
+    pub fn settings_xchg(&mut self) {
+        self.settings_xchg_but_ack();
         self.recv_frame_settings_ack();
     }
 
     pub fn recv_rst_frame(&mut self) -> RstStreamFrame {
         match self.recv_frame() {
             HttpFrame::RstStream(rst) => rst,
-            f => panic!("unexpected frame: {:?}", f),
+            f => panic!("expecting RST, got: {:?}", f),
         }
     }
 
@@ -170,14 +204,14 @@ impl HttpConnectionTester {
     pub fn recv_frame_headers(&mut self) -> HeadersFrame {
         match self.recv_frame() {
             HttpFrame::Headers(headers) => headers,
-            f => panic!("unexpected frame: {:?}", f),
+            f => panic!("expecting HEADERS, got: {:?}", f),
         }
     }
 
     pub fn recv_frame_data(&mut self) -> DataFrame {
         match self.recv_frame() {
             HttpFrame::Data(data) => data,
-            f => panic!("unexpected frame: {:?}", f),
+            f => panic!("expecting DATA, got: {:?}", f),
         }
     }
 
@@ -219,7 +253,7 @@ impl HttpConnectionTester {
                     bytes_extend_with(&mut r.body, data_frame.data);
                     end_of_stream
                 }
-                frame => panic!("unexpected frame: {:?}", frame),
+                frame => panic!("expecting HEADERS or DATA, got: {:?}", frame),
             };
             if end_of_stream {
                 return r;

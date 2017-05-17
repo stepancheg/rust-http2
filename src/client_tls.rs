@@ -4,6 +4,7 @@ use native_tls::TlsConnector;
 
 use solicit::HttpScheme;
 
+#[derive(Clone)]
 pub enum ClientTlsOption {
     Plain,
     Tls(String, Arc<TlsConnector>), // domain
