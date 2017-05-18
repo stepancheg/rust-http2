@@ -185,12 +185,12 @@ struct ControllerState {
     tls: ClientTlsOption,
     conf: ClientConf,
     // current connection
-    conn: Arc<HttpClientConnectionAsync>,
+    conn: Arc<ClientConnection>,
 }
 
 impl ControllerState {
     fn init_conn(&mut self) {
-        let (conn, future) = HttpClientConnectionAsync::new(
+        let (conn, future) = ClientConnection::new(
             self.handle.clone(),
             &self.socket_addr,
             self.tls.clone(),
@@ -247,7 +247,7 @@ fn run_client_event_loop(
     let (shutdown_signal, shutdown_future) = shutdown_signal();
 
     let (http_conn, conn_future) =
-        HttpClientConnectionAsync::new(lp.handle(), &socket_addr, tls.clone(), conf.clone());
+        ClientConnection::new(lp.handle(), &socket_addr, tls.clone(), conf.clone());
 
     lp.handle().spawn(conn_future.map_err(|e| { warn!("client error: {:?}", e); () }));
 

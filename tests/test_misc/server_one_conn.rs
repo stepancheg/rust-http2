@@ -28,7 +28,7 @@ pub struct HttpServerOneConn {
     from_loop: FromLoop,
     join_handle: Option<thread::JoinHandle<()>>,
     shutdown_tx: Option<futures::Complete<()>>,
-    conn: Arc<Mutex<Option<HttpServerConnectionAsync>>>,
+    conn: Arc<Mutex<Option<ServerConnection>>>,
 }
 
 struct FromLoop {
@@ -55,7 +55,7 @@ impl HttpServerOneConn {
         let (from_loop_tx, from_loop_rx) = futures::oneshot();
         let (shutdown_tx, shutdown_rx) = futures::oneshot::<()>();
 
-        let conn: Arc<Mutex<Option<HttpServerConnectionAsync>>> = Default::default();
+        let conn: Arc<Mutex<Option<ServerConnection>>> = Default::default();
 
         let conn_for_thread = conn.clone();
 
@@ -84,7 +84,7 @@ impl HttpServerOneConn {
                         //HttpServerConnectionAsync::new_tls_fn(&handle, conn, server_context, service)
                         unimplemented!()
                     } else {
-                        let (conn, future) = HttpServerConnectionAsync::new_plain_fn(
+                        let (conn, future) = ServerConnection::new_plain_fn(
                             &handle, conn, Default::default(), service);
                         *conn_for_thread.lock().unwrap() = Some(conn);
                         future

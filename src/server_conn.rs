@@ -37,13 +37,13 @@ use server_conf::*;
 use misc::any_to_string;
 
 
-struct HttpServerStream<F : Service> {
+struct ServerStream<F : Service> {
     common: HttpStreamCommon,
     request_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
     _marker: marker::PhantomData<F>,
 }
 
-impl<F : Service> HttpStream for HttpServerStream<F> {
+impl<F : Service> HttpStream for ServerStream<F> {
     fn common(&self) -> &HttpStreamCommon {
         &self.common
     }
@@ -78,7 +78,7 @@ impl<F : Service> HttpStream for HttpServerStream<F> {
     }
 }
 
-impl<F : Service> HttpServerStream<F> {
+impl<F : Service> ServerStream<F> {
     fn set_headers(&mut self, headers: Headers, last: bool) {
         if let Some(ref mut sender) = self.request_handler {
             let part = HttpStreamPart {
@@ -92,7 +92,7 @@ impl<F : Service> HttpServerStream<F> {
 
 }
 
-struct HttpServerSessionState<F : Service> {
+struct ServerSessionState<F : Service> {
     factory: Arc<F>,
     to_write_tx: futures::sync::mpsc::UnboundedSender<ServerToWriteMessage<F>>,
     loop_handle: reactor::Handle,
@@ -100,8 +100,8 @@ struct HttpServerSessionState<F : Service> {
 
 
 struct ServerInner<F : Service> {
-    common: LoopInnerCommon<HttpServerStream<F>>,
-    session_state: HttpServerSessionState<F>,
+    common: LoopInnerCommon<ServerStream<F>>,
+    session_state: ServerSessionState<F>,
 }
 
 impl<F : Service> ServerInner<F> {
@@ -171,13 +171,13 @@ impl<F : Service> ServerInner<F> {
         req_tx
     }
 
-    fn new_stream(&mut self, stream_id: StreamId, headers: Headers) -> &mut HttpServerStream<F> {
+    fn new_stream(&mut self, stream_id: StreamId, headers: Headers) -> &mut ServerStream<F> {
         debug!("new stream: {}", stream_id);
 
         let req_tx = self.new_request(stream_id, headers);
 
         // New stream initiated by the client
-        let stream = HttpServerStream {
+        let stream = ServerStream {
             common: HttpStreamCommon::new(self.common.conn.peer_settings.initial_window_size),
             request_handler: Some(req_tx),
             _marker: marker::PhantomData,
@@ -188,7 +188,7 @@ impl<F : Service> ServerInner<F> {
         self.common.streams.get_mut(&stream_id).unwrap()
     }
 
-    fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool) -> &mut HttpServerStream<F> {
+    fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool) -> &mut ServerStream<F> {
         if self.common.get_stream_mut(stream_id).is_some() {
             // https://github.com/rust-lang/rust/issues/36403
             let stream = self.common.get_stream_mut(stream_id).unwrap();
@@ -201,9 +201,9 @@ impl<F : Service> ServerInner<F> {
 }
 
 impl<F : Service> LoopInner for ServerInner<F> {
-    type LoopHttpStream = HttpServerStream<F>;
+    type LoopHttpStream = ServerStream<F>;
 
-    fn common(&mut self) -> &mut LoopInnerCommon<HttpServerStream<F>> {
+    fn common(&mut self) -> &mut LoopInnerCommon<ServerStream<F>> {
         &mut self.common
     }
 
@@ -340,13 +340,13 @@ impl<F : Service> ServerCommandLoop<F> {
 
 
 
-pub struct HttpServerConnectionAsync {
+pub struct ServerConnection {
     command_tx: futures::sync::mpsc::UnboundedSender<ServerCommandMessage>,
 }
 
-impl HttpServerConnectionAsync {
+impl ServerConnection {
     fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, _conf: ServerConf, service: Arc<F>)
-                       -> (HttpServerConnectionAsync, HttpFuture<()>)
+                       -> (ServerConnection, HttpFuture<()>)
         where
             F : Service,
             I : AsyncRead + AsyncWrite + Send + 'static,
@@ -366,7 +366,7 @@ impl HttpServerConnectionAsync {
 
             let inner = TaskRcMut::new(ServerInner {
                 common: LoopInnerCommon::new(HttpScheme::Http),
-                session_state: HttpServerSessionState {
+                session_state: ServerSessionState {
                     factory: service,
                     to_write_tx: to_write_tx.clone(),
                     loop_handle: lh,
@@ -382,36 +382,36 @@ impl HttpServerConnectionAsync {
 
         let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));
 
-        (HttpServerConnectionAsync {
+        (ServerConnection {
             command_tx: command_tx,
         }, future)
     }
 
     pub fn new<S>(lh: &reactor::Handle, socket: TcpStream, tls: ServerTlsOption, conf: ServerConf, service: Arc<S>)
-                  -> (HttpServerConnectionAsync, HttpFuture<()>)
+                  -> (ServerConnection, HttpFuture<()>)
         where
             S : Service,
     {
         match tls {
             ServerTlsOption::Plain =>
-                HttpServerConnectionAsync::connected(
+                ServerConnection::connected(
                     lh, Box::new(futures::finished(socket)), conf, service),
             ServerTlsOption::Tls(acceptor) =>
-                HttpServerConnectionAsync::connected(
+                ServerConnection::connected(
                     lh, Box::new(acceptor.accept_async(socket).map_err(Error::from)), conf, service),
         }
     }
 
     pub fn new_plain<S>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, service: Arc<S>)
-                        -> (HttpServerConnectionAsync, HttpFuture<()>)
+                        -> (ServerConnection, HttpFuture<()>)
         where
             S : Service,
     {
-        HttpServerConnectionAsync::new(lh, socket, ServerTlsOption::Plain, conf, service)
+        ServerConnection::new(lh, socket, ServerTlsOption::Plain, conf, service)
     }
 
     pub fn new_plain_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
-                           -> (HttpServerConnectionAsync, HttpFuture<()>)
+                           -> (ServerConnection, HttpFuture<()>)
         where
             F : Fn(Headers, HttpPartStream) -> Response + Send + 'static,
     {
@@ -425,7 +425,7 @@ impl HttpServerConnectionAsync {
             }
         }
 
-        HttpServerConnectionAsync::new_plain(lh, socket, conf, Arc::new(HttpServiceFn(f)))
+        ServerConnection::new_plain(lh, socket, conf, Arc::new(HttpServiceFn(f)))
     }
 
     /// For tests

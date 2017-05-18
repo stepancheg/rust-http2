@@ -36,12 +36,12 @@ use client_conf::*;
 use client_tls::*;
 
 
-struct HttpClientStream {
+struct ClientStream {
     common: HttpStreamCommon,
     response_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
 }
 
-impl HttpStream for HttpClientStream {
+impl HttpStream for ClientStream {
     fn common(&self) -> &HttpStreamCommon {
         &self.common
     }
@@ -75,22 +75,22 @@ impl HttpStream for HttpClientStream {
     }
 }
 
-impl HttpClientStream {
+impl ClientStream {
 }
 
-struct HttpClientSessionState {
+struct ClientSessionState {
     next_stream_id: StreamId,
     loop_handle: reactor::Handle,
 }
 
 struct ClientInner {
-    common: LoopInnerCommon<HttpClientStream>,
+    common: LoopInnerCommon<ClientStream>,
     to_write_tx: futures::sync::mpsc::UnboundedSender<ClientToWriteMessage>,
-    session_state: HttpClientSessionState,
+    session_state: ClientSessionState,
 }
 
 impl ClientInner {
-    fn insert_stream(&mut self, stream: HttpClientStream) -> StreamId {
+    fn insert_stream(&mut self, stream: ClientStream) -> StreamId {
         let id = self.session_state.next_stream_id;
         if let Some(..) = self.common.streams.insert(id, stream) {
             panic!("inserted stream that already existed");
@@ -101,9 +101,9 @@ impl ClientInner {
 }
 
 impl LoopInner for ClientInner {
-    type LoopHttpStream = HttpClientStream;
+    type LoopHttpStream = ClientStream;
 
-    fn common(&mut self) -> &mut LoopInnerCommon<HttpClientStream> {
+    fn common(&mut self) -> &mut LoopInnerCommon<ClientStream> {
         &mut self.common
     }
 
@@ -113,7 +113,7 @@ impl LoopInner for ClientInner {
     }
 
     fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
-        let mut stream: &mut HttpClientStream = match self.common.get_stream_mut(stream_id) {
+        let mut stream: &mut ClientStream = match self.common.get_stream_mut(stream_id) {
             None => {
                 // TODO(mlalic): This means that the server's header is not associated to any
                 //               request made by the client nor any server-initiated stream (pushed)
@@ -135,13 +135,13 @@ impl LoopInner for ClientInner {
     }
 }
 
-pub struct HttpClientConnectionAsync {
+pub struct ClientConnection {
     call_tx: futures::sync::mpsc::UnboundedSender<ClientToWriteMessage>,
     command_tx: futures::sync::mpsc::UnboundedSender<ClientCommandMessage>,
     _remote: reactor::Remote,
 }
 
-unsafe impl Sync for HttpClientConnectionAsync {}
+unsafe impl Sync for ClientConnection {}
 
 pub struct StartRequestMessage {
     pub headers: Headers,
@@ -176,7 +176,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
-            let mut stream = HttpClientStream {
+            let mut stream = ClientStream {
                 common: HttpStreamCommon::new(inner.common.conn.peer_settings.initial_window_size),
                 response_handler: Some(resp_tx),
             };
@@ -270,7 +270,7 @@ type ClientWriteLoop<I> = WriteLoopData<I, ClientInner>;
 type ClientCommandLoop = CommandLoopData<ClientInner>;
 
 
-impl HttpClientConnectionAsync {
+impl ClientConnection {
     fn connected<I : AsyncWrite + AsyncRead + Send + 'static>(
         lh: reactor::Handle, connect: HttpFutureSend<I>, _conf: ClientConf)
             -> (Self, HttpFuture<()>)
@@ -281,7 +281,7 @@ impl HttpClientConnectionAsync {
         let to_write_rx = Box::new(to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
         let command_rx = Box::new(command_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
 
-        let c = HttpClientConnectionAsync {
+        let c = ClientConnection {
             _remote: lh.remote().clone(),
             call_tx: to_write_tx.clone(),
             command_tx: command_tx,
@@ -296,7 +296,7 @@ impl HttpClientConnectionAsync {
             let inner = TaskRcMut::new(ClientInner {
                 common: LoopInnerCommon::new(HttpScheme::Http),
                 to_write_tx: to_write_tx.clone(),
-                session_state: HttpClientSessionState {
+                session_state: ClientSessionState {
                     next_stream_id: 1,
                     loop_handle: lh,
                 }
@@ -315,9 +315,9 @@ impl HttpClientConnectionAsync {
     pub fn new(lh: reactor::Handle, addr: &SocketAddr, tls: ClientTlsOption, conf: ClientConf) -> (Self, HttpFuture<()>) {
         match tls {
             ClientTlsOption::Plain =>
-                HttpClientConnectionAsync::new_plain(lh, addr, conf),
+                ClientConnection::new_plain(lh, addr, conf),
             ClientTlsOption::Tls(domain, connector) =>
-                HttpClientConnectionAsync::new_tls(lh, &domain, connector, addr, conf),
+                ClientConnection::new_tls(lh, &domain, connector, addr, conf),
         }
     }
 
@@ -341,7 +341,7 @@ impl HttpClientConnectionAsync {
             connect.map(map_callback).boxed()
         };
 
-        HttpClientConnectionAsync::connected(lh, connect, conf)
+        ClientConnection::connected(lh, connect, conf)
     }
 
     pub fn new_tls(
@@ -367,7 +367,7 @@ impl HttpClientConnectionAsync {
 
         let tls_conn = tls_conn.map_err(Error::from);
 
-        HttpClientConnectionAsync::connected(lh, Box::new(tls_conn), conf)
+        ClientConnection::connected(lh, Box::new(tls_conn), conf)
     }
 
     pub fn start_request_with_resp_sender(

@@ -51,23 +51,23 @@ pub struct Server {
 #[derive(Default)]
 struct ServerState {
     last_conn_id: u64,
-    conns: HashMap<u64, HttpServerConnectionAsync>,
+    conns: HashMap<u64, ServerConnection>,
 }
 
 impl ServerState {
-    fn snapshot(&self) -> HttpFutureSend<HttpServerStateSnapshot> {
+    fn snapshot(&self) -> HttpFutureSend<ServerStateSnapshot> {
         let futures: Vec<_> = self.conns.iter()
             .map(|(&id, conn)| conn.dump_state().map(move |state| (id, state)))
             .collect();
 
         Box::new(join_all(futures)
-            .map(|states| HttpServerStateSnapshot {
+            .map(|states| ServerStateSnapshot {
                 conns: states.into_iter().collect(),
             }))
     }
 }
 
-pub struct HttpServerStateSnapshot {
+pub struct ServerStateSnapshot {
     pub conns: HashMap<u64, ConnectionStateSnapshot>,
 }
 
@@ -135,7 +135,7 @@ fn run_server_event_loop<S>(
             let no_delay = conf.no_delay.unwrap_or(true);
             socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
 
-            let (conn, future) = HttpServerConnectionAsync::new(&loop_handle, socket, tls, conf, service);
+            let (conn, future) = ServerConnection::new(&loop_handle, socket, tls, conf, service);
 
             let conn_id = {
                 let mut g = state.lock().expect("lock");
@@ -217,7 +217,7 @@ impl Server {
     }
 
     // for tests
-    pub fn dump_state(&self) -> HttpFutureSend<HttpServerStateSnapshot> {
+    pub fn dump_state(&self) -> HttpFutureSend<ServerStateSnapshot> {
         let g = self.state.lock().expect("lock");
         g.snapshot()
     }
