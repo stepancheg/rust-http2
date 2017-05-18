@@ -233,6 +233,7 @@ impl HttpFrameStream {
 #[derive(Debug)]
 pub enum HttpFrameConn {
     Settings(SettingsFrame),
+    PushPromise(PushPromiseFrame),
     Ping(PingFrame),
     Goaway(GoawayFrame),
     WindowUpdate(WindowUpdateFrame),
@@ -243,6 +244,7 @@ impl HttpFrameConn {
     pub fn into_frame(self) -> HttpFrame {
         match self {
             HttpFrameConn::Settings(f) => HttpFrame::Settings(f),
+            HttpFrameConn::PushPromise(f) => HttpFrame::PushPromise(f),
             HttpFrameConn::Ping(f) => HttpFrame::Ping(f),
             HttpFrameConn::Goaway(f) => HttpFrame::Goaway(f),
             HttpFrameConn::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
@@ -264,6 +266,7 @@ impl HttpFrameClassified {
             HttpFrame::Headers(f) => HttpFrameClassified::Stream(HttpFrameStream::Headers(f)),
             HttpFrame::RstStream(f) => HttpFrameClassified::Stream(HttpFrameStream::RstStream(f)),
             HttpFrame::Settings(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
+            HttpFrame::PushPromise(f) => HttpFrameClassified::Conn(HttpFrameConn::PushPromise(f)),
             HttpFrame::Ping(f) => HttpFrameClassified::Conn(HttpFrameConn::Ping(f)),
             HttpFrame::Goaway(f) => HttpFrameClassified::Conn(HttpFrameConn::Goaway(f)),
             HttpFrame::WindowUpdate(f) => {

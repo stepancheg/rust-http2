@@ -50,6 +50,7 @@ pub mod settings;
 pub mod goaway;
 pub mod ping;
 pub mod window_update;
+pub mod push_promise;
 mod flags;
 
 pub use self::builder::FrameBuilder;
@@ -65,6 +66,7 @@ pub use self::goaway::GoawayFrame;
 pub use self::ping::PingFrame;
 pub use self::window_update::WindowUpdateFrame;
 pub use self::continuation::ContinuationFrame;
+pub use self::push_promise::PushPromiseFrame;
 
 /// An alias for the 9-byte buffer that each HTTP/2 frame header must be stored
 /// in.

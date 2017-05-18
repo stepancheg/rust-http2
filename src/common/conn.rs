@@ -406,6 +406,7 @@ pub trait LoopInner: 'static {
     fn process_conn_frame(&mut self, frame: HttpFrameConn) {
         match frame {
             HttpFrameConn::Settings(f) => self.process_settings_global(f),
+            HttpFrameConn::PushPromise(_f) => { /* TODO */ },
             HttpFrameConn::Ping(f) => self.process_ping(f),
             HttpFrameConn::Goaway(f) => self.process_goaway(f),
             HttpFrameConn::WindowUpdate(f) => self.process_conn_window_update(f),
