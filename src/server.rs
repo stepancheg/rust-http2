@@ -25,7 +25,7 @@ use futures_misc::*;
 use net2;
 
 use super::server_conn::*;
-use super::conn::*;
+use super::common::*;
 
 use service::Service;
 

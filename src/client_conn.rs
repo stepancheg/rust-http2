@@ -7,7 +7,6 @@ use error::ErrorCode;
 use error::Error;
 
 use solicit::StreamId;
-use solicit::HttpScheme;
 use solicit::header::*;
 use solicit::connection::EndStream;
 
@@ -30,7 +29,7 @@ use futures_misc::*;
 
 use solicit_async::*;
 
-use conn::*;
+use common::*;
 use stream_part::*;
 use client_conf::*;
 use client_tls::*;
@@ -42,6 +41,10 @@ struct ClientStream {
 }
 
 impl HttpStream for ClientStream {
+    fn first_id() -> StreamId {
+        1
+    }
+
     fn common(&self) -> &HttpStreamCommon {
         &self.common
     }
@@ -75,27 +78,16 @@ impl HttpStream for ClientStream {
     }
 }
 
-impl ClientStream {
-}
-
-struct ClientSessionState {
-    next_stream_id: StreamId,
-    loop_handle: reactor::Handle,
-}
-
 struct ClientInner {
     common: LoopInnerCommon<ClientStream>,
     to_write_tx: futures::sync::mpsc::UnboundedSender<ClientToWriteMessage>,
-    session_state: ClientSessionState,
+    callbacks: Box<ClientConnectionCallbacks>,
 }
 
 impl ClientInner {
     fn insert_stream(&mut self, stream: ClientStream) -> StreamId {
-        let id = self.session_state.next_stream_id;
-        if let Some(..) = self.common.streams.insert(id, stream) {
-            panic!("inserted stream that already existed");
-        }
-        self.session_state.next_stream_id += 2;
+        let id = self.common.next_local_stream_id();
+        self.common.streams.insert(id, stream);
         id
     }
 }
@@ -113,7 +105,7 @@ impl LoopInner for ClientInner {
     }
 
     fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
-        let mut stream: &mut ClientStream = match self.common.get_stream_mut(stream_id) {
+        let mut stream: &mut ClientStream = match self.common.streams.get_mut(stream_id) {
             None => {
                 // TODO(mlalic): This means that the server's header is not associated to any
                 //               request made by the client nor any server-initiated stream (pushed)
@@ -212,7 +204,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                 ()
             });
 
-            inner.session_state.loop_handle.spawn(future);
+            inner.common.loop_handle.spawn(future);
         });
 
         self.send_outg_stream(stream_id)
@@ -222,7 +214,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         let BodyChunkMessage { stream_id, chunk } = body_chunk;
 
         self.inner.with(move |inner: &mut ClientInner| {
-            let stream = inner.common.get_stream_mut(stream_id)
+            let stream = inner.common.streams.get_mut(stream_id)
                 .expect(&format!("stream not found: {}", stream_id));
             // TODO: check stream state
 
@@ -236,7 +228,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         let EndRequestMessage { stream_id } = end;
 
         self.inner.with(move |inner: &mut ClientInner| {
-            let stream = inner.common.get_stream_mut(stream_id)
+            let stream = inner.common.streams.get_mut(stream_id)
                 .expect(&format!("stream not found: {}", stream_id));
 
             // TODO: check stream state
@@ -270,10 +262,21 @@ type ClientWriteLoop<I> = WriteLoopData<I, ClientInner>;
 type ClientCommandLoop = CommandLoopData<ClientInner>;
 
 
+pub trait ClientConnectionCallbacks : 'static {
+    // called at most once
+    fn goaway(&self, error_code: u32, debug: Bytes);
+}
+
+
 impl ClientConnection {
-    fn connected<I : AsyncWrite + AsyncRead + Send + 'static>(
-        lh: reactor::Handle, connect: HttpFutureSend<I>, _conf: ClientConf)
+    fn connected<I, C>(
+        lh: reactor::Handle, connect: HttpFutureSend<I>,
+        _conf: ClientConf,
+        callbacks: C)
             -> (Self, HttpFuture<()>)
+        where
+            I : AsyncWrite + AsyncRead + Send + 'static,
+            C : ClientConnectionCallbacks,
     {
         let (to_write_tx, to_write_rx) = futures::sync::mpsc::unbounded();
         let (command_tx, command_rx) = futures::sync::mpsc::unbounded();
@@ -294,12 +297,9 @@ impl ClientConnection {
             let (read, write) = conn.split();
 
             let inner = TaskRcMut::new(ClientInner {
-                common: LoopInnerCommon::new(HttpScheme::Http),
+                common: LoopInnerCommon::new(lh),
                 to_write_tx: to_write_tx.clone(),
-                session_state: ClientSessionState {
-                    next_stream_id: 1,
-                    loop_handle: lh,
-                }
+                callbacks: Box::new(callbacks),
             });
 
             let run_write = ClientWriteLoop { write: write, inner: inner.clone() }.run(to_write_rx);
@@ -312,16 +312,31 @@ impl ClientConnection {
         (c, Box::new(future))
     }
 
-    pub fn new(lh: reactor::Handle, addr: &SocketAddr, tls: ClientTlsOption, conf: ClientConf) -> (Self, HttpFuture<()>) {
+    pub fn new<C>(
+        lh: reactor::Handle,
+        addr: &SocketAddr,
+        tls: ClientTlsOption,
+        conf: ClientConf,
+        callbacks: C)
+            -> (Self, HttpFuture<()>)
+        where C : ClientConnectionCallbacks
+    {
         match tls {
             ClientTlsOption::Plain =>
-                ClientConnection::new_plain(lh, addr, conf),
+                ClientConnection::new_plain(lh, addr, conf, callbacks),
             ClientTlsOption::Tls(domain, connector) =>
-                ClientConnection::new_tls(lh, &domain, connector, addr, conf),
+                ClientConnection::new_tls(lh, &domain, connector, addr, conf, callbacks),
         }
     }
 
-    pub fn new_plain(lh: reactor::Handle, addr: &SocketAddr, conf: ClientConf) -> (Self, HttpFuture<()>) {
+    pub fn new_plain<C>(
+        lh: reactor::Handle,
+        addr: &SocketAddr,
+        conf: ClientConf,
+        callbacks: C)
+            -> (Self, HttpFuture<()>)
+        where C : ClientConnectionCallbacks
+    {
         let addr = addr.clone();
 
         let no_delay = conf.no_delay.unwrap_or(true);
@@ -341,16 +356,18 @@ impl ClientConnection {
             connect.map(map_callback).boxed()
         };
 
-        ClientConnection::connected(lh, connect, conf)
+        ClientConnection::connected(lh, connect, conf, callbacks)
     }
 
-    pub fn new_tls(
+    pub fn new_tls<C>(
         lh: reactor::Handle,
         domain: &str,
         connector: Arc<TlsConnector>,
         addr: &SocketAddr,
-        conf: ClientConf)
+        conf: ClientConf,
+        callbacks: C)
             -> (Self, HttpFuture<()>)
+        where C : ClientConnectionCallbacks
     {
         let domain = domain.to_owned();
         let addr = addr.clone();
@@ -367,7 +384,7 @@ impl ClientConnection {
 
         let tls_conn = tls_conn.map_err(Error::from);
 
-        ClientConnection::connected(lh, Box::new(tls_conn), conf)
+        ClientConnection::connected(lh, Box::new(tls_conn), conf, callbacks)
     }
 
     pub fn start_request_with_resp_sender(

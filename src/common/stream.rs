@@ -3,6 +3,7 @@ use std::cmp;
 
 use bytes::Bytes;
 
+use solicit::StreamId;
 use solicit::session::StreamState;
 use solicit::WindowSize;
 use solicit::DEFAULT_SETTINGS;
@@ -144,7 +145,7 @@ impl HttpStreamCommon {
         }))
     }
 
-    pub fn pop_outg_all(&mut self, conn_out_window_size: &mut WindowSize) -> Vec<HttpStreamCommand> {
+    pub fn _pop_outg_all(&mut self, conn_out_window_size: &mut WindowSize) -> Vec<HttpStreamCommand> {
         let mut r = Vec::new();
         while let Some(p) = self.pop_outg(conn_out_window_size) {
             r.push(p);
@@ -155,6 +156,9 @@ impl HttpStreamCommon {
 
 
 pub trait HttpStream {
+    // First stream id used by either client or server
+    fn first_id() -> StreamId;
+
     fn common(&self) -> &HttpStreamCommon;
     fn common_mut(&mut self) -> &mut HttpStreamCommon;
     fn new_data_chunk(&mut self, data: &[u8], last: bool);

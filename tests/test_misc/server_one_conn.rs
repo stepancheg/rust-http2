@@ -16,9 +16,7 @@ use tokio_core;
 use tokio_core::reactor;
 
 use httpbis;
-
-use httpbis::solicit::header::*;
-
+use httpbis::*;
 use httpbis::for_test::*;
 
 

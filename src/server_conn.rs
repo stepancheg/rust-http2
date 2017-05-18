@@ -6,7 +6,6 @@ use std::panic;
 use error::ErrorCode;
 
 use solicit::StreamId;
-use solicit::HttpScheme;
 use error::Error;
 use solicit::header::*;
 use solicit::connection::EndStream;
@@ -27,9 +26,9 @@ use tokio_tls::TlsAcceptorExt;
 use futures_misc::*;
 
 use solicit_async::*;
-use conn::*;
 use service::Service;
 use stream_part::*;
+use common::*;
 
 use server_tls::*;
 use server_conf::*;
@@ -44,6 +43,10 @@ struct ServerStream<F : Service> {
 }
 
 impl<F : Service> HttpStream for ServerStream<F> {
+    fn first_id() -> StreamId {
+        2
+    }
+
     fn common(&self) -> &HttpStreamCommon {
         &self.common
     }
@@ -92,16 +95,10 @@ impl<F : Service> ServerStream<F> {
 
 }
 
-struct ServerSessionState<F : Service> {
-    factory: Arc<F>,
-    to_write_tx: futures::sync::mpsc::UnboundedSender<ServerToWriteMessage<F>>,
-    loop_handle: reactor::Handle,
-}
-
-
 struct ServerInner<F : Service> {
     common: LoopInnerCommon<ServerStream<F>>,
-    session_state: ServerSessionState<F>,
+    factory: Arc<F>,
+    to_write_tx: futures::sync::mpsc::UnboundedSender<ServerToWriteMessage<F>>,
 }
 
 impl<F : Service> ServerInner<F> {
@@ -114,7 +111,7 @@ impl<F : Service> ServerInner<F> {
         let req_rx = stream_with_eof_and_error(req_rx, || Error::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
 
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            self.session_state.factory.start_request(headers, HttpPartStream::new(req_rx))
+            self.factory.start_request(headers, HttpPartStream::new(req_rx))
         }));
 
         let response = response.unwrap_or_else(|e| {
@@ -141,7 +138,7 @@ impl<F : Service> ServerInner<F> {
         });
 
         {
-            let to_write_tx1 = self.session_state.to_write_tx.clone();
+            let to_write_tx1 = self.to_write_tx.clone();
             let to_write_tx2 = to_write_tx1.clone();
 
             let process_response = response.for_each(move |part: HttpStreamPart| {
@@ -165,7 +162,7 @@ impl<F : Service> ServerInner<F> {
                 Ok(())
             });
 
-            self.session_state.loop_handle.spawn(process_response);
+            self.common.loop_handle.spawn(process_response);
         }
 
         req_tx
@@ -182,16 +179,16 @@ impl<F : Service> ServerInner<F> {
             request_handler: Some(req_tx),
             _marker: marker::PhantomData,
         };
-        if let Some(..) = self.common.streams.insert(stream_id, stream) {
+        if let Some(..) = self.common.streams.map.insert(stream_id, stream) {
             panic!("inserted stream that already existed");
         }
-        self.common.streams.get_mut(&stream_id).unwrap()
+        self.common.streams.map.get_mut(&stream_id).unwrap()
     }
 
     fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool) -> &mut ServerStream<F> {
-        if self.common.get_stream_mut(stream_id).is_some() {
+        if self.common.streams.get_mut(stream_id).is_some() {
             // https://github.com/rust-lang/rust/issues/36403
-            let stream = self.common.get_stream_mut(stream_id).unwrap();
+            let stream = self.common.streams.get_mut(stream_id).unwrap();
             stream.set_headers(headers, last);
             stream
         } else {
@@ -208,7 +205,7 @@ impl<F : Service> LoopInner for ServerInner<F> {
     }
 
     fn send_common(&mut self, message: CommonToWriteMessage) {
-        self.session_state.to_write_tx.send(ServerToWriteMessage::Common(message))
+        self.to_write_tx.send(ServerToWriteMessage::Common(message))
             .expect("read to write common");
     }
 
@@ -243,12 +240,12 @@ enum ServerCommandMessage {
 
 impl<F : Service, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
     fn _loop_handle(&self) -> reactor::Handle {
-        self.inner.with(move |inner: &mut ServerInner<F>| inner.session_state.loop_handle.clone())
+        self.inner.with(move |inner: &mut ServerInner<F>| inner.common.loop_handle.clone())
     }
 
     fn process_response_part(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner: &mut ServerInner<F>| {
-            let stream = inner.common.get_stream_mut(stream_id);
+            let stream = inner.common.streams.get_mut(stream_id);
             if let Some(stream) = stream {
                 if !stream.common.state.is_closed_local() {
                     stream.common.outgoing.push_back(part.content);
@@ -272,7 +269,7 @@ impl<F : Service, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
 
     fn process_response_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner: &mut ServerInner<F>| {
-            let stream = inner.common.get_stream_mut(stream_id);
+            let stream = inner.common.streams.get_mut(stream_id);
             if let Some(stream) = stream {
                 if stream.common.outgoing_end.is_none() {
                     stream.common.outgoing_end = Some(error_code);
@@ -365,12 +362,10 @@ impl ServerConnection {
             let (read, write) = socket.split();
 
             let inner = TaskRcMut::new(ServerInner {
-                common: LoopInnerCommon::new(HttpScheme::Http),
-                session_state: ServerSessionState {
-                    factory: service,
-                    to_write_tx: to_write_tx.clone(),
-                    loop_handle: lh,
-                },
+                common: LoopInnerCommon::new(lh),
+                factory: service,
+                to_write_tx: to_write_tx.clone(),
+
             });
 
             let run_write = ServerWriteLoop { write: write, inner: inner.clone() }.run(Box::new(to_write_rx));

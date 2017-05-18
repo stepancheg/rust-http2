@@ -3,8 +3,7 @@
 use httpbis;
 use httpbis::server::Server;
 use httpbis::server::ServerTlsOption;
-use httpbis::conn::*;
-use httpbis::Headers;
+use httpbis::*;
 
 
 pub struct HttpServerEcho {

@@ -14,7 +14,6 @@ use httpbis::message::SimpleHttpMessage;
 use httpbis::bytesx::*;
 use httpbis::solicit::StreamId;
 use httpbis::error::ErrorCode;
-use httpbis::solicit::HttpScheme;
 use httpbis::solicit::header::*;
 use httpbis::solicit::frame::FrameIR;
 use httpbis::solicit::frame::settings::SettingsFrame;
@@ -52,7 +51,7 @@ impl HttpServerTester {
         debug!("accept connection...");
         let r = HttpConnectionTester {
             tcp: self.0.accept().unwrap().0,
-            conn: HttpConnection::new(HttpScheme::Http),
+            conn: HttpConnection::new(),
             waiting_settings_ack: true,
         };
         debug!("accept connection.");
@@ -73,7 +72,7 @@ impl HttpConnectionTester {
         HttpConnectionTester {
             tcp: net::TcpStream::connect(("::1", port).to_socket_addrs().unwrap().next().unwrap())
                 .expect("connect"),
-            conn: HttpConnection::new(HttpScheme::Http),
+            conn: HttpConnection::new(),
             waiting_settings_ack: true,
         }
     }

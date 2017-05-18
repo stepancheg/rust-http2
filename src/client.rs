@@ -28,7 +28,7 @@ use solicit_async::*;
 
 use client_conn::*;
 use client_conf::*;
-use conn::*;
+use common::*;
 use stream_part::*;
 use service::Service;
 
@@ -194,7 +194,8 @@ impl ControllerState {
             self.handle.clone(),
             &self.socket_addr,
             self.tls.clone(),
-            self.conf.clone());
+            self.conf.clone(),
+            CallbacksImpl);
 
         self.handle.spawn(future.map_err(|e| { warn!("client error: {:?}", e); () }));
 
@@ -233,6 +234,14 @@ fn controller(init: ControllerState, rx: futures::sync::mpsc::UnboundedReceiver<
     Box::new(r)
 }
 
+struct CallbacksImpl;
+
+impl ClientConnectionCallbacks for CallbacksImpl {
+    fn goaway(&self, _error_code: u32, _debug: Bytes) {
+        unimplemented!()
+    }
+}
+
 // Event loop entry point
 fn run_client_event_loop(
     socket_addr: SocketAddr,
@@ -247,7 +256,7 @@ fn run_client_event_loop(
     let (shutdown_signal, shutdown_future) = shutdown_signal();
 
     let (http_conn, conn_future) =
-        ClientConnection::new(lp.handle(), &socket_addr, tls.clone(), conf.clone());
+        ClientConnection::new(lp.handle(), &socket_addr, tls.clone(), conf.clone(), CallbacksImpl);
 
     lp.handle().spawn(conn_future.map_err(|e| { warn!("client error: {:?}", e); () }));
 

@@ -24,7 +24,7 @@ use bytes::Bytes;
 use error::Error;
 use error::ErrorCode;
 use result::Result;
-use solicit::{StreamId, HttpScheme, WindowSize};
+use solicit::{StreamId, WindowSize};
 use solicit::DEFAULT_SETTINGS;
 use solicit::header::Header;
 use solicit::frame::continuation::ContinuationFlag;
@@ -152,8 +152,6 @@ pub struct HttpConnection {
     pub in_window_size: WindowSize,
     /// Last known peer settings
     pub peer_settings: HttpSettings,
-    /// The scheme of the connection
-    pub scheme: HttpScheme,
 }
 
 /// A trait that should be implemented by types that can provide the functionality
@@ -354,9 +352,8 @@ impl<'a, S> HttpConnectionSender<'a, S>
 impl HttpConnection {
     /// Creates a new `HttpConnection` that will use the given sender
     /// for writing frames.
-    pub fn new(scheme: HttpScheme) -> HttpConnection {
+    pub fn new() -> HttpConnection {
         HttpConnection {
-            scheme: scheme,
             decoder: hpack::Decoder::new(),
             encoder: hpack::Encoder::new(),
             peer_settings: DEFAULT_SETTINGS,

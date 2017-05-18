@@ -20,10 +20,11 @@ mod test_misc;
 
 use httpbis::solicit::header::*;
 use httpbis::error::Error;
+use httpbis::error::ErrorCode;
+use httpbis::*;
+use httpbis::for_test::*;
 
 use test_misc::*;
-use httpbis::for_test::*;
-use httpbis::error::ErrorCode;
 
 #[test]
 fn stream_count() {

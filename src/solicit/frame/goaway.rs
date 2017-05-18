@@ -20,27 +20,22 @@ pub const GOAWAY_FRAME_TYPE: u8 = 0x7;
 pub struct GoawayFrame {
     last_stream_id: StreamId,
     raw_error_code: u32,
-    debug_data: Option<Bytes>,
+    debug_data: Bytes,
     flags: Flags<NoFlag>,
 }
 
 impl GoawayFrame {
     /// Create a new `GOAWAY` frame with the given error code and no debug data.
     pub fn new(last_stream_id: StreamId, error_code: ErrorCode) -> Self {
-        GoawayFrame {
-            last_stream_id: last_stream_id,
-            raw_error_code: error_code.into(),
-            debug_data: None,
-            flags: Flags::default(),
-        }
+        GoawayFrame::with_debug_data(last_stream_id, error_code, Bytes::new())
     }
 
     /// Create a new `GOAWAY` frame with the given parts.
-    pub fn with_debug_data(last_stream_id: StreamId, raw_error: u32, debug_data: Bytes) -> Self {
+    pub fn with_debug_data(last_stream_id: StreamId, error_code: ErrorCode, debug_data: Bytes) -> Self {
         GoawayFrame {
             last_stream_id: last_stream_id,
-            raw_error_code: raw_error,
-            debug_data: Some(debug_data),
+            raw_error_code: error_code.into(),
+            debug_data: debug_data,
             flags: Flags::default(),
         }
     }
@@ -63,13 +58,13 @@ impl GoawayFrame {
     }
 
     /// Returns the debug data associated with the frame.
-    pub fn debug_data(&self) -> Option<&Bytes> {
-        self.debug_data.as_ref()
+    pub fn debug_data(&self) -> &Bytes {
+        &self.debug_data
     }
 
     /// Returns the total length of the frame's payload, including any debug data.
     pub fn payload_len(&self) -> u32 {
-        GOAWAY_MIN_FRAME_LEN + self.debug_data.as_ref().map_or(0, |d| d.len() as u32)
+        GOAWAY_MIN_FRAME_LEN + self.debug_data.len() as u32
     }
 }
 
@@ -90,11 +85,7 @@ impl Frame for GoawayFrame {
 
         let last_stream_id = parse_stream_id(&raw_frame.payload());
         let error = unpack_octets_4!(raw_frame.payload(), 4, u32);
-        let debug_data = if length > GOAWAY_MIN_FRAME_LEN {
-            Some(raw_frame.payload().slice_from(GOAWAY_MIN_FRAME_LEN as usize))
-        } else {
-            None
-        };
+        let debug_data = raw_frame.payload().slice_from(GOAWAY_MIN_FRAME_LEN as usize);
 
         Some(GoawayFrame {
             last_stream_id: last_stream_id,
@@ -127,9 +118,7 @@ impl FrameIR for GoawayFrame {
         builder.write_header(self.get_header())?;
         builder.write_u32(self.last_stream_id)?;
         builder.write_u32(self.raw_error_code)?;
-        if let Some(buf) = self.debug_data {
-            builder.write_all(&buf)?;
-        }
+        builder.write_all(&self.debug_data)?;
         Ok(())
     }
 }
@@ -151,7 +140,7 @@ mod tests {
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0);
-        assert_eq!(frame.debug_data(), None);
+        assert_eq!(frame.debug_data(), &Bytes::new());
     }
 
     #[test]
@@ -160,7 +149,7 @@ mod tests {
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0x00000100);
-        assert_eq!(frame.debug_data(), None);
+        assert_eq!(frame.debug_data(), &Bytes::new());
     }
 
     #[test]
@@ -169,7 +158,7 @@ mod tests {
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0);
-        assert_eq!(frame.debug_data().map(|b| &b[..]), Some(&[1, 2, 3, 4][..]));
+        assert_eq!(frame.debug_data(), &Bytes::from(&[1, 2, 3, 4][..]));
     }
 
     #[test]
@@ -178,7 +167,7 @@ mod tests {
         let frame = GoawayFrame::from_raw(&raw).expect("Expected successful parse");
         assert_eq!(frame.error_code(), ErrorCode::ProtocolError);
         assert_eq!(frame.last_stream_id(), 0);
-        assert_eq!(frame.debug_data(), None);
+        assert_eq!(frame.debug_data(), &Bytes::new());
     }
 
     #[test]
@@ -224,14 +213,4 @@ mod tests {
         assert_eq!(expected, raw);
     }
 
-    #[test]
-    fn test_serialize_raw_error() {
-        let frame = GoawayFrame::with_debug_data(1, 0x0001AA, Bytes::new());
-        let expected: Vec<u8> = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 0),
-                                                     vec![0, 0, 0, 1, 0, 0, 0x1, 0xAA])
-                                    .as_ref().to_owned();
-        let raw = serialize_frame(&frame);
-
-        assert_eq!(expected, raw);
-    }
 }

@@ -5,6 +5,8 @@ use futures::Future;
 use futures::future;
 use futures;
 
+use tokio_core::reactor;
+
 use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
@@ -28,7 +30,8 @@ use futures_misc::*;
 use solicit_misc::*;
 use solicit_async::*;
 
-use common_stream::*;
+use super::stream::*;
+use super::stream_map::*;
 
 
 pub use resp::Response;
@@ -43,8 +46,11 @@ pub enum CommonToWriteMessage {
 pub struct LoopInnerCommon<S>
     where S : HttpStream,
 {
+    pub loop_handle: reactor::Handle,
     pub conn: HttpConnection,
-    pub streams: HashMap<StreamId, S>,
+    pub streams: StreamMap<S>,
+    pub last_local_stream_id: StreamId,
+    pub last_peer_stream_id: StreamId,
 }
 
 
@@ -59,26 +65,35 @@ pub struct ConnectionStateSnapshot {
 impl<S> LoopInnerCommon<S>
     where S : HttpStream,
 {
-    pub fn new() -> LoopInnerCommon<S> {
+    pub fn new(loop_handle: reactor::Handle) -> LoopInnerCommon<S> {
         LoopInnerCommon {
             conn: HttpConnection::new(),
-            streams: HashMap::new(),
+            streams: StreamMap::new(),
+            last_local_stream_id: 0,
+            last_peer_stream_id: 0,
+            loop_handle: loop_handle,
         }
     }
 
-    pub fn get_stream_mut(&mut self, stream_id: StreamId) -> Option<&mut S> {
-        self.streams.get_mut(&stream_id)
+    /// Allocate stream id for locally initiated stream
+    pub fn next_local_stream_id(&mut self) -> StreamId {
+        let id = match self.last_local_stream_id {
+            0 => S::first_id(),
+            n => n + 2,
+        };
+        self.last_local_stream_id = id;
+        id
     }
 
     pub fn remove_stream(&mut self, stream_id: StreamId) {
-        match self.streams.remove(&stream_id) {
+        match self.streams.map.remove(&stream_id) {
             Some(_) => debug!("removed stream: {}", stream_id),
             None => debug!("incorrect request to remove stream: {}", stream_id),
         }
     }
 
     pub fn remove_stream_if_closed(&mut self, stream_id: StreamId) {
-        if self.get_stream_mut(stream_id).expect("unknown stream").common().state == StreamState::Closed {
+        if self.streams.get_mut(stream_id).expect("unknown stream").common().state == StreamState::Closed {
             self.remove_stream(stream_id);
         }
     }
@@ -86,7 +101,7 @@ impl<S> LoopInnerCommon<S>
 
     pub fn pop_outg_for_stream(&mut self, stream_id: StreamId) -> Option<HttpStreamCommand> {
         let r = {
-            if let Some(stream) = self.streams.get_mut(&stream_id) {
+            if let Some(stream) = self.streams.map.get_mut(&stream_id) {
                 stream.common_mut().pop_outg(&mut self.conn.out_window_size)
             } else {
                 None
@@ -100,7 +115,7 @@ impl<S> LoopInnerCommon<S>
 
     pub fn pop_outg_for_conn(&mut self) -> Option<(StreamId, HttpStreamCommand)> {
         // TODO: lame
-        let stream_ids: Vec<StreamId> = self.streams.keys().cloned().collect();
+        let stream_ids: Vec<StreamId> = self.streams.map.keys().cloned().collect();
         for stream_id in stream_ids {
             let r = self.pop_outg_for_stream(stream_id);
             if let Some(r) = r {
@@ -211,7 +226,7 @@ impl<S> LoopInnerCommon<S>
 
     pub fn dump_state(&self) -> ConnectionStateSnapshot {
         ConnectionStateSnapshot {
-            streams: self.streams.iter().map(|(&k, s)| (k, s.common().state)).collect(),
+            streams: self.streams.map.iter().map(|(&k, s)| (k, s.common().state)).collect(),
         }
     }
 }
@@ -267,7 +282,7 @@ pub trait LoopInner: 'static {
                 let delta = (new_size as i32) - (old_size as i32);
 
                 if delta != 0 {
-                    for (_, s) in &mut self.common().streams {
+                    for (_, s) in &mut self.common().streams.map {
                         // In addition to changing the flow-control window for streams
                         // that are not yet active, a SETTINGS frame can alter the initial
                         // flow-control window size for streams with active flow-control windows
@@ -279,7 +294,7 @@ pub trait LoopInner: 'static {
                         s.common_mut().out_window_size.0 += delta;
                     }
 
-                    if !self.common().streams.is_empty() && delta > 0 {
+                    if !self.common().streams.map.is_empty() && delta > 0 {
                         out_window_increased = true;
                     }
                 }
@@ -297,7 +312,7 @@ pub trait LoopInner: 'static {
 
     fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame) {
         {
-            match self.common().get_stream_mut(frame.get_stream_id()) {
+            match self.common().streams.get_mut(frame.get_stream_id()) {
                 Some(stream) => {
                     stream.common_mut().out_window_size.try_increase(frame.increment())
                         .expect("failed to increment stream window");
@@ -322,7 +337,7 @@ pub trait LoopInner: 'static {
     }
 
     fn process_rst_stream_frame(&mut self, frame: RstStreamFrame) {
-        let stream = self.common().get_stream_mut(frame.get_stream_id())
+        let stream = self.common().streams.get_mut(frame.get_stream_id())
             .expect(&format!("stream not found: {}", frame.get_stream_id()));
         stream.rst(frame.error_code());
     }
@@ -345,7 +360,7 @@ pub trait LoopInner: 'static {
             };
 
         let increment_stream = {
-            let stream = self.common().get_stream_mut(frame.get_stream_id())
+            let stream = self.common().streams.get_mut(frame.get_stream_id())
                 .expect(&format!("stream not found: {}", frame.get_stream_id()));
 
             stream.common_mut().in_window_size.try_decrease(frame.payload_len() as i32)
@@ -436,7 +451,7 @@ pub trait LoopInner: 'static {
 
         // RST_STREAM and WINDOW_UPDATE can be received when we have no stream
         {
-            if let Some(stream) = self.common().get_stream_mut(stream_id) {
+            if let Some(stream) = self.common().streams.get_mut(stream_id) {
                 stream.common_mut().close_remote();
                 stream.closed_remote();
             } else {
@@ -451,7 +466,7 @@ pub trait LoopInner: 'static {
         debug!("close local: {}", stream_id);
 
         {
-            if let Some(stream) = self.common().get_stream_mut(stream_id) {
+            if let Some(stream) = self.common().streams.get_mut(stream_id) {
                 stream.common_mut().close_local();
                 //stream.closed_local();
             } else {

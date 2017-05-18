@@ -26,7 +26,9 @@ pub mod server_conf;
 pub mod server_conn;
 mod server_tls;
 pub mod server;
-pub mod conn;
+
+mod common;
+
 pub mod stream_part;
 pub mod message;
 
@@ -65,14 +67,6 @@ pub use error::Error;
 pub use result::Result;
 
 pub mod for_test {
-    pub use server_conf::*;
-    pub use server_conn::*;
-    pub use server::*;
-    pub use client_conf::*;
-    pub use client_conn::*;
-    pub use client::*;
-    pub use conn::*;
-    pub use solicit_async::*;
-    pub use futures_misc::*;
-    pub use message::*;
+    pub use common::ConnectionStateSnapshot;
+    pub use server_conn::ServerConnection;
 }
