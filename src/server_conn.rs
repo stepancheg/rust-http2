@@ -1,4 +1,3 @@
-use std::marker;
 use std::io;
 use std::sync::Arc;
 use std::panic;
@@ -36,13 +35,12 @@ use server_conf::*;
 use misc::any_to_string;
 
 
-struct ServerStream<F : Service> {
+struct ServerStream {
     common: HttpStreamCommon,
     request_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
-    _marker: marker::PhantomData<F>,
 }
 
-impl<F : Service> HttpStream for ServerStream<F> {
+impl HttpStream for ServerStream {
     fn first_id() -> StreamId {
         2
     }
@@ -81,7 +79,7 @@ impl<F : Service> HttpStream for ServerStream<F> {
     }
 }
 
-impl<F : Service> ServerStream<F> {
+impl ServerStream {
     fn set_headers(&mut self, headers: Headers, last: bool) {
         if let Some(ref mut sender) = self.request_handler {
             let part = HttpStreamPart {
@@ -95,13 +93,13 @@ impl<F : Service> ServerStream<F> {
 
 }
 
-struct ServerInner<F : Service> {
-    common: LoopInnerCommon<ServerStream<F>>,
-    factory: Arc<F>,
-    to_write_tx: futures::sync::mpsc::UnboundedSender<ServerToWriteMessage<F>>,
+struct ServerInner {
+    common: LoopInnerCommon<ServerStream>,
+    factory: Arc<Service>,
+    to_write_tx: futures::sync::mpsc::UnboundedSender<ServerToWriteMessage>,
 }
 
-impl<F : Service> ServerInner<F> {
+impl ServerInner {
     fn new_request(&mut self, stream_id: StreamId, headers: Headers)
         -> futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>
     {
@@ -168,7 +166,7 @@ impl<F : Service> ServerInner<F> {
         req_tx
     }
 
-    fn new_stream(&mut self, stream_id: StreamId, headers: Headers) -> &mut ServerStream<F> {
+    fn new_stream(&mut self, stream_id: StreamId, headers: Headers) -> &mut ServerStream {
         debug!("new stream: {}", stream_id);
 
         let req_tx = self.new_request(stream_id, headers);
@@ -177,7 +175,6 @@ impl<F : Service> ServerInner<F> {
         let stream = ServerStream {
             common: HttpStreamCommon::new(self.common.conn.peer_settings.initial_window_size),
             request_handler: Some(req_tx),
-            _marker: marker::PhantomData,
         };
         if let Some(..) = self.common.streams.map.insert(stream_id, stream) {
             panic!("inserted stream that already existed");
@@ -185,7 +182,7 @@ impl<F : Service> ServerInner<F> {
         self.common.streams.map.get_mut(&stream_id).unwrap()
     }
 
-    fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool) -> &mut ServerStream<F> {
+    fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool) -> &mut ServerStream {
         if self.common.streams.get_mut(stream_id).is_some() {
             // https://github.com/rust-lang/rust/issues/36403
             let stream = self.common.streams.get_mut(stream_id).unwrap();
@@ -197,10 +194,10 @@ impl<F : Service> ServerInner<F> {
     }
 }
 
-impl<F : Service> LoopInner for ServerInner<F> {
-    type LoopHttpStream = ServerStream<F>;
+impl LoopInner for ServerInner {
+    type LoopHttpStream = ServerStream;
 
-    fn common(&mut self) -> &mut LoopInnerCommon<ServerStream<F>> {
+    fn common(&mut self) -> &mut LoopInnerCommon<ServerStream> {
         &mut self.common
     }
 
@@ -220,13 +217,12 @@ impl<F : Service> LoopInner for ServerInner<F> {
 
 }
 
-type ServerReadLoop<F, I> = ReadLoopData<I, ServerInner<F>>;
-type ServerWriteLoop<F, I> = WriteLoopData<I, ServerInner<F>>;
-type ServerCommandLoop<F> = CommandLoopData<ServerInner<F>>;
+type ServerReadLoop<I> = ReadLoopData<I, ServerInner>;
+type ServerWriteLoop<I> = WriteLoopData<I, ServerInner>;
+type ServerCommandLoop = CommandLoopData<ServerInner>;
 
 
-enum ServerToWriteMessage<F : Service> {
-    _Dummy(F),
+enum ServerToWriteMessage {
     ResponsePart(StreamId, HttpStreamPart),
     // send when user provided handler completed the stream
     ResponseStreamEnd(StreamId, ErrorCode),
@@ -238,13 +234,13 @@ enum ServerCommandMessage {
 }
 
 
-impl<F : Service, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
+impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
     fn _loop_handle(&self) -> reactor::Handle {
-        self.inner.with(move |inner: &mut ServerInner<F>| inner.common.loop_handle.clone())
+        self.inner.with(move |inner: &mut ServerInner| inner.common.loop_handle.clone())
     }
 
     fn process_response_part(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
-        let stream_id = self.inner.with(move |inner: &mut ServerInner<F>| {
+        let stream_id = self.inner.with(move |inner: &mut ServerInner| {
             let stream = inner.common.streams.get_mut(stream_id);
             if let Some(stream) = stream {
                 if !stream.common.state.is_closed_local() {
@@ -268,7 +264,7 @@ impl<F : Service, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
     }
 
     fn process_response_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
-        let stream_id = self.inner.with(move |inner: &mut ServerInner<F>| {
+        let stream_id = self.inner.with(move |inner: &mut ServerInner| {
             let stream = inner.common.streams.get_mut(stream_id);
             if let Some(stream) = stream {
                 if stream.common.outgoing_end.is_none() {
@@ -286,7 +282,7 @@ impl<F : Service, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
         }
     }
 
-    fn process_message(self, message: ServerToWriteMessage<F>) -> HttpFuture<Self> {
+    fn process_message(self, message: ServerToWriteMessage) -> HttpFuture<Self> {
         match message {
             ServerToWriteMessage::ResponsePart(stream_id, response) => {
                 self.process_response_part(stream_id, response)
@@ -297,23 +293,20 @@ impl<F : Service, I : AsyncWrite + Send> ServerWriteLoop<F, I> {
             ServerToWriteMessage::Common(common) => {
                 self.process_common(common)
             },
-            ServerToWriteMessage::_Dummy(..) => {
-                panic!()
-            },
         }
     }
 
-    fn run(self, requests: HttpFutureStream<ServerToWriteMessage<F>>) -> HttpFuture<()> {
+    fn run(self, requests: HttpFutureStream<ServerToWriteMessage>) -> HttpFuture<()> {
         let requests = requests.map_err(Error::from);
         Box::new(requests
-            .fold(self, move |wl, message: ServerToWriteMessage<F>| {
+            .fold(self, move |wl, message: ServerToWriteMessage| {
                 wl.process_message(message)
             })
             .map(|_| ()))
     }
 }
 
-impl<F : Service> ServerCommandLoop<F> {
+impl ServerCommandLoop {
     fn process_dump_state(self, sender: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) -> HttpFuture<Self> {
         // ignore send error, client might be already dead
         drop(sender.send(self.inner.with(|inner| inner.common.dump_state())));
@@ -350,7 +343,7 @@ impl ServerConnection {
     {
         let lh = lh.clone();
 
-        let (to_write_tx, to_write_rx) = futures::sync::mpsc::unbounded::<ServerToWriteMessage<F>>();
+        let (to_write_tx, to_write_rx) = futures::sync::mpsc::unbounded::<ServerToWriteMessage>();
         let (command_tx, command_rx) = futures::sync::mpsc::unbounded::<ServerCommandMessage>();
 
         let to_write_rx = to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
