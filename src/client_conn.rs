@@ -35,26 +35,36 @@ use client_conf::*;
 use client_tls::*;
 
 
-struct ClientStream {
-    common: HttpStreamCommon,
-    response_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
-}
+struct ClientTypes;
 
-impl HttpStream for ClientStream {
+impl Types for ClientTypes {
+    type HttpStream = ClientStream;
+    type HttpStreamSpecific = ClientStreamData;
+    type ConnDataSpecific = ClientConnData;
+    type ConnData = ClientInner;
+    type ToWriteMessage = ClientToWriteMessage;
+
     fn first_id() -> StreamId {
         1
     }
+}
 
-    fn common(&self) -> &HttpStreamCommon {
-        &self.common
-    }
 
-    fn common_mut(&mut self) -> &mut HttpStreamCommon {
-        &mut self.common
-    }
+
+pub struct ClientStreamData {
+    response_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
+}
+
+impl HttpStreamDataSpecific for ClientStreamData {
+}
+
+type ClientStream = HttpStreamCommon<ClientTypes>;
+
+impl HttpStream for ClientStream {
+    type Types = ClientTypes;
 
     fn new_data_chunk(&mut self, data: &[u8], last: bool) {
-        if let Some(ref mut response_handler) = self.response_handler {
+        if let Some(ref mut response_handler) = self.specific.response_handler {
             // TODO: reset stream if called is dead
             drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                 content: HttpStreamPartContent::Data(Bytes::from(data)),
@@ -64,48 +74,42 @@ impl HttpStream for ClientStream {
     }
 
     fn rst(&mut self, error_code: ErrorCode) {
-        if let Some(ref mut response_handler) = self.response_handler {
+        if let Some(ref mut response_handler) = self.specific.response_handler {
             // TODO: reset stream if called is dead
             drop(response_handler.send(ResultOrEof::Error(Error::CodeError(error_code))));
         }
     }
 
     fn closed_remote(&mut self) {
-        if let Some(response_handler) = self.response_handler.take() {
+        if let Some(response_handler) = self.specific.response_handler.take() {
             // it is OK to ignore error: handler may be already dead
             drop(response_handler.send(ResultOrEof::Eof));
         }
     }
 }
 
-struct ClientInner {
-    common: LoopInnerCommon<ClientStream>,
-    to_write_tx: futures::sync::mpsc::UnboundedSender<ClientToWriteMessage>,
+pub struct ClientConnData {
     callbacks: Box<ClientConnectionCallbacks>,
 }
 
+impl ConnDataSpecific for ClientConnData {
+}
+
+type ClientInner = ConnData<ClientTypes>;
+
 impl ClientInner {
     fn insert_stream(&mut self, stream: ClientStream) -> StreamId {
-        let id = self.common.next_local_stream_id();
-        self.common.streams.insert(id, stream);
+        let id = self.next_local_stream_id();
+        self.streams.insert(id, stream);
         id
     }
 }
 
-impl LoopInner for ClientInner {
-    type LoopHttpStream = ClientStream;
-
-    fn common(&mut self) -> &mut LoopInnerCommon<ClientStream> {
-        &mut self.common
-    }
-
-    fn send_common(&mut self, message: CommonToWriteMessage) {
-        self.to_write_tx.send(ClientToWriteMessage::Common(message))
-            .expect("read to write common");
-    }
+impl ConnInner for ClientInner {
+    type Types = ClientTypes;
 
     fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
-        let mut stream: &mut ClientStream = match self.common.streams.get_mut(stream_id) {
+        let mut stream: &mut ClientStream = match self.streams.get_mut(stream_id) {
             None => {
                 // TODO(mlalic): This means that the server's header is not associated to any
                 //               request made by the client nor any server-initiated stream (pushed)
@@ -116,7 +120,7 @@ impl LoopInner for ClientInner {
         // TODO: hack
         if headers.0.len() != 0 {
 
-            if let Some(ref mut response_handler) = stream.response_handler {
+            if let Some(ref mut response_handler) = stream.specific.response_handler {
                 // TODO: reset stream if called is dead
                 drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                     content: HttpStreamPartContent::Headers(headers),
@@ -130,7 +134,6 @@ impl LoopInner for ClientInner {
 pub struct ClientConnection {
     call_tx: futures::sync::mpsc::UnboundedSender<ClientToWriteMessage>,
     command_tx: futures::sync::mpsc::UnboundedSender<ClientCommandMessage>,
-    _remote: reactor::Remote,
 }
 
 unsafe impl Sync for ClientConnection {}
@@ -157,23 +160,30 @@ enum ClientToWriteMessage {
     Common(CommonToWriteMessage),
 }
 
+impl From<CommonToWriteMessage> for ClientToWriteMessage {
+    fn from(m: CommonToWriteMessage) -> Self {
+        ClientToWriteMessage::Common(m)
+    }
+}
+
 enum ClientCommandMessage {
     DumpState(futures::sync::oneshot::Sender<ConnectionStateSnapshot>),
 }
 
 
-impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
+impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_start(self, start: StartRequestMessage) -> HttpFuture<Self> {
         let StartRequestMessage { headers, body, resp_tx } = start;
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
-            let mut stream = ClientStream {
-                common: HttpStreamCommon::new(inner.common.conn.peer_settings.initial_window_size),
-                response_handler: Some(resp_tx),
-            };
+            let mut stream = HttpStreamCommon::new(
+                inner.conn.peer_settings.initial_window_size,
+                ClientStreamData {
+                    response_handler: Some(resp_tx)
+                });
 
-            stream.common.outgoing.push_back(HttpStreamPartContent::Headers(headers));
+            stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
 
             inner.insert_stream(stream)
         });
@@ -204,7 +214,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                 ()
             });
 
-            inner.common.loop_handle.spawn(future);
+            inner.loop_handle.spawn(future);
         });
 
         self.send_outg_stream(stream_id)
@@ -214,11 +224,11 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         let BodyChunkMessage { stream_id, chunk } = body_chunk;
 
         self.inner.with(move |inner: &mut ClientInner| {
-            let stream = inner.common.streams.get_mut(stream_id)
+            let stream = inner.streams.get_mut(stream_id)
                 .expect(&format!("stream not found: {}", stream_id));
             // TODO: check stream state
 
-            stream.common.outgoing.push_back(HttpStreamPartContent::Data(Bytes::from(chunk)));
+            stream.outgoing.push_back(HttpStreamPartContent::Data(Bytes::from(chunk)));
         });
 
         self.send_outg_stream(stream_id)
@@ -228,11 +238,11 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         let EndRequestMessage { stream_id } = end;
 
         self.inner.with(move |inner: &mut ClientInner| {
-            let stream = inner.common.streams.get_mut(stream_id)
+            let stream = inner.streams.get_mut(stream_id)
                 .expect(&format!("stream not found: {}", stream_id));
 
             // TODO: check stream state
-            stream.common.outgoing_end = Some(ErrorCode::NoError);
+            stream.outgoing_end = Some(ErrorCode::NoError);
         });
 
         self.send_outg_stream(stream_id)
@@ -247,7 +257,7 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         }
     }
 
-    fn run(self, requests: HttpFutureStreamSend<ClientToWriteMessage>) -> HttpFuture<()> {
+    pub fn run(self, requests: HttpFutureStreamSend<ClientToWriteMessage>) -> HttpFuture<()> {
         let requests = requests.map_err(Error::from);
         Box::new(requests
             .fold(self, move |wl, message: ClientToWriteMessage| {
@@ -257,9 +267,9 @@ impl<I : AsyncRead + AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     }
 }
 
-type ClientReadLoop<I> = ReadLoopData<I, ClientInner>;
-type ClientWriteLoop<I> = WriteLoopData<I, ClientInner>;
-type ClientCommandLoop = CommandLoopData<ClientInner>;
+type ClientReadLoop<I> = ReadLoopData<I, ClientTypes>;
+type ClientWriteLoop<I> = WriteLoopData<I, ClientTypes>;
+type ClientCommandLoop = CommandLoopData<ClientTypes>;
 
 
 pub trait ClientConnectionCallbacks : 'static {
@@ -285,7 +295,6 @@ impl ClientConnection {
         let command_rx = Box::new(command_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
 
         let c = ClientConnection {
-            _remote: lh.remote().clone(),
             call_tx: to_write_tx.clone(),
             command_tx: command_tx,
         };
@@ -296,11 +305,12 @@ impl ClientConnection {
             debug!("handshake done");
             let (read, write) = conn.split();
 
-            let inner = TaskRcMut::new(ClientInner {
-                common: LoopInnerCommon::new(lh),
-                to_write_tx: to_write_tx.clone(),
-                callbacks: Box::new(callbacks),
-            });
+            let inner = TaskRcMut::new(ConnData::new(
+                lh,
+                ClientConnData {
+                    callbacks: Box::new(callbacks),
+                },
+                to_write_tx.clone()));
 
             let run_write = ClientWriteLoop { write: write, inner: inner.clone() }.run(to_write_rx);
             let run_read = ClientReadLoop { read: read, inner: inner.clone() }.run();
@@ -446,7 +456,7 @@ impl ClientConnection {
 impl ClientCommandLoop {
     fn process_dump_state(self, sender: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) -> HttpFuture<Self> {
         // ignore send error, client might be already dead
-        drop(sender.send(self.inner.with(|inner| inner.common.dump_state())));
+        drop(sender.send(self.inner.with(|inner| inner.dump_state())));
         Box::new(futures::finished(self))
     }
 

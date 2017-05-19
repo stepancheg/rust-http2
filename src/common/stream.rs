@@ -3,7 +3,6 @@ use std::cmp;
 
 use bytes::Bytes;
 
-use solicit::StreamId;
 use solicit::session::StreamState;
 use solicit::WindowSize;
 use solicit::DEFAULT_SETTINGS;
@@ -13,6 +12,8 @@ use solicit::connection::EndStream;
 use stream_part::*;
 
 use error::ErrorCode;
+
+use super::types::Types;
 
 
 pub enum HttpStreamCommand {
@@ -39,7 +40,8 @@ impl HttpStreamCommand {
 }
 
 
-pub struct HttpStreamCommon {
+pub struct HttpStreamCommon<T : Types> {
+    pub specific: T::HttpStreamSpecific,
     pub state: StreamState,
     pub out_window_size: WindowSize,
     pub in_window_size: WindowSize,
@@ -48,9 +50,10 @@ pub struct HttpStreamCommon {
     pub outgoing_end: Option<ErrorCode>,
 }
 
-impl HttpStreamCommon {
-    pub fn new(out_window_size: u32) -> HttpStreamCommon {
+impl<T : Types> HttpStreamCommon<T> {
+    pub fn new(out_window_size: u32, specific: T::HttpStreamSpecific) -> HttpStreamCommon<T> {
         HttpStreamCommon {
+            specific: specific,
             state: StreamState::Open,
             in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
@@ -155,12 +158,12 @@ impl HttpStreamCommon {
 }
 
 
-pub trait HttpStream {
-    // First stream id used by either client or server
-    fn first_id() -> StreamId;
+pub trait HttpStreamDataSpecific {
+}
 
-    fn common(&self) -> &HttpStreamCommon;
-    fn common_mut(&mut self) -> &mut HttpStreamCommon;
+pub trait HttpStream {
+    type Types : Types;
+
     fn new_data_chunk(&mut self, data: &[u8], last: bool);
     fn rst(&mut self, error_code: ErrorCode);
     fn closed_remote(&mut self);

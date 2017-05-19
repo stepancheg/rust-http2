@@ -35,26 +35,49 @@ use server_conf::*;
 use misc::any_to_string;
 
 
-struct ServerStream {
-    common: HttpStreamCommon,
-    request_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
-}
+struct ServerTypes;
 
-impl HttpStream for ServerStream {
+impl Types for ServerTypes {
+    type HttpStream = ServerStream;
+    type HttpStreamSpecific = ServerStreamData;
+    type ConnDataSpecific = ServerInnerSpecific;
+    type ConnData = ServerInner;
+    type ToWriteMessage = ServerToWriteMessage;
+
     fn first_id() -> StreamId {
         2
     }
+}
 
-    fn common(&self) -> &HttpStreamCommon {
-        &self.common
-    }
 
-    fn common_mut(&mut self) -> &mut HttpStreamCommon {
-        &mut self.common
+pub struct ServerStreamData {
+    request_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
+}
+
+impl HttpStreamDataSpecific for ServerStreamData {
+}
+
+type ServerStream = HttpStreamCommon<ServerTypes>;
+
+impl ServerStream {
+    fn set_headers(&mut self, headers: Headers, last: bool) {
+        if let Some(ref mut sender) = self.specific.request_handler {
+            let part = HttpStreamPart {
+                content: HttpStreamPartContent::Headers(headers),
+                last: last,
+            };
+            // ignore error
+            sender.send(ResultOrEof::Item(part)).ok();
+        }
     }
+}
+
+impl HttpStream for ServerStream {
+
+    type Types = ServerTypes;
 
     fn new_data_chunk(&mut self, data: &[u8], last: bool) {
-        if let Some(ref mut sender) = self.request_handler {
+        if let Some(ref mut sender) = self.specific.request_handler {
             let part = HttpStreamPart {
                 content: HttpStreamPartContent::Data(Bytes::from(data)),
                 last: last,
@@ -65,39 +88,28 @@ impl HttpStream for ServerStream {
     }
 
     fn rst(&mut self, error_code: ErrorCode) {
-        if let Some(ref mut sender) = self.request_handler {
+        if let Some(ref mut sender) = self.specific.request_handler {
             // ignore error
             sender.send(ResultOrEof::Error(Error::CodeError(error_code))).ok();
         }
     }
 
     fn closed_remote(&mut self) {
-        if let Some(sender) = self.request_handler.take() {
+        if let Some(sender) = self.specific.request_handler.take() {
             // ignore error
             sender.send(ResultOrEof::Eof).ok();
         }
     }
 }
 
-impl ServerStream {
-    fn set_headers(&mut self, headers: Headers, last: bool) {
-        if let Some(ref mut sender) = self.request_handler {
-            let part = HttpStreamPart {
-                content: HttpStreamPartContent::Headers(headers),
-                last: last,
-            };
-            // ignore error
-            sender.send(ResultOrEof::Item(part)).ok();
-        }
-    }
-
-}
-
-struct ServerInner {
-    common: LoopInnerCommon<ServerStream>,
+struct ServerInnerSpecific {
     factory: Arc<Service>,
-    to_write_tx: futures::sync::mpsc::UnboundedSender<ServerToWriteMessage>,
 }
+
+impl ConnDataSpecific for ServerInnerSpecific {
+}
+
+type ServerInner = ConnData<ServerTypes>;
 
 impl ServerInner {
     fn new_request(&mut self, stream_id: StreamId, headers: Headers)
@@ -109,7 +121,7 @@ impl ServerInner {
         let req_rx = stream_with_eof_and_error(req_rx, || Error::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
 
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            self.factory.start_request(headers, HttpPartStream::new(req_rx))
+            self.specific.factory.start_request(headers, HttpPartStream::new(req_rx))
         }));
 
         let response = response.unwrap_or_else(|e| {
@@ -160,7 +172,7 @@ impl ServerInner {
                 Ok(())
             });
 
-            self.common.loop_handle.spawn(process_response);
+            self.loop_handle.spawn(process_response);
         }
 
         req_tx
@@ -172,20 +184,21 @@ impl ServerInner {
         let req_tx = self.new_request(stream_id, headers);
 
         // New stream initiated by the client
-        let stream = ServerStream {
-            common: HttpStreamCommon::new(self.common.conn.peer_settings.initial_window_size),
-            request_handler: Some(req_tx),
-        };
-        if let Some(..) = self.common.streams.map.insert(stream_id, stream) {
+        let stream = HttpStreamCommon::new(
+            self.conn.peer_settings.initial_window_size,
+            ServerStreamData {
+                request_handler: Some(req_tx)
+            });
+        if let Some(..) = self.streams.map.insert(stream_id, stream) {
             panic!("inserted stream that already existed");
         }
-        self.common.streams.map.get_mut(&stream_id).unwrap()
+        self.streams.map.get_mut(&stream_id).unwrap()
     }
 
     fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool) -> &mut ServerStream {
-        if self.common.streams.get_mut(stream_id).is_some() {
+        if self.streams.get_mut(stream_id).is_some() {
             // https://github.com/rust-lang/rust/issues/36403
-            let stream = self.common.streams.get_mut(stream_id).unwrap();
+            let stream = self.streams.get_mut(stream_id).unwrap();
             stream.set_headers(headers, last);
             stream
         } else {
@@ -194,17 +207,8 @@ impl ServerInner {
     }
 }
 
-impl LoopInner for ServerInner {
-    type LoopHttpStream = ServerStream;
-
-    fn common(&mut self) -> &mut LoopInnerCommon<ServerStream> {
-        &mut self.common
-    }
-
-    fn send_common(&mut self, message: CommonToWriteMessage) {
-        self.to_write_tx.send(ServerToWriteMessage::Common(message))
-            .expect("read to write common");
-    }
+impl ConnInner for ServerInner {
+    type Types = ServerTypes;
 
     fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
         let _stream = self.get_or_create_stream(
@@ -217,9 +221,9 @@ impl LoopInner for ServerInner {
 
 }
 
-type ServerReadLoop<I> = ReadLoopData<I, ServerInner>;
-type ServerWriteLoop<I> = WriteLoopData<I, ServerInner>;
-type ServerCommandLoop = CommandLoopData<ServerInner>;
+type ServerReadLoop<I> = ReadLoopData<I, ServerTypes>;
+type ServerWriteLoop<I> = WriteLoopData<I, ServerTypes>;
+type ServerCommandLoop = CommandLoopData<ServerTypes>;
 
 
 enum ServerToWriteMessage {
@@ -229,6 +233,12 @@ enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
 }
 
+impl From<CommonToWriteMessage> for ServerToWriteMessage {
+    fn from(m: CommonToWriteMessage) -> Self {
+        ServerToWriteMessage::Common(m)
+    }
+}
+
 enum ServerCommandMessage {
     DumpState(futures::sync::oneshot::Sender<ConnectionStateSnapshot>),
 }
@@ -236,17 +246,17 @@ enum ServerCommandMessage {
 
 impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
     fn _loop_handle(&self) -> reactor::Handle {
-        self.inner.with(move |inner: &mut ServerInner| inner.common.loop_handle.clone())
+        self.inner.with(move |inner: &mut ServerInner| inner.loop_handle.clone())
     }
 
     fn process_response_part(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner: &mut ServerInner| {
-            let stream = inner.common.streams.get_mut(stream_id);
+            let stream = inner.streams.get_mut(stream_id);
             if let Some(stream) = stream {
-                if !stream.common.state.is_closed_local() {
-                    stream.common.outgoing.push_back(part.content);
+                if !stream.state.is_closed_local() {
+                    stream.outgoing.push_back(part.content);
                     if part.last {
-                        stream.common.outgoing_end = Some(ErrorCode::NoError);
+                        stream.outgoing_end = Some(ErrorCode::NoError);
                     }
                     Some(stream_id)
                 } else {
@@ -265,10 +275,10 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
 
     fn process_response_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner: &mut ServerInner| {
-            let stream = inner.common.streams.get_mut(stream_id);
+            let stream = inner.streams.get_mut(stream_id);
             if let Some(stream) = stream {
-                if stream.common.outgoing_end.is_none() {
-                    stream.common.outgoing_end = Some(error_code);
+                if stream.outgoing_end.is_none() {
+                    stream.outgoing_end = Some(error_code);
                 }
                 Some(stream_id)
             } else {
@@ -309,7 +319,7 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
 impl ServerCommandLoop {
     fn process_dump_state(self, sender: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) -> HttpFuture<Self> {
         // ignore send error, client might be already dead
-        drop(sender.send(self.inner.with(|inner| inner.common.dump_state())));
+        drop(sender.send(self.inner.with(|inner| inner.dump_state())));
         Box::new(futures::finished(self))
     }
 
@@ -319,7 +329,7 @@ impl ServerCommandLoop {
         }
     }
 
-    fn run(self, requests: HttpFutureStreamSend<ServerCommandMessage>) -> HttpFuture<()> {
+    pub fn run(self, requests: HttpFutureStreamSend<ServerCommandMessage>) -> HttpFuture<()> {
         let requests = requests.map_err(Error::from);
         Box::new(requests
             .fold(self, move |l, message: ServerCommandMessage| {
@@ -354,12 +364,12 @@ impl ServerConnection {
         let run = handshake.and_then(move |socket| {
             let (read, write) = socket.split();
 
-            let inner = TaskRcMut::new(ServerInner {
-                common: LoopInnerCommon::new(lh),
-                factory: service,
-                to_write_tx: to_write_tx.clone(),
-
-            });
+            let inner = TaskRcMut::new(ConnData::new(
+                lh,
+                ServerInnerSpecific {
+                    factory: service,
+                },
+                to_write_tx.clone()));
 
             let run_write = ServerWriteLoop { write: write, inner: inner.clone() }.run(Box::new(to_write_rx));
             let run_read = ServerReadLoop { read: read, inner: inner.clone() }.run();

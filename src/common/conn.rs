@@ -32,6 +32,7 @@ use solicit_async::*;
 
 use super::stream::*;
 use super::stream_map::*;
+use super::types::*;
 
 
 pub use resp::Response;
@@ -42,13 +43,21 @@ pub enum CommonToWriteMessage {
     Write(Vec<u8>),
 }
 
+pub trait ConnDataSpecific : 'static {
+}
 
-pub struct LoopInnerCommon<S>
-    where S : HttpStream,
-{
+
+pub struct ConnData<T : Types> {
+    /// Client or server specific data
+    pub specific: T::ConnDataSpecific,
+    /// Messages to be sent to write loop
+    pub to_write_tx: futures::sync::mpsc::UnboundedSender<T::ToWriteMessage>,
+    /// Reactor we are using
     pub loop_handle: reactor::Handle,
+    /// Connection state
     pub conn: HttpConnection,
-    pub streams: StreamMap<S>,
+    /// Known streams
+    pub streams: StreamMap<T>,
     pub last_local_stream_id: StreamId,
     pub last_peer_stream_id: StreamId,
 }
@@ -62,11 +71,21 @@ pub struct ConnectionStateSnapshot {
 
 
 
-impl<S> LoopInnerCommon<S>
-    where S : HttpStream,
+impl<T : Types> ConnData<T>
+    where
+        Self : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStream,
 {
-    pub fn new(loop_handle: reactor::Handle) -> LoopInnerCommon<S> {
-        LoopInnerCommon {
+
+    pub fn new(
+        loop_handle: reactor::Handle,
+        specific: T::ConnDataSpecific,
+        to_write_tx: futures::sync::mpsc::UnboundedSender<T::ToWriteMessage>)
+            -> ConnData<T>
+    {
+        ConnData {
+            specific: specific,
+            to_write_tx: to_write_tx,
             conn: HttpConnection::new(),
             streams: StreamMap::new(),
             last_local_stream_id: 0,
@@ -78,7 +97,7 @@ impl<S> LoopInnerCommon<S>
     /// Allocate stream id for locally initiated stream
     pub fn next_local_stream_id(&mut self) -> StreamId {
         let id = match self.last_local_stream_id {
-            0 => S::first_id(),
+            0 => T::first_id(),
             n => n + 2,
         };
         self.last_local_stream_id = id;
@@ -93,7 +112,7 @@ impl<S> LoopInnerCommon<S>
     }
 
     pub fn remove_stream_if_closed(&mut self, stream_id: StreamId) {
-        if self.streams.get_mut(stream_id).expect("unknown stream").common().state == StreamState::Closed {
+        if self.streams.get_mut(stream_id).expect("unknown stream").state == StreamState::Closed {
             self.remove_stream(stream_id);
         }
     }
@@ -102,7 +121,7 @@ impl<S> LoopInnerCommon<S>
     pub fn pop_outg_for_stream(&mut self, stream_id: StreamId) -> Option<HttpStreamCommand> {
         let r = {
             if let Some(stream) = self.streams.map.get_mut(&stream_id) {
-                stream.common_mut().pop_outg(&mut self.conn.out_window_size)
+                stream.pop_outg(&mut self.conn.out_window_size)
             } else {
                 None
             }
@@ -226,38 +245,12 @@ impl<S> LoopInnerCommon<S>
 
     pub fn dump_state(&self) -> ConnectionStateSnapshot {
         ConnectionStateSnapshot {
-            streams: self.streams.map.iter().map(|(&k, s)| (k, s.common().state)).collect(),
+            streams: self.streams.map.iter().map(|(&k, s)| (k, s.state)).collect(),
         }
-    }
-}
-
-
-pub trait LoopInner: 'static {
-    type LoopHttpStream : HttpStream;
-
-    fn common(&mut self) -> &mut LoopInnerCommon<Self::LoopHttpStream>;
-
-    /// Send a frame back to the network
-    /// Must not be data frame
-    fn send_frame<R : FrameIR>(&mut self, frame: R) {
-        let mut send_buf = VecSendFrame(Vec::new());
-        send_buf.send_frame(frame).unwrap();
-        self.send_common(CommonToWriteMessage::Write(send_buf.0))
-    }
-
-    fn send_common(&mut self, message: CommonToWriteMessage);
-
-    fn out_window_increased(&mut self, stream_id: Option<StreamId>) {
-        self.send_common(CommonToWriteMessage::TryFlushStream(stream_id))
-    }
-
-    /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
-    fn ack_settings(&mut self) {
-        self.send_frame(SettingsFrame::new_ack());
     }
 
     fn process_headers_frame(&mut self, frame: HeadersFrame) {
-        let headers = self.common().conn.decoder
+        let headers = self.conn.decoder
             .decode(&frame.header_fragment())
             .map_err(Error::CompressionError).unwrap(); // TODO: do not panic
         let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
@@ -266,8 +259,6 @@ pub trait LoopInner: 'static {
 
         self.process_headers(frame.stream_id, end_stream, headers);
     }
-
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers);
 
     fn process_settings_global(&mut self, frame: SettingsFrame) {
         if frame.is_ack() {
@@ -278,11 +269,11 @@ pub trait LoopInner: 'static {
 
         for setting in frame.settings {
             if let HttpSetting::InitialWindowSize(new_size) = setting {
-                let old_size = self.common().conn.peer_settings.initial_window_size;
+                let old_size = self.conn.peer_settings.initial_window_size;
                 let delta = (new_size as i32) - (old_size as i32);
 
                 if delta != 0 {
-                    for (_, s) in &mut self.common().streams.map {
+                    for (_, s) in &mut self.streams.map {
                         // In addition to changing the flow-control window for streams
                         // that are not yet active, a SETTINGS frame can alter the initial
                         // flow-control window size for streams with active flow-control windows
@@ -291,16 +282,16 @@ pub trait LoopInner: 'static {
                         // a receiver MUST adjust the size of all stream flow-control windows
                         // that it maintains by the difference between the new value
                         // and the old value.
-                        s.common_mut().out_window_size.0 += delta;
+                        s.out_window_size.0 += delta;
                     }
 
-                    if !self.common().streams.map.is_empty() && delta > 0 {
+                    if !self.streams.map.is_empty() && delta > 0 {
                         out_window_increased = true;
                     }
                 }
             }
 
-            self.common().conn.peer_settings.apply(setting);
+            self.conn.peer_settings.apply(setting);
         }
 
         self.ack_settings();
@@ -309,12 +300,12 @@ pub trait LoopInner: 'static {
             self.out_window_increased(None);
         }
     }
-
+    
     fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame) {
         {
-            match self.common().streams.get_mut(frame.get_stream_id()) {
+            match self.streams.get_mut(frame.get_stream_id()) {
                 Some(stream) => {
-                    stream.common_mut().out_window_size.try_increase(frame.increment())
+                    stream.out_window_size.try_increase(frame.increment())
                         .expect("failed to increment stream window");
                 }
                 None => {
@@ -331,13 +322,13 @@ pub trait LoopInner: 'static {
     }
 
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) {
-        self.common().conn.out_window_size.try_increase(frame.increment())
+        self.conn.out_window_size.try_increase(frame.increment())
             .expect("failed to increment conn window");
         self.out_window_increased(None);
     }
 
     fn process_rst_stream_frame(&mut self, frame: RstStreamFrame) {
-        let stream = self.common().streams.get_mut(frame.get_stream_id())
+        let stream = self.streams.get_mut(frame.get_stream_id())
             .expect(&format!("stream not found: {}", frame.get_stream_id()));
         stream.rst(frame.error_code());
     }
@@ -345,14 +336,14 @@ pub trait LoopInner: 'static {
     fn process_data_frame(&mut self, frame: DataFrame) {
         let stream_id = frame.get_stream_id();
 
-        self.common().conn.decrease_in_window(frame.payload_len())
+        self.conn.decrease_in_window(frame.payload_len())
             .expect("failed to decrease conn win");
 
         let increment_conn =
             // TODO: need something better
-            if self.common().conn.in_window_size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
+            if self.conn.in_window_size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                 let increment = DEFAULT_SETTINGS.initial_window_size;
-                self.common().conn.in_window_size.try_increase(increment).expect("failed to increase");
+                self.conn.in_window_size.try_increase(increment).expect("failed to increase");
 
                 Some(increment)
             } else {
@@ -360,16 +351,16 @@ pub trait LoopInner: 'static {
             };
 
         let increment_stream = {
-            let stream = self.common().streams.get_mut(frame.get_stream_id())
+            let stream = self.streams.get_mut(frame.get_stream_id())
                 .expect(&format!("stream not found: {}", frame.get_stream_id()));
 
-            stream.common_mut().in_window_size.try_decrease(frame.payload_len() as i32)
+            stream.in_window_size.try_decrease(frame.payload_len() as i32)
                 .expect("failed to decrease stream win");
 
             let increment_stream =
-                if stream.common_mut().in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
+                if stream.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                     let increment = DEFAULT_SETTINGS.initial_window_size;
-                    stream.common_mut().in_window_size.try_increase(increment).expect("failed to increase");
+                    stream.in_window_size.try_increase(increment).expect("failed to increase");
 
                     Some(increment)
                 } else {
@@ -452,64 +443,103 @@ pub trait LoopInner: 'static {
 
         // RST_STREAM and WINDOW_UPDATE can be received when we have no stream
         {
-            if let Some(stream) = self.common().streams.get_mut(stream_id) {
-                stream.common_mut().close_remote();
+            if let Some(stream) = self.streams.get_mut(stream_id) {
+                stream.close_remote();
                 stream.closed_remote();
             } else {
                 return;
             }
         }
 
-        self.common().remove_stream_if_closed(stream_id);
+        self.remove_stream_if_closed(stream_id);
     }
 
     fn close_local(&mut self, stream_id: StreamId) {
         debug!("close local: {}", stream_id);
 
         {
-            if let Some(stream) = self.common().streams.get_mut(stream_id) {
-                stream.common_mut().close_local();
-                //stream.closed_local();
+            if let Some(stream) = self.streams.get_mut(stream_id) {
+                stream.close_local();
             } else {
                 return;
             }
         }
 
-        self.common().remove_stream_if_closed(stream_id);
+        self.remove_stream_if_closed(stream_id);
     }
+
+    fn send_common(&mut self, message: CommonToWriteMessage)
+        where T::ToWriteMessage : From<CommonToWriteMessage>
+    {
+        self.to_write_tx.send(message.into())
+            .expect("send to write"); // TODO: do not panic
+    }
+
+    /// Send a frame back to the network
+    /// Must not be data frame
+    fn send_frame<R : FrameIR>(&mut self, frame: R) {
+        let mut send_buf = VecSendFrame(Vec::new());
+        send_buf.send_frame(frame).unwrap();
+        self.send_common(CommonToWriteMessage::Write(send_buf.0))
+    }
+
+    fn out_window_increased(&mut self, stream_id: Option<StreamId>) {
+        self.send_common(CommonToWriteMessage::TryFlushStream(stream_id))
+    }
+
+    /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
+    fn ack_settings(&mut self) {
+        self.send_frame(SettingsFrame::new_ack());
+    }
+
 }
 
 
-pub struct ReadLoopData<I, N>
+pub trait ConnInner : 'static {
+    type Types : Types;
+
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers);
+}
+
+
+pub struct ReadLoopData<I, T>
     where
         I : AsyncRead + 'static,
-        N : LoopInner,
+        T : Types,
+        ConnData<T> : ConnInner,
+        HttpStreamCommon<T> : HttpStream,
 {
     pub read: ReadHalf<I>,
-    pub inner: TaskRcMut<N>,
+    pub inner: TaskRcMut<ConnData<T>>,
 }
 
-pub struct WriteLoopData<I, N>
+pub struct WriteLoopData<I, T>
     where
         I : AsyncWrite + 'static,
-        N : LoopInner,
+        T : Types,
+        ConnData<T> : ConnInner,
+        HttpStreamCommon<T> : HttpStream,
 {
     pub write: WriteHalf<I>,
-    pub inner: TaskRcMut<N>,
+    pub inner: TaskRcMut<ConnData<T>>,
 }
 
-pub struct CommandLoopData<N>
+pub struct CommandLoopData<T>
     where
-        N : LoopInner,
+        T : Types,
+        ConnData<T> : ConnInner,
+        HttpStreamCommon<T> : HttpStream,
 {
-    pub inner: TaskRcMut<N>,
+    pub inner: TaskRcMut<ConnData<T>>,
 }
 
 
-impl<I, N> ReadLoopData<I, N>
+impl<I, T> ReadLoopData<I, T>
     where
-        I : AsyncRead + AsyncWrite + Send + 'static,
-        N : LoopInner,
+        I : AsyncRead + Send + 'static,
+        T : Types,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStream<Types=T>,
 {
     /// Recv a frame from the network
     fn recv_http_frame(self) -> HttpFuture<(Self, HttpFrame)> {
@@ -540,10 +570,12 @@ impl<I, N> ReadLoopData<I, N>
 
 }
 
-impl<I, N> WriteLoopData<I, N>
+impl<I, T> WriteLoopData<I, T>
     where
         I : AsyncWrite + Send + 'static,
-        N : LoopInner,
+        T : Types,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStream<Types=T>,
 {
     pub fn write_all(self, buf: Vec<u8>) -> HttpFuture<Self> {
         let WriteLoopData { write, inner } = self;
@@ -554,14 +586,14 @@ impl<I, N> WriteLoopData<I, N>
     }
 
     fn with_inner<G, R>(&self, f: G) -> R
-        where G: FnOnce(&mut N) -> R
+        where G : FnOnce(&mut ConnData<T>) -> R
     {
         self.inner.with(f)
     }
 
     pub fn send_outg_stream(self, stream_id: StreamId) -> HttpFuture<Self> {
         let bytes = self.with_inner(|inner| {
-            inner.common().pop_outg_all_for_stream_bytes(stream_id)
+            inner.pop_outg_all_for_stream_bytes(stream_id)
         });
 
         self.write_all(bytes)
@@ -569,7 +601,7 @@ impl<I, N> WriteLoopData<I, N>
 
     fn send_outg_conn(self) -> HttpFuture<Self> {
         let bytes = self.with_inner(|inner| {
-            inner.common().pop_outg_all_for_conn_bytes()
+            inner.pop_outg_all_for_conn_bytes()
         });
 
         self.write_all(bytes)
@@ -584,8 +616,10 @@ impl<I, N> WriteLoopData<I, N>
     }
 }
 
-impl<N> CommandLoopData<N>
+impl<T> CommandLoopData<T>
     where
-        N : LoopInner,
+        T : Types,
+        ConnData<T> : ConnInner,
+        HttpStreamCommon<T> : HttpStream,
 {
 }
