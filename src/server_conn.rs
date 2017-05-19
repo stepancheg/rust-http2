@@ -40,7 +40,7 @@ struct ServerTypes;
 impl Types for ServerTypes {
     type HttpStream = ServerStream;
     type HttpStreamSpecific = ServerStreamData;
-    type ConnDataSpecific = ServerInnerSpecific;
+    type ConnDataSpecific = ServerConnData;
     type ConnData = ServerInner;
     type ToWriteMessage = ServerToWriteMessage;
 
@@ -102,11 +102,11 @@ impl HttpStream for ServerStream {
     }
 }
 
-struct ServerInnerSpecific {
+struct ServerConnData {
     factory: Arc<Service>,
 }
 
-impl ConnDataSpecific for ServerInnerSpecific {
+impl ConnDataSpecific for ServerConnData {
 }
 
 type ServerInner = ConnData<ServerTypes>;
@@ -366,7 +366,7 @@ impl ServerConnection {
 
             let inner = TaskRcMut::new(ConnData::new(
                 lh,
-                ServerInnerSpecific {
+                ServerConnData {
                     factory: service,
                 },
                 to_write_tx.clone()));
