@@ -13,7 +13,8 @@ use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 use tokio_io::io as tokio_io;
 
-use error::Error;
+use error;
+use result;
 
 use solicit::session::StreamState;
 use solicit::frame::*;
@@ -60,6 +61,8 @@ pub struct ConnData<T : Types> {
     pub streams: StreamMap<T>,
     pub last_local_stream_id: StreamId,
     pub last_peer_stream_id: StreamId,
+    pub goaway_sent: Option<GoawayFrame>,
+    pub goaway_received: Option<GoawayFrame>,
 }
 
 
@@ -91,6 +94,8 @@ impl<T : Types> ConnData<T>
             last_local_stream_id: 0,
             last_peer_stream_id: 0,
             loop_handle: loop_handle,
+            goaway_sent: None,
+            goaway_received: None,
         }
     }
 
@@ -252,7 +257,7 @@ impl<T : Types> ConnData<T>
     fn process_headers_frame(&mut self, frame: HeadersFrame) {
         let headers = self.conn.decoder
             .decode(&frame.header_fragment())
-            .map_err(Error::CompressionError).unwrap(); // TODO: do not panic
+            .map_err(error::Error::CompressionError).unwrap(); // TODO: do not panic
         let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
 
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
@@ -260,9 +265,10 @@ impl<T : Types> ConnData<T>
         self.process_headers(frame.stream_id, end_stream, headers);
     }
 
-    fn process_settings_global(&mut self, frame: SettingsFrame) {
+    fn process_settings_global(&mut self, frame: SettingsFrame) -> result::Result<()> {
         if frame.is_ack() {
-            return;
+            // TODO: remember which settings acked
+            return Ok(());
         }
 
         let mut out_window_increased = false;
@@ -299,6 +305,8 @@ impl<T : Types> ConnData<T>
         if out_window_increased {
             self.out_window_increased(None);
         }
+
+        Ok(())
     }
     
     fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame) {
@@ -321,10 +329,11 @@ impl<T : Types> ConnData<T>
         self.out_window_increased(Some(frame.get_stream_id()));
     }
 
-    fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) {
+    fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
         self.conn.out_window_size.try_increase(frame.increment())
-            .expect("failed to increment conn window");
+            .expect("failed to increment conn window"); // TODO: do not panic
         self.out_window_increased(None);
+        Ok(())
     }
 
     fn process_rst_stream_frame(&mut self, frame: RstStreamFrame) {
@@ -381,30 +390,40 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    fn process_ping(&mut self, frame: PingFrame) {
+    fn process_ping(&mut self, frame: PingFrame) -> result::Result<()> {
         if frame.is_ack() {
-
+            // TODO: check we sent PING
+            Ok(())
         } else {
             self.send_frame(PingFrame::new_ack(frame.opaque_data()));
+            Ok(())
         }
     }
 
-    fn process_goaway(&mut self, _frame: GoawayFrame) {
+    fn process_goaway(&mut self, frame: GoawayFrame) -> result::Result<()> {
+        if let Some(..) = self.goaway_received {
+            return Err(error::Error::Other("GOAWAY after GOAWAY"));
+        }
+
+        self.goaway_received = Some(frame);
+
+        Ok(())
+
         // TODO: After all streams end, close the connection.
         //self.common().streams
     }
 
-    fn process_conn_frame(&mut self, frame: HttpFrameConn) {
+    fn process_conn_frame(&mut self, frame: HttpFrameConn) -> result::Result<()> {
         match frame {
             HttpFrameConn::Settings(f) => self.process_settings_global(f),
-            HttpFrameConn::PushPromise(_f) => { /* TODO */ },
+            HttpFrameConn::PushPromise(_f) => /* TODO */ Ok(()),
             HttpFrameConn::Ping(f) => self.process_ping(f),
             HttpFrameConn::Goaway(f) => self.process_goaway(f),
             HttpFrameConn::WindowUpdate(f) => self.process_conn_window_update(f),
         }
     }
 
-    fn process_stream_frame(&mut self, frame: HttpFrameStream) {
+    fn process_stream_frame(&mut self, frame: HttpFrameStream) -> result::Result<()> {
         let stream_id = frame.get_stream_id();
         let end_of_stream = frame.is_end_of_stream();
 
@@ -426,15 +445,21 @@ impl<T : Types> ConnData<T>
         if close_local {
             self.close_local(stream_id);
         }
+
+        Ok(())
     }
 
-    fn process_http_frame(&mut self, frame: HttpFrame) {
+    fn process_http_frame(&mut self, frame: HttpFrame) -> result::Result<()> {
         // TODO: decode headers
         debug!("received frame: {:?}", frame);
         match HttpFrameClassified::from(frame) {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
             HttpFrameClassified::Stream(f) => self.process_stream_frame(f),
-            HttpFrameClassified::Unknown(_f) => {},
+            HttpFrameClassified::Unknown(_f) => {
+                // 4.1
+                // Implementations MUST ignore and discard any frame that has a type that is unknown.
+                Ok(())
+            },
         }
     }
 
@@ -562,10 +587,9 @@ impl<I, T> ReadLoopData<I, T>
     }
 
     fn process_http_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
-        self.inner.with(move |inner| {
-            inner.process_http_frame(frame);
-        });
-        Box::new(futures::finished(self))
+        Box::new(future::result(self.inner.with(move |inner| {
+            inner.process_http_frame(frame)
+        }).map(|()| self)))
     }
 
 }
@@ -582,7 +606,7 @@ impl<I, T> WriteLoopData<I, T>
 
         Box::new(tokio_io::write_all(write, buf)
             .map(move |(write, _)| WriteLoopData { write: write, inner: inner })
-            .map_err(Error::from))
+            .map_err(error::Error::from))
     }
 
     fn with_inner<G, R>(&self, f: G) -> R
