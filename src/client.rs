@@ -23,6 +23,7 @@ use result::Result;
 
 use solicit::header::*;
 use solicit::HttpScheme;
+use solicit::StreamId;
 
 use solicit_async::*;
 
@@ -174,7 +175,7 @@ impl Service for Client {
     }}
 
 enum ControllerCommand {
-    _GoAway,
+    GoAway,
     StartRequest(StartRequestMessage),
     DumpState(futures::sync::oneshot::Sender<ConnectionStateSnapshot>),
 }
@@ -186,6 +187,7 @@ struct ControllerState {
     conf: ClientConf,
     // current connection
     conn: Arc<ClientConnection>,
+    tx: futures::sync::mpsc::UnboundedSender<ControllerCommand>,
 }
 
 impl ControllerState {
@@ -195,7 +197,9 @@ impl ControllerState {
             &self.socket_addr,
             self.tls.clone(),
             self.conf.clone(),
-            CallbacksImpl);
+            CallbacksImpl {
+                tx: self.tx.clone(),
+            });
 
         self.handle.spawn(future.map_err(|e| { warn!("client error: {:?}", e); () }));
 
@@ -204,7 +208,9 @@ impl ControllerState {
 
     fn iter(mut self, cmd: ControllerCommand) -> ControllerState {
         match cmd {
-            ControllerCommand::_GoAway => unimplemented!(),
+            ControllerCommand::GoAway => {
+                self.init_conn();
+            },
             ControllerCommand::StartRequest(start) => {
                 if let Err(start) = self.conn.start_request_with_resp_sender(start) {
                     self.init_conn();
@@ -234,11 +240,13 @@ fn controller(init: ControllerState, rx: futures::sync::mpsc::UnboundedReceiver<
     Box::new(r)
 }
 
-struct CallbacksImpl;
+struct CallbacksImpl {
+    tx: futures::sync::mpsc::UnboundedSender<ControllerCommand>,
+}
 
 impl ClientConnectionCallbacks for CallbacksImpl {
-    fn goaway(&self, _error_code: u32, _debug: Bytes) {
-        unimplemented!()
+    fn goaway(&self, _stream_id: StreamId, _error_code: u32) {
+        drop(self.tx.send(ControllerCommand::GoAway));
     }
 }
 
@@ -255,8 +263,12 @@ fn run_client_event_loop(
     // Create a channel to receive shutdown signal.
     let (shutdown_signal, shutdown_future) = shutdown_signal();
 
+    let (controller_tx, controller_rx) = futures::sync::mpsc::unbounded();
+
     let (http_conn, conn_future) =
-        ClientConnection::new(lp.handle(), &socket_addr, tls.clone(), conf.clone(), CallbacksImpl);
+        ClientConnection::new(lp.handle(), &socket_addr, tls.clone(), conf.clone(), CallbacksImpl {
+            tx: controller_tx.clone(),
+        });
 
     lp.handle().spawn(conn_future.map_err(|e| { warn!("client error: {:?}", e); () }));
 
@@ -266,9 +278,8 @@ fn run_client_event_loop(
         tls: tls,
         conf: conf,
         conn: Arc::new(http_conn),
+        tx: controller_tx.clone(),
     };
-
-    let (controller_tx, controller_rx) = futures::sync::mpsc::unbounded();
 
     let controller_future = controller(init, controller_rx);
 

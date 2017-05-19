@@ -254,7 +254,7 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    fn process_headers_frame(&mut self, frame: HeadersFrame) {
+    fn process_headers_frame(&mut self, frame: HeadersFrame) -> result::Result<()> {
         let headers = self.conn.decoder
             .decode(&frame.header_fragment())
             .map_err(error::Error::CompressionError).unwrap(); // TODO: do not panic
@@ -262,7 +262,7 @@ impl<T : Types> ConnData<T>
 
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
 
-        self.process_headers(frame.stream_id, end_stream, headers);
+        self.process_headers(frame.stream_id, end_stream, headers)
     }
 
     fn process_settings_global(&mut self, frame: SettingsFrame) -> result::Result<()> {
@@ -300,16 +300,18 @@ impl<T : Types> ConnData<T>
             self.conn.peer_settings.apply(setting);
         }
 
-        self.ack_settings();
+        self.ack_settings()?;
 
         if out_window_increased {
-            self.out_window_increased(None);
+            self.out_window_increased(None)?;
         }
 
         Ok(())
     }
     
-    fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame) {
+    fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame)
+        -> result::Result<()>
+    {
         {
             match self.streams.get_mut(frame.get_stream_id()) {
                 Some(stream) => {
@@ -326,23 +328,26 @@ impl<T : Types> ConnData<T>
                 }
             }
         }
-        self.out_window_increased(Some(frame.get_stream_id()));
+        self.out_window_increased(Some(frame.get_stream_id()))
     }
 
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
         self.conn.out_window_size.try_increase(frame.increment())
             .expect("failed to increment conn window"); // TODO: do not panic
-        self.out_window_increased(None);
+        self.out_window_increased(None)
+    }
+
+    fn process_rst_stream_frame(&mut self, frame: RstStreamFrame) -> result::Result<()> {
+        let stream = self.streams.get_mut(frame.get_stream_id())
+            // TODO: do not panic
+            .expect(&format!("stream not found: {}", frame.get_stream_id()));
+        stream.rst(frame.error_code());
         Ok(())
     }
 
-    fn process_rst_stream_frame(&mut self, frame: RstStreamFrame) {
-        let stream = self.streams.get_mut(frame.get_stream_id())
-            .expect(&format!("stream not found: {}", frame.get_stream_id()));
-        stream.rst(frame.error_code());
-    }
-
-    fn process_data_frame(&mut self, frame: DataFrame) {
+    fn process_data_frame(&mut self, frame: DataFrame)
+        -> result::Result<()>
+    {
         let stream_id = frame.get_stream_id();
 
         self.conn.decrease_in_window(frame.payload_len())
@@ -382,12 +387,14 @@ impl<T : Types> ConnData<T>
         };
 
         if let Some(increment_conn) = increment_conn {
-            self.send_frame(WindowUpdateFrame::for_connection(increment_conn));
+            self.send_frame(WindowUpdateFrame::for_connection(increment_conn))?;
         }
 
         if let Some(increment_stream) = increment_stream {
-            self.send_frame(WindowUpdateFrame::for_stream(stream_id, increment_stream));
+            self.send_frame(WindowUpdateFrame::for_stream(stream_id, increment_stream))?;
         }
+
+        Ok(())
     }
 
     fn process_ping(&mut self, frame: PingFrame) -> result::Result<()> {
@@ -395,8 +402,7 @@ impl<T : Types> ConnData<T>
             // TODO: check we sent PING
             Ok(())
         } else {
-            self.send_frame(PingFrame::new_ack(frame.opaque_data()));
-            Ok(())
+            self.send_frame(PingFrame::new_ack(frame.opaque_data()))
         }
     }
 
@@ -433,10 +439,10 @@ impl<T : Types> ConnData<T>
         };
 
         match frame {
-            HttpFrameStream::Data(data) => self.process_data_frame(data),
-            HttpFrameStream::Headers(headers) => self.process_headers_frame(headers),
-            HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst),
-            HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update),
+            HttpFrameStream::Data(data) => self.process_data_frame(data)?,
+            HttpFrameStream::Headers(headers) => self.process_headers_frame(headers)?,
+            HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
+            HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update)?,
             HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),
         };
         if end_of_stream {
@@ -494,27 +500,28 @@ impl<T : Types> ConnData<T>
     }
 
     fn send_common(&mut self, message: CommonToWriteMessage)
+            -> result::Result<()>
         where T::ToWriteMessage : From<CommonToWriteMessage>
     {
         self.to_write_tx.send(message.into())
-            .expect("send to write"); // TODO: do not panic
+            .map_err(|_| error::Error::Other("write loop died"))
     }
 
     /// Send a frame back to the network
     /// Must not be data frame
-    fn send_frame<R : FrameIR>(&mut self, frame: R) {
+    fn send_frame<R : FrameIR>(&mut self, frame: R) -> result::Result<()> {
         let mut send_buf = VecSendFrame(Vec::new());
         send_buf.send_frame(frame).unwrap();
         self.send_common(CommonToWriteMessage::Write(send_buf.0))
     }
 
-    fn out_window_increased(&mut self, stream_id: Option<StreamId>) {
+    fn out_window_increased(&mut self, stream_id: Option<StreamId>) -> result::Result<()> {
         self.send_common(CommonToWriteMessage::TryFlushStream(stream_id))
     }
 
     /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
-    fn ack_settings(&mut self) {
-        self.send_frame(SettingsFrame::new_ack());
+    fn ack_settings(&mut self) -> result::Result<()> {
+        self.send_frame(SettingsFrame::new_ack())
     }
 
 }
@@ -523,7 +530,10 @@ impl<T : Types> ConnData<T>
 pub trait ConnInner : 'static {
     type Types : Types;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers);
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+        -> result::Result<()>;
+
+    fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32);
 }
 
 

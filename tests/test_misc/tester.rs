@@ -21,6 +21,7 @@ use httpbis::solicit::frame::headers::HeadersFrame;
 use httpbis::solicit::frame::headers::HeadersFlag;
 use httpbis::solicit::frame::data::DataFrame;
 use httpbis::solicit::frame::data::DataFlag;
+use httpbis::solicit::frame::goaway::GoawayFrame;
 use httpbis::solicit::frame::RawFrame;
 use httpbis::solicit::frame::rst_stream::RstStreamFrame;
 use httpbis::solicit::connection::HttpFrame;
@@ -84,12 +85,20 @@ impl HttpConnectionTester {
         assert_eq!(PREFACE, &preface[..]);
     }
 
+    pub fn recv_eof(&mut self) {
+        assert_eq!(0, self.tcp.read(&mut [0]).expect("read"));
+    }
+
     pub fn send_preface(&mut self) {
         self.tcp.write(PREFACE).expect("send");
     }
 
     pub fn send_frame<F : FrameIR>(&mut self, frame: F) {
         self.tcp.write(&frame.serialize_into_vec()).expect("send_frame");
+    }
+
+    pub fn send_goaway(&mut self, last_stream_id: StreamId) {
+        self.send_frame(GoawayFrame::new(last_stream_id, ErrorCode::InadequateSecurity));
     }
 
     pub fn send_headers(&mut self, stream_id: StreamId, headers: Headers, end: bool) {

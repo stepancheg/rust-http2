@@ -5,6 +5,7 @@ use std::io;
 use error;
 use error::ErrorCode;
 use error::Error;
+use result;
 
 use solicit::StreamId;
 use solicit::header::*;
@@ -108,12 +109,14 @@ impl ClientInner {
 impl ConnInner for ClientInner {
     type Types = ClientTypes;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+        -> result::Result<()>
+    {
         let mut stream: &mut ClientStream = match self.streams.get_mut(stream_id) {
             None => {
                 // TODO(mlalic): This means that the server's header is not associated to any
                 //               request made by the client nor any server-initiated stream (pushed)
-                return;
+                return Err(error::Error::Other("??"));
             }
             Some(stream) => stream,
         };
@@ -128,6 +131,12 @@ impl ConnInner for ClientInner {
                 })));
             }
         }
+
+        Ok(())
+    }
+
+    fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32) {
+        self.specific.callbacks.goaway(stream_id, raw_error_code);
     }
 }
 
@@ -274,7 +283,7 @@ type ClientCommandLoop = CommandLoopData<ClientTypes>;
 
 pub trait ClientConnectionCallbacks : 'static {
     // called at most once
-    fn goaway(&self, error_code: u32, debug: Bytes);
+    fn goaway(&self, stream_id: StreamId, raw_error_code: u32);
 }
 
 

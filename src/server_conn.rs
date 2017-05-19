@@ -3,9 +3,10 @@ use std::sync::Arc;
 use std::panic;
 
 use error::ErrorCode;
+use error::Error;
+use result;
 
 use solicit::StreamId;
-use error::Error;
 use solicit::header::*;
 use solicit::connection::EndStream;
 
@@ -210,15 +211,22 @@ impl ServerInner {
 impl ConnInner for ServerInner {
     type Types = ServerTypes;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers) {
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+        -> result::Result<()>
+    {
         let _stream = self.get_or_create_stream(
             stream_id,
             headers,
             end_stream == EndStream::Yes);
 
         // TODO: drop stream if closed on both ends
+
+        Ok(())
     }
 
+    fn goaway_received(&mut self, _stream_id: StreamId, _raw_error_code: u32) {
+        // ignore
+    }
 }
 
 type ServerReadLoop<I> = ReadLoopData<I, ServerTypes>;

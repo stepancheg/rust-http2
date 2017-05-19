@@ -133,7 +133,7 @@ fn client_call_dropped() {
 }
 
 #[test]
-fn reconnect() {
+fn reconnect_on_disconnect() {
     env_logger::init().ok();
 
     let server = HttpServerTester::new();
@@ -173,4 +173,31 @@ fn reconnect() {
         let resp = req.wait().expect("OK");
         assert_eq!(200, resp.headers.status());
     }
+}
+
+#[test]
+fn reconnect_on_goaway() {
+    env_logger::init().ok();
+
+    let server = HttpServerTester::new();
+
+    let client: Client =
+        Client::new("::1", server.port(), false, Default::default()).expect("connect");
+
+    let mut server_tester = server.accept();
+    server_tester.recv_preface();
+    server_tester.settings_xchg();
+
+    {
+        let req = client.start_get("/111", "localhost").collect();
+        server_tester.recv_message(1);
+        server_tester.send_headers(1, Headers::ok_200(), true);
+        let resp = req.wait().expect("OK");
+        assert_eq!(200, resp.headers.status());
+    }
+
+    server_tester.send_goaway(1);
+
+    // TODO
+    //server_tester.recv_eof();
 }
