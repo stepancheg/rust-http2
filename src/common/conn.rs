@@ -411,12 +411,17 @@ impl<T : Types> ConnData<T>
             return Err(error::Error::Other("GOAWAY after GOAWAY"));
         }
 
+        let last_stream_id = frame.last_stream_id;
+        let raw_error_code = frame.raw_error_code;
+
         self.goaway_received = Some(frame);
 
-        Ok(())
+        for (_stream_id, mut stream) in self.streams.remove_local_streams_with_id_gt(last_stream_id) {
+            stream.goaway_recvd(raw_error_code);
+        }
 
-        // TODO: After all streams end, close the connection.
-        //self.common().streams
+
+        Ok(())
     }
 
     fn process_conn_frame(&mut self, frame: HttpFrameConn) -> result::Result<()> {
@@ -432,6 +437,17 @@ impl<T : Types> ConnData<T>
     fn process_stream_frame(&mut self, frame: HttpFrameStream) -> result::Result<()> {
         let stream_id = frame.get_stream_id();
         let end_of_stream = frame.is_end_of_stream();
+
+        // 6.8
+        // Once sent, the sender will ignore frames sent on streams initiated by the receiver
+        // if the stream has an identifier higher than the included last stream identifier.
+        if let Some(ref f) = self.goaway_sent.as_ref() {
+            if !T::is_init_locally(stream_id) {
+                if stream_id > f.last_stream_id {
+                    return Ok(());
+                }
+            }
+        }
 
         let close_local = match frame {
             HttpFrameStream::RstStream(..) => true,

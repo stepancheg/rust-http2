@@ -53,7 +53,6 @@ impl Types for ClientTypes {
 
 
 pub struct ClientStreamData {
-    response_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
 }
 
 impl HttpStreamDataSpecific for ClientStreamData {
@@ -63,30 +62,6 @@ type ClientStream = HttpStreamCommon<ClientTypes>;
 
 impl HttpStream for ClientStream {
     type Types = ClientTypes;
-
-    fn new_data_chunk(&mut self, data: &[u8], last: bool) {
-        if let Some(ref mut response_handler) = self.specific.response_handler {
-            // TODO: reset stream if called is dead
-            drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
-                content: HttpStreamPartContent::Data(Bytes::from(data)),
-                last: last,
-            })));
-        }
-    }
-
-    fn rst(&mut self, error_code: ErrorCode) {
-        if let Some(ref mut response_handler) = self.specific.response_handler {
-            // TODO: reset stream if called is dead
-            drop(response_handler.send(ResultOrEof::Error(Error::CodeError(error_code))));
-        }
-    }
-
-    fn closed_remote(&mut self) {
-        if let Some(response_handler) = self.specific.response_handler.take() {
-            // it is OK to ignore error: handler may be already dead
-            drop(response_handler.send(ResultOrEof::Eof));
-        }
-    }
 }
 
 pub struct ClientConnData {
@@ -123,7 +98,7 @@ impl ConnInner for ClientInner {
         // TODO: hack
         if headers.0.len() != 0 {
 
-            if let Some(ref mut response_handler) = stream.specific.response_handler {
+            if let Some(ref mut response_handler) = stream.peer_tx {
                 // TODO: reset stream if called is dead
                 drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                     content: HttpStreamPartContent::Headers(headers),
@@ -188,9 +163,8 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
             let mut stream = HttpStreamCommon::new(
                 inner.conn.peer_settings.initial_window_size,
-                ClientStreamData {
-                    response_handler: Some(resp_tx)
-                });
+                resp_tx,
+                ClientStreamData { });
 
             stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
 

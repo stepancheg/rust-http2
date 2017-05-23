@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::panic;
 
 use error::ErrorCode;
-use error::Error;
+use error;
 use result;
 
 use solicit::StreamId;
@@ -52,7 +52,6 @@ impl Types for ServerTypes {
 
 
 pub struct ServerStreamData {
-    request_handler: Option<futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>>,
 }
 
 impl HttpStreamDataSpecific for ServerStreamData {
@@ -62,7 +61,7 @@ type ServerStream = HttpStreamCommon<ServerTypes>;
 
 impl ServerStream {
     fn set_headers(&mut self, headers: Headers, last: bool) {
-        if let Some(ref mut sender) = self.specific.request_handler {
+        if let Some(ref mut sender) = self.peer_tx {
             let part = HttpStreamPart {
                 content: HttpStreamPartContent::Headers(headers),
                 last: last,
@@ -74,33 +73,7 @@ impl ServerStream {
 }
 
 impl HttpStream for ServerStream {
-
     type Types = ServerTypes;
-
-    fn new_data_chunk(&mut self, data: &[u8], last: bool) {
-        if let Some(ref mut sender) = self.specific.request_handler {
-            let part = HttpStreamPart {
-                content: HttpStreamPartContent::Data(Bytes::from(data)),
-                last: last,
-            };
-            // ignore error
-            sender.send(ResultOrEof::Item(part)).ok();
-        }
-    }
-
-    fn rst(&mut self, error_code: ErrorCode) {
-        if let Some(ref mut sender) = self.specific.request_handler {
-            // ignore error
-            sender.send(ResultOrEof::Error(Error::CodeError(error_code))).ok();
-        }
-    }
-
-    fn closed_remote(&mut self) {
-        if let Some(sender) = self.specific.request_handler.take() {
-            // ignore error
-            sender.send(ResultOrEof::Eof).ok();
-        }
-    }
 }
 
 struct ServerConnData {
@@ -114,12 +87,12 @@ type ServerInner = ConnData<ServerTypes>;
 
 impl ServerInner {
     fn new_request(&mut self, stream_id: StreamId, headers: Headers)
-        -> futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, Error>>
+        -> futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>
     {
         let (req_tx, req_rx) = futures::sync::mpsc::unbounded();
 
-        let req_rx = req_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
-        let req_rx = stream_with_eof_and_error(req_rx, || Error::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
+        let req_rx = req_rx.map_err(|()| error::Error::from(io::Error::new(io::ErrorKind::Other, "req")));
+        let req_rx = stream_with_eof_and_error(req_rx, || error::Error::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
 
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             self.specific.factory.start_request(headers, HttpPartStream::new(req_rx))
@@ -143,7 +116,7 @@ impl ServerInner {
                     let e = any_to_string(e);
                     // TODO: send plain text error if headers weren't sent yet
                     warn!("handler panicked: {}", e);
-                    Err(Error::HandlerPanicked(e))
+                    Err(error::Error::HandlerPanicked(e))
                 },
             }
         });
@@ -187,9 +160,8 @@ impl ServerInner {
         // New stream initiated by the client
         let stream = HttpStreamCommon::new(
             self.conn.peer_settings.initial_window_size,
-            ServerStreamData {
-                request_handler: Some(req_tx)
-            });
+            req_tx,
+            ServerStreamData { });
         if let Some(..) = self.streams.map.insert(stream_id, stream) {
             panic!("inserted stream that already existed");
         }
@@ -315,7 +287,7 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
     }
 
     fn run(self, requests: HttpFutureStream<ServerToWriteMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(Error::from);
+        let requests = requests.map_err(error::Error::from);
         Box::new(requests
             .fold(self, move |wl, message: ServerToWriteMessage| {
                 wl.process_message(message)
@@ -338,7 +310,7 @@ impl ServerCommandLoop {
     }
 
     pub fn run(self, requests: HttpFutureStreamSend<ServerCommandMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(Error::from);
+        let requests = requests.map_err(error::Error::from);
         Box::new(requests
             .fold(self, move |l, message: ServerCommandMessage| {
                 l.process_message(message)
@@ -364,8 +336,8 @@ impl ServerConnection {
         let (to_write_tx, to_write_rx) = futures::sync::mpsc::unbounded::<ServerToWriteMessage>();
         let (command_tx, command_rx) = futures::sync::mpsc::unbounded::<ServerCommandMessage>();
 
-        let to_write_rx = to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
-        let command_rx = Box::new(command_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
+        let to_write_rx = to_write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
+        let command_rx = Box::new(command_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
 
         let handshake = socket.and_then(server_handshake);
 
@@ -404,7 +376,7 @@ impl ServerConnection {
                     lh, Box::new(futures::finished(socket)), conf, service),
             ServerTlsOption::Tls(acceptor) =>
                 ServerConnection::connected(
-                    lh, Box::new(acceptor.accept_async(socket).map_err(Error::from)), conf, service),
+                    lh, Box::new(acceptor.accept_async(socket).map_err(error::Error::from)), conf, service),
         }
     }
 
@@ -441,7 +413,7 @@ impl ServerConnection {
         self.command_tx.clone().send(ServerCommandMessage::DumpState(tx))
             .expect("send request to dump state");
 
-        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+        let rx = rx.map_err(|_| error::Error::Other("oneshot canceled"));
 
         Box::new(rx)
     }

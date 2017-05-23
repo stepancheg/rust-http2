@@ -1,13 +1,19 @@
 use std::collections::VecDeque;
 use std::cmp;
 
+use futures::sync::mpsc::UnboundedSender;
+
 use bytes::Bytes;
+
+use error;
 
 use solicit::session::StreamState;
 use solicit::WindowSize;
 use solicit::DEFAULT_SETTINGS;
 use solicit::header::Headers;
 use solicit::connection::EndStream;
+
+use futures_misc::ResultOrEof;
 
 use stream_part::*;
 
@@ -48,10 +54,17 @@ pub struct HttpStreamCommon<T : Types> {
     pub outgoing: VecDeque<HttpStreamPartContent>,
     // Means nothing will be added to `outgoing`
     pub outgoing_end: Option<ErrorCode>,
+    // channel for data to be sent as request on server, and as response on client
+    pub peer_tx: Option<UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>>,
 }
 
 impl<T : Types> HttpStreamCommon<T> {
-    pub fn new(out_window_size: u32, specific: T::HttpStreamSpecific) -> HttpStreamCommon<T> {
+    pub fn new(
+        out_window_size: u32,
+        peer_tx: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
+        specific: T::HttpStreamSpecific)
+            -> HttpStreamCommon<T>
+    {
         HttpStreamCommon {
             specific: specific,
             state: StreamState::Open,
@@ -59,6 +72,7 @@ impl<T : Types> HttpStreamCommon<T> {
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: VecDeque::new(),
             outgoing_end: None,
+            peer_tx: Some(peer_tx),
         }
     }
 
@@ -155,6 +169,36 @@ impl<T : Types> HttpStreamCommon<T> {
         }
         r
     }
+
+    pub fn new_data_chunk(&mut self, data: &[u8], last: bool) {
+        if let Some(ref mut response_handler) = self.peer_tx {
+            // TODO: reset stream if rx is dead
+            drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
+                content: HttpStreamPartContent::Data(Bytes::from(data)),
+                last: last,
+            })));
+        }
+    }
+
+    pub fn rst(&mut self, error_code: ErrorCode) {
+        if let Some(ref mut response_handler) = self.peer_tx.take() {
+            drop(response_handler.send(ResultOrEof::Error(error::Error::CodeError(error_code))));
+        }
+    }
+
+    pub fn closed_remote(&mut self) {
+        if let Some(response_handler) = self.peer_tx.take() {
+            // it is OK to ignore error: handler may be already dead
+            drop(response_handler.send(ResultOrEof::Eof));
+        }
+    }
+
+    pub fn goaway_recvd(&mut self, _raw_error_code: u32) {
+        if let Some(response_handler) = self.peer_tx.take() {
+            // it is OK to ignore error: handler may be already dead
+            drop(response_handler.send(ResultOrEof::Error(error::Error::Other("peer sent GOAWAY"))));
+        }
+    }
 }
 
 
@@ -163,10 +207,6 @@ pub trait HttpStreamDataSpecific {
 
 pub trait HttpStream {
     type Types : Types;
-
-    fn new_data_chunk(&mut self, data: &[u8], last: bool);
-    fn rst(&mut self, error_code: ErrorCode);
-    fn closed_remote(&mut self);
 }
 
 
