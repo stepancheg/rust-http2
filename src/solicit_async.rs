@@ -2,8 +2,9 @@ use std::io;
 use std::io::Read;
 use std::net::SocketAddr;
 
-use futures::done;
-use futures::future;
+use futures::future::done;
+use futures::future::Loop;
+use futures::future::loop_fn;
 use futures::future::Future;
 use futures::future::BoxFuture;
 use futures::stream::Stream;
@@ -108,7 +109,7 @@ pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R)
 pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
     -> Box<Future<Item=(R, HttpFrame), Error=Error> + 'r>
 {
-    Box::new(future::loop_fn::<(R, Option<HeadersFrame>), _, _, _>((read, None), |(read, header_opt)| {
+    Box::new(loop_fn::<(R, Option<HeadersFrame>), _, _, _>((read, None), |(read, header_opt)| {
         recv_http_frame(read).and_then(move |(read, frame)| {
             match frame {
                 HttpFrame::Headers(h) => {
@@ -116,9 +117,9 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
                         Err(Error::Other("expecting CONTINUATION frame, got HEADERS"))
                     } else {
                         if h.is_headers_end() {
-                            Ok(future::Loop::Break((read, HttpFrame::Headers(h))))
+                            Ok(Loop::Break((read, HttpFrame::Headers(h))))
                         } else {
-                            Ok(future::Loop::Continue((read, Some(h))))
+                            Ok(Loop::Continue((read, Some(h))))
                         }
                     }
                 }
@@ -131,9 +132,9 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
                             bytes_extend_with(&mut h.header_fragment, c.header_fragment);
                             if header_end {
                                 h.set_flag(HeadersFlag::EndHeaders);
-                                Ok(future::Loop::Break((read, HttpFrame::Headers(h))))
+                                Ok(Loop::Break((read, HttpFrame::Headers(h))))
                             } else {
-                                Ok(future::Loop::Continue((read, Some(h))))
+                                Ok(Loop::Continue((read, Some(h))))
                             }
                         }
                     } else {
@@ -144,7 +145,7 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
                     if let Some(_) = header_opt {
                         Err(Error::Other("expecting CONTINUATION frame"))
                     } else {
-                        Ok(future::Loop::Break((read, f)))
+                        Ok(Loop::Break((read, f)))
                     }
                 },
             }

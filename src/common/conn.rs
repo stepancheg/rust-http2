@@ -3,6 +3,8 @@ use std::cmp;
 
 use futures::Future;
 use futures::future;
+use futures::future::Loop;
+use futures::future::loop_fn;
 use futures;
 
 use tokio_core::reactor;
@@ -540,6 +542,12 @@ impl<T : Types> ConnData<T>
         self.send_frame(SettingsFrame::new_ack())
     }
 
+    /// Should we close the connection because of GOAWAY state
+    pub fn end_loop(&self) -> bool {
+        let goaway = self.goaway_sent.is_some() || self.goaway_received.is_some();
+        let no_streams = self.streams.map.is_empty();
+        goaway && no_streams
+    }
 }
 
 
@@ -604,12 +612,17 @@ impl<I, T> ReadLoopData<I, T>
             .and_then(move |(lp, frame)| lp.process_http_frame(frame)))
     }
 
-    pub fn run(self) -> HttpFuture<()> {
-        let future = future::loop_fn(self, |lp| {
-            lp.read_process_frame().map(future::Loop::Continue::<(), _>)
-        });
+    fn loop_iter(self) -> HttpFuture<Loop<(), Self>> {
+        if self.inner.with(|inner| inner.end_loop()) {
+            return Box::new(future::err(error::Error::Other("GOAWAY")));
+            //return Box::new(future::ok(Loop::Break(())));
+        }
 
-        Box::new(future)
+        Box::new(self.read_process_frame().map(Loop::Continue))
+    }
+
+    pub fn run(self) -> HttpFuture<()> {
+        Box::new(loop_fn(self, Self::loop_iter))
     }
 
     fn process_http_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
