@@ -197,7 +197,6 @@ fn reconnect_on_goaway() {
 
         server_tester.send_goaway(1);
 
-        // TODO
         server_tester.recv_eof();
     }
 
