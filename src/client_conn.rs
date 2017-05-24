@@ -11,6 +11,8 @@ use solicit::StreamId;
 use solicit::header::*;
 use solicit::connection::EndStream;
 
+use service::Service;
+
 use bytes::Bytes;
 
 use futures;
@@ -394,7 +396,25 @@ impl ClientConnection {
             })
     }
 
-    pub fn start_request(
+    pub fn dump_state_with_resp_sender(&self, tx: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) {
+        // ignore error
+        drop(self.command_tx.send(ClientCommandMessage::DumpState(tx)));
+    }
+
+    /// For tests
+    pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
+        let (tx, rx) = futures::oneshot();
+
+        self.dump_state_with_resp_sender(tx);
+
+        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+
+        Box::new(rx)
+    }
+}
+
+impl Service for ClientConnection {
+    fn start_request(
         &self,
         headers: Headers,
         body: HttpPartStream)
@@ -417,22 +437,6 @@ impl ClientConnection {
         let req_rx = stream_with_eof_and_error(req_rx, || error::Error::Other("client is likely died"));
 
         Response::from_stream(req_rx)
-    }
-
-    pub fn dump_state_with_resp_sender(&self, tx: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) {
-        // ignore error
-        drop(self.command_tx.send(ClientCommandMessage::DumpState(tx)));
-    }
-
-    /// For tests
-    pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
-        let (tx, rx) = futures::oneshot();
-
-        self.dump_state_with_resp_sender(tx);
-
-        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
-
-        Box::new(rx)
     }
 }
 
