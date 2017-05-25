@@ -201,11 +201,15 @@ fn reconnect_on_goaway() {
     }
 
     {
-        let req = client.start_get("/111", "localhost").collect();
+        let connect = client.wait_for_connect();
 
         let mut server_tester = server.accept();
         server_tester.recv_preface();
-        server_tester.settings_xchg_but_ack();
+        server_tester.settings_xchg();
+
+        connect.wait().expect("connect");
+
+        let req = client.start_get("/111", "localhost").collect();
 
         server_tester.recv_message(1);
         server_tester.send_headers(1, Headers::ok_200(), true);
