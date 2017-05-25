@@ -433,7 +433,6 @@ impl<T : Types> ConnData<T>
     fn process_conn_frame(&mut self, frame: HttpFrameConn) -> result::Result<()> {
         match frame {
             HttpFrameConn::Settings(f) => self.process_settings_global(f),
-            HttpFrameConn::PushPromise(_f) => /* TODO */ Ok(()),
             HttpFrameConn::Ping(f) => self.process_ping(f),
             HttpFrameConn::Goaway(f) => self.process_goaway(f),
             HttpFrameConn::WindowUpdate(f) => self.process_conn_window_update(f),
@@ -465,6 +464,7 @@ impl<T : Types> ConnData<T>
             HttpFrameStream::Headers(headers) => self.process_headers_frame(headers)?,
             HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
             HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
+            HttpFrameStream::PushPromise(_f) => unimplemented!(),
             HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update)?,
             HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),
         };

@@ -23,6 +23,8 @@ pub struct PushPromiseFrame {
     flags: Flags<PushPromiseFlag>,
     /// The ID of the stream with which this frame is associated
     pub stream_id: StreamId,
+    /// Promised Stream ID
+    pub promised_stream_id: StreamId,
     /// The header fragment bytes stored within the frame.
     pub header_fragment: Bytes,
     /// The length of the padding, if any.
@@ -97,6 +99,7 @@ impl Frame for PushPromiseFrame {
             stream_id: stream_id,
             padding_len: pad_len,
             flags: Flags::new(flags),
+            promised_stream_id: unimplemented!(),
         })
     }
 

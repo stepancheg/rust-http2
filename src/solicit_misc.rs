@@ -190,6 +190,7 @@ pub enum HttpFrameStream {
     Headers(HeadersFrame),
     Priority(PriorityFrame),
     RstStream(RstStreamFrame),
+    PushPromise(PushPromiseFrame),
     WindowUpdate(WindowUpdateFrame),
     Continuation(ContinuationFrame),
 }
@@ -203,6 +204,7 @@ impl HttpFrameStream {
             HttpFrameStream::Priority(f) => HttpFrame::Priority(f),
             HttpFrameStream::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
             HttpFrameStream::RstStream(f) => HttpFrame::RstStream(f),
+            HttpFrameStream::PushPromise(f) => HttpFrame::PushPromise(f),
             HttpFrameStream::Continuation(f) => HttpFrame::Continuation(f),
         }
     }
@@ -215,6 +217,7 @@ impl HttpFrameStream {
             &HttpFrameStream::Priority(ref f) => f.get_stream_id(),
             &HttpFrameStream::WindowUpdate(ref f) => f.get_stream_id(),
             &HttpFrameStream::RstStream(ref f) => f.get_stream_id(),
+            &HttpFrameStream::PushPromise(ref f) => f.get_stream_id(),
             &HttpFrameStream::Continuation(ref f) => f.get_stream_id(),
         }
     }
@@ -227,6 +230,7 @@ impl HttpFrameStream {
             &HttpFrameStream::Priority(..) => false,
             &HttpFrameStream::WindowUpdate(..) => false,
             &HttpFrameStream::RstStream(..) => true,
+            &HttpFrameStream::PushPromise(..) => false,
             &HttpFrameStream::Continuation(..) => panic!("end of stream is defined in HEADERS"),
         }
     }
@@ -237,7 +241,6 @@ impl HttpFrameStream {
 #[derive(Debug)]
 pub enum HttpFrameConn {
     Settings(SettingsFrame),
-    PushPromise(PushPromiseFrame),
     Ping(PingFrame),
     Goaway(GoawayFrame),
     WindowUpdate(WindowUpdateFrame),
@@ -248,7 +251,6 @@ impl HttpFrameConn {
     pub fn into_frame(self) -> HttpFrame {
         match self {
             HttpFrameConn::Settings(f) => HttpFrame::Settings(f),
-            HttpFrameConn::PushPromise(f) => HttpFrame::PushPromise(f),
             HttpFrameConn::Ping(f) => HttpFrame::Ping(f),
             HttpFrameConn::Goaway(f) => HttpFrame::Goaway(f),
             HttpFrameConn::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
@@ -271,7 +273,7 @@ impl HttpFrameClassified {
             HttpFrame::Priority(f) => HttpFrameClassified::Stream(HttpFrameStream::Priority(f)),
             HttpFrame::RstStream(f) => HttpFrameClassified::Stream(HttpFrameStream::RstStream(f)),
             HttpFrame::Settings(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
-            HttpFrame::PushPromise(f) => HttpFrameClassified::Conn(HttpFrameConn::PushPromise(f)),
+            HttpFrame::PushPromise(f) => HttpFrameClassified::Stream(HttpFrameStream::PushPromise(f)),
             HttpFrame::Ping(f) => HttpFrameClassified::Conn(HttpFrameConn::Ping(f)),
             HttpFrame::Goaway(f) => HttpFrameClassified::Conn(HttpFrameConn::Goaway(f)),
             HttpFrame::WindowUpdate(f) => {
