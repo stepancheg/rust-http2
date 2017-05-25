@@ -138,7 +138,7 @@ pub struct HeadersFrame {
     /// The stream dependency information, if any.
     pub stream_dep: Option<StreamDependency>,
     /// The length of the padding, if any.
-    pub padding_len: Option<u8>,
+    pub padding_len: u8,
 }
 
 impl HeadersFrame {
@@ -149,7 +149,7 @@ impl HeadersFrame {
             header_fragment: fragment.into(),
             stream_id: stream_id,
             stream_dep: None,
-            padding_len: None,
+            padding_len: 0,
             flags: Flags::default(),
         }
     }
@@ -164,7 +164,7 @@ impl HeadersFrame {
             header_fragment: Bytes::from(fragment),
             stream_id: stream_id,
             stream_dep: Some(stream_dep),
-            padding_len: None,
+            padding_len: 0,
             flags: HeadersFlag::Priority.to_flags(),
         }
     }
@@ -184,15 +184,15 @@ impl HeadersFrame {
     /// Sets the padding length for the frame, as well as the corresponding
     /// Padded flag.
     pub fn set_padding(&mut self, padding_len: u8) {
-        self.padding_len = Some(padding_len);
         self.set_flag(HeadersFlag::Padded);
+        self.padding_len = padding_len;
     }
 
     /// Returns the length of the payload of the current frame, including any
     /// possible padding in the number of bytes.
     fn payload_len(&self) -> u32 {
         let padding = if self.flags.is_set(HeadersFlag::Padded) {
-            1 + self.padding_len.unwrap_or(0) as u32
+            1 + self.padding_len as u32
         } else {
             0
         };
@@ -247,21 +247,20 @@ impl Frame for HeadersFrame {
             return None;
         }
 
+        let flags = Flags::new(flags);
+
         // First, we get a slice containing the actual payload, depending on if
         // the frame is padded.
-        let padded = (flags & HeadersFlag::Padded.bitmask()) != 0;
-        let (actual, pad_len) = if padded {
-            match parse_padded_payload(raw_frame.payload()) {
-                Some((data, pad_len)) => (data, Some(pad_len)),
-                None => return None,
-            }
-        } else {
-            (raw_frame.payload(), None)
+        let padded = flags.is_set(HeadersFlag::Padded);
+
+        let (actual, pad_len) = match parse_padded_payload(raw_frame.payload(), padded) {
+            None => return None,
+            Some(t) => t,
         };
 
         // From the actual payload we extract the stream dependency info, if
         // the appropriate flag is set.
-        let priority = (flags & HeadersFlag::Priority.bitmask()) != 0;
+        let priority = flags.is_set(HeadersFlag::Priority);
         let (data, stream_dep) = if priority {
             (actual.slice_from(5), Some(StreamDependency::parse(&actual[..5])))
         } else {
@@ -273,7 +272,7 @@ impl Frame for HeadersFrame {
             stream_id: stream_id,
             stream_dep: stream_dep,
             padding_len: pad_len,
-            flags: Flags::new(flags),
+            flags: flags,
         })
     }
 
@@ -305,7 +304,7 @@ impl FrameIR for HeadersFrame {
         b.write_header(self.get_header())?;
         let padded = self.flags.is_set(HeadersFlag::Padded);
         if padded {
-            b.write_all(&[self.padding_len.unwrap_or(0)])?;
+            b.write_all(&[self.padding_len])?;
         }
         // The stream dependency fields follow, if the priority flag is set
         if self.flags.is_set(HeadersFlag::Priority) {
@@ -319,7 +318,7 @@ impl FrameIR for HeadersFrame {
         b.write_all(&self.header_fragment)?;
         // Finally, add the trailing padding, if required
         if padded {
-            b.write_padding(self.padding_len.unwrap_or(0))?;
+            b.write_padding(self.padding_len)?;
         }
 
         Ok(())
@@ -429,7 +428,7 @@ mod tests {
         assert_eq!(frame.flags.0, 0);
         assert_eq!(frame.get_stream_id(), 1);
         assert!(frame.stream_dep.is_none());
-        assert!(frame.padding_len.is_none());
+        assert_eq!(0, frame.padding_len);
     }
 
     /// Tests that a HEADERS frame with padding is correctly parsed.
@@ -446,7 +445,7 @@ mod tests {
         assert_eq!(frame.flags.0, 8);
         assert_eq!(frame.get_stream_id(), 1);
         assert!(frame.stream_dep.is_none());
-        assert_eq!(frame.padding_len.unwrap(), 6);
+        assert_eq!(6, frame.padding_len);
     }
 
     /// Tests that a HEADERS frame with the priority flag (and necessary fields)
@@ -471,7 +470,7 @@ mod tests {
         assert_eq!(frame.flags.0, 0x20);
         assert_eq!(frame.get_stream_id(), 1);
         assert_eq!(frame.stream_dep.unwrap(), dep);
-        assert!(frame.padding_len.is_none());
+        assert_eq!(0, frame.padding_len);
     }
 
     /// Tests that a HEADERS frame with both padding and priority gets
@@ -497,7 +496,7 @@ mod tests {
         assert_eq!(frame.flags.0, 0x20 | 0x8);
         assert_eq!(frame.get_stream_id(), 1);
         assert_eq!(frame.stream_dep.unwrap(), dep);
-        assert_eq!(frame.padding_len.unwrap(), 4);
+        assert_eq!(4, frame.padding_len);
     }
 
     /// Tests that a HEADERS with stream ID 0 is considered invalid.

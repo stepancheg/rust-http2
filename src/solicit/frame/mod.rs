@@ -134,7 +134,10 @@ pub fn pack_header(header: &FrameHeader) -> FrameHeaderBuffer {
 ///
 /// If the padded payload is invalid (e.g. the length of the padding is equal
 /// to the total length), returns `None`.
-fn parse_padded_payload(payload: Bytes) -> Option<(Bytes, u8)> {
+fn parse_padded_payload(payload: Bytes, flag: bool) -> Option<(Bytes, u8)> {
+    if !flag {
+        return Some((payload, 0));
+    }
     if payload.len() == 0 {
         // We make sure not to index the payload before we're sure how
         // large the buffer is.

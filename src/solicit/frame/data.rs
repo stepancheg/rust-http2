@@ -67,7 +67,7 @@ pub struct DataFrame {
     /// The length of the padding applied to the data. Since the spec defines
     /// that the padding length is at most an unsigned integer value, we also
     /// keep a `u8`, instead of a `usize`.
-    padding_len: Option<u8>,
+    padding_len: u8,
 }
 
 impl DataFrame {
@@ -81,7 +81,7 @@ impl DataFrame {
             // No data stored in the frame yet
             data: Bytes::new(),
             // No padding
-            padding_len: None,
+            padding_len: 0,
         }
     }
 
@@ -94,7 +94,7 @@ impl DataFrame {
             stream_id: stream_id,
             flags: Flags::default(),
             data: data.into(),
-            padding_len: None,
+            padding_len: 0,
         }
     }
 
@@ -112,14 +112,14 @@ impl DataFrame {
     /// frame.
     pub fn set_padding(&mut self, pad_len: u8) {
         self.set_flag(DataFlag::Padded);
-        self.padding_len = Some(pad_len);
+        self.padding_len = pad_len;
     }
 
     /// Returns the total length of the payload, taking into account possible
     /// padding.
     pub fn payload_len(&self) -> u32 {
         if self.is_padded() {
-            1 + (self.data.len() as u32) + (self.padding_len.unwrap_or(0) as u32)
+            1 + (self.data.len() as u32) + (self.padding_len as u32)
         } else {
             // Downcasting here is all right, because the HTTP/2 frames cannot
             // have a length larger than a 32 bit unsigned integer.
@@ -138,17 +138,8 @@ impl DataFrame {
     /// If there was no padding, returns `None` for the second tuple member.
     ///
     /// If the payload was invalid for a DATA frame, returns `None`
-    fn parse_payload(payload: Bytes, padded: bool) -> Option<(Bytes, Option<u8>)> {
-        let (data, pad_len) = if padded {
-            match parse_padded_payload(payload) {
-                Some((data, pad_len)) => (data, Some(pad_len)),
-                None => return None,
-            }
-        } else {
-            (payload, None)
-        };
-
-        Some((data, pad_len))
+    fn parse_payload(payload: Bytes, padded: bool) -> Option<(Bytes, u8)> {
+        parse_padded_payload(payload, padded)
     }
 
     /// Sets the given flag for the frame.
@@ -186,22 +177,13 @@ impl Frame for DataFrame {
         // the payload.
         let padded = (flags & DataFlag::Padded.bitmask()) != 0;
         match DataFrame::parse_payload(raw_frame.payload(), padded) {
-            Some((data, Some(padding_len))) => {
+            Some((data, padding_len)) => {
                 // The data got extracted (from a padded frame)
                 Some(DataFrame {
                     stream_id: stream_id,
                     flags: Flags::new(flags),
                     data: data,
-                    padding_len: Some(padding_len),
-                })
-            }
-            Some((data, None)) => {
-                // The data got extracted (from a no-padding frame)
-                Some(DataFrame {
-                    stream_id: stream_id,
-                    flags: Flags::new(flags),
-                    data: data,
-                    padding_len: None,
+                    padding_len: padding_len,
                 })
             }
             None => None,
@@ -233,7 +215,7 @@ impl FrameIR for DataFrame {
     fn serialize_into<B: FrameBuilder>(self, b: &mut B) -> io::Result<()> {
         b.write_header(self.get_header())?;
         if self.is_padded() {
-            let pad_len = self.padding_len.unwrap_or(0);
+            let pad_len = self.padding_len;
             b.write_all(&[pad_len])?;
             b.write_all(&self.data)?;
             b.write_padding(pad_len)?;
