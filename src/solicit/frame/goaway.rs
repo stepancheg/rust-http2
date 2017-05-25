@@ -21,7 +21,7 @@ pub struct GoawayFrame {
     pub last_stream_id: StreamId,
     pub raw_error_code: u32,
     pub debug_data: Bytes,
-    pub flags: Flags<NoFlag>,
+    flags: Flags<NoFlag>,
 }
 
 impl GoawayFrame {
@@ -95,8 +95,8 @@ impl Frame for GoawayFrame {
         })
     }
 
-    fn is_set(&self, _: NoFlag) -> bool {
-        false
+    fn flags(&self) -> Flags<NoFlag> {
+        self.flags
     }
 
     fn get_stream_id(&self) -> StreamId {

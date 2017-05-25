@@ -18,14 +18,18 @@ pub const PING_FRAME_LEN: u32 = 8;
 pub const PING_FRAME_TYPE: u8 = 0x6;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct PingFlag;
+pub enum PingFlag {
+    Ack = 0x1,
+}
+
 impl Flag for PingFlag {
+    #[inline]
     fn bitmask(&self) -> u8 {
-        0x1
+        *self as u8
     }
 
     fn flags() -> &'static [Self] {
-        static FLAGS: &'static [PingFlag] = &[PingFlag];
+        static FLAGS: &'static [PingFlag] = &[PingFlag::Ack];
         FLAGS
     }
 }
@@ -50,7 +54,7 @@ impl PingFrame {
     pub fn new_ack(opaque_data: u64) -> Self {
         PingFrame {
             opaque_data: opaque_data,
-            flags: PingFlag.to_flags(),
+            flags: PingFlag::Ack.to_flags(),
         }
     }
 
@@ -63,7 +67,7 @@ impl PingFrame {
     }
 
     pub fn is_ack(&self) -> bool {
-        self.is_set(PingFlag)
+        self.flags.is_set(PingFlag::Ack)
     }
 
     pub fn opaque_data(&self) -> u64 {
@@ -95,8 +99,8 @@ impl Frame for PingFrame {
         })
     }
 
-    fn is_set(&self, flag: PingFlag) -> bool {
-        self.flags.is_set(&flag)
+    fn flags(&self) -> Flags<PingFlag> {
+        self.flags
     }
 
     fn get_stream_id(&self) -> StreamId {

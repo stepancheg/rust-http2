@@ -5,6 +5,8 @@ use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
 
+pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
+
 /// An enum that lists all valid settings that can be sent in a SETTINGS
 /// frame.
 ///
@@ -204,7 +206,7 @@ impl SettingsFrame {
 
     /// Checks whether the `SettingsFrame` has an ACK attached to it.
     pub fn is_ack(&self) -> bool {
-        self.is_set(SettingsFlag::Ack)
+        self.flags.is_set(SettingsFlag::Ack)
     }
 
     /// Returns the total length of the payload in bytes.
@@ -262,7 +264,7 @@ impl Frame for SettingsFrame {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
-        if frame_type != 0x4 {
+        if frame_type != SETTINGS_FRAME_TYPE {
             return None;
         }
         // Check that the length given in the header matches the payload
@@ -300,8 +302,8 @@ impl Frame for SettingsFrame {
     }
 
     /// Tests if the given flag is set for the frame.
-    fn is_set(&self, flag: SettingsFlag) -> bool {
-        self.flags.is_set(&flag)
+    fn flags(&self) -> Flags<SettingsFlag> {
+        self.flags
     }
 
     /// Returns the `StreamId` of the stream to which the frame is associated.
@@ -315,7 +317,7 @@ impl Frame for SettingsFrame {
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
             length: self.payload_len(),
-            frame_type: 0x4,
+            frame_type: SETTINGS_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: 0
         }

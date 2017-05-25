@@ -13,6 +13,8 @@ use super::flags::Flag;
 use super::flags::Flags;
 
 
+pub const CONTINUATION_FRAME_TYPE: u8 = 0x9;
+
 /// An enum representing the flags that a `ContinuationFrame` can have.
 #[derive(Clone)]
 #[derive(PartialEq)]
@@ -35,8 +37,6 @@ impl Flag for ContinuationFlag {
         FLAGS
     }
 }
-
-const CONTINUATION_FRAME_TYPE: u8 = 0x9;
 
 /// The CONTINUATION frame (type=0x9) is used to continue a sequence of header block fragments
 /// (Section 4.3). Any number of CONTINUATION frames can be sent, as long as the preceding
@@ -73,7 +73,7 @@ impl ContinuationFrame {
     /// number of follow up CONTINUATION frames that send the rest of the
     /// header data.
     pub fn is_headers_end(&self) -> bool {
-        self.is_set(ContinuationFlag::EndHeaders)
+        self.flags.is_set(ContinuationFlag::EndHeaders)
     }
 
     /// Sets the given flag for the frame.
@@ -110,8 +110,8 @@ impl Frame for ContinuationFrame {
         })
     }
 
-    fn is_set(&self, flag: ContinuationFlag) -> bool {
-        self.flags.is_set(&flag)
+    fn flags(&self) -> Flags<ContinuationFlag> {
+        self.flags
     }
 
     fn get_stream_id(&self) -> StreamId {

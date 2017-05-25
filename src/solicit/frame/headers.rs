@@ -8,6 +8,8 @@ use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame, parse_padded_payload};
 use solicit::frame::flags::*;
 
+pub const HEADERS_FRAME_TYPE: u8 = 0x1;
+
 /// An enum representing the flags that a `HeadersFrame` can have.
 /// The integer representation associated to each variant is that flag's
 /// bitmask.
@@ -171,12 +173,12 @@ impl HeadersFrame {
     /// number of follow up CONTINUATION frames that send the rest of the
     /// header data.
     pub fn is_headers_end(&self) -> bool {
-        self.is_set(HeadersFlag::EndHeaders)
+        self.flags.is_set(HeadersFlag::EndHeaders)
     }
 
     /// Returns whther this frame ends the stream it is associated with.
     pub fn is_end_of_stream(&self) -> bool {
-        self.is_set(HeadersFlag::EndStream)
+        self.flags.is_set(HeadersFlag::EndStream)
     }
 
     /// Sets the padding length for the frame, as well as the corresponding
@@ -189,12 +191,12 @@ impl HeadersFrame {
     /// Returns the length of the payload of the current frame, including any
     /// possible padding in the number of bytes.
     fn payload_len(&self) -> u32 {
-        let padding = if self.is_set(HeadersFlag::Padded) {
+        let padding = if self.flags.is_set(HeadersFlag::Padded) {
             1 + self.padding_len.unwrap_or(0) as u32
         } else {
             0
         };
-        let priority = if self.is_set(HeadersFlag::Priority) {
+        let priority = if self.flags.is_set(HeadersFlag::Priority) {
             5
         } else {
             0
@@ -231,7 +233,7 @@ impl Frame for HeadersFrame {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
-        if frame_type != 0x1 {
+        if frame_type != HEADERS_FRAME_TYPE {
             return None;
         }
         // Check that the length given in the header matches the payload
@@ -276,8 +278,8 @@ impl Frame for HeadersFrame {
     }
 
     /// Tests if the given flag is set for the frame.
-    fn is_set(&self, flag: HeadersFlag) -> bool {
-        self.flags.is_set(&flag)
+    fn flags(&self) -> Flags<HeadersFlag> {
+        self.flags
     }
 
     /// Returns the `StreamId` of the stream to which the frame is associated.
@@ -291,7 +293,7 @@ impl Frame for HeadersFrame {
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
             length: self.payload_len(),
-            frame_type: 0x1,
+            frame_type: HEADERS_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,
         }
@@ -301,12 +303,12 @@ impl Frame for HeadersFrame {
 impl FrameIR for HeadersFrame {
     fn serialize_into<B: FrameBuilder>(self, b: &mut B) -> io::Result<()> {
         b.write_header(self.get_header())?;
-        let padded = self.is_set(HeadersFlag::Padded);
+        let padded = self.flags.is_set(HeadersFlag::Padded);
         if padded {
             b.write_all(&[self.padding_len.unwrap_or(0)])?;
         }
         // The stream dependency fields follow, if the priority flag is set
-        if self.is_set(HeadersFlag::Priority) {
+        if self.flags.is_set(HeadersFlag::Priority) {
             let dep_buf = match self.stream_dep {
                 Some(ref dep) => dep.serialize(),
                 None => panic!("Priority flag set, but no dependency information given"),

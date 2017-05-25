@@ -46,6 +46,7 @@ pub mod continuation;
 pub mod data;
 pub mod headers;
 pub mod rst_stream;
+pub mod priority;
 pub mod settings;
 pub mod goaway;
 pub mod ping;
@@ -55,12 +56,10 @@ mod flags;
 
 pub use self::builder::FrameBuilder;
 
-/// Rexports related to the `DATA` frame.
 pub use self::data::{DataFlag, DataFrame};
-/// Rexports related to the `HEADERS` frame.
 pub use self::headers::{HeadersFlag, HeadersFrame};
+pub use self::priority::PriorityFrame;
 pub use self::rst_stream::RstStreamFrame;
-/// Rexports related to the `SETTINGS` frame.
 pub use self::settings::{SettingsFlag, SettingsFrame, HttpSetting};
 pub use self::goaway::GoawayFrame;
 pub use self::ping::PingFrame;
@@ -171,10 +170,10 @@ pub trait FrameIR {
 }
 
 /// A trait that all HTTP/2 frame structs need to implement.
-pub trait Frame: Sized {
+pub trait Frame : Sized {
     /// The type that represents the flags that the particular `Frame` can take.
     /// This makes sure that only valid `Flag`s are used with each `Frame`.
-    type FlagType: Flag;
+    type FlagType : Flag;
 
     /// Creates a new `Frame` from the given `RawFrame` (i.e. header and
     /// payload), if possible.
@@ -189,8 +188,8 @@ pub trait Frame: Sized {
     /// Otherwise, returns a newly constructed `Frame`.
     fn from_raw(raw_frame: &RawFrame) -> Option<Self>;
 
-    /// Tests if the given flag is set for the frame.
-    fn is_set(&self, flag: Self::FlagType) -> bool;
+    /// Frame flags
+    fn flags(&self) -> Flags<Self::FlagType>;
     /// Returns the `StreamId` of the stream to which the frame is associated
     fn get_stream_id(&self) -> StreamId;
     /// Returns a `FrameHeader` based on the current state of the `Frame`.

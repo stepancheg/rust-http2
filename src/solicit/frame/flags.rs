@@ -16,6 +16,7 @@ pub trait Flag : fmt::Debug + Copy + Clone + Sized {
 /// A helper struct that can be used by all frames that do not define any flags.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct NoFlag;
+
 impl Flag for NoFlag {
     fn bitmask(&self) -> u8 {
         0
@@ -29,6 +30,12 @@ impl Flag for NoFlag {
 
 
 #[derive(PartialEq, Eq, Copy, Clone)]
+/// 4.1
+/// Flags: An 8-bit field reserved for boolean flags specific to the frame type.
+///
+/// Flags are assigned semantics specific to the indicated frame type.
+/// Flags that have no defined semantics for a particular frame type
+/// MUST be ignored and MUST be left unset (0x0) when sending.
 pub struct Flags<F : Flag + 'static>(pub u8, marker::PhantomData<F>);
 
 impl<F : Flag> Flags<F> {
@@ -36,7 +43,7 @@ impl<F : Flag> Flags<F> {
         Flags(value, marker::PhantomData)
     }
 
-    pub fn is_set(&self, flag: &F) -> bool {
+    pub fn is_set(&self, flag: F) -> bool {
         (self.0 & flag.bitmask()) != 0
     }
 
@@ -44,7 +51,7 @@ impl<F : Flag> Flags<F> {
         self.0 |= flag.bitmask()
     }
 
-    pub fn clear(&mut self, flag: &F) {
+    pub fn clear(&mut self, flag: F) {
         self.0 &= !flag.bitmask();
     }
 }
@@ -64,7 +71,7 @@ impl<F : Flag> fmt::Debug for Flags<F> {
         let mut copy: Flags<F> = (*self).clone();
 
         let mut first = true;
-        for flag in F::flags() {
+        for &flag in F::flags() {
             if copy.is_set(flag) {
                 if !first {
                     write!(f, "|")?;

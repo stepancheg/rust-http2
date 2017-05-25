@@ -8,6 +8,8 @@ use solicit::frame::flags::*;
 
 use bytes::Bytes;
 
+pub const DATA_FRAME_TYPE: u8 = 0x0;
+
 /// An enum representing the flags that a `DataFrame` can have.
 /// The integer representation associated to each variant is that flag's
 /// bitmask.
@@ -98,12 +100,12 @@ impl DataFrame {
 
     /// Returns `true` if the DATA frame is padded, otherwise false.
     pub fn is_padded(&self) -> bool {
-        self.is_set(DataFlag::Padded)
+        self.flags.is_set(DataFlag::Padded)
     }
 
     /// Returns whther this frame ends the stream it is associated with.
     pub fn is_end_of_stream(&self) -> bool {
-        self.is_set(DataFlag::EndStream)
+        self.flags.is_set(DataFlag::EndStream)
     }
 
     /// Sets the number of bytes that should be used as padding for this
@@ -165,7 +167,7 @@ impl Frame for DataFrame {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
-        if frame_type != 0x0 {
+        if frame_type != DATA_FRAME_TYPE {
             return None;
         }
         // Check that the length given in the header matches the payload
@@ -207,8 +209,8 @@ impl Frame for DataFrame {
     }
 
     /// Tests if the given flag is set for the frame.
-    fn is_set(&self, flag: DataFlag) -> bool {
-        self.flags.is_set(&flag)
+    fn flags(&self) -> Flags<DataFlag> {
+        self.flags
     }
 
     /// Returns the `StreamId` of the stream to which the frame is associated.
@@ -220,7 +222,7 @@ impl Frame for DataFrame {
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
             length: self.payload_len(),
-            frame_type: 0x0,
+            frame_type: DATA_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,
         }

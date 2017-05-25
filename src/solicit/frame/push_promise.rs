@@ -14,7 +14,7 @@ use super::flags::Flag;
 use super::flags::Flags;
 
 
-const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
+pub const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
 
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -53,7 +53,7 @@ impl PushPromiseFrame {
     /// Returns the length of the payload of the current frame, including any
     /// possible padding in the number of bytes.
     fn payload_len(&self) -> u32 {
-        let padding = if self.is_set(PushPromiseFlag::Padded) {
+        let padding = if self.flags.is_set(PushPromiseFlag::Padded) {
             1 + self.padding_len.unwrap_or(0) as u32
         } else {
             0
@@ -100,8 +100,8 @@ impl Frame for PushPromiseFrame {
         })
     }
 
-    fn is_set(&self, flag: PushPromiseFlag) -> bool {
-        self.flags.is_set(&flag)
+    fn flags(&self) -> Flags<PushPromiseFlag> {
+        self.flags
     }
 
     fn get_stream_id(&self) -> StreamId {
@@ -121,7 +121,7 @@ impl Frame for PushPromiseFrame {
 impl FrameIR for PushPromiseFrame {
     fn serialize_into<B : FrameBuilder>(self, b: &mut B) -> io::Result<()> {
         b.write_header(self.get_header())?;
-        let padded = self.is_set(PushPromiseFlag::Padded);
+        let padded = self.flags.is_set(PushPromiseFlag::Padded);
         if padded {
             b.write_all(&[self.padding_len.unwrap_or(0)])?;
         }

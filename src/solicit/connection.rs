@@ -28,6 +28,7 @@ use solicit::{StreamId, WindowSize};
 use solicit::DEFAULT_SETTINGS;
 use solicit::header::Header;
 use solicit::frame::continuation::ContinuationFlag;
+use solicit::frame;
 use solicit::frame::*;
 use solicit::frame::settings::HttpSettings;
 use hpack;
@@ -36,6 +37,7 @@ use hpack;
 pub enum HttpFrameType {
     Data,
     Headers,
+    Priority,
     RstStream,
     Settings,
     PushPromise,
@@ -56,6 +58,7 @@ pub enum HttpFrameType {
 pub enum HttpFrame {
     Data(DataFrame),
     Headers(HeadersFrame),
+    Priority(PriorityFrame),
     RstStream(RstStreamFrame),
     Settings(SettingsFrame),
     PushPromise(PushPromiseFrame),
@@ -69,16 +72,28 @@ pub enum HttpFrame {
 impl HttpFrame{
     pub fn from_raw(raw_frame: &RawFrame) -> Result<HttpFrame> {
         let frame = match raw_frame.header().frame_type {
-            0x0 => HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
-            0x1 => HttpFrame::Headers(HttpFrame::parse_frame(&raw_frame)?),
-            0x3 => HttpFrame::RstStream(HttpFrame::parse_frame(&raw_frame)?),
-            0x4 => HttpFrame::Settings(HttpFrame::parse_frame(&raw_frame)?),
-            0x5 => HttpFrame::PushPromise(HttpFrame::parse_frame(&raw_frame)?),
-            0x6 => HttpFrame::Ping(HttpFrame::parse_frame(&raw_frame)?),
-            0x7 => HttpFrame::Goaway(HttpFrame::parse_frame(&raw_frame)?),
-            0x8 => HttpFrame::WindowUpdate(HttpFrame::parse_frame(&raw_frame)?),
-            0x9 => HttpFrame::Continuation(HttpFrame::parse_frame(&raw_frame)?),
-            _ => HttpFrame::Unknown(raw_frame.as_ref().into()),
+            frame::data::DATA_FRAME_TYPE =>
+                HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
+            frame::headers::HEADERS_FRAME_TYPE =>
+                HttpFrame::Headers(HttpFrame::parse_frame(&raw_frame)?),
+            frame::priority::PRIORITY_FRAME_TYPE =>
+                HttpFrame::Priority(HttpFrame::parse_frame(&raw_frame)?),
+            frame::rst_stream::RST_STREAM_FRAME_TYPE =>
+                HttpFrame::RstStream(HttpFrame::parse_frame(&raw_frame)?),
+            frame::settings::SETTINGS_FRAME_TYPE =>
+                HttpFrame::Settings(HttpFrame::parse_frame(&raw_frame)?),
+            frame::push_promise::PUSH_PROMISE_FRAME_TYPE =>
+                HttpFrame::PushPromise(HttpFrame::parse_frame(&raw_frame)?),
+            frame::ping::PING_FRAME_TYPE =>
+                HttpFrame::Ping(HttpFrame::parse_frame(&raw_frame)?),
+            frame::goaway::GOAWAY_FRAME_TYPE =>
+                HttpFrame::Goaway(HttpFrame::parse_frame(&raw_frame)?),
+            frame::window_update::WINDOW_UPDATE_FRAME_TYPE =>
+                HttpFrame::WindowUpdate(HttpFrame::parse_frame(&raw_frame)?),
+            frame::continuation::CONTINUATION_FRAME_TYPE =>
+                HttpFrame::Continuation(HttpFrame::parse_frame(&raw_frame)?),
+            _ =>
+                HttpFrame::Unknown(raw_frame.as_ref().into()),
         };
 
         Ok(frame)
@@ -108,6 +123,7 @@ impl HttpFrame{
         match self {
             &HttpFrame::Data(ref f) => f.get_stream_id(),
             &HttpFrame::Headers(ref f) => f.get_stream_id(),
+            &HttpFrame::Priority(ref f) => f.get_stream_id(),
             &HttpFrame::RstStream(ref f) => f.get_stream_id(),
             &HttpFrame::Settings(ref f) => f.get_stream_id(),
             &HttpFrame::PushPromise(ref f) => f.get_stream_id(),
@@ -123,6 +139,7 @@ impl HttpFrame{
         match self {
             &HttpFrame::Data(..) => HttpFrameType::Data,
             &HttpFrame::Headers(..) => HttpFrameType::Headers,
+            &HttpFrame::Priority(..) => HttpFrameType::Priority,
             &HttpFrame::RstStream(..) => HttpFrameType::RstStream,
             &HttpFrame::Settings(..) => HttpFrameType::Settings,
             &HttpFrame::PushPromise(..) => HttpFrameType::PushPromise,

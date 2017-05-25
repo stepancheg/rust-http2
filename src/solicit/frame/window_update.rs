@@ -69,9 +69,10 @@ impl Frame for WindowUpdateFrame {
         })
     }
 
-    fn is_set(&self, _: NoFlag) -> bool {
-        false
+    fn flags(&self) -> Flags<NoFlag> {
+        self.flags
     }
+
     fn get_stream_id(&self) -> StreamId {
         self.stream_id
     }

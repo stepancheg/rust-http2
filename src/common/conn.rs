@@ -267,6 +267,10 @@ impl<T : Types> ConnData<T>
         self.process_headers(frame.stream_id, end_stream, headers)
     }
 
+    fn process_priority_frame(&mut self, _frame: PriorityFrame) -> result::Result<()> {
+        Ok(())
+    }
+
     fn process_settings_global(&mut self, frame: SettingsFrame) -> result::Result<()> {
         if frame.is_ack() {
             // TODO: remember which settings acked
@@ -459,6 +463,7 @@ impl<T : Types> ConnData<T>
         match frame {
             HttpFrameStream::Data(data) => self.process_data_frame(data)?,
             HttpFrameStream::Headers(headers) => self.process_headers_frame(headers)?,
+            HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
             HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
             HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update)?,
             HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),

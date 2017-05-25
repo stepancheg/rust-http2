@@ -188,6 +188,7 @@ impl HttpConnectionEx for HttpConnection {
 pub enum HttpFrameStream {
     Data(DataFrame),
     Headers(HeadersFrame),
+    Priority(PriorityFrame),
     RstStream(RstStreamFrame),
     WindowUpdate(WindowUpdateFrame),
     Continuation(ContinuationFrame),
@@ -197,9 +198,10 @@ impl HttpFrameStream {
     #[allow(dead_code)]
     pub fn into_frame(self) -> HttpFrame {
         match self {
-            HttpFrameStream::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
-            HttpFrameStream::Data(f) => HttpFrame::Data(f),
             HttpFrameStream::Headers(f) => HttpFrame::Headers(f),
+            HttpFrameStream::Data(f) => HttpFrame::Data(f),
+            HttpFrameStream::Priority(f) => HttpFrame::Priority(f),
+            HttpFrameStream::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
             HttpFrameStream::RstStream(f) => HttpFrame::RstStream(f),
             HttpFrameStream::Continuation(f) => HttpFrame::Continuation(f),
         }
@@ -208,9 +210,10 @@ impl HttpFrameStream {
     #[allow(dead_code)]
     pub fn get_stream_id(&self) -> StreamId {
         match self {
-            &HttpFrameStream::WindowUpdate(ref f) => f.get_stream_id(),
             &HttpFrameStream::Data(ref f) => f.get_stream_id(),
             &HttpFrameStream::Headers(ref f) => f.get_stream_id(),
+            &HttpFrameStream::Priority(ref f) => f.get_stream_id(),
+            &HttpFrameStream::WindowUpdate(ref f) => f.get_stream_id(),
             &HttpFrameStream::RstStream(ref f) => f.get_stream_id(),
             &HttpFrameStream::Continuation(ref f) => f.get_stream_id(),
         }
@@ -219,9 +222,10 @@ impl HttpFrameStream {
     #[allow(dead_code)]
     pub fn is_end_of_stream(&self) -> bool {
         match self {
-            &HttpFrameStream::WindowUpdate(..) => false,
-            &HttpFrameStream::Data(ref f) => f.is_end_of_stream(),
             &HttpFrameStream::Headers(ref f) => f.is_end_of_stream(),
+            &HttpFrameStream::Data(ref f) => f.is_end_of_stream(),
+            &HttpFrameStream::Priority(..) => false,
+            &HttpFrameStream::WindowUpdate(..) => false,
             &HttpFrameStream::RstStream(..) => true,
             &HttpFrameStream::Continuation(..) => panic!("end of stream is defined in HEADERS"),
         }
@@ -264,6 +268,7 @@ impl HttpFrameClassified {
         match frame {
             HttpFrame::Data(f) => HttpFrameClassified::Stream(HttpFrameStream::Data(f)),
             HttpFrame::Headers(f) => HttpFrameClassified::Stream(HttpFrameStream::Headers(f)),
+            HttpFrame::Priority(f) => HttpFrameClassified::Stream(HttpFrameStream::Priority(f)),
             HttpFrame::RstStream(f) => HttpFrameClassified::Stream(HttpFrameStream::RstStream(f)),
             HttpFrame::Settings(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
             HttpFrame::PushPromise(f) => HttpFrameClassified::Conn(HttpFrameConn::PushPromise(f)),
