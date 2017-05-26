@@ -49,7 +49,7 @@ impl<F : Flag> Flags<F> {
         (self.0 & flag.bitmask()) != 0
     }
 
-    pub fn set(&mut self, flag: &F) {
+    pub fn set(&mut self, flag: F) {
         self.0 |= flag.bitmask()
     }
 

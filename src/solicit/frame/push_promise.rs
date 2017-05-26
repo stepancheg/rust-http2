@@ -23,7 +23,7 @@ pub const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PushPromiseFrame {
     /// The set of flags for the frame, packed into a single byte.
-    flags: Flags<PushPromiseFlag>,
+    pub flags: Flags<PushPromiseFlag>,
     /// The ID of the stream with which this frame is associated
     pub stream_id: StreamId,
     /// Promised Stream ID

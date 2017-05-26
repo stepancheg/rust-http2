@@ -240,7 +240,7 @@ impl SettingsFrame {
 
     /// Sets the given flag for the frame.
     pub fn set_flag(&mut self, flag: SettingsFlag) {
-        self.flags.set(&flag);
+        self.flags.set(flag);
     }
 }
 

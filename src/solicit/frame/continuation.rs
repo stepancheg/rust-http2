@@ -78,7 +78,7 @@ impl ContinuationFrame {
 
     /// Sets the given flag for the frame.
     pub fn set_flag(&mut self, flag: ContinuationFlag) {
-        self.flags.set(&flag);
+        self.flags.set(flag);
     }
 }
 

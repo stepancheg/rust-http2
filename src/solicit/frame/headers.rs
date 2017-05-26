@@ -130,7 +130,7 @@ impl StreamDependency {
 #[derive(PartialEq, Clone, Debug)]
 pub struct HeadersFrame {
     /// The set of flags for the frame, packed into a single byte.
-    flags: Flags<HeadersFlag>,
+    pub flags: Flags<HeadersFlag>,
     /// The ID of the stream with which this frame is associated
     pub stream_id: StreamId,
     /// The header fragment bytes stored within the frame.
@@ -211,7 +211,7 @@ impl HeadersFrame {
 
     /// Sets the given flag for the frame.
     pub fn set_flag(&mut self, flag: HeadersFlag) {
-        self.flags.set(&flag);
+        self.flags.set(flag);
     }
 }
 
