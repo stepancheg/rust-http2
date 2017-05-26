@@ -158,3 +158,24 @@ fn response_large() {
 
     assert_eq!(0, server.dump_state().streams.len());
 }
+
+#[test]
+fn close_connection_on_data_without_stream() {
+    env_logger::init().ok();
+
+    let server = HttpServerEcho::new();
+
+    let mut tester = HttpConnectionTester::connect(server.port);
+    tester.send_preface();
+    tester.settings_xchg();
+
+    // DATA frame without open stream
+    tester.send_data(11, &[10, 20, 30], false);
+
+    tester.recv_eof();
+
+    // TODO
+    // let mut tester = HttpConnectionTester::connect(server.port);
+    // tester.send_preface();
+    // tester.settings_xchg();
+}
