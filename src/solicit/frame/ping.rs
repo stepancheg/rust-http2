@@ -37,7 +37,7 @@ impl Flag for PingFlag {
 /// The struct represents the `PINg` HTTP/2 frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PingFrame {
-    opaque_data: u64,
+    pub opaque_data: u64,
     flags: Flags<PingFlag>,
 }
 

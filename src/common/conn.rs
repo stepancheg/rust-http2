@@ -65,6 +65,7 @@ pub struct ConnData<T : Types> {
     pub last_peer_stream_id: StreamId,
     pub goaway_sent: Option<GoawayFrame>,
     pub goaway_received: Option<GoawayFrame>,
+    pub ping_sent: Option<u64>,
 }
 
 
@@ -98,6 +99,7 @@ impl<T : Types> ConnData<T>
             loop_handle: loop_handle,
             goaway_sent: None,
             goaway_received: None,
+            ping_sent: None,
         }
     }
 
@@ -405,8 +407,15 @@ impl<T : Types> ConnData<T>
 
     fn process_ping(&mut self, frame: PingFrame) -> result::Result<()> {
         if frame.is_ack() {
-            // TODO: check we sent PING
-            Ok(())
+            if let Some(opaque_data) = self.ping_sent.take() {
+                if opaque_data == frame.opaque_data {
+                    Ok(())
+                } else {
+                    Err(error::Error::Other("PING ACK opaque data mismatch"))
+                }
+            } else {
+                Err(error::Error::Other("PING ACK without PING"))
+            }
         } else {
             self.send_frame(PingFrame::new_ack(frame.opaque_data()))
         }
