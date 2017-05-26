@@ -64,6 +64,7 @@ pub use resp::Response;
 pub use stream_part::HttpPartStream;
 
 pub use error::Error;
+pub use error::ErrorCode;
 pub use result::Result;
 
 pub mod for_test {

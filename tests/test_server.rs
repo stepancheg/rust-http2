@@ -160,7 +160,7 @@ fn response_large() {
 }
 
 #[test]
-fn close_connection_on_data_without_stream() {
+fn rst_stream_on_data_without_stream() {
     env_logger::init().ok();
 
     let server = HttpServerEcho::new();
@@ -172,10 +172,8 @@ fn close_connection_on_data_without_stream() {
     // DATA frame without open stream
     tester.send_data(11, &[10, 20, 30], false);
 
-    tester.recv_eof();
+    tester.recv_rst_frame_check(11, ErrorCode::StreamClosed);
 
-    // TODO
-    // let mut tester = HttpConnectionTester::connect(server.port);
-    // tester.send_preface();
-    // tester.settings_xchg();
+    let r = tester.get(1, "/fgfg");
+    assert_eq!(200, r.headers.status());
 }

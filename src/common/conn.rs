@@ -16,6 +16,7 @@ use tokio_io::AsyncWrite;
 use tokio_io::io as tokio_io;
 
 use error;
+use error::ErrorCode;
 use result;
 
 use solicit::session::StreamState;
@@ -353,6 +354,19 @@ impl<T : Types> ConnData<T>
         Ok(())
     }
 
+    fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
+        -> result::Result<Option<&mut HttpStreamCommon<T>>>
+    {
+        // Another day in endless bitter war against borrow checker
+        if self.streams.get_mut(stream_id).is_some() {
+            return Ok(Some(self.streams.get_mut(stream_id).unwrap()));
+        }
+
+        self.send_frame(RstStreamFrame::new(stream_id, ErrorCode::StreamClosed))?;
+
+        return Ok(None);
+    }
+
     fn process_data_frame(&mut self, frame: DataFrame)
         -> result::Result<()>
     {
@@ -373,8 +387,15 @@ impl<T : Types> ConnData<T>
             };
 
         let increment_stream = {
-            let stream = self.streams.get_mut(frame.get_stream_id())
-                .expect(&format!("stream not found: {}", frame.get_stream_id()));
+            // If a DATA frame is received whose stream is not in "open" or
+            // "half-closed (local)" state, the recipient MUST respond with
+            // a stream error (Section 5.4.2) of type STREAM_CLOSED.
+            let stream = match self.get_stream_or_send_stream_closed(frame.get_stream_id())? {
+                Some(stream) => stream,
+                None => {
+                    return Ok(());
+                }
+            };
 
             stream.in_window_size.try_decrease(frame.payload_len() as i32)
                 .expect("failed to decrease stream win");
