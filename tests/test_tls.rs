@@ -1,3 +1,5 @@
+//! Test client and server TLS connected with TLS.
+
 extern crate bytes;
 extern crate futures;
 extern crate native_tls;

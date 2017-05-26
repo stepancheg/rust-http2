@@ -1,3 +1,5 @@
+//! Tests for server.
+
 extern crate bytes;
 extern crate futures;
 extern crate native_tls;
