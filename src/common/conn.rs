@@ -347,10 +347,11 @@ impl<T : Types> ConnData<T>
     }
 
     fn process_rst_stream_frame(&mut self, frame: RstStreamFrame) -> result::Result<()> {
-        let stream = self.streams.get_mut(frame.get_stream_id())
-            // TODO: do not panic
-            .expect(&format!("stream not found: {}", frame.get_stream_id()));
-        stream.rst(frame.error_code());
+        if let Some(stream) = self.streams.get_mut(frame.get_stream_id()) {
+            warn!("RST_STREAM on non-existent stream: {}", frame.stream_id);
+            stream.rst(frame.error_code());
+        }
+
         Ok(())
     }
 
