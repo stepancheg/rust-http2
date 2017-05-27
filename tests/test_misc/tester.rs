@@ -64,7 +64,7 @@ static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
 pub struct HttpConnectionTester {
     tcp: net::TcpStream,
-    conn: HttpConnection,
+    pub conn: HttpConnection,
     waiting_settings_ack: bool,
 }
 

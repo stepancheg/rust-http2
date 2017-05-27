@@ -365,7 +365,7 @@ impl<'a, S> HttpConnectionSender<'a, S>
         }
         // Adjust the flow control window...
         self.conn.decrease_out_window(frame.payload_len())?;
-        trace!("New OUT WINDOW size = {}", self.conn.out_window_size());
+        trace!("New OUT WINDOW size = {}", self.conn.out_window_size.size());
         // ...and now send it out.
         self.send_frame(frame)
     }
@@ -395,17 +395,6 @@ impl HttpConnection {
         }
     }
 
-    /// Returns the current size of the inbound flow control window (i.e. the number of octets that
-    /// the connection will accept and the peer will send at most, unless the window is updated).
-    pub fn in_window_size(&self) -> i32 {
-        self.in_window_size.size()
-    }
-    /// Returns the current size of the outbound flow control window (i.e. the number of octets
-    /// that can be sent on the connection to the peer without violating flow control).
-    pub fn out_window_size(&self) -> i32 {
-        self.out_window_size.size()
-    }
-
     /// Internal helper method that decreases the outbound flow control window size.
     pub fn decrease_out_window(&mut self, size: u32) -> Result<()> {
         // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
@@ -425,7 +414,7 @@ impl HttpConnection {
         // case.
         debug_assert!(size < 0x80000000);
         self.in_window_size
-            .try_decrease(size as i32)
+            .try_decrease_to_positive(size as i32)
             .map_err(|_| Error::WindowSizeOverflow)
     }
 }

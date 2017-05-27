@@ -25,6 +25,8 @@ use httpbis::*;
 use httpbis::stream_part::HttpStreamPart;
 use httpbis::solicit::frame::settings::*;
 
+use std::iter::FromIterator;
+
 use test_misc::*;
 
 
@@ -212,7 +214,6 @@ fn increase_frame_size() {
 
     let mut frame = SettingsFrame::new();
     frame.settings.push(HttpSetting::MaxFrameSize(20000));
-
     tester.send_recv_settings(frame);
 
     tester.send_headers(1, Headers::new_post("/fgfg"), false);
@@ -221,4 +222,30 @@ fn increase_frame_size() {
     let r = tester.recv_message(1);
     assert_eq!(200, r.headers.status());
     assert_eq!(&[1; 20_000][..], &r.body);
+}
+
+#[test]
+fn exceed_window_size() {
+    env_logger::init().ok();
+
+    let server = HttpServerEcho::new();
+
+    let mut tester = HttpConnectionTester::connect(server.port);
+    tester.send_preface();
+    tester.settings_xchg();
+
+    let mut frame = SettingsFrame::new();
+    frame.settings.push(HttpSetting::MaxFrameSize(tester.conn.peer_settings.initial_window_size + 5));
+    tester.send_recv_settings(frame);
+
+    let data = Vec::from_iter((0..tester.conn.peer_settings.initial_window_size + 3).map(|_| 2));
+
+    tester.send_data(1, &data, false);
+    tester.recv_eof();
+
+    let mut tester = HttpConnectionTester::connect(server.port);
+    tester.send_preface();
+    tester.settings_xchg();
+
+    assert_eq!(200, tester.get(1, "/fgfg").headers.status());
 }

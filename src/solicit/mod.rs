@@ -109,6 +109,16 @@ impl WindowSize {
         }
     }
 
+    pub fn try_decrease_to_positive(&mut self, delta: i32) -> Result<(), ()> {
+        match self.0.checked_sub(delta) {
+            Some(new) if new >= 0 => {
+                self.0 = new;
+                Ok(())
+            }
+            _ => Err(()),
+        }
+    }
+
     /// Creates a new `WindowSize` with the given initial size.
     pub fn new(size: i32) -> WindowSize {
         WindowSize(size)

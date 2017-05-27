@@ -373,12 +373,11 @@ impl<T : Types> ConnData<T>
     {
         let stream_id = frame.get_stream_id();
 
-        self.conn.decrease_in_window(frame.payload_len())
-            .expect("failed to decrease conn win");
+        self.conn.decrease_in_window(frame.payload_len())?;
 
         let increment_conn =
             // TODO: need something better
-            if self.conn.in_window_size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
+            if self.conn.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                 let increment = DEFAULT_SETTINGS.initial_window_size;
                 self.conn.in_window_size.try_increase(increment).expect("failed to increase");
 
@@ -398,8 +397,8 @@ impl<T : Types> ConnData<T>
                 }
             };
 
-            stream.in_window_size.try_decrease(frame.payload_len() as i32)
-                .expect("failed to decrease stream win");
+            stream.in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
+                .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
 
             let increment_stream =
                 if stream.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
