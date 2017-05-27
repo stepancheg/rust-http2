@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::io;
 use std::io::Write;
 use std::io::Read;
 
@@ -85,7 +86,17 @@ impl HttpConnectionTester {
     }
 
     pub fn recv_eof(&mut self) {
-        assert_eq!(0, self.tcp.read(&mut [0]).expect("read"));
+        let r = self.tcp.read(&mut [0]);
+        match r {
+            Ok(0) => {}
+            Ok(_) => panic!("expecting EOF"),
+            Err(e) => {
+                // On Linux it returns ECONNRESET
+                if e.kind() != io::ErrorKind::ConnectionReset {
+                    panic!("bad error");
+                }
+            }
+        }
     }
 
     pub fn send_preface(&mut self) {
