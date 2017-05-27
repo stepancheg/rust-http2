@@ -28,6 +28,7 @@ use solicit::connection::EndStream;
 use solicit::connection::HttpConnection;
 use solicit::connection::SendFrame;
 use solicit::connection::HttpFrame;
+use solicit::connection::HttpFrameType;
 
 use futures_misc::*;
 
@@ -44,7 +45,7 @@ pub use resp::Response;
 
 pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
-    Write(Vec<u8>),
+    Frame(HttpFrame),
 }
 
 pub trait ConnDataSpecific : 'static {
@@ -114,38 +115,17 @@ impl<T : Types> ConnData<T>
         id
     }
 
-    pub fn remove_stream(&mut self, stream_id: StreamId) {
-        match self.streams.map.remove(&stream_id) {
-            Some(_) => debug!("removed stream: {}", stream_id),
-            None => debug!("incorrect request to remove stream: {}", stream_id),
-        }
-    }
-
-    pub fn remove_stream_if_closed(&mut self, stream_id: StreamId) {
-        if self.streams.get_mut(stream_id).expect("unknown stream").state == StreamState::Closed {
-            self.remove_stream(stream_id);
-        }
-    }
-
-
     pub fn pop_outg_for_stream(&mut self, stream_id: StreamId) -> Option<HttpStreamCommand> {
-        let r = {
-            if let Some(stream) = self.streams.map.get_mut(&stream_id) {
-                stream.pop_outg(&mut self.conn.out_window_size)
-            } else {
-                None
-            }
-        };
-        if let Some(..) = r {
-            self.remove_stream_if_closed(stream_id);
+        if let Some(stream) = self.streams.get_mut_2(stream_id) {
+            stream.pop_outg_maybe_remove(&mut self.conn.out_window_size)
+        } else {
+            None
         }
-        r
     }
 
     pub fn pop_outg_for_conn(&mut self) -> Option<(StreamId, HttpStreamCommand)> {
         // TODO: lame
-        let stream_ids: Vec<StreamId> = self.streams.map.keys().cloned().collect();
-        for stream_id in stream_ids {
+        for stream_id in self.streams.stream_ids() {
             let r = self.pop_outg_for_stream(stream_id);
             if let Some(r) = r {
                 return Some((stream_id, r));
@@ -155,11 +135,11 @@ impl<T : Types> ConnData<T>
     }
 
     pub fn pop_outg_all_for_stream(&mut self, stream_id: StreamId) -> Vec<HttpStreamCommand> {
-        let mut r = Vec::new();
-        while let Some(p) = self.pop_outg_for_stream(stream_id) {
-            r.push(p);
+        if let Some(stream) = self.streams.get_mut_2(stream_id) {
+            stream.pop_outg_all_maybe_remove(&mut self.conn.out_window_size)
+        } else {
+            Vec::new()
         }
-        r
     }
 
     pub fn pop_outg_all_for_conn(&mut self) -> Vec<(StreamId, HttpStreamCommand)> {
@@ -255,7 +235,7 @@ impl<T : Types> ConnData<T>
 
     pub fn dump_state(&self) -> ConnectionStateSnapshot {
         ConnectionStateSnapshot {
-            streams: self.streams.map.iter().map(|(&k, s)| (k, s.state)).collect(),
+            streams: self.streams.snapshot(),
         }
     }
 
@@ -363,6 +343,7 @@ impl<T : Types> ConnData<T>
             return Ok(Some(self.streams.get_mut(stream_id).unwrap()));
         }
 
+        debug!("stream not found: {}, sending RST_STREAM", stream_id);
         self.send_frame(RstStreamFrame::new(stream_id, ErrorCode::StreamClosed))?;
 
         return Ok(None);
@@ -452,7 +433,8 @@ impl<T : Types> ConnData<T>
 
         self.goaway_received = Some(frame);
 
-        for (_stream_id, mut stream) in self.streams.remove_local_streams_with_id_gt(last_stream_id) {
+        for (stream_id, mut stream) in self.streams.remove_local_streams_with_id_gt(last_stream_id) {
+            debug!("removed stream {} because of GOAWAY", stream_id);
             stream.goaway_recvd(raw_error_code);
         }
 
@@ -526,30 +508,17 @@ impl<T : Types> ConnData<T>
         debug!("close remote: {}", stream_id);
 
         // RST_STREAM and WINDOW_UPDATE can be received when we have no stream
-        {
-            if let Some(stream) = self.streams.get_mut(stream_id) {
-                stream.close_remote();
-                stream.closed_remote();
-            } else {
-                return;
-            }
+        if let Some(stream) = self.streams.get_mut_2(stream_id) {
+            stream.close_remote_remove_if_closed();
         }
-
-        self.remove_stream_if_closed(stream_id);
     }
 
     fn close_local(&mut self, stream_id: StreamId) {
         debug!("close local: {}", stream_id);
 
-        {
-            if let Some(stream) = self.streams.get_mut(stream_id) {
-                stream.close_local();
-            } else {
-                return;
-            }
+        if let Some(stream) = self.streams.get_mut_2(stream_id) {
+            stream.close_local_remove_if_closed();
         }
-
-        self.remove_stream_if_closed(stream_id);
     }
 
     fn send_common(&mut self, message: CommonToWriteMessage)
@@ -560,12 +529,12 @@ impl<T : Types> ConnData<T>
             .map_err(|_| error::Error::Other("write loop died"))
     }
 
-    /// Send a frame back to the network
+    /// Schedule a write for HTTP frame
     /// Must not be data frame
-    fn send_frame<R : FrameIR>(&mut self, frame: R) -> result::Result<()> {
-        let mut send_buf = VecSendFrame(Vec::new());
-        send_buf.send_frame(frame).unwrap();
-        self.send_common(CommonToWriteMessage::Write(send_buf.0))
+    fn send_frame<F : Into<HttpFrame>>(&mut self, frame: F) -> result::Result<()> {
+        let frame = frame.into();
+        assert!(frame.frame_type() != HttpFrameType::Data);
+        self.send_common(CommonToWriteMessage::Frame(frame))
     }
 
     fn out_window_increased(&mut self, stream_id: Option<StreamId>) -> result::Result<()> {
@@ -580,7 +549,7 @@ impl<T : Types> ConnData<T>
     /// Should we close the connection because of GOAWAY state
     pub fn end_loop(&self) -> bool {
         let goaway = self.goaway_sent.is_some() || self.goaway_received.is_some();
-        let no_streams = self.streams.map.is_empty();
+        let no_streams = self.streams.is_empty();
         goaway && no_streams
     }
 }
@@ -686,6 +655,15 @@ impl<I, T> WriteLoopData<I, T>
             .map_err(error::Error::from))
     }
 
+    fn write_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
+        debug!("send {:?}", frame);
+
+        let mut send_buf = VecSendFrame(Vec::new());
+        send_buf.send_frame(frame).unwrap();
+
+        self.write_all(send_buf.0)
+    }
+
     fn with_inner<G, R>(&self, f: G) -> R
         where G : FnOnce(&mut ConnData<T>) -> R
     {
@@ -712,7 +690,7 @@ impl<I, T> WriteLoopData<I, T>
         match common {
             CommonToWriteMessage::TryFlushStream(None) => self.send_outg_conn(),
             CommonToWriteMessage::TryFlushStream(Some(stream_id)) => self.send_outg_stream(stream_id),
-            CommonToWriteMessage::Write(buf) => self.write_all(buf),
+            CommonToWriteMessage::Frame(frame) => self.write_frame(frame),
         }
     }
 }

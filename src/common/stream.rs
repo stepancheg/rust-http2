@@ -85,10 +85,16 @@ impl<T : Types> HttpStreamCommon<T> {
     }
 
     pub fn close_remote(&mut self) {
+        trace!("close remote");
         self.state = match self.state {
             StreamState::Closed | StreamState::HalfClosedLocal => StreamState::Closed,
             _ => StreamState::HalfClosedRemote,
         };
+
+        if let Some(response_handler) = self.peer_tx.take() {
+            // it is OK to ignore error: handler may be already dead
+            drop(response_handler.send(ResultOrEof::Eof));
+        }
     }
 
     pub fn pop_outg(&mut self, conn_out_window_size: &mut WindowSize) -> Option<HttpStreamCommand> {
@@ -183,13 +189,6 @@ impl<T : Types> HttpStreamCommon<T> {
     pub fn rst(&mut self, error_code: ErrorCode) {
         if let Some(ref mut response_handler) = self.peer_tx.take() {
             drop(response_handler.send(ResultOrEof::Error(error::Error::CodeError(error_code))));
-        }
-    }
-
-    pub fn closed_remote(&mut self) {
-        if let Some(response_handler) = self.peer_tx.take() {
-            // it is OK to ignore error: handler may be already dead
-            drop(response_handler.send(ResultOrEof::Eof));
         }
     }
 

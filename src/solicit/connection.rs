@@ -18,6 +18,7 @@
 use std::borrow::Cow;
 use std::borrow::Borrow;
 use std::cmp;
+use std::io;
 
 use bytes::Bytes;
 
@@ -33,7 +34,7 @@ use solicit::frame::*;
 use solicit::frame::settings::HttpSettings;
 use hpack;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum HttpFrameType {
     Data,
     Headers,
@@ -149,6 +150,84 @@ impl HttpFrame{
             &HttpFrame::Continuation(..) => HttpFrameType::Continuation,
             &HttpFrame::Unknown(ref f) => HttpFrameType::Unknown(f.frame_type()),
         }
+    }
+}
+
+impl FrameIR for HttpFrame {
+    fn serialize_into<B : FrameBuilder>(self, builder: &mut B) -> io::Result<()> {
+        match self {
+            HttpFrame::Data(f)         => f.serialize_into(builder),
+            HttpFrame::Headers(f)      => f.serialize_into(builder),
+            HttpFrame::Priority(f)     => f.serialize_into(builder),
+            HttpFrame::RstStream(f)    => f.serialize_into(builder),
+            HttpFrame::Settings(f)     => f.serialize_into(builder),
+            HttpFrame::PushPromise(f)  => f.serialize_into(builder),
+            HttpFrame::Ping(f)         => f.serialize_into(builder),
+            HttpFrame::Goaway(f)       => f.serialize_into(builder),
+            HttpFrame::WindowUpdate(f) => f.serialize_into(builder),
+            HttpFrame::Continuation(f) => f.serialize_into(builder),
+            HttpFrame::Unknown(f)      => f.serialize_into(builder),
+        }
+    }
+}
+
+impl From<DataFrame> for HttpFrame {
+    fn from(frame: DataFrame) -> Self {
+        HttpFrame::Data(frame)
+    }
+}
+
+impl From<HeadersFrame> for HttpFrame {
+    fn from(frame: HeadersFrame) -> Self {
+        HttpFrame::Headers(frame)
+    }
+}
+
+impl From<PriorityFrame> for HttpFrame {
+    fn from(frame: PriorityFrame) -> Self {
+        HttpFrame::Priority(frame)
+    }
+}
+
+impl From<RstStreamFrame> for HttpFrame {
+    fn from(frame: RstStreamFrame) -> Self {
+        HttpFrame::RstStream(frame)
+    }
+}
+
+impl From<SettingsFrame> for HttpFrame {
+    fn from(frame: SettingsFrame) -> Self {
+        HttpFrame::Settings(frame)
+    }
+}
+
+impl From<PushPromiseFrame> for HttpFrame {
+    fn from(frame: PushPromiseFrame) -> Self {
+        HttpFrame::PushPromise(frame)
+    }
+}
+
+impl From<PingFrame> for HttpFrame {
+    fn from(frame: PingFrame) -> Self {
+        HttpFrame::Ping(frame)
+    }
+}
+
+impl From<GoawayFrame> for HttpFrame {
+    fn from(frame: GoawayFrame) -> Self {
+        HttpFrame::Goaway(frame)
+    }
+}
+
+impl From<WindowUpdateFrame> for HttpFrame {
+    fn from(frame: WindowUpdateFrame) -> Self {
+        HttpFrame::WindowUpdate(frame)
+    }
+}
+
+impl From<ContinuationFrame> for HttpFrame {
+    fn from(frame: ContinuationFrame) -> Self {
+        HttpFrame::Continuation(frame)
     }
 }
 

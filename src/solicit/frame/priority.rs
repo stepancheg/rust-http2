@@ -1,11 +1,15 @@
+use std::io;
+
 use bytes::IntoBuf;
 use bytes::BigEndian;
 use bytes::Buf;
 
 use solicit::StreamId;
 use solicit::frame::Frame;
+use solicit::frame::FrameIR;
 use solicit::frame::FrameHeader;
 use solicit::frame::RawFrame;
+use solicit::frame::builder::FrameBuilder;
 use solicit::frame::flags::NoFlag;
 use solicit::frame::flags::Flags;
 
@@ -70,5 +74,11 @@ impl Frame for PriorityFrame {
             flags: self.flags.0,
             stream_id: self.stream_id,
         }
+    }
+}
+
+impl FrameIR for PriorityFrame {
+    fn serialize_into<B : FrameBuilder>(self, _builder: &mut B) -> io::Result<()> {
+        unimplemented!()
     }
 }

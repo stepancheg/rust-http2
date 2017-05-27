@@ -152,7 +152,17 @@ impl ServerInner {
         req_tx
     }
 
-    fn new_stream(&mut self, stream_id: StreamId, headers: Headers) -> &mut ServerStream {
+    fn new_stream(&mut self, stream_id: StreamId, headers: Headers) -> result::Result<&mut ServerStream> {
+        if ServerTypes::is_init_locally(stream_id) {
+            return Err(error::Error::Other("initiated stream with server id from client"));
+        }
+
+        if stream_id <= self.last_peer_stream_id {
+            return Err(error::Error::Other("stream id is le than already existing stream id"));
+        }
+
+        self.last_peer_stream_id = stream_id;
+
         debug!("new stream: {}", stream_id);
 
         let req_tx = self.new_request(stream_id, headers);
@@ -162,18 +172,17 @@ impl ServerInner {
             self.conn.peer_settings.initial_window_size,
             req_tx,
             ServerStreamData { });
-        if let Some(..) = self.streams.map.insert(stream_id, stream) {
-            panic!("inserted stream that already existed");
-        }
-        self.streams.map.get_mut(&stream_id).unwrap()
+        Ok(self.streams.insert(stream_id, stream))
     }
 
-    fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool) -> &mut ServerStream {
+    fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool)
+        -> result::Result<&mut ServerStream>
+    {
         if self.streams.get_mut(stream_id).is_some() {
             // https://github.com/rust-lang/rust/issues/36403
             let stream = self.streams.get_mut(stream_id).unwrap();
             stream.set_headers(headers, last);
-            stream
+            Ok(stream)
         } else {
             self.new_stream(stream_id, headers)
         }
@@ -189,7 +198,7 @@ impl ConnInner for ServerInner {
         let _stream = self.get_or_create_stream(
             stream_id,
             headers,
-            end_stream == EndStream::Yes);
+            end_stream == EndStream::Yes)?;
 
         // TODO: drop stream if closed on both ends
 
