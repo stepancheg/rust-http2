@@ -2,8 +2,6 @@ use bytes::Bytes;
 
 use solicit::header::*;
 
-use bytesx::*;
-
 use stream_part::*;
 
 pub struct SimpleHttpMessage {
@@ -62,7 +60,7 @@ impl SimpleHttpMessage {
                 self.headers.extend(headers);
             }
             HttpStreamPartContent::Data(data) => {
-                bytes_extend_with(&mut self.body, data);
+                self.body.extend_from_slice(&data);
             }
         }
     }

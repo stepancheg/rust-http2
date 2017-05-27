@@ -11,7 +11,6 @@ use bytes::Bytes;
 
 use httpbis;
 use httpbis::message::SimpleHttpMessage;
-use httpbis::bytesx::*;
 use httpbis::solicit::StreamId;
 use httpbis::error::ErrorCode;
 use httpbis::solicit::header::*;
@@ -258,7 +257,7 @@ impl HttpConnectionTester {
                 }
                 HttpFrame::Data(data_frame) => {
                     let end_of_stream = data_frame.is_end_of_stream();
-                    bytes_extend_with(&mut r.body, data_frame.data);
+                    r.body.extend_from_slice(&data_frame.data);
                     end_of_stream
                 }
                 frame => panic!("expecting HEADERS or DATA, got: {:?}", frame),

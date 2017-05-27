@@ -40,7 +40,6 @@ pub mod assert_types;
 pub mod hpack;
 pub mod solicit_async; // TODO: make private
 pub mod solicit_misc;
-pub mod bytesx;
 
 pub mod misc;
 

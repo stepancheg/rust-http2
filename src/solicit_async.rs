@@ -38,8 +38,6 @@ use solicit::connection::HttpFrame;
 
 use misc::BsDebug;
 
-use bytesx::*;
-
 
 pub type HttpFuture<T> = Box<Future<Item=T, Error=Error>>;
 // Type is called `HttpFutureStream`, not just `HttpStream`
@@ -133,7 +131,7 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
                 &mut ContinuableFrame::Headers(ref mut headers) => &mut headers.header_fragment,
                 &mut ContinuableFrame::PushPromise(ref mut push_promise) => &mut push_promise.header_fragment,
             };
-            bytes_extend_with(header_fragment, bytes);
+            header_fragment.extend_from_slice(&bytes);
         }
 
         fn set_end_headers(&mut self) {
