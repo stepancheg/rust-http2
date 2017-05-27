@@ -4,19 +4,10 @@ use solicit::header::*;
 
 use stream_part::*;
 
+#[derive(Default)]
 pub struct SimpleHttpMessage {
     pub headers: Headers,
     pub body: Bytes,
-}
-
-// TODO: https://github.com/carllerche/bytes/commit/37f6cabd96a6200b0b3cb1d743be9c0cf75d1085
-impl Default for SimpleHttpMessage {
-    fn default() -> Self {
-        SimpleHttpMessage {
-            headers: Default::default(),
-            body: Bytes::new(),
-        }
-    }
 }
 
 impl SimpleHttpMessage {
