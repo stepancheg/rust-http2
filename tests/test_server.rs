@@ -23,6 +23,7 @@ use httpbis::solicit::header::*;
 
 use httpbis::*;
 use httpbis::stream_part::HttpStreamPart;
+use httpbis::solicit::frame::settings::*;
 
 use test_misc::*;
 
@@ -197,4 +198,27 @@ fn exceed_max_frame_size() {
     tester.settings_xchg();
 
     assert_eq!(200, tester.get(1, "/fgfg").headers.status());
+}
+
+#[test]
+fn increase_frame_size() {
+    env_logger::init().ok();
+
+    let server = HttpServerEcho::new();
+
+    let mut tester = HttpConnectionTester::connect(server.port);
+    tester.send_preface();
+    tester.settings_xchg();
+
+    let mut frame = SettingsFrame::new();
+    frame.settings.push(HttpSetting::MaxFrameSize(20000));
+
+    tester.send_recv_settings(frame);
+
+    tester.send_headers(1, Headers::new_post("/fgfg"), false);
+    tester.send_data(1, &[1; 20_000], true);
+
+    let r = tester.recv_message(1);
+    assert_eq!(200, r.headers.status());
+    assert_eq!(&[1; 20_000][..], &r.body);
 }

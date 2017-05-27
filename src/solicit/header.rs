@@ -151,6 +151,20 @@ impl Headers {
         Default::default()
     }
 
+    pub fn new_get(path: &str) -> Headers {
+        Headers(vec![
+            Header::new(":method", "GET"),
+            Header::new(":path", path),
+        ])
+    }
+
+    pub fn new_post(path: &str) -> Headers {
+        Headers(vec![
+            Header::new(":method", "POST"),
+            Header::new(":path", path),
+        ])
+    }
+
     pub fn from_status(code: u32) -> Headers {
         Headers(vec![
             Header::new(":status", format!("{}", code)),

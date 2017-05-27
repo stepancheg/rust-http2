@@ -209,6 +209,13 @@ impl HttpConnectionTester {
         self.recv_frame_settings_ack();
     }
 
+    pub fn send_recv_settings(&mut self, settings: SettingsFrame) {
+        assert!(!self.waiting_settings_ack);
+        self.send_frame(settings);
+        self.waiting_settings_ack = true;
+        self.recv_frame_settings_ack();
+    }
+
     pub fn recv_rst_frame(&mut self) -> RstStreamFrame {
         match self.recv_frame() {
             HttpFrame::RstStream(rst) => rst,
