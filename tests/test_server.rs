@@ -177,3 +177,24 @@ fn rst_stream_on_data_without_stream() {
     let r = tester.get(1, "/fgfg");
     assert_eq!(200, r.headers.status());
 }
+
+#[test]
+fn exceed_max_frame_size() {
+    env_logger::init().ok();
+
+    let server = HttpServerEcho::new();
+
+    let mut tester = HttpConnectionTester::connect(server.port);
+    tester.send_preface();
+    tester.settings_xchg();
+
+    tester.send_data(1, &[0; 17_000], false);
+
+    tester.recv_eof();
+
+    let mut tester = HttpConnectionTester::connect(server.port);
+    tester.send_preface();
+    tester.settings_xchg();
+
+    assert_eq!(200, tester.get(1, "/fgfg").headers.status());
+}

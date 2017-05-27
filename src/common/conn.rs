@@ -639,7 +639,10 @@ impl<I, T> ReadLoopData<I, T>
     /// Recv a frame from the network
     fn recv_http_frame(self) -> HttpFuture<(Self, HttpFrame)> {
         let ReadLoopData { read, inner } = self;
-        Box::new(recv_http_frame_join_cont(read)
+
+        let max_frame_size = inner.with(|inner| inner.conn.peer_settings.max_frame_size);
+
+        Box::new(recv_http_frame_join_cont(read, max_frame_size)
             .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame)))
     }
 

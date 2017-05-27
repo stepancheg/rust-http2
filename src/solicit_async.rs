@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 
 use bytes::Bytes;
 
+use futures::future;
 use futures::future::done;
 use futures::future::Loop;
 use futures::future::loop_fn;
@@ -19,7 +20,9 @@ use tokio_core::reactor;
 use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
 
+use error;
 use error::Error;
+use error::ErrorCode;
 use result::Result;
 
 use solicit::StreamId;
@@ -59,12 +62,19 @@ impl<T> AsMut<[T]> for VecWithPos<T> {
     }
 }
 
-pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R)
-    -> Box<Future<Item=(R, RawFrame), Error=Error> + 'r>
+pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
+    -> Box<Future<Item=(R, RawFrame), Error=error::Error> + 'r>
 {
-    let header = read_exact(read, [0; FRAME_HEADER_LEN]);
-    let frame_buf = header.and_then(|(read, raw_header)| {
+    let header = read_exact(read, [0; FRAME_HEADER_LEN]).map_err(error::Error::from);
+    let frame_buf = header.and_then(move |(read, raw_header)| -> Box<Future<Item=_, Error=_> + 'r> {
         let header = unpack_header(&raw_header);
+
+        if header.length > max_frame_size {
+            warn!("closing conn because peer sent frame with size: {}, max_frame_size: {}",
+                header.length, max_frame_size);
+            return Box::new(future::err(error::Error::CodeError(ErrorCode::FrameSizeError)));
+        }
+
         let total_len = FRAME_HEADER_LEN + header.length as usize;
         let mut full_frame = VecWithPos {
             vec: Vec::with_capacity(total_len),
@@ -75,13 +85,12 @@ pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R)
         full_frame.vec.resize(total_len, 0);
         full_frame.pos = FRAME_HEADER_LEN;
 
-        read_exact(read, full_frame)
+        Box::new(read_exact(read, full_frame).map_err(error::Error::from))
     });
     let frame = frame_buf.map(|(read, frame_buf)| {
         (read, RawFrame::from(frame_buf.vec))
     });
-    Box::new(frame
-        .map_err(|e| e.into()))
+    Box::new(frame)
 }
 
 struct SyncRead<'r, R : Read + ?Sized + 'r>(&'r mut R);
@@ -96,21 +105,21 @@ impl<'r, R : Read + ?Sized + 'r> AsyncRead for SyncRead<'r, R> {
 }
 
 
-pub fn recv_raw_frame_sync(read: &mut Read) -> Result<RawFrame> {
-    Ok(recv_raw_frame(SyncRead(read)).wait()?.1)
+pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFrame> {
+    Ok(recv_raw_frame(SyncRead(read), max_frame_size).wait()?.1)
 }
 
 /// Recieve HTTP frame from reader.
-pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R)
+pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
     -> Box<Future<Item=(R, HttpFrame), Error=Error> + 'r>
 {
-    Box::new(recv_raw_frame(read).and_then(|(read, raw_frame)| {
+    Box::new(recv_raw_frame(read, max_frame_size).and_then(|(read, raw_frame)| {
         Ok((read, HttpFrame::from_raw(&raw_frame)?))
     }))
 }
 
 /// Recieve HTTP frame, joining CONTINUATION frame with preceding HEADER frames.
-pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
+pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
     -> Box<Future<Item=(R, HttpFrame), Error=Error> + 'r>
 {
     enum ContinuableFrame {
@@ -151,8 +160,8 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
         }
     }
 
-    Box::new(loop_fn::<(R, Option<ContinuableFrame>), _, _, _>((read, None), |(read, header_opt)| {
-        recv_http_frame(read).and_then(move |(read, frame)| {
+    Box::new(loop_fn::<(R, Option<ContinuableFrame>), _, _, _>((read, None), move |(read, header_opt)| {
+        recv_http_frame(read, max_frame_size).and_then(move |(read, frame)| {
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = header_opt {
@@ -206,10 +215,10 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R)
     }))
 }
 
-pub fn recv_settings_frame<'r, R : AsyncRead + 'r>(read: R)
+pub fn recv_settings_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
     -> Box<Future<Item=(R, SettingsFrame), Error=Error> + 'r>
 {
-    Box::new(recv_http_frame(read)
+    Box::new(recv_http_frame(read, max_frame_size)
         .and_then(|(read, http_frame)| {
             match http_frame {
                 HttpFrame::Settings(f) => {
@@ -222,8 +231,10 @@ pub fn recv_settings_frame<'r, R : AsyncRead + 'r>(read: R)
         }))
 }
 
-pub fn recv_settings_frame_ack<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R, SettingsFrame)> {
-    Box::new(recv_settings_frame(read).and_then(|(read, frame)| {
+pub fn recv_settings_frame_ack<R : AsyncRead + Send + 'static>(read: R, max_frame_size: u32)
+    -> HttpFuture<(R, SettingsFrame)>
+{
+    Box::new(recv_settings_frame(read, max_frame_size).and_then(|(read, frame)| {
         if frame.is_ack() {
             Ok((read, frame))
         } else {
@@ -232,8 +243,10 @@ pub fn recv_settings_frame_ack<R : AsyncRead + Send + 'static>(read: R) -> HttpF
     }))
 }
 
-pub fn recv_settings_frame_set<R : AsyncRead + Send + 'static>(read: R) -> HttpFuture<(R, SettingsFrame)> {
-    Box::new(recv_settings_frame(read).and_then(|(read, frame)| {
+pub fn recv_settings_frame_set<R : AsyncRead + Send + 'static>(read: R, max_frame_size: u32)
+    -> HttpFuture<(R, SettingsFrame)>
+{
+    Box::new(recv_settings_frame(read, max_frame_size).and_then(|(read, frame)| {
         if !frame.is_ack() {
             Ok((read, frame))
         } else {
