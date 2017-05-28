@@ -116,7 +116,7 @@ impl<T : Types> ConnData<T>
     }
 
     pub fn pop_outg_for_stream(&mut self, stream_id: StreamId) -> Option<HttpStreamCommand> {
-        if let Some(stream) = self.streams.get_mut_2(stream_id) {
+        if let Some(stream) = self.streams.get_mut(stream_id) {
             stream.pop_outg_maybe_remove(&mut self.conn.out_window_size)
         } else {
             None
@@ -135,7 +135,7 @@ impl<T : Types> ConnData<T>
     }
 
     pub fn pop_outg_all_for_stream(&mut self, stream_id: StreamId) -> Vec<HttpStreamCommand> {
-        if let Some(stream) = self.streams.get_mut_2(stream_id) {
+        if let Some(stream) = self.streams.get_mut(stream_id) {
             stream.pop_outg_all_maybe_remove(&mut self.conn.out_window_size)
         } else {
             Vec::new()
@@ -239,7 +239,7 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    fn process_headers_frame(&mut self, frame: HeadersFrame) -> result::Result<()> {
+    fn process_headers_frame(&mut self, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
         let headers = self.conn.decoder
             .decode(&frame.header_fragment())
             .map_err(error::Error::CompressionError).unwrap(); // TODO: do not panic
@@ -250,8 +250,10 @@ impl<T : Types> ConnData<T>
         self.process_headers(frame.stream_id, end_stream, headers)
     }
 
-    fn process_priority_frame(&mut self, _frame: PriorityFrame) -> result::Result<()> {
-        Ok(())
+    fn process_priority_frame(&mut self, frame: PriorityFrame)
+        -> result::Result<Option<HttpStreamRef<T>>>
+    {
+        Ok(self.streams.get_mut(frame.get_stream_id()))
     }
 
     fn process_settings_global(&mut self, frame: SettingsFrame) -> result::Result<()> {
@@ -299,25 +301,27 @@ impl<T : Types> ConnData<T>
     }
     
     fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame)
-        -> result::Result<()>
+        -> result::Result<Option<HttpStreamRef<T>>>
     {
-        {
-            match self.streams.get_mut(frame.get_stream_id()) {
-                Some(stream) => {
-                    stream.out_window_size.try_increase(frame.increment())
-                        .expect("failed to increment stream window");
-                }
-                None => {
-                    // 6.9
-                    // WINDOW_UPDATE can be sent by a peer that has sent a frame bearing the
-                    // END_STREAM flag.  This means that a receiver could receive a
-                    // WINDOW_UPDATE frame on a "half-closed (remote)" or "closed" stream.
-                    // A receiver MUST NOT treat this as an error (see Section 5.1).
-                    debug!("WINDOW_UPDATE of unknown stream: {}", frame.get_stream_id());
-                }
+        self.out_window_increased(Some(frame.get_stream_id()))?;
+
+        match self.streams.get_mut(frame.get_stream_id()) {
+            Some(mut stream) => {
+                // TODO: do not panic
+                stream.stream().out_window_size.try_increase(frame.increment())
+                    .expect("failed to increment stream window");
+                Ok(Some(stream))
+            }
+            None => {
+                // 6.9
+                // WINDOW_UPDATE can be sent by a peer that has sent a frame bearing the
+                // END_STREAM flag.  This means that a receiver could receive a
+                // WINDOW_UPDATE frame on a "half-closed (remote)" or "closed" stream.
+                // A receiver MUST NOT treat this as an error (see Section 5.1).
+                debug!("WINDOW_UPDATE of unknown stream: {}", frame.get_stream_id());
+                Ok(None)
             }
         }
-        self.out_window_increased(Some(frame.get_stream_id()))
     }
 
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
@@ -326,17 +330,20 @@ impl<T : Types> ConnData<T>
         self.out_window_increased(None)
     }
 
-    fn process_rst_stream_frame(&mut self, frame: RstStreamFrame) -> result::Result<()> {
+    fn process_rst_stream_frame(&mut self, frame: RstStreamFrame)
+        -> result::Result<Option<HttpStreamRef<T>>>
+    {
         if let Some(stream) = self.streams.get_mut(frame.get_stream_id()) {
+            stream.rst_remove(frame.error_code());
+        } else {
             warn!("RST_STREAM on non-existent stream: {}", frame.stream_id);
-            stream.rst(frame.error_code());
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
-        -> result::Result<Option<&mut HttpStreamCommon<T>>>
+        -> result::Result<Option<HttpStreamRef<T>>>
     {
         // Another day in endless bitter war against borrow checker
         if self.streams.get_mut(stream_id).is_some() {
@@ -350,7 +357,7 @@ impl<T : Types> ConnData<T>
     }
 
     fn process_data_frame(&mut self, frame: DataFrame)
-        -> result::Result<()>
+        -> result::Result<Option<HttpStreamRef<T>>>
     {
         let stream_id = frame.get_stream_id();
 
@@ -371,27 +378,27 @@ impl<T : Types> ConnData<T>
             // If a DATA frame is received whose stream is not in "open" or
             // "half-closed (local)" state, the recipient MUST respond with
             // a stream error (Section 5.4.2) of type STREAM_CLOSED.
-            let stream = match self.get_stream_or_send_stream_closed(frame.get_stream_id())? {
+            let mut stream = match self.get_stream_or_send_stream_closed(frame.get_stream_id())? {
                 Some(stream) => stream,
                 None => {
-                    return Ok(());
+                    return Ok(None);
                 }
             };
 
-            stream.in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
+            stream.stream().in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
 
             let increment_stream =
-                if stream.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
+                if stream.stream().in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                     let increment = DEFAULT_SETTINGS.initial_window_size;
-                    stream.in_window_size.try_increase(increment).expect("failed to increase");
+                    stream.stream().in_window_size.try_increase(increment).expect("failed to increase");
 
                     Some(increment)
                 } else {
                     None
                 };
 
-            stream.new_data_chunk(&frame.data.as_ref(), frame.is_end_of_stream());
+            stream.stream().new_data_chunk(&frame.data.as_ref(), frame.is_end_of_stream());
 
             increment_stream
         };
@@ -404,7 +411,7 @@ impl<T : Types> ConnData<T>
             self.send_frame(WindowUpdateFrame::for_stream(stream_id, increment_stream))?;
         }
 
-        Ok(())
+        Ok(Some(self.streams.get_mut(stream_id).unwrap()))
     }
 
     fn process_ping(&mut self, frame: PingFrame) -> result::Result<()> {
@@ -466,12 +473,7 @@ impl<T : Types> ConnData<T>
             }
         }
 
-        let close_local = match frame {
-            HttpFrameStream::RstStream(..) => true,
-            _ => false,
-        };
-
-        match frame {
+        let stream = match frame {
             HttpFrameStream::Data(data) => self.process_data_frame(data)?,
             HttpFrameStream::Headers(headers) => self.process_headers_frame(headers)?,
             HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
@@ -480,11 +482,12 @@ impl<T : Types> ConnData<T>
             HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update)?,
             HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),
         };
-        if end_of_stream {
-            self.close_remote(stream_id);
-        }
-        if close_local {
-            self.close_local(stream_id);
+
+        if let Some(mut stream) = stream {
+            if end_of_stream {
+                stream.stream().close_remote();
+            }
+            stream.remove_if_closed();
         }
 
         Ok(())
@@ -501,23 +504,6 @@ impl<T : Types> ConnData<T>
                 // Implementations MUST ignore and discard any frame that has a type that is unknown.
                 Ok(())
             },
-        }
-    }
-
-    fn close_remote(&mut self, stream_id: StreamId) {
-        debug!("close remote: {}", stream_id);
-
-        // RST_STREAM and WINDOW_UPDATE can be received when we have no stream
-        if let Some(stream) = self.streams.get_mut_2(stream_id) {
-            stream.close_remote_remove_if_closed();
-        }
-    }
-
-    fn close_local(&mut self, stream_id: StreamId) {
-        debug!("close local: {}", stream_id);
-
-        if let Some(stream) = self.streams.get_mut_2(stream_id) {
-            stream.close_local_remove_if_closed();
         }
     }
 
@@ -559,7 +545,7 @@ pub trait ConnInner : 'static {
     type Types : Types;
 
     fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<()>;
+        -> result::Result<Option<HttpStreamRef<Self::Types>>>;
 
     fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32);
 }

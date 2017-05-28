@@ -93,12 +93,11 @@ impl ConnInner for ClientInner {
     type Types = ClientTypes;
 
     fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<()>
+        -> result::Result<Option<HttpStreamRef<ClientTypes>>>
     {
-        let mut stream: &mut ClientStream = match self.streams.get_mut(stream_id) {
+        let mut stream: HttpStreamRef<ClientTypes> = match self.streams.get_mut(stream_id) {
             None => {
-                // TODO(mlalic): This means that the server's header is not associated to any
-                //               request made by the client nor any server-initiated stream (pushed)
+                // TODO: send stream closed
                 return Err(error::Error::Other("??"));
             }
             Some(stream) => stream,
@@ -106,7 +105,7 @@ impl ConnInner for ClientInner {
         // TODO: hack
         if headers.0.len() != 0 {
 
-            if let Some(ref mut response_handler) = stream.peer_tx {
+            if let Some(ref mut response_handler) = stream.stream().peer_tx {
                 // TODO: reset stream if called is dead
                 drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                     content: HttpStreamPartContent::Headers(headers),
@@ -115,7 +114,7 @@ impl ConnInner for ClientInner {
             }
         }
 
-        Ok(())
+        Ok(Some(stream))
     }
 
     fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32) {
@@ -177,37 +176,34 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
             stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
 
-            inner.insert_stream(stream)
-        });
+            let stream_id = inner.insert_stream(stream);
+            let to_write_tx_1 = inner.to_write_tx.clone();
+            let to_write_tx_2 = inner.to_write_tx.clone();
 
-        let to_write_tx_1 = self.inner.with(|inner| inner.to_write_tx.clone());
-        let to_write_tx_2 = to_write_tx_1.clone();
-
-        self.inner.with(|inner: &mut ClientInner| {
             let future = body
                 .check_only_data() // TODO: headers too
                 .fold((), move |(), chunk| {
-                    to_write_tx_1.send(ClientToWriteMessage::BodyChunk(BodyChunkMessage {
+                    future::result(to_write_tx_1.send(ClientToWriteMessage::BodyChunk(BodyChunkMessage {
                         stream_id: stream_id,
                         chunk: chunk,
-                    })).expect("client must be dead");
-                    future::finished::<_, Error>(())
+                    })).map_err(|_| error::Error::Other("client must be dead")))
                 });
             let future = future
                 .and_then(move |()| {
-                    // TODO: do not panic
-                    to_write_tx_2.send(ClientToWriteMessage::End(EndRequestMessage {
+                    future::result(to_write_tx_2.send(ClientToWriteMessage::End(EndRequestMessage {
                         stream_id: stream_id,
-                    })).expect("client must be dead");
-                    future::finished::<_, error::Error>(())
+                    })).map_err(|_| error::Error::Other("client must be dead")))
                 });
 
             let future = future.map_err(|e| {
-                warn!("{:?}", e);
+                // TODO: should probably close-local or RST_STREAM the request
+                warn!("call handle future is dead: {:?}", e);
                 ()
             });
 
             inner.loop_handle.spawn(future);
+
+            stream_id
         });
 
         self.send_outg_stream(stream_id)
@@ -217,11 +213,11 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         let BodyChunkMessage { stream_id, chunk } = body_chunk;
 
         self.inner.with(move |inner: &mut ClientInner| {
-            let stream = inner.streams.get_mut(stream_id)
+            let mut stream = inner.streams.get_mut(stream_id)
                 .expect(&format!("stream not found: {}", stream_id));
             // TODO: check stream state
 
-            stream.outgoing.push_back(HttpStreamPartContent::Data(Bytes::from(chunk)));
+            stream.stream().outgoing.push_back(HttpStreamPartContent::Data(Bytes::from(chunk)));
         });
 
         self.send_outg_stream(stream_id)
@@ -231,11 +227,12 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         let EndRequestMessage { stream_id } = end;
 
         self.inner.with(move |inner: &mut ClientInner| {
-            let stream = inner.streams.get_mut(stream_id)
+            // TODO: do not panic
+            let mut stream = inner.streams.get_mut(stream_id)
                 .expect(&format!("stream not found: {}", stream_id));
 
             // TODO: check stream state
-            stream.outgoing_end = Some(ErrorCode::NoError);
+            stream.stream().outgoing_end = Some(ErrorCode::NoError);
         });
 
         self.send_outg_stream(stream_id)

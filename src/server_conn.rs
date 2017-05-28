@@ -152,7 +152,9 @@ impl ServerInner {
         req_tx
     }
 
-    fn new_stream(&mut self, stream_id: StreamId, headers: Headers) -> result::Result<&mut ServerStream> {
+    fn new_stream(&mut self, stream_id: StreamId, headers: Headers)
+        -> result::Result<HttpStreamRef<ServerTypes>>
+    {
         if ServerTypes::is_init_locally(stream_id) {
             return Err(error::Error::Other("initiated stream with server id from client"));
         }
@@ -176,12 +178,12 @@ impl ServerInner {
     }
 
     fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool)
-        -> result::Result<&mut ServerStream>
+        -> result::Result<HttpStreamRef<ServerTypes>>
     {
         if self.streams.get_mut(stream_id).is_some() {
             // https://github.com/rust-lang/rust/issues/36403
-            let stream = self.streams.get_mut(stream_id).unwrap();
-            stream.set_headers(headers, last);
+            let mut stream = self.streams.get_mut(stream_id).unwrap();
+            stream.stream().set_headers(headers, last);
             Ok(stream)
         } else {
             self.new_stream(stream_id, headers)
@@ -193,16 +195,14 @@ impl ConnInner for ServerInner {
     type Types = ServerTypes;
 
     fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<()>
+        -> result::Result<Option<HttpStreamRef<ServerTypes>>>
     {
-        let _stream = self.get_or_create_stream(
+        let stream = self.get_or_create_stream(
             stream_id,
             headers,
             end_stream == EndStream::Yes)?;
 
-        // TODO: drop stream if closed on both ends
-
-        Ok(())
+        Ok(Some(stream))
     }
 
     fn goaway_received(&mut self, _stream_id: StreamId, _raw_error_code: u32) {
@@ -241,11 +241,11 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
     fn process_response_part(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner: &mut ServerInner| {
             let stream = inner.streams.get_mut(stream_id);
-            if let Some(stream) = stream {
-                if !stream.state.is_closed_local() {
-                    stream.outgoing.push_back(part.content);
+            if let Some(mut stream) = stream {
+                if !stream.stream().state.is_closed_local() {
+                    stream.stream().outgoing.push_back(part.content);
                     if part.last {
-                        stream.outgoing_end = Some(ErrorCode::NoError);
+                        stream.stream().outgoing_end = Some(ErrorCode::NoError);
                     }
                     Some(stream_id)
                 } else {
@@ -265,9 +265,9 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
     fn process_response_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner: &mut ServerInner| {
             let stream = inner.streams.get_mut(stream_id);
-            if let Some(stream) = stream {
-                if stream.outgoing_end.is_none() {
-                    stream.outgoing_end = Some(error_code);
+            if let Some(mut stream) = stream {
+                if stream.stream().outgoing_end.is_none() {
+                    stream.stream().outgoing_end = Some(error_code);
                 }
                 Some(stream_id)
             } else {

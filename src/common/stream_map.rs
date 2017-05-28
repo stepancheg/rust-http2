@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::OccupiedEntry;
 
+use error::ErrorCode;
+
 use solicit::session::StreamState;
 use solicit::WindowSize;
 use super::stream::HttpStreamCommon;
@@ -14,6 +16,7 @@ pub struct StreamMap<T : Types> {
     pub map: HashMap<StreamId, HttpStreamCommon<T>>,
 }
 
+/// Reference to a stream within `StreamMap`
 pub struct HttpStreamRef<'m, T : Types + 'm> {
     entry: OccupiedEntry<'m, StreamId, HttpStreamCommon<T>>,
 }
@@ -25,18 +28,18 @@ impl<T : Types> StreamMap<T> {
         }
     }
 
-    pub fn insert(&mut self, id: StreamId, stream: HttpStreamCommon<T>) -> &mut HttpStreamCommon<T> {
+    /// Insert a stream into a map and return a reference to it
+    pub fn insert(&mut self, id: StreamId, stream: HttpStreamCommon<T>) -> HttpStreamRef<T> {
         match self.map.entry(id) {
-            Entry::Occupied(_) => panic!("inserted stream that already existed: {}", id),
+            Entry::Occupied(_) => panic!("stream to insert that already exists: {}", id),
             Entry::Vacant(v) => v.insert(stream),
-        }
+        };
+
+        // unfortunately HashMap doesn't have an API to convert vacant entry into occupied
+        self.get_mut(id).unwrap()
     }
 
-    pub fn get_mut(&mut self, id: StreamId) -> Option<&mut HttpStreamCommon<T>> {
-        self.map.get_mut(&id)
-    }
-
-    pub fn get_mut_2(&mut self, id: StreamId) -> Option<HttpStreamRef<T>> {
+    pub fn get_mut(&mut self, id: StreamId) -> Option<HttpStreamRef<T>> {
         match self.map.entry(id) {
             Entry::Occupied(e) => Some(HttpStreamRef {
                 entry: e,
@@ -97,16 +100,6 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
         }
     }
 
-    pub fn close_local_remove_if_closed(mut self) {
-        self.stream().close_local();
-        self.remove_if_closed();
-    }
-
-    pub fn close_remote_remove_if_closed(mut self) {
-        self.stream().close_remote();
-        self.remove_if_closed();
-    }
-
     pub fn pop_outg_maybe_remove(mut self, conn_out_window_size: &mut WindowSize)
         -> Option<HttpStreamCommand>
     {
@@ -127,5 +120,12 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
                 return r;
             }
         }
+    }
+
+    // Reset stream and remove it
+    pub fn rst_remove(mut self, error_code: ErrorCode) {
+        self.stream().rst(error_code);
+        self.stream().state = StreamState::Closed;
+        self.remove_if_closed();
     }
 }
