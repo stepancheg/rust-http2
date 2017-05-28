@@ -125,26 +125,27 @@ impl ServerInner {
             let to_write_tx1 = self.to_write_tx.clone();
             let to_write_tx2 = to_write_tx1.clone();
 
-            let process_response = response.for_each(move |part: HttpStreamPart| {
-                // drop error if connection is closed
-                if let Err(e) = to_write_tx1.send(ServerToWriteMessage::Common(CommonToWriteMessage::Part(stream_id, part))) {
-                    warn!("failed to write to channel, probably connection is closed: {}", e);
-                }
-                Ok(())
-            }).then(move |r| {
-                let error_code =
-                    match r {
-                        Ok(()) => ErrorCode::NoError,
-                        Err(e) => {
-                            warn!("handler stream error: {:?}", e);
-                            ErrorCode::InternalError
-                        }
-                    };
-                if let Err(e) = to_write_tx2.send(ServerToWriteMessage::ResponseStreamEnd(stream_id, error_code)) {
-                    warn!("failed to write to channel, probably connection is closed: {}", e);
-                }
-                Ok(())
-            });
+            let process_response = response
+                .for_each(move |part: HttpStreamPart| {
+                    // drop error if connection is closed
+                    if let Err(e) = to_write_tx1.send(ServerToWriteMessage::Common(CommonToWriteMessage::Part(stream_id, part))) {
+                        warn!("failed to write to channel, probably connection is closed: {}", e);
+                    }
+                    Ok(())
+                }).then(move |r| {
+                    let error_code =
+                        match r {
+                            Ok(()) => ErrorCode::NoError,
+                            Err(e) => {
+                                warn!("handler stream error: {:?}", e);
+                                ErrorCode::InternalError
+                            }
+                        };
+                    if let Err(e) = to_write_tx2.send(ServerToWriteMessage::Common(CommonToWriteMessage::StreamEnd(stream_id, error_code))) {
+                        warn!("failed to write to channel, probably connection is closed: {}", e);
+                    }
+                    Ok(())
+                });
 
             self.loop_handle.spawn(process_response);
         }
@@ -216,8 +217,6 @@ type ServerCommandLoop = CommandLoopData<ServerTypes>;
 
 
 enum ServerToWriteMessage {
-    // send when user provided handler completed the stream
-    ResponseStreamEnd(StreamId, ErrorCode),
     Common(CommonToWriteMessage),
 }
 
@@ -237,30 +236,8 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
         self.inner.with(move |inner: &mut ServerInner| inner.loop_handle.clone())
     }
 
-    fn process_response_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
-        let stream_id = self.inner.with(move |inner: &mut ServerInner| {
-            let stream = inner.streams.get_mut(stream_id);
-            if let Some(mut stream) = stream {
-                if stream.stream().outgoing_end.is_none() {
-                    stream.stream().outgoing_end = Some(error_code);
-                }
-                Some(stream_id)
-            } else {
-                None
-            }
-        });
-        if let Some(stream_id) = stream_id {
-            self.send_outg_stream(stream_id)
-        } else {
-            Box::new(futures::finished(self))
-        }
-    }
-
     fn process_message(self, message: ServerToWriteMessage) -> HttpFuture<Self> {
         match message {
-            ServerToWriteMessage::ResponseStreamEnd(stream_id, error_code) => {
-                self.process_response_end(stream_id, error_code)
-            },
             ServerToWriteMessage::Common(common) => {
                 self.process_common(common)
             },

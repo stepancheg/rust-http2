@@ -48,6 +48,7 @@ pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
     Part(StreamId, HttpStreamPart), // new data available from request/response handler
     Frame(HttpFrame),
+    StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
 }
 
 pub trait ConnDataSpecific : 'static {
@@ -698,12 +699,32 @@ impl<I, T> WriteLoopData<I, T>
         }
     }
 
+    fn process_stream_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
+        let stream_id = self.inner.with(move |inner| {
+            let stream = inner.streams.get_mut(stream_id);
+            if let Some(mut stream) = stream {
+                if stream.stream().outgoing_end.is_none() {
+                    stream.stream().outgoing_end = Some(error_code);
+                }
+                Some(stream_id)
+            } else {
+                None
+            }
+        });
+        if let Some(stream_id) = stream_id {
+            self.send_outg_stream(stream_id)
+        } else {
+            Box::new(futures::finished(self))
+        }
+    }
+
     pub fn process_common(self, common: CommonToWriteMessage) -> HttpFuture<Self> {
         match common {
             CommonToWriteMessage::TryFlushStream(None) => self.send_outg_conn(),
             CommonToWriteMessage::TryFlushStream(Some(stream_id)) => self.send_outg_stream(stream_id),
             CommonToWriteMessage::Frame(frame) => self.write_frame(frame),
             CommonToWriteMessage::Part(stream_id, part) => self.process_part(stream_id, part),
+            CommonToWriteMessage::StreamEnd(stream_id, error_code) => self.process_stream_end(stream_id, error_code),
         }
     }
 }

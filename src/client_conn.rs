@@ -133,13 +133,8 @@ pub struct StartRequestMessage {
     pub resp_tx: UnboundedSender<ResultOrEof<HttpStreamPart, Error>>,
 }
 
-struct EndRequestMessage {
-    stream_id: StreamId,
-}
-
 enum ClientToWriteMessage {
     Start(StartRequestMessage),
-    End(EndRequestMessage),
     Common(CommonToWriteMessage),
 }
 
@@ -173,24 +168,26 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             let to_write_tx_2 = inner.to_write_tx.clone();
 
             let future = body
-                .fold((), move |(), chunk| {
-                    future::result(to_write_tx_1.send(ClientToWriteMessage::Common(CommonToWriteMessage::Part(
-                        stream_id,
-                        chunk,
-                    ))).map_err(|_| error::Error::Other("client must be dead")))
+                .for_each(move |part: HttpStreamPart| {
+                    // drop error if connection is closed
+                    if let Err(e) = to_write_tx_1.send(ClientToWriteMessage::Common(CommonToWriteMessage::Part(stream_id, part))) {
+                        warn!("failed to write to channel, probably connection is closed: {}", e);
+                    }
+                    Ok(())
+                }).then(move |r| {
+                    let error_code =
+                        match r {
+                            Ok(()) => ErrorCode::NoError,
+                            Err(e) => {
+                                warn!("handler stream error: {:?}", e);
+                                ErrorCode::InternalError
+                            }
+                        };
+                    if let Err(e) = to_write_tx_2.send(ClientToWriteMessage::Common(CommonToWriteMessage::StreamEnd(stream_id, error_code))) {
+                        warn!("failed to write to channel, probably connection is closed: {}", e);
+                    }
+                    Ok(())
                 });
-            let future = future
-                .and_then(move |()| {
-                    future::result(to_write_tx_2.send(ClientToWriteMessage::End(EndRequestMessage {
-                        stream_id: stream_id,
-                    })).map_err(|_| error::Error::Other("client must be dead")))
-                });
-
-            let future = future.map_err(|e| {
-                // TODO: should probably close-local or RST_STREAM the request
-                warn!("call handle future is dead: {:?}", e);
-                ()
-            });
 
             inner.loop_handle.spawn(future);
 
@@ -200,25 +197,9 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         self.send_outg_stream(stream_id)
     }
 
-    fn process_end(self, end: EndRequestMessage) -> HttpFuture<Self> {
-        let EndRequestMessage { stream_id } = end;
-
-        self.inner.with(move |inner: &mut ClientInner| {
-            // TODO: do not panic
-            let mut stream = inner.streams.get_mut(stream_id)
-                .expect(&format!("stream not found: {}", stream_id));
-
-            // TODO: check stream state
-            stream.stream().outgoing_end = Some(ErrorCode::NoError);
-        });
-
-        self.send_outg_stream(stream_id)
-    }
-
     fn process_message(self, message: ClientToWriteMessage) -> HttpFuture<Self> {
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
-            ClientToWriteMessage::End(end) => self.process_end(end),
             ClientToWriteMessage::Common(common) => self.process_common(common),
         }
     }
