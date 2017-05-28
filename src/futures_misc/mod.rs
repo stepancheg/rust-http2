@@ -11,8 +11,6 @@ pub use self::sender_with_last::*;
 
 pub mod stream_deferred;
 
-pub use self::task_data::TaskRcMut;
-
 pub use self::stream_single::stream_single;
 
 pub use self::stream_merge2::stream_merge2;

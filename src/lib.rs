@@ -42,6 +42,7 @@ pub mod solicit_async; // TODO: make private
 pub mod solicit_misc;
 
 pub mod misc;
+mod rc_mut;
 
 mod resp;
 

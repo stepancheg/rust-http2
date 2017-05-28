@@ -31,8 +31,6 @@ use solicit::connection::SendFrame;
 use solicit::connection::HttpFrame;
 use solicit::connection::HttpFrameType;
 
-use futures_misc::*;
-
 use solicit_misc::*;
 use solicit_async::*;
 
@@ -43,6 +41,8 @@ use super::types::*;
 use stream_part::*;
 
 pub use resp::Response;
+
+use rc_mut::*;
 
 
 pub enum CommonToWriteMessage {
@@ -594,7 +594,7 @@ pub struct ReadLoopData<I, T>
         HttpStreamCommon<T> : HttpStream,
 {
     pub read: ReadHalf<I>,
-    pub inner: TaskRcMut<ConnData<T>>,
+    pub inner: RcMut<ConnData<T>>,
 }
 
 pub struct WriteLoopData<I, T>
@@ -605,7 +605,7 @@ pub struct WriteLoopData<I, T>
         HttpStreamCommon<T> : HttpStream,
 {
     pub write: WriteHalf<I>,
-    pub inner: TaskRcMut<ConnData<T>>,
+    pub inner: RcMut<ConnData<T>>,
 }
 
 pub struct CommandLoopData<T>
@@ -614,7 +614,7 @@ pub struct CommandLoopData<T>
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStream,
 {
-    pub inner: TaskRcMut<ConnData<T>>,
+    pub inner: RcMut<ConnData<T>>,
 }
 
 

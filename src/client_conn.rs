@@ -40,6 +40,8 @@ use stream_part::*;
 use client_conf::*;
 use client_tls::*;
 
+use rc_mut::*;
+
 
 struct ClientTypes;
 
@@ -227,7 +229,7 @@ impl ClientConnection {
             debug!("handshake done");
             let (read, write) = conn.split();
 
-            let inner = TaskRcMut::new(ConnData::new(
+            let inner = RcMut::new(ConnData::new(
                 lh,
                 ClientConnData {
                     callbacks: Box::new(callbacks),

@@ -33,6 +33,7 @@ use server_tls::*;
 use server_conf::*;
 
 use misc::any_to_string;
+use rc_mut::*;
 
 
 struct ServerTypes;
@@ -262,7 +263,7 @@ impl ServerConnection {
         let run = handshake.and_then(move |socket| {
             let (read, write) = socket.split();
 
-            let inner = TaskRcMut::new(ConnData::new(
+            let inner = RcMut::new(ConnData::new(
                 lh,
                 ServerConnData {
                     factory: service,
