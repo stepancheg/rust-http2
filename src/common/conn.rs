@@ -243,7 +243,7 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    fn process_headers_frame(&mut self, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
+    fn process_headers_frame(&mut self, self_rc: RcMut<Self>, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
         let headers = self.conn.decoder
             .decode(&frame.header_fragment())
             .map_err(error::Error::CompressionError).unwrap(); // TODO: do not panic
@@ -251,7 +251,7 @@ impl<T : Types> ConnData<T>
 
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
 
-        self.process_headers(frame.stream_id, end_stream, headers)
+        self.process_headers(self_rc, frame.stream_id, end_stream, headers)
     }
 
     fn process_priority_frame(&mut self, frame: PriorityFrame)
@@ -462,7 +462,7 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    fn process_stream_frame(&mut self, frame: HttpFrameStream) -> result::Result<()> {
+    fn process_stream_frame(&mut self, self_rc: RcMut<Self>, frame: HttpFrameStream) -> result::Result<()> {
         let stream_id = frame.get_stream_id();
         let end_of_stream = frame.is_end_of_stream();
 
@@ -479,7 +479,7 @@ impl<T : Types> ConnData<T>
 
         let stream = match frame {
             HttpFrameStream::Data(data) => self.process_data_frame(data)?,
-            HttpFrameStream::Headers(headers) => self.process_headers_frame(headers)?,
+            HttpFrameStream::Headers(headers) => self.process_headers_frame(self_rc, headers)?,
             HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
             HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
             HttpFrameStream::PushPromise(_f) => unimplemented!(),
@@ -497,12 +497,12 @@ impl<T : Types> ConnData<T>
         Ok(())
     }
 
-    fn process_http_frame(&mut self, frame: HttpFrame) -> result::Result<()> {
+    fn process_http_frame(&mut self, self_rc: RcMut<Self>, frame: HttpFrame) -> result::Result<()> {
         // TODO: decode headers
         debug!("received frame: {:?}", frame);
         match HttpFrameClassified::from(frame) {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
-            HttpFrameClassified::Stream(f) => self.process_stream_frame(f),
+            HttpFrameClassified::Stream(f) => self.process_stream_frame(self_rc, f),
             HttpFrameClassified::Unknown(_f) => {
                 // 4.1
                 // Implementations MUST ignore and discard any frame that has a type that is unknown.
@@ -543,7 +543,7 @@ impl<T : Types> ConnData<T>
         goaway && no_streams
     }
 
-    pub fn pump_stream_to_write_loop(&mut self, stream_id: StreamId, stream: HttpPartStream) {
+    pub fn pump_stream_to_write_loop(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, stream: HttpPartStream) {
         let to_write_tx_1 = self.to_write_tx.clone();
         let to_write_tx_2 = self.to_write_tx.clone();
 
@@ -576,10 +576,10 @@ impl<T : Types> ConnData<T>
 }
 
 
-pub trait ConnInner : 'static {
+pub trait ConnInner : Sized + 'static {
     type Types : Types;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+    fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<Self::Types>>>;
 
     fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32);
@@ -654,8 +654,10 @@ impl<I, T> ReadLoopData<I, T>
     }
 
     fn process_http_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
+        let inner_rc = self.inner.clone();
+
         Box::new(future::result(self.inner.with(move |inner| {
-            inner.process_http_frame(frame)
+            inner.process_http_frame(inner_rc, frame)
         }).map(|()| self)))
     }
 

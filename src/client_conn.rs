@@ -91,7 +91,7 @@ impl ClientInner {
 impl ConnInner for ClientInner {
     type Types = ClientTypes;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+    fn process_headers(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ClientTypes>>>
     {
         let mut stream: HttpStreamRef<ClientTypes> = match self.streams.get_mut(stream_id) {
@@ -155,6 +155,8 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_start(self, start: StartRequestMessage) -> HttpFuture<Self> {
         let StartRequestMessage { headers, body, resp_tx } = start;
 
+        let inner_rc = self.inner.clone();
+
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
             let mut stream = HttpStreamCommon::new(
@@ -166,7 +168,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
             let stream_id = inner.insert_stream(stream);
 
-            inner.pump_stream_to_write_loop(stream_id, body);
+            inner.pump_stream_to_write_loop(inner_rc, stream_id, body);
 
             stream_id
         });

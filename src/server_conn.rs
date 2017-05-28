@@ -86,7 +86,7 @@ impl ConnDataSpecific for ServerConnData {
 type ServerInner = ConnData<ServerTypes>;
 
 impl ServerInner {
-    fn new_request(&mut self, stream_id: StreamId, headers: Headers)
+    fn new_request(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
         -> futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>
     {
         let (req_tx, req_rx) = futures::sync::mpsc::unbounded();
@@ -109,12 +109,12 @@ impl ServerInner {
             ]))
         });
 
-        self.pump_stream_to_write_loop(stream_id, response.into_part_stream());
+        self.pump_stream_to_write_loop(self_rc, stream_id, response.into_part_stream());
 
         req_tx
     }
 
-    fn new_stream(&mut self, stream_id: StreamId, headers: Headers)
+    fn new_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
         -> result::Result<HttpStreamRef<ServerTypes>>
     {
         if ServerTypes::is_init_locally(stream_id) {
@@ -129,7 +129,7 @@ impl ServerInner {
 
         debug!("new stream: {}", stream_id);
 
-        let req_tx = self.new_request(stream_id, headers);
+        let req_tx = self.new_request(self_rc, stream_id, headers);
 
         // New stream initiated by the client
         let stream = HttpStreamCommon::new(
@@ -139,7 +139,7 @@ impl ServerInner {
         Ok(self.streams.insert(stream_id, stream))
     }
 
-    fn get_or_create_stream(&mut self, stream_id: StreamId, headers: Headers, last: bool)
+    fn get_or_create_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers, last: bool)
         -> result::Result<HttpStreamRef<ServerTypes>>
     {
         if self.streams.get_mut(stream_id).is_some() {
@@ -148,7 +148,7 @@ impl ServerInner {
             stream.stream().set_headers(headers, last);
             Ok(stream)
         } else {
-            self.new_stream(stream_id, headers)
+            self.new_stream(self_rc, stream_id, headers)
         }
     }
 }
@@ -156,10 +156,11 @@ impl ServerInner {
 impl ConnInner for ServerInner {
     type Types = ServerTypes;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+    fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ServerTypes>>>
     {
         let stream = self.get_or_create_stream(
+            self_rc,
             stream_id,
             headers,
             end_stream == EndStream::Yes)?;
