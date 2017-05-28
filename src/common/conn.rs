@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::cmp;
-use std::panic;
 
 use futures::Future;
 use futures::future;
@@ -36,7 +35,6 @@ use futures_misc::*;
 
 use solicit_misc::*;
 use solicit_async::*;
-use misc::any_to_string;
 
 use super::stream::*;
 use super::stream_map::*;
@@ -549,17 +547,7 @@ impl<T : Types> ConnData<T>
         let to_write_tx_1 = self.to_write_tx.clone();
         let to_write_tx_2 = self.to_write_tx.clone();
 
-        let stream = panic::AssertUnwindSafe(stream.0).catch_unwind().then(|r| {
-            match r {
-                Ok(r) => r,
-                Err(e) => {
-                    let e = any_to_string(e);
-                    // TODO: send plain text error if headers weren't sent yet
-                    warn!("handler panicked: {}", e);
-                    Err(error::Error::HandlerPanicked(e))
-                },
-            }
-        });
+        let stream = stream.catch_unwind();
 
         let future = stream
             .for_each(move |part: HttpStreamPart| {

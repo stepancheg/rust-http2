@@ -1,4 +1,5 @@
 use std::io;
+use std::panic;
 
 use futures::Poll;
 use futures::stream;
@@ -11,6 +12,8 @@ use error;
 use solicit::header::Headers;
 
 use solicit_async::*;
+
+use misc::any_to_string;
 
 
 /// Stream frame content
@@ -121,6 +124,22 @@ impl HttpPartStream {
                 },
                 HttpStreamPartContent::Headers(..) => {
                     Err(error::Error::from(io::Error::new(io::ErrorKind::Other, "expecting only DATA frames")))
+                },
+            }
+        }))
+    }
+
+    /// Wrap a stream with `catch_unwind` combinator.
+    /// Transform panic into `error::Error`
+    pub fn catch_unwind(self) -> HttpPartStream {
+        HttpPartStream::new(panic::AssertUnwindSafe(self.0).catch_unwind().then(|r| {
+            match r {
+                Ok(r) => r,
+                Err(e) => {
+                    let e = any_to_string(e);
+                    // TODO: send plain text error if headers weren't sent yet
+                    warn!("handler panicked: {}", e);
+                    Err(error::Error::HandlerPanicked(e))
                 },
             }
         }))
