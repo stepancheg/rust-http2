@@ -108,19 +108,7 @@ impl ServerInner {
             ]))
         });
 
-        let response = panic::AssertUnwindSafe(response.into_stream_flag()).catch_unwind().then(|r| {
-            match r {
-                Ok(r) => r,
-                Err(e) => {
-                    let e = any_to_string(e);
-                    // TODO: send plain text error if headers weren't sent yet
-                    warn!("handler panicked: {}", e);
-                    Err(error::Error::HandlerPanicked(e))
-                },
-            }
-        });
-
-        self.pump_stream_to_write_loop(stream_id, HttpPartStream::new(response));
+        self.pump_stream_to_write_loop(stream_id, response.into_part_stream());
 
         req_tx
     }

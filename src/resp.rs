@@ -84,6 +84,10 @@ impl Response {
         Box::new(self.into_stream_flag().map(|c| c.content))
     }
 
+    pub fn into_part_stream(self) -> HttpPartStream {
+        HttpPartStream::new(self.into_stream_flag())
+    }
+
     pub fn collect(self) -> HttpFutureSend<SimpleHttpMessage> {
         Box::new(self.into_stream().fold(SimpleHttpMessage::new(), |mut c, p| {
             c.add(p);
