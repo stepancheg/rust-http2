@@ -16,8 +16,6 @@ use solicit::connection::EndStream;
 
 use service::Service;
 
-use bytes::Bytes;
-
 use futures::future;
 use futures::future::Future;
 use futures::stream::Stream;
@@ -135,18 +133,12 @@ pub struct StartRequestMessage {
     pub resp_tx: UnboundedSender<ResultOrEof<HttpStreamPart, Error>>,
 }
 
-struct BodyChunkMessage {
-    stream_id: StreamId,
-    chunk: Bytes,
-}
-
 struct EndRequestMessage {
     stream_id: StreamId,
 }
 
 enum ClientToWriteMessage {
     Start(StartRequestMessage),
-    BodyChunk(BodyChunkMessage),
     End(EndRequestMessage),
     Common(CommonToWriteMessage),
 }
@@ -181,12 +173,11 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             let to_write_tx_2 = inner.to_write_tx.clone();
 
             let future = body
-                .check_only_data() // TODO: headers too
                 .fold((), move |(), chunk| {
-                    future::result(to_write_tx_1.send(ClientToWriteMessage::BodyChunk(BodyChunkMessage {
-                        stream_id: stream_id,
-                        chunk: chunk,
-                    })).map_err(|_| error::Error::Other("client must be dead")))
+                    future::result(to_write_tx_1.send(ClientToWriteMessage::Common(CommonToWriteMessage::Part(
+                        stream_id,
+                        chunk,
+                    ))).map_err(|_| error::Error::Other("client must be dead")))
                 });
             let future = future
                 .and_then(move |()| {
@@ -204,20 +195,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             inner.loop_handle.spawn(future);
 
             stream_id
-        });
-
-        self.send_outg_stream(stream_id)
-    }
-
-    fn process_body_chunk(self, body_chunk: BodyChunkMessage) -> HttpFuture<Self> {
-        let BodyChunkMessage { stream_id, chunk } = body_chunk;
-
-        self.inner.with(move |inner: &mut ClientInner| {
-            let mut stream = inner.streams.get_mut(stream_id)
-                .expect(&format!("stream not found: {}", stream_id));
-            // TODO: check stream state
-
-            stream.stream().outgoing.push_back(HttpStreamPartContent::Data(Bytes::from(chunk)));
         });
 
         self.send_outg_stream(stream_id)
@@ -241,7 +218,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_message(self, message: ClientToWriteMessage) -> HttpFuture<Self> {
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
-            ClientToWriteMessage::BodyChunk(body_chunk) => self.process_body_chunk(body_chunk),
             ClientToWriteMessage::End(end) => self.process_end(end),
             ClientToWriteMessage::Common(common) => self.process_common(common),
         }

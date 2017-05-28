@@ -39,12 +39,14 @@ use super::stream::*;
 use super::stream_map::*;
 use super::types::*;
 
+use stream_part::HttpStreamPart;
 
 pub use resp::Response;
 
 
 pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
+    Part(StreamId, HttpStreamPart), // new data available from request/response handler
     Frame(HttpFrame),
 }
 
@@ -672,11 +674,36 @@ impl<I, T> WriteLoopData<I, T>
         self.write_all(bytes)
     }
 
+    fn process_part(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
+        let stream_id = self.inner.with(move |inner| {
+            let stream = inner.streams.get_mut(stream_id);
+            if let Some(mut stream) = stream {
+                if !stream.stream().state.is_closed_local() {
+                    stream.stream().outgoing.push_back(part.content);
+                    if part.last {
+                        stream.stream().outgoing_end = Some(ErrorCode::NoError);
+                    }
+                    Some(stream_id)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+        if let Some(stream_id) = stream_id {
+            self.send_outg_stream(stream_id)
+        } else {
+            Box::new(futures::finished(self))
+        }
+    }
+
     pub fn process_common(self, common: CommonToWriteMessage) -> HttpFuture<Self> {
         match common {
             CommonToWriteMessage::TryFlushStream(None) => self.send_outg_conn(),
             CommonToWriteMessage::TryFlushStream(Some(stream_id)) => self.send_outg_stream(stream_id),
             CommonToWriteMessage::Frame(frame) => self.write_frame(frame),
+            CommonToWriteMessage::Part(stream_id, part) => self.process_part(stream_id, part),
         }
     }
 }

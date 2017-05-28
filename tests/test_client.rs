@@ -50,10 +50,8 @@ fn stream_count() {
     assert_eq!("POST", headers.get(":method"));
     assert_eq!("/foobar", headers.get(":path"));
 
-    let data = server_tester.recv_frame_data_check(1, false);
+    let data = server_tester.recv_frame_data_check(1, true);
     assert_eq!(b"xxyy", &data[..]);
-
-    server_tester.recv_frame_data_check_empty_end(1);
 
     let mut resp_headers = Headers::new();
     resp_headers.add(":status", "200");

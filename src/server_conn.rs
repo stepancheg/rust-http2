@@ -127,7 +127,7 @@ impl ServerInner {
 
             let process_response = response.for_each(move |part: HttpStreamPart| {
                 // drop error if connection is closed
-                if let Err(e) = to_write_tx1.send(ServerToWriteMessage::ResponsePart(stream_id, part)) {
+                if let Err(e) = to_write_tx1.send(ServerToWriteMessage::Common(CommonToWriteMessage::Part(stream_id, part))) {
                     warn!("failed to write to channel, probably connection is closed: {}", e);
                 }
                 Ok(())
@@ -216,7 +216,6 @@ type ServerCommandLoop = CommandLoopData<ServerTypes>;
 
 
 enum ServerToWriteMessage {
-    ResponsePart(StreamId, HttpStreamPart),
     // send when user provided handler completed the stream
     ResponseStreamEnd(StreamId, ErrorCode),
     Common(CommonToWriteMessage),
@@ -236,30 +235,6 @@ enum ServerCommandMessage {
 impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
     fn _loop_handle(&self) -> reactor::Handle {
         self.inner.with(move |inner: &mut ServerInner| inner.loop_handle.clone())
-    }
-
-    fn process_response_part(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
-        let stream_id = self.inner.with(move |inner: &mut ServerInner| {
-            let stream = inner.streams.get_mut(stream_id);
-            if let Some(mut stream) = stream {
-                if !stream.stream().state.is_closed_local() {
-                    stream.stream().outgoing.push_back(part.content);
-                    if part.last {
-                        stream.stream().outgoing_end = Some(ErrorCode::NoError);
-                    }
-                    Some(stream_id)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        });
-        if let Some(stream_id) = stream_id {
-            self.send_outg_stream(stream_id)
-        } else {
-            Box::new(futures::finished(self))
-        }
     }
 
     fn process_response_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
@@ -283,9 +258,6 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
 
     fn process_message(self, message: ServerToWriteMessage) -> HttpFuture<Self> {
         match message {
-            ServerToWriteMessage::ResponsePart(stream_id, response) => {
-                self.process_response_part(stream_id, response)
-            },
             ServerToWriteMessage::ResponseStreamEnd(stream_id, error_code) => {
                 self.process_response_end(stream_id, error_code)
             },
