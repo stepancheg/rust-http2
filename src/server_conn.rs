@@ -2,7 +2,6 @@ use std::io;
 use std::sync::Arc;
 use std::panic;
 
-use error::ErrorCode;
 use error;
 use result;
 
@@ -121,34 +120,7 @@ impl ServerInner {
             }
         });
 
-        {
-            let to_write_tx1 = self.to_write_tx.clone();
-            let to_write_tx2 = to_write_tx1.clone();
-
-            let process_response = response
-                .for_each(move |part: HttpStreamPart| {
-                    // drop error if connection is closed
-                    if let Err(e) = to_write_tx1.send(ServerToWriteMessage::Common(CommonToWriteMessage::Part(stream_id, part))) {
-                        warn!("failed to write to channel, probably connection is closed: {}", e);
-                    }
-                    Ok(())
-                }).then(move |r| {
-                    let error_code =
-                        match r {
-                            Ok(()) => ErrorCode::NoError,
-                            Err(e) => {
-                                warn!("handler stream error: {:?}", e);
-                                ErrorCode::InternalError
-                            }
-                        };
-                    if let Err(e) = to_write_tx2.send(ServerToWriteMessage::Common(CommonToWriteMessage::StreamEnd(stream_id, error_code))) {
-                        warn!("failed to write to channel, probably connection is closed: {}", e);
-                    }
-                    Ok(())
-                });
-
-            self.loop_handle.spawn(process_response);
-        }
+        self.pump_stream_to_write_loop(stream_id, HttpPartStream::new(response));
 
         req_tx
     }

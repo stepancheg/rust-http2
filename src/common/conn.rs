@@ -5,6 +5,7 @@ use futures::Future;
 use futures::future;
 use futures::future::Loop;
 use futures::future::loop_fn;
+use futures::stream::Stream;
 use futures;
 
 use tokio_core::reactor;
@@ -39,7 +40,7 @@ use super::stream::*;
 use super::stream_map::*;
 use super::types::*;
 
-use stream_part::HttpStreamPart;
+use stream_part::*;
 
 pub use resp::Response;
 
@@ -540,6 +541,35 @@ impl<T : Types> ConnData<T>
         let goaway = self.goaway_sent.is_some() || self.goaway_received.is_some();
         let no_streams = self.streams.is_empty();
         goaway && no_streams
+    }
+
+    pub fn pump_stream_to_write_loop(&mut self, stream_id: StreamId, stream: HttpPartStream) {
+        let to_write_tx_1 = self.to_write_tx.clone();
+        let to_write_tx_2 = self.to_write_tx.clone();
+
+        let future = stream
+            .for_each(move |part: HttpStreamPart| {
+                // drop error if connection is closed
+                if let Err(e) = to_write_tx_1.send(CommonToWriteMessage::Part(stream_id, part).into()) {
+                    warn!("failed to write to channel, probably connection is closed: {}", e);
+                }
+                Ok(())
+            }).then(move |r| {
+                let error_code =
+                    match r {
+                        Ok(()) => ErrorCode::NoError,
+                        Err(e) => {
+                            warn!("handler stream error: {:?}", e);
+                            ErrorCode::InternalError
+                        }
+                    };
+                if let Err(e) = to_write_tx_2.send(CommonToWriteMessage::StreamEnd(stream_id, error_code).into()) {
+                    warn!("failed to write to channel, probably connection is closed: {}", e);
+                }
+                Ok(())
+            });
+
+        self.loop_handle.spawn(future);
     }
 }
 

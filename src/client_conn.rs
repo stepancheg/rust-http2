@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::io;
 
 use error;
-use error::ErrorCode;
 use error::Error;
 use result;
 
@@ -164,32 +163,8 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
 
             let stream_id = inner.insert_stream(stream);
-            let to_write_tx_1 = inner.to_write_tx.clone();
-            let to_write_tx_2 = inner.to_write_tx.clone();
 
-            let future = body
-                .for_each(move |part: HttpStreamPart| {
-                    // drop error if connection is closed
-                    if let Err(e) = to_write_tx_1.send(ClientToWriteMessage::Common(CommonToWriteMessage::Part(stream_id, part))) {
-                        warn!("failed to write to channel, probably connection is closed: {}", e);
-                    }
-                    Ok(())
-                }).then(move |r| {
-                    let error_code =
-                        match r {
-                            Ok(()) => ErrorCode::NoError,
-                            Err(e) => {
-                                warn!("handler stream error: {:?}", e);
-                                ErrorCode::InternalError
-                            }
-                        };
-                    if let Err(e) = to_write_tx_2.send(ClientToWriteMessage::Common(CommonToWriteMessage::StreamEnd(stream_id, error_code))) {
-                        warn!("failed to write to channel, probably connection is closed: {}", e);
-                    }
-                    Ok(())
-                });
-
-            inner.loop_handle.spawn(future);
+            inner.pump_stream_to_write_loop(stream_id, body);
 
             stream_id
         });
