@@ -647,7 +647,7 @@ impl<I, T> WriteLoopData<I, T>
         ConnData<T> : ConnInner<Types=T>,
         HttpStreamCommon<T> : HttpStream<Types=T>,
 {
-    pub fn write_all(self, buf: Vec<u8>) -> HttpFuture<Self> {
+    fn write_all(self, buf: Vec<u8>) -> HttpFuture<Self> {
         let WriteLoopData { write, inner } = self;
 
         Box::new(tokio_io::write_all(write, buf)
