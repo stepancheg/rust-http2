@@ -14,6 +14,7 @@ use solicit::header::Headers;
 use solicit::connection::EndStream;
 
 use futures_misc::ResultOrEof;
+use futures_misc::LatchController;
 
 use stream_part::*;
 
@@ -46,22 +47,87 @@ impl HttpStreamCommand {
 }
 
 
+// Outgoing frames queue
+pub struct StreamOutQueue {
+    // items, newest in back
+    queue: VecDeque<HttpStreamPartContent>,
+    // nothing will be added to `outgoing`
+    // None means data is maybe available
+    // Some(NoError) means data is successfully generated
+    outgoing_end: Option<ErrorCode>,
+}
+
+impl StreamOutQueue {
+    pub fn new() -> StreamOutQueue {
+        StreamOutQueue {
+            queue: VecDeque::new(),
+            outgoing_end: None,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    pub fn push_back(&mut self, part: HttpStreamPartContent) {
+        if let Some(_) = self.outgoing_end {
+            return;
+        }
+        self.queue.push_back(part);
+    }
+
+    pub fn push_back_part(&mut self, part: HttpStreamPart) {
+        self.push_back(part.content);
+        if part.last {
+            self.close(ErrorCode::NoError);
+        }
+    }
+
+    pub fn push_front(&mut self, part: HttpStreamPartContent) {
+        self.queue.push_front(part);
+    }
+
+    pub fn pop_front(&mut self) -> Option<HttpStreamPartContent> {
+        self.queue.pop_front()
+    }
+
+    pub fn front(&self) -> Option<&HttpStreamPartContent> {
+        self.queue.front()
+    }
+
+    pub fn close(&mut self, error_code: ErrorCode) {
+        if None == self.outgoing_end || Some(ErrorCode::NoError) == self.outgoing_end {
+            self.outgoing_end = Some(error_code);
+        }
+    }
+
+    pub fn end(&self) -> Option<ErrorCode> {
+        if !self.is_empty() {
+            None
+        } else {
+            self.outgoing_end
+        }
+    }
+}
+
+
 pub struct HttpStreamCommon<T : Types> {
     pub specific: T::HttpStreamSpecific,
     pub state: StreamState,
     pub out_window_size: WindowSize,
     pub in_window_size: WindowSize,
-    pub outgoing: VecDeque<HttpStreamPartContent>,
-    // Means nothing will be added to `outgoing`
-    pub outgoing_end: Option<ErrorCode>,
+    pub outgoing: StreamOutQueue,
     // channel for data to be sent as request on server, and as response on client
     pub peer_tx: Option<UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>>,
+    // task waiting for window increase
+    pub ready_to_write: LatchController,
 }
 
 impl<T : Types> HttpStreamCommon<T> {
     pub fn new(
         out_window_size: u32,
         peer_tx: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
+        ready_to_write: LatchController,
         specific: T::HttpStreamSpecific)
             -> HttpStreamCommon<T>
     {
@@ -70,9 +136,9 @@ impl<T : Types> HttpStreamCommon<T> {
             state: StreamState::Open,
             in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
-            outgoing: VecDeque::new(),
-            outgoing_end: None,
+            outgoing: StreamOutQueue::new(),
             peer_tx: Some(peer_tx),
+            ready_to_write: ready_to_write,
         }
     }
 
@@ -100,7 +166,7 @@ impl<T : Types> HttpStreamCommon<T> {
     pub fn pop_outg(&mut self, conn_out_window_size: &mut WindowSize) -> Option<HttpStreamCommand> {
         if self.outgoing.is_empty() {
             return
-                if let Some(error_code) = self.outgoing_end {
+                if let Some(error_code) = self.outgoing.end() {
                     if self.state.is_closed_local() {
                         None
                     } else {
@@ -123,7 +189,7 @@ impl<T : Types> HttpStreamCommon<T> {
             };
         if pop_headers {
             let r = self.outgoing.pop_front().unwrap();
-            let last = self.outgoing_end == Some(ErrorCode::NoError) && self.outgoing.is_empty();
+            let last = self.outgoing.end() == Some(ErrorCode::NoError);
             if last {
                 self.close_local();
             }
@@ -157,7 +223,7 @@ impl<T : Types> HttpStreamCommon<T> {
         self.out_window_size.try_decrease(data.len() as i32).unwrap();
         conn_out_window_size.try_decrease(data.len() as i32).unwrap();
 
-        let last = self.outgoing_end == Some(ErrorCode::NoError) && self.outgoing.is_empty();
+        let last = self.outgoing.end() == Some(ErrorCode::NoError);
         if last {
             self.close_local();
         }

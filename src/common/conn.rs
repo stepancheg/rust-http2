@@ -31,6 +31,8 @@ use solicit::connection::SendFrame;
 use solicit::connection::HttpFrame;
 use solicit::connection::HttpFrameType;
 
+use futures_misc::*;
+
 use solicit_misc::*;
 use solicit_async::*;
 
@@ -47,7 +49,6 @@ use rc_mut::*;
 
 pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
-    Part(StreamId, HttpStreamPart), // new data available from request/response handler
     Frame(HttpFrame),
     StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
 }
@@ -543,33 +544,78 @@ impl<T : Types> ConnData<T>
         goaway && no_streams
     }
 
-    pub fn pump_stream_to_write_loop(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, stream: HttpPartStream) {
-        let to_write_tx_1 = self.to_write_tx.clone();
+    pub fn pump_stream_to_write_loop(
+        &mut self,
+        self_rc: RcMut<Self>,
+        stream_id: StreamId,
+        stream: HttpPartStream,
+        ready_to_write: Latch)
+    {
         let to_write_tx_2 = self.to_write_tx.clone();
 
         let stream = stream.catch_unwind();
 
-        let future = stream
-            .for_each(move |part: HttpStreamPart| {
-                // drop error if connection is closed
-                if let Err(e) = to_write_tx_1.send(CommonToWriteMessage::Part(stream_id, part).into()) {
-                    warn!("failed to write to channel, probably connection is closed: {}", e);
-                }
-                Ok(())
-            }).then(move |r| {
-                let error_code =
-                    match r {
-                        Ok(()) => ErrorCode::NoError,
-                        Err(e) => {
-                            warn!("handler stream error: {:?}", e);
-                            ErrorCode::InternalError
-                        }
-                    };
-                if let Err(e) = to_write_tx_2.send(CommonToWriteMessage::StreamEnd(stream_id, error_code).into()) {
-                    warn!("failed to write to channel, probably connection is closed: {}", e);
-                }
-                Ok(())
-            });
+        let ready_to_write = ready_to_write.map_err(|()| {
+            error::Error::Other("error from latch; stream must be closed")
+        });
+
+        let future = loop_fn((ready_to_write, stream, self.to_write_tx.clone(), self_rc), move |(ready_to_write, stream, to_write_tx, self_rc)| {
+            ready_to_write.into_future().map_err(move |(e, _)| e)
+                .and_then(move |(o, ready_to_write)| {
+                    if let None::<()> = o {
+                        unreachable!();
+                    }
+
+                    stream.into_future().map_err(move |(e, _)| e)
+                        .and_then(move |(part_opt, stream)| {
+                            let (cont, to_write_tx) = self_rc.with(move |conn| {
+                                let cont = if let Some(mut stream) = conn.streams.get_mut(stream_id) {
+                                    if !stream.stream().state.is_closed_local() {
+                                        match part_opt {
+                                            Some(part) => {
+                                                stream.stream().outgoing.push_back_part(part);
+                                                true
+                                            }
+                                            None => {
+                                                stream.stream().outgoing.close(ErrorCode::NoError);
+                                                false
+                                            }
+                                        }
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                };
+                                if let Err(e) = to_write_tx.send(CommonToWriteMessage::TryFlushStream(Some(stream_id)).into()) {
+                                    warn!("failed to write to channel, probably connection is closed: {:?}", e);
+                                }
+                                (cont, to_write_tx)
+                            });
+
+                            future::ok(if cont {
+                                Loop::Continue((ready_to_write, stream, to_write_tx, self_rc))
+                            } else {
+                                Loop::Break(())
+                            })
+                        })
+                })
+        });
+
+        let future = future.then(move |r| {
+            let error_code =
+                match r {
+                    Ok(()) => ErrorCode::NoError,
+                    Err(e) => {
+                        warn!("handler stream error: {:?}", e);
+                        ErrorCode::InternalError
+                    }
+                };
+            if let Err(e) = to_write_tx_2.send(CommonToWriteMessage::StreamEnd(stream_id, error_code).into()) {
+                warn!("failed to write to channel, probably connection is closed: {}", e);
+            }
+            Ok(())
+        });
 
         self.loop_handle.spawn(future);
     }
@@ -709,37 +755,11 @@ impl<I, T> WriteLoopData<I, T>
         self.write_all(bytes)
     }
 
-    fn process_part(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
-        let stream_id = self.inner.with(move |inner| {
-            let stream = inner.streams.get_mut(stream_id);
-            if let Some(mut stream) = stream {
-                if !stream.stream().state.is_closed_local() {
-                    stream.stream().outgoing.push_back(part.content);
-                    if part.last {
-                        stream.stream().outgoing_end = Some(ErrorCode::NoError);
-                    }
-                    Some(stream_id)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        });
-        if let Some(stream_id) = stream_id {
-            self.send_outg_stream(stream_id)
-        } else {
-            Box::new(futures::finished(self))
-        }
-    }
-
     fn process_stream_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner| {
             let stream = inner.streams.get_mut(stream_id);
             if let Some(mut stream) = stream {
-                if stream.stream().outgoing_end.is_none() {
-                    stream.stream().outgoing_end = Some(error_code);
-                }
+                stream.stream().outgoing.close(error_code);
                 Some(stream_id)
             } else {
                 None
@@ -757,7 +777,6 @@ impl<I, T> WriteLoopData<I, T>
             CommonToWriteMessage::TryFlushStream(None) => self.send_outg_conn(),
             CommonToWriteMessage::TryFlushStream(Some(stream_id)) => self.send_outg_stream(stream_id),
             CommonToWriteMessage::Frame(frame) => self.write_frame(frame),
-            CommonToWriteMessage::Part(stream_id, part) => self.process_part(stream_id, part),
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => self.process_stream_end(stream_id, error_code),
         }
     }

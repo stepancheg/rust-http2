@@ -5,6 +5,8 @@ mod stream_merge2;
 mod stream_with_eof;
 mod stream_with_eof_and_error;
 mod shutdown_signal;
+mod signal;
+mod latch;
 
 mod sender_with_last;
 pub use self::sender_with_last::*;
@@ -23,3 +25,6 @@ pub use self::stream_with_eof_and_error::*;
 pub use self::stream_deferred::stream_deferred;
 
 pub use self::shutdown_signal::*;
+
+pub use self::signal::*;
+pub use self::latch::*;

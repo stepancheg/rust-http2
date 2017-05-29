@@ -159,16 +159,22 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
+            let (latch_ctr, latch) = latch();
+
+            // TODO
+            latch_ctr.open();
+
             let mut stream = HttpStreamCommon::new(
                 inner.conn.peer_settings.initial_window_size,
                 resp_tx,
+                latch_ctr,
                 ClientStreamData { });
 
             stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
 
             let stream_id = inner.insert_stream(stream);
 
-            inner.pump_stream_to_write_loop(inner_rc, stream_id, body);
+            inner.pump_stream_to_write_loop(inner_rc, stream_id, body, latch);
 
             stream_id
         });

@@ -86,9 +86,21 @@ impl ConnDataSpecific for ServerConnData {
 type ServerInner = ConnData<ServerTypes>;
 
 impl ServerInner {
-    fn new_request(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
-        -> futures::sync::mpsc::UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>
+    fn new_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
+        -> result::Result<HttpStreamRef<ServerTypes>>
     {
+        if ServerTypes::is_init_locally(stream_id) {
+            return Err(error::Error::Other("initiated stream with server id from client"));
+        }
+
+        if stream_id <= self.last_peer_stream_id {
+            return Err(error::Error::Other("stream id is le than already existing stream id"));
+        }
+
+        self.last_peer_stream_id = stream_id;
+
+        debug!("new stream: {}", stream_id);
+
         let (req_tx, req_rx) = futures::sync::mpsc::unbounded();
 
         let req_rx = req_rx.map_err(|()| error::Error::from(io::Error::new(io::ErrorKind::Other, "req")));
@@ -109,34 +121,24 @@ impl ServerInner {
             ]))
         });
 
-        self.pump_stream_to_write_loop(self_rc, stream_id, response.into_part_stream());
+        let (latch_ctr, latch) = latch();
 
-        req_tx
-    }
+        // TODO
+        latch_ctr.open();
 
-    fn new_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
-        -> result::Result<HttpStreamRef<ServerTypes>>
-    {
-        if ServerTypes::is_init_locally(stream_id) {
-            return Err(error::Error::Other("initiated stream with server id from client"));
+        {
+            // New stream initiated by the client
+            let stream = HttpStreamCommon::new(
+                self.conn.peer_settings.initial_window_size,
+                req_tx,
+                latch_ctr,
+                ServerStreamData {});
+            self.streams.insert(stream_id, stream);
         }
 
-        if stream_id <= self.last_peer_stream_id {
-            return Err(error::Error::Other("stream id is le than already existing stream id"));
-        }
+        self.pump_stream_to_write_loop(self_rc, stream_id, response.into_part_stream(), latch);
 
-        self.last_peer_stream_id = stream_id;
-
-        debug!("new stream: {}", stream_id);
-
-        let req_tx = self.new_request(self_rc, stream_id, headers);
-
-        // New stream initiated by the client
-        let stream = HttpStreamCommon::new(
-            self.conn.peer_settings.initial_window_size,
-            req_tx,
-            ServerStreamData { });
-        Ok(self.streams.insert(stream_id, stream))
+        Ok(self.streams.get_mut(stream_id).expect("get stream"))
     }
 
     fn get_or_create_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers, last: bool)
