@@ -299,9 +299,9 @@ impl<T : Types> ConnData<T>
 
         match self.streams.get_mut(frame.get_stream_id()) {
             Some(mut stream) => {
-                // TODO: do not panic
+                // TODO: stream error, not conn error
                 stream.stream().out_window_size.try_increase(frame.increment())
-                    .expect("failed to increment stream window");
+                    .map_err(|()| error::Error::Other("failed to increment stream window"))?;
                 Ok(Some(stream))
             }
             None => {
@@ -359,7 +359,8 @@ impl<T : Types> ConnData<T>
             // TODO: need something better
             if self.conn.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                 let increment = DEFAULT_SETTINGS.initial_window_size;
-                self.conn.in_window_size.try_increase(increment).expect("failed to increase");
+                self.conn.in_window_size.try_increase(increment)
+                    .map_err(|()| error::Error::Other("failed to increase window size"))?;
 
                 Some(increment)
             } else {
@@ -383,7 +384,8 @@ impl<T : Types> ConnData<T>
             let increment_stream =
                 if stream.stream().in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                     let increment = DEFAULT_SETTINGS.initial_window_size;
-                    stream.stream().in_window_size.try_increase(increment).expect("failed to increase");
+                    stream.stream().in_window_size.try_increase(increment)
+                        .map_err(|()| error::Error::Other("failed to increase window size"))?;
 
                     Some(increment)
                 } else {
@@ -403,7 +405,7 @@ impl<T : Types> ConnData<T>
             self.send_frame(WindowUpdateFrame::for_stream(stream_id, increment_stream))?;
         }
 
-        Ok(Some(self.streams.get_mut(stream_id).unwrap()))
+        Ok(Some(self.streams.get_mut(stream_id).expect("stream must be found")))
     }
 
     fn process_ping(&mut self, frame: PingFrame) -> result::Result<()> {
