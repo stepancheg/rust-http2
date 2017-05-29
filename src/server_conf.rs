@@ -1,3 +1,5 @@
+use common::CommonConf;
+
 #[derive(Default, Debug, Clone)]
 pub struct ServerConf {
     /// TCP_NODELAY
@@ -6,6 +8,8 @@ pub struct ServerConf {
     /// Ignored on Windows
     pub reuse_port: Option<bool>,
     pub backlog: Option<i32>,
+
+    pub common: CommonConf,
 }
 
 impl ServerConf {

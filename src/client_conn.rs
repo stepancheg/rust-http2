@@ -49,7 +49,6 @@ impl Types for ClientTypes {
     type HttpStream = ClientStream;
     type HttpStreamSpecific = ClientStreamData;
     type ConnDataSpecific = ClientConnData;
-    type ConnData = ClientInner;
     type ToWriteMessage = ClientToWriteMessage;
 
     fn first_id() -> StreamId {
@@ -213,7 +212,7 @@ pub trait ClientConnectionCallbacks : 'static {
 impl ClientConnection {
     fn connected<I, C>(
         lh: reactor::Handle, connect: HttpFutureSend<I>,
-        _conf: ClientConf,
+        conf: ClientConf,
         callbacks: C)
             -> (Self, HttpFuture<()>)
         where
@@ -242,6 +241,7 @@ impl ClientConnection {
                 ClientConnData {
                     callbacks: Box::new(callbacks),
                 },
+                conf.common,
                 to_write_tx.clone()));
 
             let run_write = ClientWriteLoop { write: write, inner: inner.clone() }.run(to_write_rx);

@@ -42,7 +42,6 @@ impl Types for ServerTypes {
     type HttpStream = ServerStream;
     type HttpStreamSpecific = ServerStreamData;
     type ConnDataSpecific = ServerConnData;
-    type ConnData = ServerInner;
     type ToWriteMessage = ServerToWriteMessage;
 
     fn first_id() -> StreamId {
@@ -83,6 +82,7 @@ struct ServerConnData {
 impl ConnDataSpecific for ServerConnData {
 }
 
+#[allow(dead_code)] // https://github.com/rust-lang/rust/issues/42303
 type ServerInner = ConnData<ServerTypes>;
 
 impl ServerInner {
@@ -247,7 +247,7 @@ pub struct ServerConnection {
 }
 
 impl ServerConnection {
-    fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, _conf: ServerConf, service: Arc<F>)
+    fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, conf: ServerConf, service: Arc<F>)
                        -> (ServerConnection, HttpFuture<()>)
         where
             F : Service,
@@ -271,6 +271,7 @@ impl ServerConnection {
                 ServerConnData {
                     factory: service,
                 },
+                conf.common,
                 to_write_tx.clone()));
 
             let run_write = ServerWriteLoop { write: write, inner: inner.clone() }.run(Box::new(to_write_rx));

@@ -39,6 +39,7 @@ use solicit_async::*;
 use super::stream::*;
 use super::stream_map::*;
 use super::types::*;
+use super::conf::*;
 
 use stream_part::*;
 
@@ -93,6 +94,7 @@ impl<T : Types> ConnData<T>
     pub fn new(
         loop_handle: reactor::Handle,
         specific: T::ConnDataSpecific,
+        _conf: CommonConf,
         to_write_tx: futures::sync::mpsc::UnboundedSender<T::ToWriteMessage>)
             -> ConnData<T>
     {
@@ -215,6 +217,7 @@ impl<T : Types> ConnData<T>
     }
 
     pub fn pop_outg_all_for_conn_bytes(&mut self) -> Vec<u8> {
+        // TODO: maintain own limits of out window
         let mut send = VecSendFrame(Vec::new());
         for (stream_id, part) in self.pop_outg_all_for_conn() {
             self.write_part(&mut send, stream_id, part);
@@ -315,7 +318,7 @@ impl<T : Types> ConnData<T>
 
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
         self.conn.out_window_size.try_increase(frame.increment())
-            .expect("failed to increment conn window"); // TODO: do not panic
+            .map_err(|()| error::Error::Other("failed to increment conn window"))?;
         self.out_window_increased(None)
     }
 
@@ -544,13 +547,14 @@ impl<T : Types> ConnData<T>
         });
 
         let future = loop_fn((ready_to_write, stream, self.to_write_tx.clone(), self_rc), move |(ready_to_write, stream, to_write_tx, self_rc)| {
-            ready_to_write.into_future().map_err(move |(e, _)| e)
+            // Only poll user-provided callback when out window is available
+            ready_to_write.into_future().map_err(|(e, _)| e)
                 .and_then(move |(o, ready_to_write)| {
                     if let None::<()> = o {
                         unreachable!();
                     }
 
-                    stream.into_future().map_err(move |(e, _)| e)
+                    stream.into_future().map_err(|(e, _)| e)
                         .and_then(move |(part_opt, stream)| {
                             let (cont, to_write_tx) = self_rc.with(move |conn| {
                                 let cont = if let Some(mut stream) = conn.streams.get_mut(stream_id) {

@@ -30,6 +30,20 @@ pub type StreamId = u32;
 /// TODO: Eventually only use "h2".
 pub const ALPN_PROTOCOLS: &'static [&'static [u8]] = &[b"h2", b"h2-16", b"h2-15", b"h2-14"];
 
+/// A sender MUST NOT allow a flow-control window to exceed 231-1 octets. If a sender receives
+/// a WINDOW_UPDATE that causes a flow-control window to exceed this maximum,
+/// it MUST terminate either the stream or the connection, as appropriate. For streams,
+/// the sender sends a RST_STREAM with an error code of FLOW_CONTROL_ERROR; for the connection,
+/// a GOAWAY frame with an error code of FLOW_CONTROL_ERROR is sent.
+pub const MAX_WINDOW_SIZE: u32 = 0x7fffffff;
+
+// 6.9 WINDOW_UPDATE
+/// The payload of a WINDOW_UPDATE frame is one reserved bit plus an unsigned 31-bit integer
+/// indicating the number of octets that the sender can transmit in addition to the existing
+/// flow-control window. The legal range for the increment to the flow-control window
+/// is 1 to 231-1 (2,147,483,647) octets.
+pub const MAX_WINDOW_SIZE_INC: u32 = 0x7fffffff;
+
 /// The struct represents the size of a flow control window.
 ///
 /// It exposes methods that allow the manipulation of window sizes, such that they can never
@@ -57,7 +71,7 @@ impl WindowSize {
     /// ```
     pub fn try_increase(&mut self, delta: u32) -> Result<(), ()> {
         // Someone's provided a delta that would definitely overflow the window size.
-        if delta > 0x7fffffff {
+        if delta > MAX_WINDOW_SIZE_INC || delta == 0 {
             return Err(());
         }
         // Now it is safe to cast the delta to the `i32`.
