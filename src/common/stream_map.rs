@@ -100,12 +100,12 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
         }
     }
 
-    pub fn pop_outg_maybe_remove(mut self, conn_out_window_size: &mut WindowSize)
-        -> Option<HttpStreamCommand>
-    {
-        let r = self.stream().pop_outg(conn_out_window_size);
-        self.remove_if_closed();
-        r
+    pub fn check_ready_to_write(&mut self, conn_out_window_size: &mut WindowSize) {
+        if conn_out_window_size.size() > 0 && self.stream().out_window_size.size() > 0 {
+            self.stream().ready_to_write.open();
+        } else {
+            self.stream().ready_to_write.close();
+        }
     }
 
     pub fn pop_outg_all_maybe_remove(mut self, conn_out_window_size: &mut WindowSize)
@@ -116,6 +116,7 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
             if let Some(c) = self.stream().pop_outg(conn_out_window_size) {
                 r.push(c);
             } else {
+                self.check_ready_to_write(conn_out_window_size);
                 self.remove_if_closed();
                 return r;
             }

@@ -55,6 +55,14 @@ pub struct StreamOutQueue {
     // None means data is maybe available
     // Some(NoError) means data is successfully generated
     outgoing_end: Option<ErrorCode>,
+    data_size: usize,
+}
+
+fn data_size(content: &HttpStreamPartContent) -> usize {
+    match *content {
+        HttpStreamPartContent::Headers(_) => 0,
+        HttpStreamPartContent::Data(ref d) => d.len(),
+    }
 }
 
 impl StreamOutQueue {
@@ -62,6 +70,7 @@ impl StreamOutQueue {
         StreamOutQueue {
             queue: VecDeque::new(),
             outgoing_end: None,
+            data_size: 0,
         }
     }
 
@@ -73,6 +82,7 @@ impl StreamOutQueue {
         if let Some(_) = self.outgoing_end {
             return;
         }
+        self.data_size += data_size(&part);
         self.queue.push_back(part);
     }
 
@@ -84,11 +94,17 @@ impl StreamOutQueue {
     }
 
     pub fn push_front(&mut self, part: HttpStreamPartContent) {
+        self.data_size += data_size(&part);
         self.queue.push_front(part);
     }
 
     pub fn pop_front(&mut self) -> Option<HttpStreamPartContent> {
-        self.queue.pop_front()
+        if let Some(part) = self.queue.pop_front() {
+            self.data_size -= data_size(&part);
+            Some(part)
+        } else {
+            None
+        }
     }
 
     pub fn front(&self) -> Option<&HttpStreamPartContent> {

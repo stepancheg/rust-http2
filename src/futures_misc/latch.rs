@@ -48,6 +48,7 @@ impl LatchController {
     pub fn close(&self) {
         let mut guard = self.shared.lock().expect("lock");
         guard.state = State::Closed;
+        // no need to unpark, because nobody is subscribed to close
     }
 }
 

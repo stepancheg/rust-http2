@@ -120,25 +120,6 @@ impl<T : Types> ConnData<T>
         id
     }
 
-    pub fn pop_outg_for_stream(&mut self, stream_id: StreamId) -> Option<HttpStreamCommand> {
-        if let Some(stream) = self.streams.get_mut(stream_id) {
-            stream.pop_outg_maybe_remove(&mut self.conn.out_window_size)
-        } else {
-            None
-        }
-    }
-
-    pub fn pop_outg_for_conn(&mut self) -> Option<(StreamId, HttpStreamCommand)> {
-        // TODO: lame
-        for stream_id in self.streams.stream_ids() {
-            let r = self.pop_outg_for_stream(stream_id);
-            if let Some(r) = r {
-                return Some((stream_id, r));
-            }
-        }
-        None
-    }
-
     pub fn pop_outg_all_for_stream(&mut self, stream_id: StreamId) -> Vec<HttpStreamCommand> {
         if let Some(stream) = self.streams.get_mut(stream_id) {
             stream.pop_outg_all_maybe_remove(&mut self.conn.out_window_size)
@@ -149,9 +130,12 @@ impl<T : Types> ConnData<T>
 
     pub fn pop_outg_all_for_conn(&mut self) -> Vec<(StreamId, HttpStreamCommand)> {
         let mut r = Vec::new();
-        while let Some(p) = self.pop_outg_for_conn() {
-            r.push(p);
+
+        // TODO: keep list of streams with data
+        for stream_id in self.streams.stream_ids() {
+            r.extend(self.pop_outg_all_for_stream(stream_id).into_iter().map(|s| (stream_id, s)));
         }
+
         r
     }
 
@@ -574,6 +558,7 @@ impl<T : Types> ConnData<T>
                                         match part_opt {
                                             Some(part) => {
                                                 stream.stream().outgoing.push_back_part(part);
+                                                stream.check_ready_to_write(&mut conn.conn.out_window_size);
                                                 true
                                             }
                                             None => {
