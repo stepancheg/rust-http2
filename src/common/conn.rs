@@ -30,6 +30,7 @@ use solicit::connection::HttpConnection;
 use solicit::connection::SendFrame;
 use solicit::connection::HttpFrame;
 use solicit::connection::HttpFrameType;
+use solicit::frame::settings::HttpSettings;
 
 use futures_misc::*;
 
@@ -95,13 +96,17 @@ impl<T : Types> ConnData<T>
         loop_handle: reactor::Handle,
         specific: T::ConnDataSpecific,
         _conf: CommonConf,
+        sent_settings: HttpSettings,
         to_write_tx: futures::sync::mpsc::UnboundedSender<T::ToWriteMessage>)
             -> ConnData<T>
     {
+        let mut conn = HttpConnection::new();
+        conn.our_settings_sent = Some(sent_settings);
+
         ConnData {
             specific: specific,
             to_write_tx: to_write_tx,
-            conn: HttpConnection::new(),
+            conn: conn,
             streams: StreamMap::new(),
             last_local_stream_id: 0,
             last_peer_stream_id: 0,
@@ -248,11 +253,19 @@ impl<T : Types> ConnData<T>
         Ok(self.streams.get_mut(frame.get_stream_id()))
     }
 
-    fn process_settings_global(&mut self, frame: SettingsFrame) -> result::Result<()> {
-        if frame.is_ack() {
-            // TODO: remember which settings acked
-            return Ok(());
+    fn process_settings_ack(&mut self, frame: SettingsFrame) -> result::Result<()> {
+        assert!(frame.is_ack());
+
+        if let Some(settings) = self.conn.our_settings_sent.take() {
+            self.conn.our_settings_ack = settings;
+            Ok(())
+        } else {
+            Err(error::Error::Other("SETTINGS ack without settings sent"))
         }
+    }
+
+    fn process_settings_req(&mut self, frame: SettingsFrame) -> result::Result<()> {
+        assert!(!frame.is_ack());
 
         let mut out_window_increased = false;
 
@@ -290,6 +303,14 @@ impl<T : Types> ConnData<T>
         }
 
         Ok(())
+    }
+
+    fn process_settings(&mut self, frame: SettingsFrame) -> result::Result<()> {
+        if frame.is_ack() {
+            self.process_settings_ack(frame)
+        } else {
+            self.process_settings_req(frame)
+        }
     }
     
     fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame)
@@ -445,7 +466,7 @@ impl<T : Types> ConnData<T>
 
     fn process_conn_frame(&mut self, frame: HttpFrameConn) -> result::Result<()> {
         match frame {
-            HttpFrameConn::Settings(f) => self.process_settings_global(f),
+            HttpFrameConn::Settings(f) => self.process_settings(f),
             HttpFrameConn::Ping(f) => self.process_ping(f),
             HttpFrameConn::Goaway(f) => self.process_goaway(f),
             HttpFrameConn::WindowUpdate(f) => self.process_conn_window_update(f),

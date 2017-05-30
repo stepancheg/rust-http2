@@ -12,6 +12,8 @@ use result;
 use solicit::StreamId;
 use solicit::header::*;
 use solicit::connection::EndStream;
+use solicit::frame::settings::*;
+use solicit::DEFAULT_SETTINGS;
 
 use service::Service;
 
@@ -230,7 +232,11 @@ impl ClientConnection {
             command_tx: command_tx,
         };
 
-        let handshake = connect.and_then(client_handshake);
+        let settings_frame = SettingsFrame::from_settings(vec![ HttpSetting::EnablePush(false) ]);
+        let mut settings = DEFAULT_SETTINGS;
+        settings.apply_from_frame(&settings_frame);
+
+        let handshake = connect.and_then(|conn| client_handshake(conn, settings_frame));
 
         let future = handshake.and_then(move |conn| {
             debug!("handshake done");
@@ -242,6 +248,7 @@ impl ClientConnection {
                     callbacks: Box::new(callbacks),
                 },
                 conf.common,
+                settings,
                 to_write_tx.clone()));
 
             let run_write = ClientWriteLoop { write: write, inner: inner.clone() }.run(to_write_rx);

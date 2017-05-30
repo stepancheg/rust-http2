@@ -1,6 +1,5 @@
 use std::io;
 use std::io::Read;
-use std::net::SocketAddr;
 
 use bytes::Bytes;
 
@@ -15,8 +14,6 @@ use futures::stream::BoxStream;
 
 use tokio_io::io::read_exact;
 use tokio_io::io::write_all;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor;
 use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
 
@@ -36,7 +33,6 @@ use solicit::frame::push_promise::PushPromiseFrame;
 use solicit::frame::push_promise::PushPromiseFlag;
 use solicit::frame::unpack_header;
 use solicit::frame::settings::SettingsFrame;
-use solicit::frame::settings::HttpSetting;
 use solicit::connection::HttpFrame;
 
 use misc::BsDebug;
@@ -273,28 +269,22 @@ pub fn send_frame<W : AsyncWrite + Send + 'static, F : FrameIR>(write: W, frame:
 
 static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
-fn send_settings<W : AsyncWrite + Send + 'static>(conn: W) -> HttpFuture<W> {
-    let settings = {
-        let mut frame = SettingsFrame::new();
-        frame.add_setting(HttpSetting::EnablePush(false));
-        frame
-    };
-
+fn send_settings<W : AsyncWrite + Send + 'static>(conn: W, settings: SettingsFrame) -> HttpFuture<W> {
     Box::new(send_frame(conn, settings))
 }
 
-pub fn client_handshake<I : AsyncWrite + AsyncRead + Send + 'static>(conn: I) -> HttpFuture<I> {
+pub fn client_handshake<I : AsyncWrite + AsyncRead + Send + 'static>(conn: I, settings: SettingsFrame) -> HttpFuture<I> {
     debug!("send PREFACE");
     let send_preface = write_all(conn, PREFACE)
         .map(|(conn, _)| conn)
         .map_err(|e| e.into());
 
-    let send_settings = send_preface.and_then(send_settings);
+    let send_settings = send_preface.and_then(|conn| send_settings(conn, settings));
 
     Box::new(send_settings)
 }
 
-pub fn server_handshake<I : AsyncRead + AsyncWrite + Send + 'static>(conn: I) -> HttpFuture<I> {
+pub fn server_handshake<I : AsyncRead + AsyncWrite + Send + 'static>(conn: I, settings: SettingsFrame) -> HttpFuture<I> {
     let mut preface_buf = Vec::with_capacity(PREFACE.len());
     preface_buf.resize(PREFACE.len(), 0);
     let recv_preface = read_exact(conn, preface_buf)
@@ -311,16 +301,7 @@ pub fn server_handshake<I : AsyncRead + AsyncWrite + Send + 'static>(conn: I) ->
             })
         });
 
-    let send_settings = recv_preface.and_then(send_settings);
+    let send_settings = recv_preface.and_then(|conn| send_settings(conn, settings));
 
     Box::new(send_settings)
-}
-
-pub fn connect_and_handshake(lh: &reactor::Handle, addr: &SocketAddr) -> HttpFuture<TcpStream> {
-    let connect = TcpStream::connect(&addr, lh)
-        .map_err(|e| e.into());
-
-    let handshake = connect.and_then(client_handshake);
-
-    Box::new(handshake)
 }

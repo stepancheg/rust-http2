@@ -8,6 +8,8 @@ use result;
 use solicit::StreamId;
 use solicit::header::*;
 use solicit::connection::EndStream;
+use solicit::frame::settings::*;
+use solicit::DEFAULT_SETTINGS;
 
 use bytes::Bytes;
 
@@ -261,7 +263,11 @@ impl ServerConnection {
         let to_write_rx = to_write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
         let command_rx = Box::new(command_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
 
-        let handshake = socket.and_then(server_handshake);
+        let settings_frame = SettingsFrame::from_settings(vec![ HttpSetting::EnablePush(false) ]);
+        let mut settings = DEFAULT_SETTINGS;
+        settings.apply_from_frame(&settings_frame);
+
+        let handshake = socket.and_then(|conn| server_handshake(conn, settings_frame));
 
         let run = handshake.and_then(move |socket| {
             let (read, write) = socket.split();
@@ -272,6 +278,7 @@ impl ServerConnection {
                     factory: service,
                 },
                 conf.common,
+                settings,
                 to_write_tx.clone()));
 
             let run_write = ServerWriteLoop { write: write, inner: inner.clone() }.run(Box::new(to_write_rx));

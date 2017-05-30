@@ -1,19 +1,11 @@
 use std::io;
 use std::mem;
-use std::cmp;
 
-use solicit::header::Header;
 use solicit::StreamId;
-use error::ErrorCode;
 use result::Result;
 use solicit::frame::*;
 use solicit::connection::HttpFrame;
 use solicit::connection::SendFrame;
-use solicit::connection::HttpConnection;
-use solicit::connection::EndStream;
-use solicit::connection::DataChunk;
-
-use stream_part::*;
 
 
 pub struct VecSendFrame(pub Vec<u8>);
@@ -27,159 +19,6 @@ impl SendFrame for VecSendFrame {
         self.0 = cursor.into_inner();
 
         Ok(())
-    }
-}
-
-pub trait HttpConnectionEx {
-    fn conn(&mut self) -> &mut HttpConnection;
-
-    fn send_rst<S : SendFrame>(
-        &mut self,
-        send: &mut S,
-        stream_id: StreamId,
-        error_code: ErrorCode)
-            -> Result<()>
-    {
-        self.conn().sender(send).send_rst_stream(stream_id, error_code)
-    }
-
-    fn send_rst_to_vec(&mut self, stream_id: StreamId, error_code: ErrorCode)
-        -> Result<Vec<u8>>
-    {
-        let mut send = VecSendFrame(Vec::new());
-        self.send_rst(&mut send, stream_id, error_code)?;
-        Ok(send.0)
-    }
-
-    fn send_headers<S : SendFrame>(
-        &mut self,
-        send: &mut S,
-        stream_id: StreamId,
-        headers: &[Header],
-        end_stream: EndStream)
-            -> Result<()>
-    {
-        self.conn().sender(send).send_headers(headers, stream_id, end_stream)
-    }
-
-    fn send_headers_to_vec(
-        &mut self,
-        stream_id: StreamId,
-        headers: &[Header],
-        end_stream: EndStream)
-             -> Result<Vec<u8>>
-    {
-        let mut send = VecSendFrame(Vec::new());
-        self.send_headers(&mut send, stream_id, headers, end_stream)?;
-        Ok(send.0)
-    }
-
-    fn send_data_frame<S : SendFrame>(
-        &mut self,
-        send: &mut S,
-        stream_id: StreamId,
-        chunk: &[u8],
-        end_stream: EndStream)
-            -> Result<()>
-    {
-        let data_chunk = DataChunk::new_borrowed(chunk, stream_id, end_stream);
-        self.conn().sender(send).send_data(data_chunk)
-    }
-
-    fn send_data_frames<S : SendFrame>(
-        &mut self,
-        send: &mut S,
-        stream_id: StreamId,
-        data: &[u8],
-        end_stream: EndStream)
-            -> Result<()>
-    {
-        // if client requested end of stream,
-        // we must send at least one frame with end stream flag
-        if end_stream == EndStream::Yes && data.len() == 0 {
-            return self.send_end_of_stream(send, stream_id)
-        }
-
-        let mut pos = 0;
-        const MAX_CHUNK_SIZE: usize = 8 * 1024;
-        while pos < data.len() {
-            let end = cmp::min(data.len(), pos + MAX_CHUNK_SIZE);
-
-            let end_stream =
-                if end == data.len() && end_stream == EndStream::Yes {
-                    EndStream::Yes
-                } else {
-                    EndStream::No
-                };
-
-            self.send_data_frame(send, stream_id, &data[pos..end], end_stream)?;
-
-            pos = end;
-        }
-
-        Ok(())
-    }
-
-    fn send_data_frames_to_vec(
-        &mut self,
-        stream_id: StreamId,
-        data: &[u8],
-        end_stream: EndStream)
-            -> Result<Vec<u8>>
-    {
-        let mut send = VecSendFrame(Vec::new());
-        self.send_data_frames(&mut send, stream_id, data, end_stream)?;
-        Ok(send.0)
-    }
-
-    fn send_end_of_stream<S : SendFrame>(
-        &mut self,
-        send: &mut S,
-        stream_id: StreamId)
-            -> Result<()>
-    {
-        self.send_data_frame(send, stream_id, &Vec::new(), EndStream::Yes)
-    }
-
-    fn send_end_of_stream_to_vec(&mut self, stream_id: StreamId) -> Result<Vec<u8>> {
-        let mut send = VecSendFrame(Vec::new());
-        self.send_end_of_stream(&mut send, stream_id)?;
-        Ok(send.0)
-    }
-
-    fn send_part<S : SendFrame>(
-        &mut self,
-        send: &mut S,
-        stream_id: StreamId,
-        part: &HttpStreamPart)
-            -> Result<()>
-    {
-        let end_stream = if part.last { EndStream::Yes } else { EndStream::No };
-        match part.content {
-            HttpStreamPartContent::Data(ref data) => {
-                self.send_data_frames(send, stream_id, &data, end_stream)
-            },
-            HttpStreamPartContent::Headers(ref headers) => {
-                self.send_headers(send, stream_id, &headers.0, end_stream)
-            },
-        }
-    }
-
-    fn send_part_to_vec(
-        &mut self,
-        stream_id: StreamId,
-        part: &HttpStreamPart)
-            -> Result<Vec<u8>>
-    {
-        let mut send = VecSendFrame(Vec::new());
-        self.send_part(&mut send, stream_id, part)?;
-        Ok(send.0)
-    }
-}
-
-impl HttpConnectionEx for HttpConnection {
-    fn conn(&mut self) -> &mut HttpConnection {
-        self
     }
 }
 

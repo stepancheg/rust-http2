@@ -54,7 +54,6 @@ impl HttpServerTester {
         let r = HttpConnectionTester {
             tcp: self.0.accept().unwrap().0,
             conn: HttpConnection::new(),
-            waiting_settings_ack: true,
         };
         debug!("accept connection.");
         r
@@ -66,7 +65,6 @@ static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 pub struct HttpConnectionTester {
     tcp: net::TcpStream,
     pub conn: HttpConnection,
-    waiting_settings_ack: bool,
 }
 
 impl HttpConnectionTester {
@@ -75,7 +73,6 @@ impl HttpConnectionTester {
             tcp: net::TcpStream::connect(("::1", port).to_socket_addrs().unwrap().next().unwrap())
                 .expect("connect"),
             conn: HttpConnection::new(),
-            waiting_settings_ack: true,
         }
     }
 
@@ -150,7 +147,7 @@ impl HttpConnectionTester {
     pub fn recv_raw_frame(&mut self) -> RawFrame {
         httpbis::solicit_async::recv_raw_frame_sync(
             &mut self.tcp,
-            self.conn.our_settings_sent.max_frame_size) // TODO: use our settings
+            self.conn.our_settings_effective().max_frame_size) // TODO: use our settings
                 .expect("recv_raw_frame")
     }
 
@@ -165,11 +162,10 @@ impl HttpConnectionTester {
         loop {
             let frame = self.fn_recv_frame_no_check_ack();
             if let HttpFrame::Settings(ref f) = frame {
-                if self.waiting_settings_ack && f.is_ack() {
-                    self.waiting_settings_ack = false;
+                if self.conn.our_settings_sent.is_some() && f.is_ack() {
+                    self.process_peer_settings_ack(&f);
                     continue;
                 }
-                continue;
             }
             return frame;
         }
@@ -189,11 +185,16 @@ impl HttpConnectionTester {
         settings
     }
 
+    fn process_peer_settings_ack(&mut self, frame: &SettingsFrame) {
+        assert!(frame.is_ack());
+        assert!(self.conn.our_settings_sent.is_some());
+        self.conn.our_settings_ack = self.conn.our_settings_sent.take().unwrap();
+    }
+
     pub fn recv_frame_settings_ack(&mut self) -> SettingsFrame {
-        assert!(self.waiting_settings_ack);
+        assert!(self.conn.our_settings_sent.is_some());
         let settings = self.recv_frame_settings();
-        assert!(settings.is_ack());
-        self.waiting_settings_ack = false;
+        self.process_peer_settings_ack(&settings);
         settings
     }
 
@@ -203,10 +204,18 @@ impl HttpConnectionTester {
         self.recv_message(stream_id)
     }
 
+    pub fn send_settings(&mut self, settings: SettingsFrame) {
+        assert!(self.conn.our_settings_sent.is_none());
+        let mut new_settings = self.conn.our_settings_ack;
+        new_settings.apply_from_frame(&settings);
+        self.conn.our_settings_sent = Some(new_settings);
+        self.send_frame(settings);
+    }
+
     // Perform handshape, but do not wait for ACK of my SETTINGS
     // Useful, because ACK may come e.g. after first request HEADERS
     pub fn settings_xchg_but_ack(&mut self) {
-        self.send_frame(SettingsFrame::new());
+        self.send_settings(SettingsFrame::new());
         self.recv_frame_settings_set();
         self.send_frame(SettingsFrame::new_ack());
     }
@@ -217,11 +226,7 @@ impl HttpConnectionTester {
     }
 
     pub fn send_recv_settings(&mut self, settings: SettingsFrame) {
-        assert!(!self.waiting_settings_ack);
-        self.conn.our_settings_sent.apply_from_frame(&settings);
-        self.waiting_settings_ack = true;
-        self.send_frame(settings);
-        self.conn.our_settings_ack = self.conn.our_settings_sent.clone();
+        self.send_settings(settings);
         self.recv_frame_settings_ack();
     }
 

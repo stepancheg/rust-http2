@@ -253,10 +253,20 @@ pub struct HttpConnection {
     pub in_window_size: WindowSize,
     /// Last known peer settings
     pub peer_settings: HttpSettings,
-    /// Last our settings sent
-    pub our_settings_sent: HttpSettings,
     /// Last our settings acknowledged
     pub our_settings_ack: HttpSettings,
+    /// Last our settings sent
+    pub our_settings_sent: Option<HttpSettings>,
+}
+
+impl HttpConnection {
+    pub fn our_settings_effective(&self) -> HttpSettings {
+        if let Some(ref sent) = self.our_settings_sent {
+            HttpSettings::min(&self.our_settings_ack, &sent)
+        } else {
+            self.our_settings_ack
+        }
+    }
 }
 
 /// A trait that should be implemented by types that can provide the functionality
@@ -454,8 +464,8 @@ impl HttpConnection {
             decoder: hpack::Decoder::new(),
             encoder: hpack::Encoder::new(),
             peer_settings: DEFAULT_SETTINGS,
-            our_settings_sent: DEFAULT_SETTINGS,
             our_settings_ack: DEFAULT_SETTINGS,
+            our_settings_sent: None,
             in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
             out_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
         }
