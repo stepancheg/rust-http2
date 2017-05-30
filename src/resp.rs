@@ -58,6 +58,7 @@ impl Response {
     pub fn from_stream<S>(stream: S) -> Response
         where S : Stream<Item=HttpStreamPart, Error=Error> + Send + 'static
     {
+        // Check that first frame is HEADERS
         Response::new(stream.into_future().map_err(|(p, _s)| p).and_then(|(first, rem)| {
             match first {
                 Some(part) => {

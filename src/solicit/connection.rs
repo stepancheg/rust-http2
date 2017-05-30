@@ -253,11 +253,11 @@ pub struct HttpConnection {
 }
 
 impl HttpConnection {
-    pub fn our_settings_effective(&self) -> HttpSettings {
+    pub fn our_settings_sent(&self) -> &HttpSettings {
         if let Some(ref sent) = self.our_settings_sent {
-            HttpSettings::min(&self.our_settings_ack, &sent)
+            &sent
         } else {
-            self.our_settings_ack
+            &self.our_settings_ack
         }
     }
 }

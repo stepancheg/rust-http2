@@ -149,7 +149,7 @@ impl HttpConnectionTester {
     pub fn recv_raw_frame(&mut self) -> RawFrame {
         httpbis::solicit_async::recv_raw_frame_sync(
             &mut self.tcp,
-            self.conn.our_settings_effective().max_frame_size) // TODO: use our settings
+            self.conn.our_settings_ack.max_frame_size)
                 .expect("recv_raw_frame")
     }
 

@@ -1,6 +1,5 @@
 //! The module contains the implementation of the `SETTINGS` frame and associated flags.
 
-use std::cmp;
 use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
@@ -121,17 +120,6 @@ impl HttpSettings {
     pub fn apply_from_frame(&mut self, frame: &SettingsFrame) {
         for s in &frame.settings {
             self.apply(*s);
-        }
-    }
-
-    pub fn min(a: &HttpSettings, b: &HttpSettings) -> HttpSettings {
-        HttpSettings {
-            header_table_size: cmp::min(a.header_table_size, b.header_table_size),
-            enable_push: a.enable_push || b.enable_push,
-            max_concurrent_streams: cmp::min(a.max_concurrent_streams, b.max_concurrent_streams),
-            initial_window_size: cmp::min(a.initial_window_size, b.initial_window_size),
-            max_frame_size: cmp::min(a.max_frame_size, b.max_frame_size),
-            max_header_list_size: cmp::min(a.max_header_list_size, b.max_header_list_size),
         }
     }
 }

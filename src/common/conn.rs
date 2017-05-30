@@ -272,7 +272,7 @@ impl<T : Types> ConnData<T>
     fn process_headers_frame(&mut self, self_rc: RcMut<Self>, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
         let headers = self.conn.decoder
             .decode(&frame.header_fragment())
-            .map_err(error::Error::CompressionError).unwrap(); // TODO: do not panic
+            .map_err(error::Error::CompressionError)?;
         let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
 
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
@@ -726,8 +726,9 @@ impl<I, T> ReadLoopData<I, T>
     fn recv_http_frame(self) -> HttpFuture<(Self, HttpFrame)> {
         let ReadLoopData { read, inner } = self;
 
-        // TODO: use our settings
-        let max_frame_size = inner.with(|_| DEFAULT_SETTINGS.max_frame_size);
+        let max_frame_size = inner.with(|inner| {
+            inner.conn.our_settings_ack.max_frame_size
+        });
 
         Box::new(recv_http_frame_join_cont(read, max_frame_size)
             .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame)))
