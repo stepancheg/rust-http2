@@ -15,17 +15,6 @@ pub trait FrameBuilder: io::Write + io::Seek {
         self.write_all(&pack_header(&header))
     }
 
-    /// Copy all available bytes from the given `io::Read` instance.
-    ///
-    /// This method allows poor man's specialization for types that can implement the copy more
-    /// efficiently than the `io::copy` function does (i.e. without the intermediate read into a
-    /// stack-allocated buffer).
-    fn copy_bytes_from<R: io::Read>(&mut self, provider: &mut R) -> io::Result<u64>
-        where Self: Sized
-    {
-        io::copy(provider, self)
-    }
-
     /// Write the given number of padding octets.
     ///
     /// The default implementation invokes the underlying Writer's `write` method `padding_length`
