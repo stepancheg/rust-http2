@@ -277,6 +277,10 @@ fn stream_window_gt_conn_window() {
     assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
     assert_eq!(w as usize, tester.recv_frame_data_check(1, false).len());
 
+    let server_sn = server.server.dump_state().wait().expect("state");
+    assert_eq!(0, server_sn.single_conn().1.out_window_size);
+    assert_eq!(w as i32, server_sn.single_conn().1.single_stream().1.out_window_size);
+
     tester.send_window_update_conn(w);
 
     assert_eq!(w as usize, tester.recv_frame_data_check(1, true).len());

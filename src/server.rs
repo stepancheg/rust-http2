@@ -71,6 +71,15 @@ pub struct ServerStateSnapshot {
     pub conns: HashMap<u64, ConnectionStateSnapshot>,
 }
 
+impl ServerStateSnapshot {
+    pub fn single_conn(&self) -> (u64, &ConnectionStateSnapshot) {
+        let mut iter = self.conns.iter();
+        let (&id, conn) = iter.next().expect("no conns");
+        assert!(iter.next().is_none(), "more than one conn");
+        (id, conn)
+    }
+}
+
 #[cfg(unix)]
 fn configure_tcp(tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
     use net2::unix::UnixTcpBuilderExt;

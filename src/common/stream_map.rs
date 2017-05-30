@@ -9,6 +9,7 @@ use solicit::session::StreamState;
 use solicit::WindowSize;
 use super::stream::HttpStreamCommon;
 use super::stream::HttpStreamCommand;
+use super::stream::HttpStreamStateSnapshot;
 use super::types::Types;
 
 
@@ -71,8 +72,8 @@ impl<T : Types> StreamMap<T> {
         self.map.keys().cloned().collect()
     }
 
-    pub fn snapshot(&self) -> HashMap<StreamId, StreamState> {
-        self.map.iter().map(|(&k, s)| (k, s.state)).collect()
+    pub fn snapshot(&self) -> HashMap<StreamId, HttpStreamStateSnapshot> {
+        self.map.iter().map(|(&k, s)| (k, s.snapshot())).collect()
     }
 }
 

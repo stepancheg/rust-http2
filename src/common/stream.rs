@@ -127,6 +127,14 @@ impl StreamOutQueue {
 }
 
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct HttpStreamStateSnapshot {
+    pub state: StreamState,
+    pub out_window_size: i32,
+    pub in_window_size: i32,
+}
+
+
 pub struct HttpStreamCommon<T : Types> {
     pub specific: T::HttpStreamSpecific,
     pub state: StreamState,
@@ -155,6 +163,14 @@ impl<T : Types> HttpStreamCommon<T> {
             outgoing: StreamOutQueue::new(),
             peer_tx: Some(peer_tx),
             ready_to_write: ready_to_write,
+        }
+    }
+
+    pub fn snapshot(&self) -> HttpStreamStateSnapshot {
+        HttpStreamStateSnapshot {
+            state: self.state,
+            out_window_size: self.out_window_size.0,
+            in_window_size: self.in_window_size.0,
         }
     }
 

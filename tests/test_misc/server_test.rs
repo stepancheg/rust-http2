@@ -14,7 +14,7 @@ use regex::Regex;
 
 /// HTTP/2 server used by tests
 pub struct HttpServerTest {
-    server: Server,
+    pub server: Server,
     pub port: u16,
 }
 

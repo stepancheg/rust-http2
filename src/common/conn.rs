@@ -20,7 +20,6 @@ use error;
 use error::ErrorCode;
 use result;
 
-use solicit::session::StreamState;
 use solicit::frame::*;
 use solicit::header::*;
 use solicit::StreamId;
@@ -78,11 +77,21 @@ pub struct ConnData<T : Types> {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ConnectionStateSnapshot {
-    pub streams: HashMap<StreamId, StreamState>,
+    pub in_window_size: i32,
+    pub out_window_size: i32,
+    pub streams: HashMap<StreamId, HttpStreamStateSnapshot>,
 }
 
+impl ConnectionStateSnapshot {
+    pub fn single_stream(&self) -> (u32, &HttpStreamStateSnapshot) {
+        let mut iter = self.streams.iter();
+        let (&id, stream) = iter.next().expect("no streams");
+        assert!(iter.next().is_none(), "more than one stream");
+        (id, stream)
+    }
+}
 
 
 
@@ -232,6 +241,8 @@ impl<T : Types> ConnData<T>
 
     pub fn dump_state(&self) -> ConnectionStateSnapshot {
         ConnectionStateSnapshot {
+            in_window_size: self.conn.in_window_size.0,
+            out_window_size: self.conn.out_window_size.0,
             streams: self.streams.snapshot(),
         }
     }
