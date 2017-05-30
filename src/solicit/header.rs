@@ -103,7 +103,7 @@ impl<'a> From<Cow<'a, str>> for HeaderPart {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Header {
     pub name: Bytes,
     pub value: Bytes,
@@ -143,7 +143,7 @@ impl<N: Into<HeaderPart>, V: Into<HeaderPart>> From<(N, V)> for Header {
     }
 }
 
-#[derive(Default,Debug)]
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct Headers(pub Vec<Header>);
 
 impl Headers {

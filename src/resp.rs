@@ -43,8 +43,8 @@ impl Response {
     }
 
     /// Create a response with headers and response body
-    pub fn headers_and_bytes(header: Headers, content: Bytes) -> Response {
-        Response::headers_and_bytes_stream(header, stream::once(Ok(content)))
+    pub fn headers_and_bytes<B : Into<Bytes>>(header: Headers, content: B) -> Response {
+        Response::headers_and_bytes_stream(header, stream::once(Ok(content.into())))
     }
 
     pub fn message(message: SimpleHttpMessage) -> Response {

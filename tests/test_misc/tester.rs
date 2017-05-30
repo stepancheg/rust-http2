@@ -19,6 +19,8 @@ use httpbis::solicit::frame::FrameIR;
 use httpbis::solicit::frame::settings::SettingsFrame;
 use httpbis::solicit::frame::headers::HeadersFrame;
 use httpbis::solicit::frame::headers::HeadersFlag;
+use httpbis::solicit::frame::continuation::ContinuationFrame;
+use httpbis::solicit::frame::continuation::ContinuationFlag;
 use httpbis::solicit::frame::data::DataFrame;
 use httpbis::solicit::frame::data::DataFlag;
 use httpbis::solicit::frame::goaway::GoawayFrame;
@@ -243,11 +245,51 @@ impl HttpConnectionTester {
         assert_eq!(error_code, frame.error_code());
     }
 
-    pub fn recv_frame_headers(&mut self) -> HeadersFrame {
+    fn recv_frame_continuation(&mut self) -> ContinuationFrame {
         match self.recv_frame() {
-            HttpFrame::Headers(headers) => headers,
-            f => panic!("expecting HEADERS, got: {:?}", f),
+            HttpFrame::Continuation(continuation) => continuation,
+            f => panic!("expecting CONTINUATION, got: {:?}", f),
         }
+    }
+
+    pub fn recv_frame_headers_continuation(&mut self) -> (HeadersFrame, u32) {
+        let mut headers =
+            match self.recv_frame() {
+                HttpFrame::Headers(headers) => headers,
+                f => panic!("expecting HEADERS, got: {:?}", f),
+            };
+
+        if headers.flags.is_set(HeadersFlag::EndHeaders) {
+            return (headers, 0);
+        }
+
+        let mut cont_count = 0;
+
+        loop {
+            let continuation = self.recv_frame_continuation();
+            cont_count += 1;
+
+            headers.header_fragment.extend_from_slice(&continuation.header_fragment);
+
+            if continuation.flags.is_set(ContinuationFlag::EndHeaders) {
+                headers.set_flag(HeadersFlag::EndHeaders);
+                return (headers, cont_count);
+            }
+        }
+    }
+
+    pub fn recv_frame_headers_decode(&mut self) -> (HeadersFrame, Headers, u32) {
+        let (frame, cont_count) = self.recv_frame_headers_continuation();
+        let headers = self.conn.decoder.decode(frame.header_fragment()).expect("decode");
+        let headers = Headers(headers.into_iter().map(|(n, v)| Header::new(n, v)).collect());
+        (frame, headers, cont_count)
+    }
+
+    pub fn recv_frame_headers_check(&mut self, stream_id: StreamId, end: bool) -> Headers {
+        let (frame, headers, _) = self.recv_frame_headers_decode();
+        assert_eq!(stream_id, frame.stream_id);
+        assert_eq!(end, frame.is_end_of_stream());
+        headers
     }
 
     pub fn recv_frame_data(&mut self) -> DataFrame {
@@ -255,14 +297,6 @@ impl HttpConnectionTester {
             HttpFrame::Data(data) => data,
             f => panic!("expecting DATA, got: {:?}", f),
         }
-    }
-
-    pub fn recv_frame_headers_check(&mut self, stream_id: StreamId, end: bool) -> Headers {
-        let headers = self.recv_frame_headers();
-        assert_eq!(stream_id, headers.stream_id);
-        assert_eq!(end, headers.is_end_of_stream());
-        let headers = self.conn.decoder.decode(headers.header_fragment()).expect("decode");
-        Headers(headers.into_iter().map(|(n, v)| Header::new(n, v)).collect())
     }
 
     pub fn recv_frame_data_check(&mut self, stream_id: StreamId, end: bool) -> Vec<u8> {

@@ -45,7 +45,7 @@ impl Flag for ContinuationFlag {
 #[derive(PartialEq, Clone, Debug)]
 pub struct ContinuationFrame {
     /// The set of flags for the frame, packed into a single byte.
-    flags: Flags<ContinuationFlag>,
+    pub flags: Flags<ContinuationFlag>,
     /// The ID of the stream with which this frame is associated
     pub stream_id: StreamId,
     /// The header fragment bytes stored within the frame.

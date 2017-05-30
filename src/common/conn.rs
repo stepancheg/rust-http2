@@ -22,6 +22,7 @@ use result;
 
 use solicit::frame::*;
 use solicit::header::*;
+use solicit::frame::continuation::*;
 use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 use solicit::connection::EndStream;
@@ -155,6 +156,8 @@ impl<T : Types> ConnData<T>
     }
 
     fn write_part(&mut self, target: &mut FrameBuilder, stream_id: StreamId, part: HttpStreamCommand) {
+        let max_frame_size = self.conn.peer_settings.max_frame_size as usize;
+
         match part {
             HttpStreamCommand::Data(data, end_stream) => {
                 // if client requested end of stream,
@@ -171,7 +174,6 @@ impl<T : Types> ConnData<T>
                 }
 
                 let mut pos = 0;
-                let max_frame_size = self.conn.peer_settings.max_frame_size as usize;
                 while pos < data.len() {
                     let end = cmp::min(data.len(), pos + max_frame_size);
 
@@ -198,19 +200,39 @@ impl<T : Types> ConnData<T>
                 let headers_fragment = self
                     .conn.encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
 
-                // For now, sending header fragments larger than 16kB is not supported
-                // (i.e. the encoded representation cannot be split into CONTINUATION
-                // frames).
-                let mut frame = HeadersFrame::new(headers_fragment, stream_id);
-                frame.set_flag(HeadersFlag::EndHeaders);
+                let mut pos = 0;
+                while pos < headers_fragment.len() || pos == 0 {
+                    let end = cmp::min(headers_fragment.len(), pos + max_frame_size);
 
-                if end_stream == EndStream::Yes {
-                    frame.set_flag(HeadersFlag::EndStream);
+                    let chunk = &headers_fragment[pos..end];
+
+                    if pos == 0 {
+                        let mut frame = HeadersFrame::new(chunk, stream_id);
+                        if end_stream == EndStream::Yes {
+                            frame.set_flag(HeadersFlag::EndStream);
+                        }
+
+                        if end == headers_fragment.len() {
+                            frame.set_flag(HeadersFlag::EndHeaders);
+                        }
+
+                        debug!("sending frame {:?}", frame);
+
+                        frame.serialize_into(target);
+                    } else {
+                        let mut frame = ContinuationFrame::new(chunk, stream_id);
+
+                        if end == headers_fragment.len() {
+                            frame.set_flag(ContinuationFlag::EndHeaders);
+                        }
+
+                        debug!("sending frame {:?}", frame);
+
+                        frame.serialize_into(target);
+                    }
+
+                    pos = end;
                 }
-
-                debug!("sending frame {:?}", frame);
-
-                frame.serialize_into(target);
             }
             HttpStreamCommand::Rst(error_code) => {
                 let frame = RstStreamFrame::new(stream_id, error_code);

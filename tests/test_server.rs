@@ -25,6 +25,7 @@ use httpbis::solicit::header::*;
 use httpbis::*;
 use httpbis::stream_part::HttpStreamPart;
 use httpbis::solicit::frame::settings::*;
+use httpbis::solicit::frame::headers::*;
 use httpbis::solicit::DEFAULT_SETTINGS;
 
 use std::iter::FromIterator;
@@ -284,4 +285,32 @@ fn stream_window_gt_conn_window() {
     tester.send_window_update_conn(w);
 
     assert_eq!(w as usize, tester.recv_frame_data_check(1, true).len());
+}
+
+#[test]
+pub fn server_sends_continuation_frame() {
+    env_logger::init().ok();
+
+    let mut headers = Headers::ok_200();
+    for i in 0..1000 {
+        headers.add(&format!("abcdefghijklmnop{}", i), &format!("ABCDEFGHIJKLMNOP{}", i));
+    }
+
+    let headers_copy = headers.clone();
+
+    let server = HttpServerOneConn::new_fn(0, move |_headers, _req| {
+        Response::headers_and_bytes(headers_copy.clone(), "there")
+    });
+
+    let mut tester = HttpConnectionTester::connect(server.port());
+    tester.send_preface();
+    tester.settings_xchg();
+
+    tester.send_get(1, "/long-header-list");
+    let (headers_frame, headers_recv, cont_count) = tester.recv_frame_headers_decode();
+    assert!(headers_frame.flags.is_set(HeadersFlag::EndHeaders));
+    assert!(cont_count > 0);
+    assert_eq!(headers, headers_recv);
+
+    assert_eq!(&b"there"[..], &tester.recv_frame_data_check(1, true)[..]);
 }
