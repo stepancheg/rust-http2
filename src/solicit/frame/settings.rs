@@ -1,6 +1,5 @@
 //! The module contains the implementation of the `SETTINGS` frame and associated flags.
 
-use std::io;
 use std::cmp;
 use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame};
@@ -351,21 +350,20 @@ impl Frame for SettingsFrame {
 }
 
 impl FrameIR for SettingsFrame {
-    fn serialize_into<B: FrameBuilder>(self, b: &mut B) -> io::Result<()> {
-        b.write_header(self.get_header())?;
+    fn serialize_into(self, b: &mut FrameBuilder) {
+        b.write_header(self.get_header());
         for setting in &self.settings {
-            b.write_all(&setting.serialize())?;
+            b.write_all(&setting.serialize());
         }
-
-        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{HttpSetting, SettingsFrame};
-    use solicit::tests::common::{raw_frame_from_parts, serialize_frame};
+    use solicit::tests::common::raw_frame_from_parts;
     use solicit::frame::{pack_header, Frame, FrameHeader};
+    use solicit::frame::FrameIR;
 
     /// Tests that a `SettingsFrame` correctly handles a SETTINGS frame with
     /// no ACK flag and only a single setting.
@@ -567,7 +565,7 @@ mod tests {
             res
         };
 
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(serialized, expected);
     }
@@ -590,7 +588,7 @@ mod tests {
             res
         };
 
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(serialized, expected);
     }
@@ -604,7 +602,7 @@ mod tests {
             &FrameHeader { length: 0, frame_type: 4, flags: 1, stream_id: 0 })
                 .to_vec();
 
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(serialized, expected);
     }

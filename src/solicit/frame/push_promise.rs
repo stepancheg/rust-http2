@@ -1,5 +1,3 @@
-use std::io;
-
 use bytes::Bytes;
 use bytes::Buf;
 use bytes::IntoBuf;
@@ -143,20 +141,18 @@ impl Frame for PushPromiseFrame {
 }
 
 impl FrameIR for PushPromiseFrame {
-    fn serialize_into<B : FrameBuilder>(self, b: &mut B) -> io::Result<()> {
-        b.write_header(self.get_header())?;
+    fn serialize_into(self, b: &mut FrameBuilder) {
+        b.write_header(self.get_header());
         let padded = self.flags.is_set(PushPromiseFlag::Padded);
         if padded {
-            b.write_all(&[self.padding_len])?;
+            b.write_all(&[self.padding_len]);
         }
         // Now the actual headers fragment
-        b.write_all(&self.header_fragment)?;
+        b.write_all(&self.header_fragment);
         // Finally, add the trailing padding, if required
         if padded {
-            b.write_padding(self.padding_len)?;
+            b.write_padding(self.padding_len);
         }
-
-        Ok(())
     }
 }
 

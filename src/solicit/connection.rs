@@ -18,7 +18,6 @@
 use std::borrow::Cow;
 use std::borrow::Borrow;
 use std::cmp;
-use std::io;
 
 use bytes::Bytes;
 
@@ -154,7 +153,7 @@ impl HttpFrame{
 }
 
 impl FrameIR for HttpFrame {
-    fn serialize_into<B : FrameBuilder>(self, builder: &mut B) -> io::Result<()> {
+    fn serialize_into(self, builder: &mut FrameBuilder) {
         match self {
             HttpFrame::Data(f)         => f.serialize_into(builder),
             HttpFrame::Headers(f)      => f.serialize_into(builder),

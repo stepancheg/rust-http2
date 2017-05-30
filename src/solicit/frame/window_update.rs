@@ -1,7 +1,5 @@
 //! Implements the `WINDOW_UPDATE` HTTP/2 frame.
 
-use std::io;
-
 use solicit::StreamId;
 use solicit::frame::{Frame, FrameIR, FrameBuilder, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
@@ -87,10 +85,9 @@ impl Frame for WindowUpdateFrame {
 }
 
 impl FrameIR for WindowUpdateFrame {
-    fn serialize_into<B: FrameBuilder>(self, builder: &mut B) -> io::Result<()> {
-        builder.write_header(self.get_header())?;
-        builder.write_u32(self.increment)?;
-        Ok(())
+    fn serialize_into(self, builder: &mut FrameBuilder) {
+        builder.write_header(self.get_header());
+        builder.write_u32(self.increment);
     }
 }
 
@@ -98,8 +95,9 @@ impl FrameIR for WindowUpdateFrame {
 mod tests {
     use super::WindowUpdateFrame;
 
-    use solicit::tests::common::{serialize_frame, raw_frame_from_parts};
+    use solicit::tests::common::raw_frame_from_parts;
     use solicit::frame::Frame;
+    use solicit::frame::FrameIR;
     use solicit::frame::FrameHeader;
 
     #[test]
@@ -140,7 +138,7 @@ mod tests {
     fn test_serialize_connection_level() {
         let frame = WindowUpdateFrame::for_connection(10);
         let expected: Vec<u8> = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 0), vec![0, 0, 0, 10]).as_ref().to_owned();
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(expected, serialized);
     }
@@ -149,7 +147,7 @@ mod tests {
     fn test_serialize_stream_level() {
         let frame = WindowUpdateFrame::for_stream(1, 10);
         let expected = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 10]).as_ref().to_owned();
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(expected, serialized);
     }

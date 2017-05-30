@@ -1,6 +1,5 @@
 //! The module contains the implementation of HTTP/2 frames.
 
-use std::io;
 use std::mem;
 
 use bytes::Bytes;
@@ -19,7 +18,6 @@ use solicit::frame::flags::*;
 /// let buf: [u8; 4] = [0, 0, 0, 1];
 /// assert_eq!(1u32, unpack_octets_4!(buf, 0, u32));
 /// ```
-#[macro_escape]
 macro_rules! unpack_octets_4 {
     ($buf:expr, $offset:expr, $tip:ty) => (
         (($buf[$offset + 0] as $tip) << 24) |
@@ -38,8 +36,6 @@ fn parse_stream_id(buf: &[u8]) -> u32 {
     // Now clear the most significant bit, as that is reserved and MUST be ignored when received.
     unpacked & !0x80000000
 }
-
-pub const FRAME_HEADER_LEN: usize = 9;
 
 pub mod builder;
 pub mod continuation;
@@ -67,9 +63,12 @@ pub use self::window_update::WindowUpdateFrame;
 pub use self::continuation::ContinuationFrame;
 pub use self::push_promise::PushPromiseFrame;
 
+pub const FRAME_HEADER_LEN: usize = 9;
+
 /// An alias for the 9-byte buffer that each HTTP/2 frame header must be stored
 /// in.
-pub type FrameHeaderBuffer = [u8; 9];
+pub type FrameHeaderBuffer = [u8; FRAME_HEADER_LEN];
+
 /// An alias for the 4-tuple representing the components of each HTTP/2 frame
 /// header.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -161,14 +160,14 @@ fn parse_padded_payload(payload: Bytes, flag: bool) -> Option<(Bytes, u8)> {
 /// representation.
 pub trait FrameIR {
     /// Write out the on-the-wire representation of the frame into the given `FrameBuilder`.
-    fn serialize_into<B: FrameBuilder>(self, builder: &mut B) -> io::Result<()>;
+    fn serialize_into(self, builder: &mut FrameBuilder);
 
     fn serialize_into_vec(self) -> Vec<u8>
         where Self : Sized
     {
-        let mut buf = io::Cursor::new(Vec::with_capacity(16));
-        self.serialize_into(&mut buf).expect("serialize_into");
-        buf.into_inner()
+        let mut buf = FrameBuilder::new();
+        self.serialize_into(&mut buf);
+        buf.0
     }
 }
 
@@ -354,16 +353,15 @@ impl<'a> From<&'a [u8]> for RawFrame {
 
 /// `RawFrame`s can be serialized to an on-the-wire format.
 impl FrameIR for RawFrame {
-    fn serialize_into<B: FrameBuilder>(self, b: &mut B) -> io::Result<()> {
-        b.write_header(self.header())?;
-        b.write_all(&self.payload())
+    fn serialize_into(self, b: &mut FrameBuilder) {
+        b.write_header(self.header());
+        b.write_all(&self.payload());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{unpack_header, pack_header, RawFrame, FrameIR, FrameHeader};
-    use std::io;
+    use super::{unpack_header, pack_header, RawFrame, FrameHeader};
 
     /// Tests that the `unpack_header` function correctly returns the
     /// components of HTTP/2 frame headers.
@@ -496,26 +494,6 @@ mod tests {
         let raw: RawFrame = buf.clone().into();
 
         assert_eq!(raw.serialize().as_ref(), &buf[..]);
-    }
-
-    /// Tests that `RawFrame`s are correctly serialized to an on-the-wire format, when considered a
-    /// `FrameIR` implementation.
-    #[test]
-    fn test_raw_frame_as_frame_ir() {
-        let data = b"123";
-        let header = FrameHeader::new(data.len() as u32, 0x1, 0, 1);
-        let buf = {
-            let mut buf = Vec::new();
-            buf.extend(pack_header(&header).to_vec().into_iter());
-            buf.extend(data.to_vec().into_iter());
-            buf
-        };
-        let raw: RawFrame = buf.clone().into();
-
-        let mut serialized = io::Cursor::new(Vec::new());
-        raw.serialize_into(&mut serialized).unwrap();
-
-        assert_eq!(serialized.into_inner(), buf);
     }
 
     /// Tests the `len` method of the `RawFrame`.

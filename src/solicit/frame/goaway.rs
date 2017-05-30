@@ -1,7 +1,5 @@
 //! Implements the `GOAWAY` HTTP/2 frame.
 
-use std::io;
-
 use bytes::Bytes;
 
 use error::ErrorCode;
@@ -114,12 +112,11 @@ impl Frame for GoawayFrame {
 }
 
 impl FrameIR for GoawayFrame {
-    fn serialize_into<B: FrameBuilder>(self, builder: &mut B) -> io::Result<()> {
-        builder.write_header(self.get_header())?;
-        builder.write_u32(self.last_stream_id)?;
-        builder.write_u32(self.raw_error_code)?;
-        builder.write_all(&self.debug_data)?;
-        Ok(())
+    fn serialize_into(self, builder: &mut FrameBuilder) {
+        builder.write_header(self.get_header());
+        builder.write_u32(self.last_stream_id);
+        builder.write_u32(self.raw_error_code);
+        builder.write_all(&self.debug_data);
     }
 }
 
@@ -127,9 +124,10 @@ impl FrameIR for GoawayFrame {
 mod tests {
     use super::GoawayFrame;
 
-    use solicit::tests::common::{serialize_frame, raw_frame_from_parts};
+    use solicit::tests::common::raw_frame_from_parts;
     use error::ErrorCode;
     use solicit::frame::Frame;
+    use solicit::frame::FrameIR;
     use solicit::frame::FrameHeader;
 
     use bytes::Bytes;
@@ -195,7 +193,7 @@ mod tests {
         let frame = GoawayFrame::new(0, ErrorCode::ProtocolError);
         let expected: Vec<u8> = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1])
                                     .as_ref().to_owned();
-        let raw = serialize_frame(&frame);
+        let raw = frame.serialize_into_vec();
 
         assert_eq!(expected, raw);
     }
@@ -208,7 +206,7 @@ mod tests {
                                                      vec![0, 0, 0, 0, 0, 0, 0, 1, b'H', b'i',
                                                           b'!'])
                                     .as_ref().to_owned();
-        let raw = serialize_frame(&frame);
+        let raw = frame.serialize_into_vec();
 
         assert_eq!(expected, raw);
     }

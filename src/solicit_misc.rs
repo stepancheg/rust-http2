@@ -1,26 +1,8 @@
-use std::io;
-use std::mem;
-
 use solicit::StreamId;
 use result::Result;
 use solicit::frame::*;
 use solicit::connection::HttpFrame;
-use solicit::connection::SendFrame;
 
-
-pub struct VecSendFrame(pub Vec<u8>);
-
-impl SendFrame for VecSendFrame {
-    fn send_frame<F : FrameIR>(&mut self, frame: F) -> Result<()> {
-        let pos = self.0.len();
-        let mut cursor = io::Cursor::new(mem::replace(&mut self.0, Vec::new()));
-        cursor.set_position(pos as u64);
-        frame.serialize_into(&mut cursor)?;
-        self.0 = cursor.into_inner();
-
-        Ok(())
-    }
-}
 
 /// Frames with stream
 #[derive(Debug)]

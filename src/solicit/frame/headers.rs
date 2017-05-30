@@ -1,7 +1,5 @@
 //! The module contains the implementation of the `HEADERS` frame and associated flags.
 
-use std::io;
-
 use bytes::Bytes;
 
 use solicit::StreamId;
@@ -300,11 +298,11 @@ impl Frame for HeadersFrame {
 }
 
 impl FrameIR for HeadersFrame {
-    fn serialize_into<B: FrameBuilder>(self, b: &mut B) -> io::Result<()> {
-        b.write_header(self.get_header())?;
+    fn serialize_into(self, b: &mut FrameBuilder) {
+        b.write_header(self.get_header());
         let padded = self.flags.is_set(HeadersFlag::Padded);
         if padded {
-            b.write_all(&[self.padding_len])?;
+            b.write_all(&[self.padding_len]);
         }
         // The stream dependency fields follow, if the priority flag is set
         if self.flags.is_set(HeadersFlag::Priority) {
@@ -312,16 +310,14 @@ impl FrameIR for HeadersFrame {
                 Some(ref dep) => dep.serialize(),
                 None => panic!("Priority flag set, but no dependency information given"),
             };
-            b.write_all(&dep_buf)?;
+            b.write_all(&dep_buf);
         }
         // Now the actual headers fragment
-        b.write_all(&self.header_fragment)?;
+        b.write_all(&self.header_fragment);
         // Finally, add the trailing padding, if required
         if padded {
-            b.write_padding(self.padding_len)?;
+            b.write_padding(self.padding_len);
         }
-
-        Ok(())
     }
 }
 
@@ -329,9 +325,10 @@ impl FrameIR for HeadersFrame {
 mod tests {
     use super::{HeadersFrame, HeadersFlag, StreamDependency};
     use solicit::frame::tests::build_padded_frame_payload;
-    use solicit::tests::common::{raw_frame_from_parts, serialize_frame};
+    use solicit::tests::common::raw_frame_from_parts;
     use solicit::frame::{pack_header, Frame};
     use solicit::frame::FrameHeader;
+    use solicit::frame::FrameIR;
 
     /// Tests that a stream dependency structure can be correctly parsed by the
     /// `StreamDependency::parse` method.
@@ -543,7 +540,7 @@ mod tests {
         };
         let frame = HeadersFrame::new(data.to_vec(), 1);
 
-        let actual = serialize_frame(&frame);
+        let actual = frame.serialize_into_vec();
 
         assert_eq!(expected, actual);
     }
@@ -565,7 +562,7 @@ mod tests {
         let mut frame = HeadersFrame::new(data.to_vec(), 1);
         frame.set_padding(6);
 
-        let actual = serialize_frame(&frame);
+        let actual = frame.serialize_into_vec();
 
         assert_eq!(expected, actual);
     }
@@ -593,7 +590,7 @@ mod tests {
         };
         let frame = HeadersFrame::with_dependency(data.to_vec(), 1, dep.clone());
 
-        let actual = serialize_frame(&frame);
+        let actual = frame.serialize_into_vec();
 
         assert_eq!(expected, actual);
     }
@@ -624,7 +621,7 @@ mod tests {
         let mut frame = HeadersFrame::with_dependency(data.to_vec(), 1, dep.clone());
         frame.set_padding(4);
 
-        let actual = serialize_frame(&frame);
+        let actual = frame.serialize_into_vec();
 
         assert_eq!(expected, actual);
     }

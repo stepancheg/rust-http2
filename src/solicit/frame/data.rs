@@ -1,6 +1,5 @@
 //! The module contains the implementation of the `DATA` frame and associated flags.
 
-use std::io;
 use std::borrow::Cow;
 use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame, parse_padded_payload};
@@ -212,17 +211,16 @@ impl Frame for DataFrame {
 }
 
 impl FrameIR for DataFrame {
-    fn serialize_into<B: FrameBuilder>(self, b: &mut B) -> io::Result<()> {
-        b.write_header(self.get_header())?;
+    fn serialize_into(self, b: &mut FrameBuilder) {
+        b.write_header(self.get_header());
         if self.is_padded() {
-            let pad_len = self.padding_len;
-            b.write_all(&[pad_len])?;
-            b.write_all(&self.data)?;
-            b.write_padding(pad_len)?;
+            let pad_len: u8 = self.padding_len;
+            b.write_all(&[pad_len]);
+            b.write_all(&self.data);
+            b.write_padding(pad_len);
         } else {
-            b.write_all(&self.data)?;
+            b.write_all(&self.data);
         }
-        Ok(())
     }
 }
 
@@ -230,8 +228,9 @@ impl FrameIR for DataFrame {
 mod tests {
     use super::{DataFlag, DataFrame};
     use solicit::frame::tests::build_padded_frame_payload;
-    use solicit::tests::common::{raw_frame_from_parts, serialize_frame};
+    use solicit::tests::common::raw_frame_from_parts;
     use solicit::frame::{pack_header, Frame};
+    use solicit::frame::FrameIR;
     use solicit::frame::FrameHeader;
 
     /// Tests that the `DataFrame` struct correctly interprets a DATA frame
@@ -414,7 +413,7 @@ mod tests {
             res
         };
 
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(serialized, expected);
     }
@@ -434,7 +433,7 @@ mod tests {
             res
         };
 
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(serialized, expected);
     }
@@ -463,7 +462,7 @@ mod tests {
             res
         };
 
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(serialized, expected);
     }
@@ -489,7 +488,7 @@ mod tests {
             res
         };
 
-        let serialized = serialize_frame(&frame);
+        let serialized = frame.serialize_into_vec();
 
         assert_eq!(serialized, expected);
     }

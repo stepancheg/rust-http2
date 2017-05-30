@@ -26,7 +26,6 @@ use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 use solicit::connection::EndStream;
 use solicit::connection::HttpConnection;
-use solicit::connection::SendFrame;
 use solicit::connection::HttpFrame;
 use solicit::connection::HttpFrameType;
 use solicit::frame::settings::HttpSettings;
@@ -155,7 +154,7 @@ impl<T : Types> ConnData<T>
         r
     }
 
-    fn write_part(&mut self, target: &mut VecSendFrame, stream_id: StreamId, part: HttpStreamCommand) {
+    fn write_part(&mut self, target: &mut FrameBuilder, stream_id: StreamId, part: HttpStreamCommand) {
         match part {
             HttpStreamCommand::Data(data, end_stream) => {
                 // if client requested end of stream,
@@ -167,7 +166,8 @@ impl<T : Types> ConnData<T>
 
                     debug!("sending frame {:?}", frame);
 
-                    return target.send_frame(frame).unwrap();
+                    frame.serialize_into(target);
+                    return;
                 }
 
                 let mut pos = 0;
@@ -189,7 +189,7 @@ impl<T : Types> ConnData<T>
 
                     debug!("sending frame {:?}", frame);
 
-                    target.send_frame(frame).unwrap();
+                    frame.serialize_into(target);
 
                     pos = end;
                 }
@@ -210,20 +210,20 @@ impl<T : Types> ConnData<T>
 
                 debug!("sending frame {:?}", frame);
 
-                target.send_frame(frame).unwrap();
+                frame.serialize_into(target);
             }
             HttpStreamCommand::Rst(error_code) => {
                 let frame = RstStreamFrame::new(stream_id, error_code);
 
                 debug!("sending frame {:?}", frame);
 
-                target.send_frame(frame).unwrap();
+                frame.serialize_into(target);
             }
         }
     }
 
     pub fn pop_outg_all_for_stream_bytes(&mut self, stream_id: StreamId) -> Vec<u8> {
-        let mut send = VecSendFrame(Vec::new());
+        let mut send = FrameBuilder::new();
         for part in self.pop_outg_all_for_stream(stream_id) {
             self.write_part(&mut send, stream_id, part);
         }
@@ -232,7 +232,7 @@ impl<T : Types> ConnData<T>
 
     pub fn pop_outg_all_for_conn_bytes(&mut self) -> Vec<u8> {
         // TODO: maintain own limits of out window
-        let mut send = VecSendFrame(Vec::new());
+        let mut send = FrameBuilder::new();
         for (stream_id, part) in self.pop_outg_all_for_conn() {
             self.write_part(&mut send, stream_id, part);
         }
@@ -751,10 +751,7 @@ impl<I, T> WriteLoopData<I, T>
     fn write_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
         debug!("send {:?}", frame);
 
-        let mut send_buf = VecSendFrame(Vec::new());
-        send_buf.send_frame(frame).unwrap();
-
-        self.write_all(send_buf.0)
+        self.write_all(frame.serialize_into_vec())
     }
 
     fn with_inner<G, R>(&self, f: G) -> R

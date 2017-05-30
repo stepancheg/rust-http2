@@ -1,5 +1,3 @@
-use std::io;
-
 use bytes::Bytes;
 
 use solicit::StreamId;
@@ -129,11 +127,8 @@ impl Frame for ContinuationFrame {
 }
 
 impl FrameIR for ContinuationFrame {
-    fn serialize_into<B : FrameBuilder>(self, b: &mut B) -> io::Result<()> {
-        b.write_header(self.get_header())?;
-        // Now the actual headers fragment
-        b.write_all(&self.header_fragment)?;
-
-        Ok(())
+    fn serialize_into(self, b: &mut FrameBuilder) {
+        b.write_header(self.get_header());
+        b.write_all(&self.header_fragment);
     }
 }

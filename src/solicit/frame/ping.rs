@@ -1,7 +1,5 @@
 //! Implements the `PING` HTTP/2 frame.
 
-use std::io;
-
 use solicit::StreamId;
 use solicit::frame::{
     Frame,
@@ -117,12 +115,11 @@ impl Frame for PingFrame {
     }
 }
 
-impl<'a> FrameIR for PingFrame {
-    fn serialize_into<B: FrameBuilder>(self, builder: &mut B) -> io::Result<()> {
-        builder.write_header(self.get_header())?;
-        builder.write_u32((self.opaque_data >> 32) as u32)?;
-        builder.write_u32(self.opaque_data as u32)?;
-        Ok(())
+impl FrameIR for PingFrame {
+    fn serialize_into(self, builder: &mut FrameBuilder) {
+        builder.write_header(self.get_header());
+        builder.write_u32((self.opaque_data >> 32) as u32);
+        builder.write_u32(self.opaque_data as u32);
     }
 }
 
@@ -130,8 +127,9 @@ impl<'a> FrameIR for PingFrame {
 mod tests {
     use super::PingFrame;
 
-    use solicit::tests::common::{serialize_frame, raw_frame_from_parts};
+    use solicit::tests::common::raw_frame_from_parts;
     use solicit::frame::Frame;
+    use solicit::frame::FrameIR;
     use solicit::frame::FrameHeader;
 
     #[test]
@@ -165,7 +163,7 @@ mod tests {
             FrameHeader::new(8, 0x6, 1, 0),
             vec![0, 0, 0, 0, 0, 0, 0, 0]).as_ref().to_owned();
 
-        let raw = serialize_frame(&frame);
+        let raw = frame.serialize_into_vec();
 
         assert_eq!(expected, raw);
     }

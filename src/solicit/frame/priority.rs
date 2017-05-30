@@ -1,5 +1,3 @@
-use std::io;
-
 use bytes::IntoBuf;
 use bytes::BigEndian;
 use bytes::Buf;
@@ -78,7 +76,7 @@ impl Frame for PriorityFrame {
 }
 
 impl FrameIR for PriorityFrame {
-    fn serialize_into<B : FrameBuilder>(self, _builder: &mut B) -> io::Result<()> {
+    fn serialize_into(self, _builder: &mut FrameBuilder) {
         unimplemented!()
     }
 }
