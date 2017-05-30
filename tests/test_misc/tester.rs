@@ -22,6 +22,7 @@ use httpbis::solicit::frame::headers::HeadersFlag;
 use httpbis::solicit::frame::data::DataFrame;
 use httpbis::solicit::frame::data::DataFlag;
 use httpbis::solicit::frame::goaway::GoawayFrame;
+use httpbis::solicit::frame::window_update::WindowUpdateFrame;
 use httpbis::solicit::frame::RawFrame;
 use httpbis::solicit::frame::rst_stream::RstStreamFrame;
 use httpbis::solicit::connection::HttpFrame;
@@ -107,6 +108,11 @@ impl HttpConnectionTester {
         self.tcp.write(&frame.serialize_into_vec()).expect("send_frame");
     }
 
+    pub fn send_window_update_conn(&mut self, increment: u32) {
+        self.conn.in_window_size.try_increase(increment).unwrap();
+        self.send_frame(WindowUpdateFrame::for_connection(increment));
+    }
+
     pub fn send_goaway(&mut self, last_stream_id: StreamId) {
         self.send_frame(GoawayFrame::new(last_stream_id, ErrorCode::InadequateSecurity));
     }
@@ -144,7 +150,7 @@ impl HttpConnectionTester {
     pub fn recv_raw_frame(&mut self) -> RawFrame {
         httpbis::solicit_async::recv_raw_frame_sync(
             &mut self.tcp,
-            self.conn.peer_settings.max_frame_size)
+            self.conn.our_settings_sent.max_frame_size) // TODO: use our settings
                 .expect("recv_raw_frame")
     }
 
@@ -179,6 +185,7 @@ impl HttpConnectionTester {
     pub fn recv_frame_settings_set(&mut self) -> SettingsFrame {
         let settings = self.recv_frame_settings();
         assert!(!settings.is_ack());
+        self.conn.peer_settings.apply_from_frame(&settings);
         settings
     }
 
@@ -211,8 +218,10 @@ impl HttpConnectionTester {
 
     pub fn send_recv_settings(&mut self, settings: SettingsFrame) {
         assert!(!self.waiting_settings_ack);
-        self.send_frame(settings);
+        self.conn.our_settings_sent.apply_from_frame(&settings);
         self.waiting_settings_ack = true;
+        self.send_frame(settings);
+        self.conn.our_settings_ack = self.conn.our_settings_sent.clone();
         self.recv_frame_settings_ack();
     }
 

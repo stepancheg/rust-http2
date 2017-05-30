@@ -96,7 +96,7 @@ impl HttpSetting {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct HttpSettings {
     pub header_table_size: u32,
     pub enable_push: bool,
@@ -115,6 +115,12 @@ impl HttpSettings {
             HttpSetting::InitialWindowSize(s) => self.initial_window_size = s,
             HttpSetting::MaxFrameSize(s) => self.max_frame_size = s,
             HttpSetting::MaxHeaderListSize(s) => self.max_header_list_size = s,
+        }
+    }
+
+    pub fn apply_from_frame(&mut self, frame: &SettingsFrame) {
+        for s in &frame.settings {
+            self.apply(*s);
         }
     }
 }
@@ -175,7 +181,7 @@ pub struct SettingsFrame {
 }
 
 impl SettingsFrame {
-    /// Creates a new `SettingsFrame`
+    /// Creates a new empty `SettingsFrame`
     pub fn new() -> SettingsFrame {
         SettingsFrame {
             settings: Vec::new(),
@@ -190,6 +196,14 @@ impl SettingsFrame {
         SettingsFrame {
             settings: Vec::new(),
             flags: SettingsFlag::Ack.to_flags(),
+        }
+    }
+
+    // Create a SETTINGS frame with given list of settings
+    pub fn from_settings(settings: Vec<HttpSetting>) -> SettingsFrame {
+        SettingsFrame {
+            settings: settings,
+            flags: Flags::default(),
         }
     }
 

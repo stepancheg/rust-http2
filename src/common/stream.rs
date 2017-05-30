@@ -215,7 +215,7 @@ impl<T : Types> HttpStreamCommon<T> {
             }))
         }
 
-        if self.out_window_size.size() <= 0 {
+        if self.out_window_size.size() <= 0 || conn_out_window_size.size() <= 0 {
             return None
         }
 
@@ -226,7 +226,7 @@ impl<T : Types> HttpStreamCommon<T> {
                 unreachable!()
             };
 
-        // Max of connection and stream window size
+        // Min of connection and stream window size
         let max_window = cmp::min(self.out_window_size.size(), conn_out_window_size.size());
 
         if data.len() as usize > max_window as usize {

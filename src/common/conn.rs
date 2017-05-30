@@ -157,9 +157,9 @@ impl<T : Types> ConnData<T>
                 }
 
                 let mut pos = 0;
-                const MAX_CHUNK_SIZE: usize = 8 * 1024;
+                let max_frame_size = self.conn.peer_settings.max_frame_size as usize;
                 while pos < data.len() {
-                    let end = cmp::min(data.len(), pos + MAX_CHUNK_SIZE);
+                    let end = cmp::min(data.len(), pos + max_frame_size);
 
                     let end_stream_in_frame =
                         if end == data.len() && end_stream == EndStream::Yes {
@@ -666,7 +666,8 @@ impl<I, T> ReadLoopData<I, T>
     fn recv_http_frame(self) -> HttpFuture<(Self, HttpFrame)> {
         let ReadLoopData { read, inner } = self;
 
-        let max_frame_size = inner.with(|inner| inner.conn.peer_settings.max_frame_size);
+        // TODO: use our settings
+        let max_frame_size = inner.with(|inner| DEFAULT_SETTINGS.max_frame_size);
 
         Box::new(recv_http_frame_join_cont(read, max_frame_size)
             .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame)))

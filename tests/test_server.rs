@@ -25,6 +25,7 @@ use httpbis::solicit::header::*;
 use httpbis::*;
 use httpbis::stream_part::HttpStreamPart;
 use httpbis::solicit::frame::settings::*;
+use httpbis::solicit::DEFAULT_SETTINGS;
 
 use std::iter::FromIterator;
 
@@ -217,12 +218,10 @@ fn increase_frame_size() {
     frame.settings.push(HttpSetting::MaxFrameSize(20000));
     tester.send_recv_settings(frame);
 
-    tester.send_headers(1, Headers::new_post("/echo"), false);
-    tester.send_data(1, &[1; 20_000], true);
-
-    let r = tester.recv_message(1);
-    assert_eq!(200, r.headers.status());
-    assert_eq!(&[1; 20_000][..], &r.body);
+    tester.send_get(1, "/blocks/30000/1");
+    assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
+    assert_eq!(20000, tester.recv_frame_data_check(1, false).len());
+    assert_eq!(10000, tester.recv_frame_data_check(1, true).len());
 }
 
 #[test]
@@ -249,4 +248,36 @@ fn exceed_window_size() {
     tester.settings_xchg();
 
     assert_eq!(200, tester.get(1, "/echo").headers.status());
+}
+
+#[test]
+fn stream_window_gt_conn_window() {
+    env_logger::init().ok();
+
+    let server = HttpServerTest::new();
+
+    let mut tester = HttpConnectionTester::connect(server.port);
+    tester.send_preface();
+    tester.settings_xchg();
+
+    let w = DEFAULT_SETTINGS.initial_window_size;
+
+    // May need to be changed if server defaults are changed
+    assert_eq!(w as i32, tester.conn.in_window_size.size());
+
+    tester.send_recv_settings(SettingsFrame::from_settings(vec![
+        HttpSetting::InitialWindowSize(w * 2),
+        HttpSetting::MaxFrameSize(w * 10)]));
+
+    // Now new stream window is gt than conn window
+
+    let w = tester.conn.peer_settings.initial_window_size;
+    tester.send_get(1, &format!("/blocks/{}/{}", w, 2));
+
+    assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
+    assert_eq!(w as usize, tester.recv_frame_data_check(1, false).len());
+
+    tester.send_window_update_conn(w);
+
+    assert_eq!(w as usize, tester.recv_frame_data_check(1, true).len());
 }
