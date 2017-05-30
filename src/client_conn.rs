@@ -97,11 +97,12 @@ impl ConnInner for ClientInner {
     {
         if let Some(mut stream) = self.get_stream_or_send_stream_closed(stream_id)? {
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
-                // TODO: reset stream if caller is dead
                 drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                     content: HttpStreamPartContent::Headers(headers),
                     last: end_stream == EndStream::Yes,
                 })));
+            } else {
+                // TODO: reset stream
             }
 
             Ok(Some(stream))

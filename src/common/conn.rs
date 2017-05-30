@@ -388,6 +388,12 @@ impl<T : Types> ConnData<T>
         Ok(None)
     }
 
+    pub fn send_rst_stream(&mut self, stream_id: StreamId, error_code: ErrorCode)
+        -> result::Result<()>
+    {
+        self.send_frame(RstStreamFrame::new(stream_id, error_code))
+    }
+
     pub fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
@@ -397,7 +403,7 @@ impl<T : Types> ConnData<T>
         }
 
         debug!("stream not found: {}, sending RST_STREAM", stream_id);
-        self.send_frame(RstStreamFrame::new(stream_id, ErrorCode::StreamClosed))?;
+        self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
 
         return Ok(None);
     }
