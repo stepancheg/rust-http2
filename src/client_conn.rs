@@ -152,7 +152,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let inner_rc = self.inner.clone();
 
-        let stream_id = self.inner.with(move |inner: &mut ClientInner| {
+        self.inner.with(move |inner: &mut ClientInner| {
 
             let (latch_ctr, latch) = latch();
 
@@ -170,11 +170,9 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             let stream_id = inner.insert_stream(stream);
 
             inner.pump_stream_to_write_loop(inner_rc, stream_id, body, latch);
-
-            stream_id
         });
 
-        self.send_outg_stream(stream_id)
+        Box::new(future::ok(self))
     }
 
     fn process_message(self, message: ClientToWriteMessage) -> HttpFuture<Self> {
