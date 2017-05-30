@@ -156,9 +156,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
             let (latch_ctr, latch) = latch();
 
-            // TODO
-            latch_ctr.open();
-
             let mut stream = HttpStreamCommon::new(
                 inner.conn.peer_settings.initial_window_size,
                 resp_tx,
@@ -174,6 +171,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             stream_id
         });
 
+        // Also opens latch if necessary
         self.send_outg_stream(stream_id)
     }
 
