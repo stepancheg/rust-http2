@@ -269,14 +269,6 @@ pub trait SendFrame {
     fn send_frame<F: FrameIR>(&mut self, frame: F) -> Result<()>;
 }
 
-/// A trait that should be implemented by types that can provide the functionality
-/// of receiving HTTP/2 frames.
-pub trait ReceiveFrame {
-    /// Return a new `HttpFrame` instance. Unknown frames can be wrapped in the
-    /// `HttpFrame::UnknownFrame` variant (i.e. their `RawFrame` representation).
-    fn recv_frame(&mut self) -> Result<HttpFrame>;
-}
-
 /// The struct represents a chunk of data that should be sent to the peer on a particular stream.
 pub struct DataChunk<'a> {
     /// The data that should be sent.
