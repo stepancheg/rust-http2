@@ -6,7 +6,7 @@ use futures::Poll;
 
 use futures::stream::Stream;
 use futures::task::Task;
-use futures::task::park;
+use futures::task;
 
 enum State {
     Nothing,
@@ -41,7 +41,7 @@ impl Drop for SignalSender {
         let mut guard = self.shared.lock().expect("lock");
         guard.state = State::SenderDead;
         if let Some(task) = guard.task.take() {
-            task.unpark();
+            task.notify();
         }
     }
 }
@@ -51,7 +51,7 @@ impl SignalSender {
         let mut guard = self.shared.lock().expect("lock");
         guard.state = State::Signalled;
         if let Some(task) = guard.task.take() {
-            task.unpark();
+            task.notify();
         }
     }
 }
@@ -73,7 +73,7 @@ impl Stream for SignalReceiver {
                 Err(())
             }
             State::Nothing => {
-                guard.task = Some(park());
+                guard.task = Some(task::current());
                 Ok(Async::NotReady)
             }
         }

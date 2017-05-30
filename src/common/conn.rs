@@ -667,7 +667,7 @@ impl<I, T> ReadLoopData<I, T>
         let ReadLoopData { read, inner } = self;
 
         // TODO: use our settings
-        let max_frame_size = inner.with(|inner| DEFAULT_SETTINGS.max_frame_size);
+        let max_frame_size = inner.with(|_| DEFAULT_SETTINGS.max_frame_size);
 
         Box::new(recv_http_frame_join_cont(read, max_frame_size)
             .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame)))

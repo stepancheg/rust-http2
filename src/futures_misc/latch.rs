@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use futures::task::Task;
-use futures::task::park;
+use futures::task;
 
 use futures::Async;
 use futures::Poll;
@@ -69,7 +69,7 @@ impl LatchController {
 
         let mut guard = self.shared.guarded.lock().expect("lock");
         if let Some(task) = guard.task.take() {
-            task.unpark();
+            task.notify();
         }
     }
 
@@ -90,7 +90,7 @@ impl Drop for LatchController {
 
         let mut guard = self.shared.guarded.lock().expect("lock");
         if let Some(task) = guard.task.take() {
-            task.unpark();
+            task.notify();
         }
     }
 }
@@ -108,7 +108,7 @@ impl Stream for Latch {
             State::ControllerDead => Err(()),
             State::Closed => {
                 let mut guard = self.shared.guarded.lock().expect("lock");
-                guard.task = Some(park());
+                guard.task = Some(task::current());
                 Ok(Async::NotReady)
             }
         }
