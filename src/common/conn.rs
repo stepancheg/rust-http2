@@ -388,7 +388,7 @@ impl<T : Types> ConnData<T>
         Ok(None)
     }
 
-    fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
+    pub fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
         // Another day in endless bitter war against borrow checker

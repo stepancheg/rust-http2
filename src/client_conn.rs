@@ -95,26 +95,23 @@ impl ConnInner for ClientInner {
     fn process_headers(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ClientTypes>>>
     {
-        let mut stream: HttpStreamRef<ClientTypes> = match self.streams.get_mut(stream_id) {
-            None => {
-                // TODO: send stream closed
-                return Err(error::Error::Other("??"));
-            }
-            Some(stream) => stream,
-        };
-        // TODO: hack
-        if headers.0.len() != 0 {
+        if let Some(mut stream) = self.get_stream_or_send_stream_closed(stream_id)? {
+            // TODO: hack
+            if headers.0.len() != 0 {
 
-            if let Some(ref mut response_handler) = stream.stream().peer_tx {
-                // TODO: reset stream if called is dead
-                drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
-                    content: HttpStreamPartContent::Headers(headers),
-                    last: end_stream == EndStream::Yes,
-                })));
+                if let Some(ref mut response_handler) = stream.stream().peer_tx {
+                    // TODO: reset stream if called is dead
+                    drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
+                        content: HttpStreamPartContent::Headers(headers),
+                        last: end_stream == EndStream::Yes,
+                    })));
+                }
             }
+
+            Ok(Some(stream))
+        } else {
+            Ok(None)
         }
-
-        Ok(Some(stream))
     }
 
     fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32) {
