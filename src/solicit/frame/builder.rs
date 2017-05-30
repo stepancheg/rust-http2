@@ -15,19 +15,6 @@ pub trait FrameBuilder: io::Write + io::Seek {
         self.write_all(&pack_header(&header))
     }
 
-    /// Overwrite the previously written header, assuming it's the first byte sequence of the
-    /// buffer.
-    ///
-    /// The default implementation seeks to the beginning of the buffer, writes the header, and
-    /// then moves the cursor back to its previos position (i.e. offset from the beginning).
-    fn overwrite_header(&mut self, header: FrameHeader) -> io::Result<()> {
-        let current = self.seek(io::SeekFrom::Current(0))?;
-        self.seek(io::SeekFrom::Start(0))?;
-        self.write_header(header)?;
-        self.seek(io::SeekFrom::Start(current))?;
-        Ok(())
-    }
-
     /// Copy all available bytes from the given `io::Read` instance.
     ///
     /// This method allows poor man's specialization for types that can implement the copy more
@@ -99,33 +86,6 @@ mod tests {
 
         buf.write_header(header).unwrap();
         buf.write_all(&[1, 2, 3, 4]).unwrap();
-
-        let frame = buf.into_inner();
-        assert_eq!(frame, expected);
-    }
-
-    #[test]
-    fn test_rewrite_header_after_payload() {
-        let mut buf = io::Cursor::new(Vec::new());
-        let original_header = FrameHeader::new(10, 0x1, 0x0, 3);
-        let actual_header = FrameHeader::new(5, 0x0, 0x0, 5);
-        let expected = {
-            let mut buf = Vec::new();
-            buf.extend(pack_header(&actual_header).to_vec());
-            buf.extend(vec![1, 2, 3, 4]);
-            buf
-        };
-
-        // Sanity check for the test: the two headers must be different!
-        assert!(original_header != actual_header);
-        // First one header...
-        buf.write_header(original_header).unwrap();
-        // Then some payload...
-        buf.write_all(&[1, 2, 3]).unwrap();
-        // Now change the header!
-        buf.overwrite_header(actual_header).unwrap();
-        // ...and add some more data to the end
-        buf.write_all(&[4]).unwrap();
 
         let frame = buf.into_inner();
         assert_eq!(frame, expected);
