@@ -4,6 +4,7 @@ use std::str;
 use std::thread;
 use std::time::Duration;
 
+extern crate regex;
 extern crate bytes;
 extern crate httpbis;
 extern crate futures;

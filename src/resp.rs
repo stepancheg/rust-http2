@@ -37,12 +37,22 @@ impl Response {
         Response::headers_and_stream(headers, HttpPartStream::bytes(content))
     }
 
+    /// Create a response with only headers
+    pub fn headers(headers: Headers) -> Response {
+        Response::headers_and_bytes_stream(headers, stream::empty())
+    }
+
+    /// Create a response with headers and response body
     pub fn headers_and_bytes(header: Headers, content: Bytes) -> Response {
         Response::headers_and_bytes_stream(header, stream::once(Ok(content)))
     }
 
     pub fn message(message: SimpleHttpMessage) -> Response {
         Response::headers_and_bytes(message.headers, message.body)
+    }
+
+    pub fn not_found_404() -> Response {
+        Response::headers(Headers::not_found_404())
     }
 
     pub fn from_stream<S>(stream: S) -> Response

@@ -1,5 +1,6 @@
 //! Tests for server.
 
+extern crate regex;
 extern crate bytes;
 extern crate futures;
 extern crate native_tls;
@@ -166,7 +167,7 @@ fn response_large() {
 fn rst_stream_on_data_without_stream() {
     env_logger::init().ok();
 
-    let server = HttpServerEcho::new();
+    let server = HttpServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -177,7 +178,7 @@ fn rst_stream_on_data_without_stream() {
 
     tester.recv_rst_frame_check(11, ErrorCode::StreamClosed);
 
-    let r = tester.get(1, "/fgfg");
+    let r = tester.get(1, "/echo");
     assert_eq!(200, r.headers.status());
 }
 
@@ -185,7 +186,7 @@ fn rst_stream_on_data_without_stream() {
 fn exceed_max_frame_size() {
     env_logger::init().ok();
 
-    let server = HttpServerEcho::new();
+    let server = HttpServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -199,14 +200,14 @@ fn exceed_max_frame_size() {
     tester.send_preface();
     tester.settings_xchg();
 
-    assert_eq!(200, tester.get(1, "/fgfg").headers.status());
+    assert_eq!(200, tester.get(1, "/echo").headers.status());
 }
 
 #[test]
 fn increase_frame_size() {
     env_logger::init().ok();
 
-    let server = HttpServerEcho::new();
+    let server = HttpServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -216,7 +217,7 @@ fn increase_frame_size() {
     frame.settings.push(HttpSetting::MaxFrameSize(20000));
     tester.send_recv_settings(frame);
 
-    tester.send_headers(1, Headers::new_post("/fgfg"), false);
+    tester.send_headers(1, Headers::new_post("/echo"), false);
     tester.send_data(1, &[1; 20_000], true);
 
     let r = tester.recv_message(1);
@@ -228,7 +229,7 @@ fn increase_frame_size() {
 fn exceed_window_size() {
     env_logger::init().ok();
 
-    let server = HttpServerEcho::new();
+    let server = HttpServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -247,5 +248,5 @@ fn exceed_window_size() {
     tester.send_preface();
     tester.settings_xchg();
 
-    assert_eq!(200, tester.get(1, "/fgfg").headers.status());
+    assert_eq!(200, tester.get(1, "/echo").headers.status());
 }
