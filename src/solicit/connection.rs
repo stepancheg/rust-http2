@@ -17,17 +17,11 @@
 
 use std::borrow::Cow;
 use std::borrow::Borrow;
-use std::cmp;
-
-use bytes::Bytes;
 
 use error::Error;
-use error::ErrorCode;
 use result::Result;
 use solicit::{StreamId, WindowSize};
 use solicit::DEFAULT_SETTINGS;
-use solicit::header::Header;
-use solicit::frame::continuation::ContinuationFlag;
 use solicit::frame;
 use solicit::frame::*;
 use solicit::frame::settings::HttpSettings;
@@ -268,16 +262,6 @@ impl HttpConnection {
     }
 }
 
-/// A trait that should be implemented by types that can provide the functionality
-/// of sending HTTP/2 frames.
-pub trait SendFrame {
-    /// Queue the given frame for immediate sending to the peer. It is the responsibility of each
-    /// individual `SendFrame` implementation to correctly serialize the given `FrameIR` into an
-    /// appropriate buffer and make sure that the frame is subsequently eventually pushed to the
-    /// peer.
-    fn send_frame<F: FrameIR>(&mut self, frame: F) -> Result<()>;
-}
-
 /// The struct represents a chunk of data that should be sent to the peer on a particular stream.
 pub struct DataChunk<'a> {
     /// The data that should be sent.
@@ -325,136 +309,6 @@ pub enum EndStream {
     No,
 }
 
-/// The struct represents an `HttpConnection` that has been bound to a `SendFrame` reference,
-/// allowing it to send frames. It exposes convenience methods for various send operations that can
-/// be invoked on the underlying stream. The methods prepare the appropriate frames and queue their
-/// sending on the referenced `SendFrame` instance.
-///
-/// The only way for clients to obtain an `HttpConnectionSender` is to invoke the
-/// `HttpConnection::sender` method and provide it a reference to the `SendFrame` that should be
-/// used.
-pub struct HttpConnectionSender<'a, S>
-    where S: SendFrame + 'a
-{
-    sender: &'a mut S,
-    conn: &'a mut HttpConnection,
-}
-
-impl<'a, S> HttpConnectionSender<'a, S>
-    where S: SendFrame + 'a
-{
-    /// Sends the given frame to the peer.
-    ///
-    /// # Returns
-    ///
-    /// Any IO errors raised by the underlying transport layer are wrapped in a
-    /// `HttpError::IoError` variant and propagated upwards.
-    ///
-    /// If the frame is successfully written, returns a unit Ok (`Ok(())`).
-    #[inline]
-    fn send_frame<F: FrameIR>(&mut self, frame: F) -> Result<()> {
-        self.sender.send_frame(frame)
-    }
-
-    /// Send a RST_STREAM frame for the given frame id
-    pub fn send_rst_stream(&mut self, id: StreamId, code: ErrorCode) -> Result<()> {
-        self.send_frame(RstStreamFrame::new(id, code))
-    }
-
-    /// Sends a SETTINGS acknowledge frame to the peer.
-    pub fn send_settings_ack(&mut self) -> Result<()> {
-        self.send_frame(SettingsFrame::new_ack())
-    }
-
-    /// Sends a PING ack
-    pub fn send_ping_ack(&mut self, bytes: u64) -> Result<()> {
-        self.send_frame(PingFrame::new_ack(bytes))
-    }
-
-    /// Sends a PING request
-    pub fn send_ping(&mut self, bytes: u64) -> Result<()> {
-        self.send_frame(PingFrame::with_data(bytes))
-    }
-
-    /// A helper function that inserts the frames required to send the given headers onto the
-    /// `SendFrame` stream.
-    ///
-    /// The `HttpConnection` performs the HPACK encoding of the header block using an internal
-    /// encoder.
-    ///
-    /// # Parameters
-    ///
-    /// - `headers` - a headers list that should be sent.
-    /// - `stream_id` - the ID of the stream on which the headers will be sent. The connection
-    ///   performs no checks as to whether the stream is a valid identifier.
-    /// - `end_stream` - whether the stream should be closed from the peer's side immediately
-    ///   after sending the headers
-    pub fn send_headers<H: Into<Vec<Header>>>(
-        &mut self,
-        headers: H,
-        stream_id: StreamId,
-        end_stream: EndStream)
-            -> Result<()>
-    {
-        let headers_fragment = self.conn
-                                   .encoder
-                                   .encode(headers.into().iter().map(|h| (h.name(), h.value())));
-
-        let headers_fragment = Bytes::from(headers_fragment);
-        let mut pos = 0;
-        while pos == 0 || pos < headers_fragment.len() {
-            let end = cmp::min(
-                pos + self.conn.peer_settings.max_frame_size as usize,
-                headers_fragment.len());
-
-            let end_headers = end == headers_fragment.len();
-
-            let part = headers_fragment.slice(pos, end);
-
-            if pos == 0 {
-                let mut frame = HeadersFrame::new(part, stream_id);
-                if end_headers {
-                    frame.set_flag(HeadersFlag::EndHeaders);
-                }
-                if end_stream == EndStream::Yes {
-                    frame.set_flag(HeadersFlag::EndStream);
-                }
-                self.send_frame(frame)?;
-            } else {
-                let mut frame = ContinuationFrame::new(part, stream_id);
-                if end_headers {
-                    frame.set_flag(ContinuationFlag::EndHeaders);
-                }
-                self.send_frame(frame)?;
-            }
-
-            pos = end;
-        }
-
-        Ok(())
-    }
-
-    /// A helper function that inserts a frame representing the given data into the `SendFrame`
-    /// stream. In doing so, the connection's outbound flow control window is adjusted
-    /// appropriately.
-    pub fn send_data(&mut self, chunk: DataChunk) -> Result<()> {
-        // Prepare the frame...
-        let DataChunk { data, stream_id, end_stream } = chunk;
-
-        assert!(data.len() <= self.conn.peer_settings.max_frame_size as usize);
-
-        let mut frame = DataFrame::with_data(stream_id, data.as_ref());
-        if end_stream == EndStream::Yes {
-            frame.set_flag(DataFlag::EndStream);
-        }
-        // Adjust the flow control window...
-        self.conn.decrease_out_window(frame.payload_len())?;
-        trace!("New OUT WINDOW size = {}", self.conn.out_window_size.size());
-        // ...and now send it out.
-        self.send_frame(frame)
-    }
-}
-
 impl HttpConnection {
     /// Creates a new `HttpConnection` that will use the given sender
     /// for writing frames.
@@ -467,17 +321,6 @@ impl HttpConnection {
             our_settings_sent: None,
             in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
             out_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
-        }
-    }
-
-    /// Creates a new `HttpConnectionSender` instance that will use the given `SendFrame` instance
-    /// to send the frames that it prepares. This is a convenience struct so that clients do not
-    /// have to pass the same `sender` reference to multiple send methods.
-    /// ```
-    pub fn sender<'a, S: SendFrame>(&'a mut self, sender: &'a mut S) -> HttpConnectionSender<S> {
-        HttpConnectionSender {
-            sender: sender,
-            conn: self,
         }
     }
 
