@@ -15,9 +15,6 @@
 //! `HttpConnection`) and the higher layers that handle these events and pass them on to the
 //! application.
 
-use std::borrow::Cow;
-use std::borrow::Borrow;
-
 use error::Error;
 use result::Result;
 use solicit::{StreamId, WindowSize};
@@ -258,44 +255,6 @@ impl HttpConnection {
             &sent
         } else {
             &self.our_settings_ack
-        }
-    }
-}
-
-/// The struct represents a chunk of data that should be sent to the peer on a particular stream.
-pub struct DataChunk<'a> {
-    /// The data that should be sent.
-    pub data: Cow<'a, [u8]>,
-    /// The ID of the stream on which the data should be sent.
-    pub stream_id: StreamId,
-    /// Whether the data chunk will also end the stream.
-    pub end_stream: EndStream,
-}
-
-impl<'a> DataChunk<'a> {
-    /// Creates a new `DataChunk`.
-    ///
-    /// **Note:** `IntoCow` is unstable and there's no implementation of `Into<Cow<'a, [u8]>>` for
-    /// the fundamental types, making this a bit of a clunky API. Once such an `Into` impl is
-    /// added, this can be made generic over the trait for some ergonomic improvements.
-    pub fn new(data: Cow<'a, [u8]>, stream_id: StreamId, end_stream: EndStream) -> DataChunk<'a> {
-        DataChunk {
-            data: data,
-            stream_id: stream_id,
-            end_stream: end_stream,
-        }
-    }
-
-    /// Creates a new `DataChunk` from a borrowed slice. This method should become obsolete if we
-    /// can take an `Into<Cow<_, _>>` without using unstable features.
-    pub fn new_borrowed<D: Borrow<&'a [u8]>>(data: D,
-                                             stream_id: StreamId,
-                                             end_stream: EndStream)
-                                             -> DataChunk<'a> {
-        DataChunk {
-            data: Cow::Borrowed(data.borrow()),
-            stream_id: stream_id,
-            end_stream: end_stream,
         }
     }
 }
