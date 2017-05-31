@@ -34,7 +34,6 @@ pub mod message;
 
 pub mod futures_misc;
 
-mod tokio_oneshot;
 pub mod assert_types;
 
 pub mod hpack;

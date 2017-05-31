@@ -7,8 +7,8 @@ use std::net::ToSocketAddrs;
 
 use bytes::Bytes;
 
-use futures;
-use futures::Future;
+use futures::future;
+use futures::future::Future;
 use futures::stream::Stream;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
@@ -159,14 +159,14 @@ impl Client {
 }
 
 impl Service for Client {
-    // TODO: copy-paste with HttpClientConnectionAsync
+    // TODO: copy-paste with ClientConnection::start_request
     fn start_request(
         &self,
         headers: Headers,
         body: HttpPartStream)
             -> Response
     {
-        let (resp_tx, resp_rx) = unbounded();
+        let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {
             headers: headers,
@@ -178,11 +178,13 @@ impl Service for Client {
             return Response::err(error::Error::Other("client controller died"));
         }
 
-        let req_rx = resp_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
+        let resp_rx = resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
 
-        let req_rx = stream_with_eof_and_error(req_rx, || error::Error::Other("client is likely died"));
+        let resp_rx = resp_rx.map(|r| r.into_stream_flag());
 
-        Response::from_stream(req_rx)
+        let resp_rx = resp_rx.flatten_stream();
+
+        Response::from_stream(resp_rx)
     }}
 
 enum ControllerCommand {
@@ -229,7 +231,9 @@ impl ControllerState {
                     if let Err(start) = self.conn.start_request_with_resp_sender(start) {
                         let err = error::Error::Other("client died and reconnect failed");
                         // ignore error
-                        drop(start.resp_tx.send(ResultOrEof::Error(err)));
+                        if let Err(_) = start.resp_tx.send(Response::err(err)) {
+                            debug!("called likely died");
+                        }
                     }
                 }
             }
@@ -318,7 +322,7 @@ fn run_client_event_loop(
         .then(move |_| {
             // Must complete with error,
             // so `join` with this future cancels another future.
-            futures::failed::<(), _>(Error::Shutdown)
+            future::failed::<(), _>(Error::Shutdown)
         });
 
     // Wait for either completion of connection (i. e. error)

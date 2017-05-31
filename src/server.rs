@@ -10,11 +10,11 @@ use std::io;
 use tokio_core::reactor;
 use tokio_core::net::TcpListener;
 
-use futures;
-use futures::stream;
-use futures::Stream;
-use futures::Future;
+use futures::future;
+use futures::future::Future;
 use futures::future::join_all;
+use futures::stream;
+use futures::stream::Stream;
 
 use error::Error;
 
@@ -170,7 +170,7 @@ fn run_server_event_loop<S>(
         .then(move |_| {
             // Must complete with error,
             // so `join` with this future cancels another future.
-            futures::failed::<(), _>(Error::Shutdown)
+            future::failed::<(), _>(Error::Shutdown)
         });
 
     // Wait for either completion of connection (i. e. error)

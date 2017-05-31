@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::cmp;
 
-use futures::Future;
 use futures::future;
+use futures::future::Future;
 use futures::future::Loop;
 use futures::future::loop_fn;
 use futures::stream::Stream;
-use futures;
+use futures::sync::mpsc::UnboundedSender;
 
 use tokio_core::reactor;
 
@@ -62,7 +62,7 @@ pub struct ConnData<T : Types> {
     /// Client or server specific data
     pub specific: T::ConnDataSpecific,
     /// Messages to be sent to write loop
-    pub to_write_tx: futures::sync::mpsc::UnboundedSender<T::ToWriteMessage>,
+    pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     /// Reactor we are using
     pub loop_handle: reactor::Handle,
     /// Connection state
@@ -106,7 +106,7 @@ impl<T : Types> ConnData<T>
         specific: T::ConnDataSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
-        to_write_tx: futures::sync::mpsc::UnboundedSender<T::ToWriteMessage>)
+        to_write_tx: UnboundedSender<T::ToWriteMessage>)
             -> ConnData<T>
     {
         let mut conn = HttpConnection::new();
@@ -818,7 +818,7 @@ impl<I, T> WriteLoopData<I, T>
         if let Some(stream_id) = stream_id {
             self.send_outg_stream(stream_id)
         } else {
-            Box::new(futures::finished(self))
+            Box::new(future::finished(self))
         }
     }
 

@@ -126,7 +126,7 @@ unsafe impl Sync for ClientConnection {}
 pub struct StartRequestMessage {
     pub headers: Headers,
     pub body: HttpPartStream,
-    pub resp_tx: UnboundedSender<ResultOrEof<HttpStreamPart, Error>>,
+    pub resp_tx: oneshot::Sender<Response>,
 }
 
 enum ClientToWriteMessage {
@@ -146,11 +146,33 @@ enum ClientCommandMessage {
 }
 
 
+fn channel_network_to_user() ->
+    (UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>, Response)
+{
+    let (tx, rx) = unbounded::<ResultOrEof<HttpStreamPart, error::Error>>();
+
+    let rx = rx.map_err(|()| unreachable!());
+
+    let rx = stream_with_eof_and_error(
+        rx,
+        || error::Error::Other("unexpected EOF, client likely died"));
+
+    let rx = Response::from_stream(rx);
+
+    (tx, rx)
+}
+
 impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_start(self, start: StartRequestMessage) -> HttpFuture<Self> {
         let StartRequestMessage { headers, body, resp_tx } = start;
 
         let inner_rc = self.inner.clone();
+
+        let (resp_channel_tx, resp_channel_rx) = channel_network_to_user();
+
+        if let Err(_) = resp_tx.send(resp_channel_rx) {
+            warn!("caller died");
+        }
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
@@ -158,7 +180,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
             let mut stream = HttpStreamCommon::new(
                 inner.conn.peer_settings.initial_window_size,
-                resp_tx,
+                resp_channel_tx,
                 latch_ctr,
                 ClientStreamData { });
 
@@ -372,13 +394,14 @@ impl ClientConnection {
 }
 
 impl Service for ClientConnection {
+    // TODO: copy-paste with Client::start_request
     fn start_request(
         &self,
         headers: Headers,
         body: HttpPartStream)
             -> Response
     {
-        let (resp_tx, resp_rx) = unbounded();
+        let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {
             headers: headers,
@@ -390,11 +413,13 @@ impl Service for ClientConnection {
             return Response::err(error::Error::Other("client died"));
         }
 
-        let req_rx = resp_rx.map_err(|()| Error::from(io::Error::new(io::ErrorKind::Other, "req")));
+        let resp_rx = resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
 
-        let req_rx = stream_with_eof_and_error(req_rx, || error::Error::Other("client is likely died"));
+        let resp_rx = resp_rx.map(|r| r.into_stream_flag());
 
-        Response::from_stream(req_rx)
+        let resp_rx = resp_rx.flatten_stream();
+
+        Response::from_stream(resp_rx)
     }
 }
 

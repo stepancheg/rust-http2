@@ -1,7 +1,7 @@
 use std::mem;
 
 use futures::stream::Stream;
-use futures::Future;
+use futures::future::Future;
 use futures::Poll;
 use futures::Async;
 

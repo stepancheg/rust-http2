@@ -6,9 +6,10 @@ use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use futures;
-use futures::Future;
+use futures::future;
+use futures::future::Future;
 use futures::stream::Stream;
+use futures::sync::oneshot;
 
 use native_tls::TlsAcceptor;
 
@@ -25,7 +26,7 @@ use httpbis::for_test::*;
 pub struct HttpServerOneConn {
     from_loop: FromLoop,
     join_handle: Option<thread::JoinHandle<()>>,
-    shutdown_tx: Option<futures::Complete<()>>,
+    shutdown_tx: Option<oneshot::Sender<()>>,
     conn: Arc<Mutex<Option<ServerConnection>>>,
 }
 
@@ -50,8 +51,8 @@ impl HttpServerOneConn {
     fn new_fn_impl<S>(port: u16, server_context: Option<TlsAcceptor>, service: S) -> Self
         where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
     {
-        let (from_loop_tx, from_loop_rx) = futures::oneshot();
-        let (shutdown_tx, shutdown_rx) = futures::oneshot::<()>();
+        let (from_loop_tx, from_loop_rx) = oneshot::channel();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
         let conn: Arc<Mutex<Option<ServerConnection>>> = Default::default();
 
@@ -89,8 +90,8 @@ impl HttpServerOneConn {
                     }
                 });
 
-            let shutdown_rx = shutdown_rx.then(|_| futures::finished::<_, ()>(()));
-            let future = future.then(|_| futures::finished::<_, ()>(()));
+            let shutdown_rx = shutdown_rx.then(|_| future::finished::<_, ()>(()));
+            let future = future.then(|_| future::finished::<_, ()>(()));
 
             lp.run(shutdown_rx.select(future)).ok();
         }).expect("spawn");

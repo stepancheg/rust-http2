@@ -13,10 +13,13 @@ use solicit::DEFAULT_SETTINGS;
 
 use bytes::Bytes;
 
-use futures;
-use futures::Future;
+use futures::future;
+use futures::future::Future;
 use futures::stream;
 use futures::stream::Stream;
+use futures::sync::mpsc::unbounded;
+use futures::sync::mpsc::UnboundedSender;
+use futures::sync::oneshot;
 
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
@@ -103,7 +106,7 @@ impl ServerInner {
 
         debug!("new stream: {}", stream_id);
 
-        let (req_tx, req_rx) = futures::sync::mpsc::unbounded();
+        let (req_tx, req_rx) = unbounded();
 
         let req_rx = req_rx.map_err(|()| error::Error::from(io::Error::new(io::ErrorKind::Other, "req")));
         let req_rx = stream_with_eof_and_error(req_rx, || error::Error::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
@@ -193,7 +196,7 @@ impl From<CommonToWriteMessage> for ServerToWriteMessage {
 }
 
 enum ServerCommandMessage {
-    DumpState(futures::sync::oneshot::Sender<ConnectionStateSnapshot>),
+    DumpState(oneshot::Sender<ConnectionStateSnapshot>),
 }
 
 
@@ -221,10 +224,10 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
 }
 
 impl ServerCommandLoop {
-    fn process_dump_state(self, sender: futures::sync::oneshot::Sender<ConnectionStateSnapshot>) -> HttpFuture<Self> {
+    fn process_dump_state(self, sender: oneshot::Sender<ConnectionStateSnapshot>) -> HttpFuture<Self> {
         // ignore send error, client might be already dead
         drop(sender.send(self.inner.with(|inner| inner.dump_state())));
-        Box::new(futures::finished(self))
+        Box::new(future::finished(self))
     }
 
     fn process_message(self, message: ServerCommandMessage) -> HttpFuture<Self> {
@@ -245,7 +248,7 @@ impl ServerCommandLoop {
 
 
 pub struct ServerConnection {
-    command_tx: futures::sync::mpsc::UnboundedSender<ServerCommandMessage>,
+    command_tx: UnboundedSender<ServerCommandMessage>,
 }
 
 impl ServerConnection {
@@ -257,8 +260,8 @@ impl ServerConnection {
     {
         let lh = lh.clone();
 
-        let (to_write_tx, to_write_rx) = futures::sync::mpsc::unbounded::<ServerToWriteMessage>();
-        let (command_tx, command_rx) = futures::sync::mpsc::unbounded::<ServerCommandMessage>();
+        let (to_write_tx, to_write_rx) = unbounded::<ServerToWriteMessage>();
+        let (command_tx, command_rx) = unbounded::<ServerCommandMessage>();
 
         let to_write_rx = to_write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
         let command_rx = Box::new(command_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
@@ -303,7 +306,7 @@ impl ServerConnection {
         match tls {
             ServerTlsOption::Plain =>
                 ServerConnection::connected(
-                    lh, Box::new(futures::finished(socket)), conf, service),
+                    lh, Box::new(future::finished(socket)), conf, service),
             ServerTlsOption::Tls(acceptor) =>
                 ServerConnection::connected(
                     lh, Box::new(acceptor.accept_async(socket).map_err(error::Error::from)), conf, service),
@@ -338,7 +341,7 @@ impl ServerConnection {
 
     /// For tests
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
-        let (tx, rx) = futures::oneshot();
+        let (tx, rx) = oneshot::channel();
 
         self.command_tx.clone().send(ServerCommandMessage::DumpState(tx))
             .expect("send request to dump state");

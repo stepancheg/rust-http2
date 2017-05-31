@@ -11,8 +11,6 @@ mod latch;
 mod sender_with_last;
 pub use self::sender_with_last::*;
 
-pub mod stream_deferred;
-
 pub use self::stream_single::stream_single;
 
 pub use self::stream_merge2::stream_merge2;
@@ -21,8 +19,6 @@ pub use self::stream_merge2::Merged2Item;
 
 pub use self::stream_with_eof::*;
 pub use self::stream_with_eof_and_error::*;
-
-pub use self::stream_deferred::stream_deferred;
 
 pub use self::shutdown_signal::*;
 

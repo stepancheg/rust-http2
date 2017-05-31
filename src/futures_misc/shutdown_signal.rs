@@ -1,6 +1,6 @@
 use futures::Async;
 use futures::Poll;
-use futures::Stream;
+use futures::stream::Stream;
 use futures::future::Future;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;

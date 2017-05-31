@@ -17,7 +17,7 @@ extern crate env_logger;
 
 use bytes::Bytes;
 
-use futures::Future;
+use futures::future::Future;
 
 mod test_misc;
 

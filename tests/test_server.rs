@@ -17,7 +17,7 @@ mod test_misc;
 
 use std::io::Write as _Write;
 
-use futures::Future;
+use futures::future::Future;
 use futures::stream;
 
 use httpbis::solicit::header::*;
