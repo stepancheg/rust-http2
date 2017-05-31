@@ -106,13 +106,10 @@ impl ServerInner {
 
         debug!("new stream: {}", stream_id);
 
-        let (req_tx, req_rx) = unbounded();
-
-        let req_rx = req_rx.map_err(|()| error::Error::from(io::Error::new(io::ErrorKind::Other, "req")));
-        let req_rx = stream_with_eof_and_error(req_rx, || error::Error::from(io::Error::new(io::ErrorKind::Other, "unexpected eof")));
+        let (req_tx, req_rx) = channel_network_to_user();
 
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            self.specific.factory.start_request(headers, HttpPartStream::new(req_rx))
+            self.specific.factory.start_request(headers, req_rx)
         }));
 
         let response = response.unwrap_or_else(|e| {

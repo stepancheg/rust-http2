@@ -6,6 +6,7 @@ use futures::future::Future;
 use futures::future::Loop;
 use futures::future::loop_fn;
 use futures::stream::Stream;
+use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
 
 use tokio_core::reactor;
@@ -46,6 +47,23 @@ use stream_part::*;
 pub use resp::Response;
 
 use rc_mut::*;
+
+
+pub fn channel_network_to_user() ->
+    (UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>, HttpPartStream)
+{
+    let (tx, rx) = unbounded::<ResultOrEof<HttpStreamPart, error::Error>>();
+
+    let rx = rx.map_err(|()| unreachable!());
+
+    let rx = stream_with_eof_and_error(
+        rx,
+        || error::Error::Other("unexpected EOF, conn likely died"));
+
+    let rx = HttpPartStream::new(rx);
+
+    (tx, rx)
+}
 
 
 pub enum CommonToWriteMessage {

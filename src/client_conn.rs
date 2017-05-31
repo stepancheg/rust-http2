@@ -146,22 +146,6 @@ enum ClientCommandMessage {
 }
 
 
-fn channel_network_to_user() ->
-    (UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>, Response)
-{
-    let (tx, rx) = unbounded::<ResultOrEof<HttpStreamPart, error::Error>>();
-
-    let rx = rx.map_err(|()| unreachable!());
-
-    let rx = stream_with_eof_and_error(
-        rx,
-        || error::Error::Other("unexpected EOF, client likely died"));
-
-    let rx = Response::from_stream(rx);
-
-    (tx, rx)
-}
-
 impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_start(self, start: StartRequestMessage) -> HttpFuture<Self> {
         let StartRequestMessage { headers, body, resp_tx } = start;
@@ -170,7 +154,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let (resp_channel_tx, resp_channel_rx) = channel_network_to_user();
 
-        if let Err(_) = resp_tx.send(resp_channel_rx) {
+        if let Err(_) = resp_tx.send(Response::from_stream(resp_channel_rx)) {
             warn!("caller died");
         }
 
