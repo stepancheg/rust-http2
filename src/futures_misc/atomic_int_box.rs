@@ -1,31 +1,74 @@
+use std::fmt;
+
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
 use std::ptr;
 use std::mem;
 
 
+// Two bit integer
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub enum U2 {
+    V0 = 0,
+    V1 = 1,
+    V2 = 2,
+    V3 = 3,
+}
+
+impl fmt::Debug for U2 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.to_u32(), f)
+    }
+}
+
+impl U2 {
+    pub fn to_u32(&self) -> u32 {
+        *self as u32
+    }
+
+    pub fn from_u32(v: u32) -> U2 {
+        match v {
+            0 => U2::V0,
+            1 => U2::V1,
+            2 => U2::V2,
+            3 => U2::V3,
+            n => panic!("cannot convert to U2: {}", n),
+        }
+    }
+
+    pub fn from_usize(v: usize) -> U2 {
+        match v {
+            0 => U2::V0,
+            1 => U2::V1,
+            2 => U2::V2,
+            3 => U2::V3,
+            n => panic!("cannot convert to U2: {}", n),
+        }
+    }
+}
+
+
 /// Atomic `Box<A>` or integer 0..4
-pub struct AtomicIntOrBox<A>(AtomicPtr<A>);
+pub struct AtomicU2OrBox<A>(AtomicPtr<A>);
 
 #[derive(Debug)]
 pub enum DecodedRef<A> {
     Ptr(*mut A),
-    Int(u32),
+    U2(U2),
 }
 
 #[derive(Debug)]
 pub enum DecodedBox<A> {
     Box(Box<A>),
-    Int(u32),
+    U2(U2),
 }
 
 impl<A> DecodedRef<A> {
     fn into_raw(self) -> *mut A {
         match self {
             DecodedRef::Ptr(p) => p,
-            DecodedRef::Int(v) => {
-                assert!(v < 4);
-                v as *mut A
+            DecodedRef::U2(v) => {
+                v.to_u32() as *mut A
             }
         }
     }
@@ -33,14 +76,14 @@ impl<A> DecodedRef<A> {
     unsafe fn into_box(self) -> DecodedBox<A> {
         match self {
             DecodedRef::Ptr(p) => DecodedBox::Box(Box::from_raw(p)),
-            DecodedRef::Int(i) => DecodedBox::Int(i),
+            DecodedRef::U2(i) => DecodedBox::U2(i),
         }
     }
 
     fn from_raw(ptr: *mut A) -> DecodedRef<A> {
         let v = ptr as usize;
         if v < 4 {
-            DecodedRef::Int(v as u32)
+            DecodedRef::U2(U2::from_usize(v))
         } else {
             DecodedRef::Ptr(ptr)
         }
@@ -54,7 +97,7 @@ impl<A> DecodedBox<A> {
 
     fn as_ref(&self) -> DecodedRef<A> {
         match self {
-            &DecodedBox::Int(i) => DecodedRef::Int(i),
+            &DecodedBox::U2(i) => DecodedRef::U2(i),
             &DecodedBox::Box(ref b) => DecodedRef::Ptr(Box::as_ref(b) as *const A as *mut A),
         }
     }
@@ -68,18 +111,21 @@ impl<A> DecodedBox<A> {
     }
 }
 
-impl<A> AtomicIntOrBox<A> {
-    pub fn new() -> AtomicIntOrBox<A> {
-        AtomicIntOrBox(AtomicPtr::new(ptr::null_mut()))
+impl<A> AtomicU2OrBox<A> {
+    pub fn new() -> AtomicU2OrBox<A> {
+        AtomicU2OrBox(AtomicPtr::new(ptr::null_mut()))
     }
 
-    pub fn from(b: DecodedBox<A>) -> AtomicIntOrBox<A> {
-        AtomicIntOrBox(AtomicPtr::new(unsafe { b.into_raw() }))
+    pub fn from(b: DecodedBox<A>) -> AtomicU2OrBox<A> {
+        AtomicU2OrBox(AtomicPtr::new(unsafe { b.into_raw() }))
     }
 
-    pub fn from_int(v: u32) -> AtomicIntOrBox<A> {
-        assert!(v < 4);
-        AtomicIntOrBox::from(DecodedBox::Int(v))
+    pub fn from_u2(v: U2) -> AtomicU2OrBox<A> {
+        AtomicU2OrBox::from(DecodedBox::U2(v))
+    }
+
+    pub fn from_u32(v: u32) -> AtomicU2OrBox<A> {
+        AtomicU2OrBox::from_u2(U2::from_u32(v))
     }
 
     pub fn into_inner(self) -> DecodedBox<A> {
@@ -109,17 +155,17 @@ impl<A> AtomicIntOrBox<A> {
         }
     }
 
-    pub fn compare_int_exchange(&self, compare: u32, exchange: DecodedBox<A>)
+    pub fn compare_int_exchange(&self, compare: U2, exchange: DecodedBox<A>)
         -> Result<DecodedBox<A>, (DecodedRef<A>, DecodedBox<A>)>
     {
-        self.compare_exchange(DecodedRef::Int(compare), exchange)
+        self.compare_exchange(DecodedRef::U2(compare), exchange)
     }
 
     pub fn compare_ptr_exchange(&self, exchange: DecodedBox<A>)
         -> Result<DecodedBox<A>, (DecodedRef<A>, DecodedBox<A>)>
     {
         match self.load() {
-            DecodedRef::Int(i) => Err((DecodedRef::Int(i), exchange)),
+            DecodedRef::U2(i) => Err((DecodedRef::U2(i), exchange)),
             DecodedRef::Ptr(p) => self.compare_exchange(DecodedRef::Ptr(p), exchange),
         }
     }
@@ -157,10 +203,10 @@ mod test {
     fn test() {
         let count = Arc::new(AtomicUsize::new(0));
 
-        let b = AtomicIntOrBox::new();
+        let b = AtomicU2OrBox::new();
 
         match b.load() {
-            DecodedRef::Int(0) => (),
+            DecodedRef::U2(U2::V0) => (),
             _ => panic!(),
         }
 

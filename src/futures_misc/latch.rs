@@ -10,18 +10,12 @@ use futures::stream::Stream;
 use super::atomic_int_box::*;
 
 
-enum State {
-    Open = 0,
-    Closed = 1,
-    ControllerDead = 2,
-}
-
-const OPEN: u32 = State::Open as u32;
-const CLOSED: u32 = State::Closed as u32;
-const CONTROLLER_DEAD: u32 = State::ControllerDead as u32;
+const OPEN: U2 = U2::V0;
+const CLOSED: U2 = U2::V1;
+const CONTROLLER_DEAD: U2 = U2::V2;
 
 struct Shared {
-    state: AtomicIntOrBox<Task>,
+    state: AtomicU2OrBox<Task>,
 }
 
 pub struct LatchController {
@@ -34,7 +28,7 @@ pub struct Latch {
 
 pub fn latch() -> (LatchController, Latch) {
     let shared = Arc::new(Shared {
-        state: AtomicIntOrBox::from_int(CLOSED),
+        state: AtomicU2OrBox::from_u2(CLOSED),
     });
     (LatchController { shared: shared.clone() }, Latch { shared: shared })
 }
@@ -42,22 +36,22 @@ pub fn latch() -> (LatchController, Latch) {
 impl LatchController {
     pub fn open(&self) {
         // fast track
-        if let DecodedRef::Int(OPEN) = self.shared.state.load() {
+        if let DecodedRef::U2(OPEN) = self.shared.state.load() {
             return;
         }
 
-        if let DecodedBox::Box(task) = self.shared.state.swap(DecodedBox::Int(OPEN)) {
+        if let DecodedBox::Box(task) = self.shared.state.swap(DecodedBox::U2(OPEN)) {
             task.notify();
         }
     }
 
     pub fn close(&self) {
         // fast track
-        if let DecodedRef::Int(CLOSED) = self.shared.state.load() {
+        if let DecodedRef::U2(CLOSED) = self.shared.state.load() {
             return;
         }
 
-        self.shared.state.store(DecodedBox::Int(CLOSED));
+        self.shared.state.store(DecodedBox::U2(CLOSED));
 
         // no need to unpark, because nobody is subscribed to close
     }
@@ -65,7 +59,7 @@ impl LatchController {
 
 impl Drop for LatchController {
     fn drop(&mut self) {
-        if let DecodedBox::Box(task) = self.shared.state.swap(DecodedBox::Int(CONTROLLER_DEAD)) {
+        if let DecodedBox::Box(task) = self.shared.state.swap(DecodedBox::U2(CONTROLLER_DEAD)) {
             task.notify();
         }
     }
@@ -78,8 +72,8 @@ impl Stream for Latch {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         loop {
             let s = match self.shared.state.load() {
-                DecodedRef::Int(OPEN) => return Ok(Async::Ready(Some(()))),
-                DecodedRef::Int(CONTROLLER_DEAD) => return Err(()),
+                DecodedRef::U2(OPEN) => return Ok(Async::Ready(Some(()))),
+                DecodedRef::U2(CONTROLLER_DEAD) => return Err(()),
                 s => s,
             };
 
