@@ -142,6 +142,8 @@ pub struct HttpStreamCommon<T : Types> {
     pub in_window_size: WindowSize,
     pub outgoing: StreamOutQueue,
     // channel for data to be sent as request on server, and as response on client
+    // TODO: client code should drive the stream instead of unbounded channel
+    // it is necessary for proper flow control
     pub peer_tx: Option<UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>>,
     // task waiting for window increase
     pub ready_to_write: LatchController,
