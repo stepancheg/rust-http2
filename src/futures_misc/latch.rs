@@ -1,7 +1,4 @@
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
 
 use futures::task::Task;
 use futures::task;
@@ -10,6 +7,8 @@ use futures::Async;
 use futures::Poll;
 use futures::stream::Stream;
 
+use super::atomic_int_box::*;
+
 
 enum State {
     Open = 0,
@@ -17,28 +16,12 @@ enum State {
     ControllerDead = 2,
 }
 
-const OPEN: usize = State::Open as usize;
-const CLOSED: usize = State::Closed as usize;
-const CONTROLLER_DEAD: usize = State::ControllerDead as usize;
-
-impl State {
-    fn from(value: usize) -> State {
-        match value {
-            OPEN => State::Open,
-            CLOSED => State::Closed,
-            CONTROLLER_DEAD => State::ControllerDead,
-            _ => unreachable!(),
-        }
-    }
-}
-
-struct Guarded {
-    task: Option<Task>,
-}
+const OPEN: u32 = State::Open as u32;
+const CLOSED: u32 = State::Closed as u32;
+const CONTROLLER_DEAD: u32 = State::ControllerDead as u32;
 
 struct Shared {
-    state: AtomicUsize,
-    guarded: Mutex<Guarded>,
+    state: AtomicIntOrBox<Task>,
 }
 
 pub struct LatchController {
@@ -51,34 +34,30 @@ pub struct Latch {
 
 pub fn latch() -> (LatchController, Latch) {
     let shared = Arc::new(Shared {
-        state: AtomicUsize::new(CLOSED),
-        guarded: Mutex::new(Guarded {
-            task: None,
-        }),
+        state: AtomicIntOrBox::from_int(CLOSED),
     });
     (LatchController { shared: shared.clone() }, Latch { shared: shared })
 }
 
 impl LatchController {
     pub fn open(&self) {
-        if self.shared.state.load(Ordering::SeqCst) == OPEN as usize {
+        // fast track
+        if let DecodedRef::Int(OPEN) = self.shared.state.load() {
             return;
         }
 
-        self.shared.state.store(OPEN, Ordering::SeqCst);
-
-        let mut guard = self.shared.guarded.lock().expect("lock");
-        if let Some(task) = guard.task.take() {
+        if let DecodedBox::Box(task) = self.shared.state.swap(DecodedBox::Int(OPEN)) {
             task.notify();
         }
     }
 
     pub fn close(&self) {
-        if self.shared.state.load(Ordering::SeqCst) == CLOSED as usize {
+        // fast track
+        if let DecodedRef::Int(CLOSED) = self.shared.state.load() {
             return;
         }
 
-        self.shared.state.store(CLOSED, Ordering::SeqCst);
+        self.shared.state.store(DecodedBox::Int(CLOSED));
 
         // no need to unpark, because nobody is subscribed to close
     }
@@ -86,10 +65,7 @@ impl LatchController {
 
 impl Drop for LatchController {
     fn drop(&mut self) {
-        self.shared.state.store(CONTROLLER_DEAD, Ordering::SeqCst);
-
-        let mut guard = self.shared.guarded.lock().expect("lock");
-        if let Some(task) = guard.task.take() {
+        if let DecodedBox::Box(task) = self.shared.state.swap(DecodedBox::Int(CONTROLLER_DEAD)) {
             task.notify();
         }
     }
@@ -100,16 +76,16 @@ impl Stream for Latch {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let state = self.shared.state.load(Ordering::SeqCst);
-        let state = State::from(state);
+        loop {
+            let s = match self.shared.state.load() {
+                DecodedRef::Int(OPEN) => return Ok(Async::Ready(Some(()))),
+                DecodedRef::Int(CONTROLLER_DEAD) => return Err(()),
+                s => s,
+            };
 
-        match state {
-            State::Open => Ok(Async::Ready(Some(()))),
-            State::ControllerDead => Err(()),
-            State::Closed => {
-                let mut guard = self.shared.guarded.lock().expect("lock");
-                guard.task = Some(task::current());
-                Ok(Async::NotReady)
+            match self.shared.state.compare_exchange(s, DecodedBox::Box(Box::new(task::current()))) {
+                Ok(_) => return Ok(Async::NotReady),
+                _ => {}
             }
         }
     }
