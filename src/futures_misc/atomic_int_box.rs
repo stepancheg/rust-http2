@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
 use std::ptr;
+use std::mem;
 
 
 /// Atomic `Box<A>` or integer 0..4
@@ -72,6 +73,15 @@ impl<A> AtomicIntOrBox<A> {
         AtomicIntOrBox(AtomicPtr::new(ptr::null_mut()))
     }
 
+    pub fn from(b: DecodedBox<A>) -> AtomicIntOrBox<A> {
+        AtomicIntOrBox(AtomicPtr::new(unsafe { b.into_raw() }))
+    }
+
+    pub fn from_int(v: u32) -> AtomicIntOrBox<A> {
+        assert!(v < 4);
+        AtomicIntOrBox::from(DecodedBox::Int(v))
+    }
+
     pub fn into_inner(self) -> DecodedBox<A> {
         unsafe { self.load().into_box() }
     }
@@ -91,10 +101,12 @@ impl<A> AtomicIntOrBox<A> {
     pub fn compare_exchange(&self, compare: DecodedRef<A>, exchange: DecodedBox<A>)
         -> Result<DecodedBox<A>, (DecodedRef<A>, DecodedBox<A>)>
     {
-        self.0.compare_exchange(
+        match self.0.compare_exchange(
             compare.into_raw(), exchange.as_ref().into_raw(), Ordering::SeqCst, Ordering::SeqCst)
-                .map(|p| unsafe { DecodedBox::from_raw(p) })
-                .map_err(|p| (DecodedRef::from_raw(p), exchange))
+        {
+            Ok(p) => unsafe { mem::forget(exchange); Ok(DecodedBox::from_raw(p)) },
+            Err(p) => Err((DecodedRef::from_raw(p), exchange)),
+        }
     }
 
     pub fn compare_int_exchange(&self, compare: u32, exchange: DecodedBox<A>)
