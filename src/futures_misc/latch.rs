@@ -114,3 +114,69 @@ impl Stream for Latch {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+
+    use std::fmt::Debug;
+
+    use futures::executor::NotifyHandle;
+    use futures::executor::Notify;
+    use futures::executor::Spawn;
+    use futures::executor;
+    use futures::Poll;
+
+    use super::*;
+
+    fn notify_noop() -> NotifyHandle {
+        struct Noop;
+
+        impl Notify for Noop {
+            fn notify(&self, _id: usize) {}
+        }
+
+        const NOOP : &'static Noop = &Noop;
+
+        NotifyHandle::from(NOOP)
+    }
+
+    fn assert_notify_stream<S>(
+        expected: Poll<Option<S::Item>, S::Error>,
+        stream: &mut Spawn<S>)
+        where
+            S : Stream,
+            S::Item : Debug,
+            S::Item : PartialEq,
+            S::Error : Debug,
+            S::Error : PartialEq,
+    {
+        assert_eq!(
+            expected,
+            stream.poll_stream_notify(&notify_noop(), 1));
+    }
+
+    #[test]
+    fn test() {
+        let (c, l) = latch();
+
+        let mut l = executor::spawn(l);
+
+        // initially closed
+        assert_notify_stream(Ok(Async::NotReady), &mut l);
+        assert_notify_stream(Ok(Async::NotReady), &mut l);
+
+        c.open();
+
+        assert_notify_stream(Ok(Async::Ready(Some(()))), &mut l);
+        assert_notify_stream(Ok(Async::Ready(Some(()))), &mut l);
+
+        c.close();
+
+        assert_notify_stream(Ok(Async::NotReady), &mut l);
+
+        c.close();
+
+        assert_notify_stream(Ok(Async::NotReady), &mut l);
+    }
+
+}
