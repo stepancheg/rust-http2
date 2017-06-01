@@ -8,6 +8,7 @@ mod shutdown_signal;
 mod signal;
 mod latch;
 pub mod atomic_int_box;
+pub mod test;
 
 mod sender_with_last;
 pub use self::sender_with_last::*;

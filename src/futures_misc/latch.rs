@@ -90,25 +90,13 @@ mod test {
 
     use std::fmt::Debug;
 
-    use futures::executor::NotifyHandle;
-    use futures::executor::Notify;
     use futures::executor::Spawn;
     use futures::executor;
     use futures::Poll;
 
+    use futures_misc::test::*;
+
     use super::*;
-
-    fn notify_noop() -> NotifyHandle {
-        struct Noop;
-
-        impl Notify for Noop {
-            fn notify(&self, _id: usize) {}
-        }
-
-        const NOOP : &'static Noop = &Noop;
-
-        NotifyHandle::from(NOOP)
-    }
 
     fn assert_notify_stream<S>(
         expected: Poll<Option<S::Item>, S::Error>,

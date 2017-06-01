@@ -144,6 +144,10 @@ impl<A> AtomicU2OrBox<A> {
         unsafe { DecodedBox::from_raw(self.0.swap(that.into_raw(), Ordering::SeqCst)) }
     }
 
+    pub fn swap_u2(&self, that: U2) -> DecodedBox<A> {
+        self.swap(DecodedBox::U2(that))
+    }
+
     pub fn compare_exchange(&self, compare: DecodedRef<A>, exchange: DecodedBox<A>)
         -> Result<DecodedBox<A>, (DecodedRef<A>, DecodedBox<A>)>
     {
