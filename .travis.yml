@@ -11,11 +11,8 @@ rust:
 script:
   - rustc --version
   - RUST_BACKTRACE=1 cargo test
-  # cargo test --benches only works in nighly
-  #- RUST_BACKTRACE=1 cargo test --benches
-  # Doesn't work either because of #[feature(test)]
-  #- RUST_BACKTRACE=1 cargo bench
-  # TODO: execute only on nightly
+  # `cargo test --benches` and `#[feature(test)]` only works on nightly
+  - test "$TRAVIS_RUST_VERSION" != "nightly" || RUST_BACKTRACE=1 cargo test --benches
 
 notifications:
   email:
