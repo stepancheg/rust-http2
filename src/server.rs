@@ -182,6 +182,7 @@ fn run_server_event_loop<S>(
 }
 
 impl Server {
+    // TODO: result
     pub fn new<A: ToSocketAddrs, S>(addr: A, tls: ServerTlsOption, conf: ServerConf, service: S) -> Server
         where S : Service
     {
