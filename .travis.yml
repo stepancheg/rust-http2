@@ -11,6 +11,7 @@ rust:
 script:
   - rustc --version
   - RUST_BACKTRACE=1 cargo test
+  - RUST_BACKTRACE=1 cargo bench
 
 notifications:
   email:
