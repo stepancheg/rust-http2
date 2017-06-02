@@ -787,7 +787,7 @@ impl<I, T> WriteLoopData<I, T>
 
     fn increase_in_window(self, stream_id: StreamId) -> HttpFuture<Self> {
         let r = self.inner.with(move |inner| {
-            inner.request_window(stream_id)
+            inner.increase_in_window(stream_id)
         });
         Box::new(future::result(r.map(|()| self)))
     }
