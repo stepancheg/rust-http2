@@ -18,23 +18,23 @@ use error;
 use stream_part::*;
 
 
-struct StreamQueueSyncShared {
+struct Shared {
     data_size: AtomicUsize,
 }
 
-impl StreamQueueSyncShared {
+impl Shared {
     pub fn data_size(&self) -> usize {
         self.data_size.load(Ordering::SeqCst)
     }
 }
 
 pub struct StreamQueueSyncSender {
-    shared: Arc<StreamQueueSyncShared>,
+    shared: Arc<Shared>,
     sender: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
 }
 
 pub struct StreamQueueSyncReceiver {
-    shared: Arc<StreamQueueSyncShared>,
+    shared: Arc<Shared>,
     receiver: UnboundedReceiver<ResultOrEof<HttpStreamPart, error::Error>>,
 }
 
@@ -79,7 +79,7 @@ impl Stream for StreamQueueSyncReceiver {
 }
 
 pub fn stream_queue_sync() -> (StreamQueueSyncSender, StreamQueueSyncReceiver) {
-    let shared = Arc::new(StreamQueueSyncShared {
+    let shared = Arc::new(Shared {
         data_size: AtomicUsize::new(0)
     });
 
