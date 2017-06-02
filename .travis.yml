@@ -13,7 +13,9 @@ script:
   - RUST_BACKTRACE=1 cargo test
   # cargo test --benches only works in nighly
   #- RUST_BACKTRACE=1 cargo test --benches
-  - RUST_BACKTRACE=1 cargo bench
+  # Doesn't work either because of #[feature(test)]
+  #- RUST_BACKTRACE=1 cargo bench
+  # TODO: execute only on nightly
 
 notifications:
   email:
