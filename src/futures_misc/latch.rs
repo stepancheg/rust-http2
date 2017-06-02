@@ -18,7 +18,7 @@ struct Shared {
     state: AtomicU2OrBox<Task>,
 }
 
-pub struct LatchController {
+pub struct Controller {
     shared: Arc<Shared>,
 }
 
@@ -26,14 +26,14 @@ pub struct Latch {
     shared: Arc<Shared>,
 }
 
-pub fn latch() -> (LatchController, Latch) {
+pub fn latch() -> (Controller, Latch) {
     let shared = Arc::new(Shared {
         state: AtomicU2OrBox::from_u2(CLOSED),
     });
-    (LatchController { shared: shared.clone() }, Latch { shared: shared })
+    (Controller { shared: shared.clone() }, Latch { shared: shared })
 }
 
-impl LatchController {
+impl Controller {
     pub fn open(&self) {
         // fast track
         if let DecodedRef::U2(OPEN) = self.shared.state.load() {
@@ -57,10 +57,29 @@ impl LatchController {
     }
 }
 
-impl Drop for LatchController {
+impl Drop for Controller {
     fn drop(&mut self) {
         if let DecodedBox::Box(task) = self.shared.state.swap(DecodedBox::U2(CONTROLLER_DEAD)) {
             task.notify();
+        }
+    }
+}
+
+pub struct ControllerDead;
+
+impl Latch {
+    pub fn poll_ready(&self) -> Poll<(), ControllerDead> {
+        loop {
+            let s = match self.shared.state.load() {
+                DecodedRef::U2(OPEN) => return Ok(Async::Ready(())),
+                DecodedRef::U2(CONTROLLER_DEAD) => return Err(ControllerDead),
+                s => s,
+            };
+
+            match self.shared.state.compare_exchange(s, DecodedBox::Box(Box::new(task::current()))) {
+                Ok(_) => return Ok(Async::NotReady),
+                _ => {}
+            }
         }
     }
 }
@@ -70,17 +89,10 @@ impl Stream for Latch {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        loop {
-            let s = match self.shared.state.load() {
-                DecodedRef::U2(OPEN) => return Ok(Async::Ready(Some(()))),
-                DecodedRef::U2(CONTROLLER_DEAD) => return Err(()),
-                s => s,
-            };
-
-            match self.shared.state.compare_exchange(s, DecodedBox::Box(Box::new(task::current()))) {
-                Ok(_) => return Ok(Async::NotReady),
-                _ => {}
-            }
+        match self.poll_ready() {
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(())) => Ok(Async::Ready(Some(()))),
+            Err(ControllerDead) => Ok(Async::Ready(None)),
         }
     }
 }

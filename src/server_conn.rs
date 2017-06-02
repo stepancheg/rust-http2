@@ -123,7 +123,7 @@ impl ServerInner {
             ]))
         });
 
-        let (latch_ctr, latch) = latch();
+        let (latch_ctr, latch) = latch::latch();
 
         // TODO
         latch_ctr.open();

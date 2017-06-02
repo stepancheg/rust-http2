@@ -5,8 +5,8 @@ mod stream_merge2;
 mod stream_with_eof;
 mod stream_with_eof_and_error;
 mod shutdown_signal;
-mod signal;
-mod latch;
+pub mod signal;
+pub mod latch;
 pub mod atomic_int_box;
 pub mod test;
 
@@ -23,6 +23,3 @@ pub use self::stream_with_eof::*;
 pub use self::stream_with_eof_and_error::*;
 
 pub use self::shutdown_signal::*;
-
-pub use self::signal::*;
-pub use self::latch::*;

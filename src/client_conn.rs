@@ -160,7 +160,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
-            let (latch_ctr, latch) = latch();
+            let (latch_ctr, latch) = latch::latch();
 
             let mut stream = HttpStreamCommon::new(
                 inner.conn.peer_settings.initial_window_size,

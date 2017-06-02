@@ -41,6 +41,7 @@ use super::stream::*;
 use super::stream_map::*;
 use super::types::*;
 use super::conf::*;
+use super::pump_stream_to_write_loop::PumpStreamToWriteLoop;
 
 use stream_part::*;
 
@@ -616,77 +617,12 @@ impl<T : Types> ConnData<T>
         self_rc: RcMut<Self>,
         stream_id: StreamId,
         stream: HttpPartStream,
-        ready_to_write: Latch)
+        ready_to_write: latch::Latch)
     {
-        let to_write_tx_2 = self.to_write_tx.clone();
-
         let stream = stream.catch_unwind();
-
-        let ready_to_write = ready_to_write.map_err(|()| {
-            error::Error::Other("error from latch; stream must be closed")
-        });
-
-        let future = loop_fn((ready_to_write, stream, self.to_write_tx.clone(), self_rc), move |(ready_to_write, stream, to_write_tx, self_rc)| {
-            // Only poll user-provided callback when out window is available
-            ready_to_write.into_future().map_err(|(e, _)| e)
-                .and_then(move |(o, ready_to_write)| {
-                    if let None::<()> = o {
-                        unreachable!();
-                    }
-
-                    stream.into_future().map_err(|(e, _)| e)
-                        .and_then(move |(part_opt, stream)| {
-                            let (cont, to_write_tx) = self_rc.with(move |conn| {
-                                let cont = if let Some(mut stream) = conn.streams.get_mut(stream_id) {
-                                    if !stream.stream().state.is_closed_local() {
-                                        match part_opt {
-                                            Some(part) => {
-                                                stream.stream().outgoing.push_back_part(part);
-                                                stream.check_ready_to_write(&mut conn.conn.out_window_size);
-                                                true
-                                            }
-                                            None => {
-                                                stream.stream().outgoing.close(ErrorCode::NoError);
-                                                false
-                                            }
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                };
-                                if let Err(e) = to_write_tx.send(CommonToWriteMessage::TryFlushStream(Some(stream_id)).into()) {
-                                    warn!("failed to write to channel, probably connection is closed: {:?}", e);
-                                }
-                                (cont, to_write_tx)
-                            });
-
-                            future::ok(if cont {
-                                Loop::Continue((ready_to_write, stream, to_write_tx, self_rc))
-                            } else {
-                                Loop::Break(())
-                            })
-                        })
-                })
-        });
-
-        let future = future.then(move |r| {
-            let error_code =
-                match r {
-                    Ok(()) => ErrorCode::NoError,
-                    Err(e) => {
-                        warn!("handler stream error: {:?}", e);
-                        ErrorCode::InternalError
-                    }
-                };
-            if let Err(e) = to_write_tx_2.send(CommonToWriteMessage::StreamEnd(stream_id, error_code).into()) {
-                warn!("failed to write to channel, probably connection is closed: {}", e);
-            }
-            Ok(())
-        });
-
-        self.loop_handle.spawn(future);
+        // TODO: spawn in provided executor
+        self.loop_handle.spawn(PumpStreamToWriteLoop::new(
+            self_rc, self.to_write_tx.clone(), stream_id, ready_to_write, stream));
     }
 }
 

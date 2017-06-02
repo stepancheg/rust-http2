@@ -18,23 +18,23 @@ struct Shared {
     state: AtomicU2OrBox<Task>,
 }
 
-pub struct SignalSender {
+pub struct Sender {
     shared: Arc<Shared>,
 }
 
-pub struct SignalReceiver {
+pub struct Receiver {
     shared: Arc<Shared>,
 }
 
-pub fn signal() -> (SignalSender, SignalReceiver) {
+pub fn signal() -> (Sender, Receiver) {
     let shared = Arc::new(Shared {
         state: AtomicU2OrBox::from_u2(NOTHING),
     });
 
-    (SignalSender { shared: shared.clone() }, SignalReceiver { shared: shared })
+    (Sender { shared: shared.clone() }, Receiver { shared: shared })
 }
 
-impl Drop for SignalSender {
+impl Drop for Sender {
     fn drop(&mut self) {
         if let DecodedBox::Box(task) = self.shared.state.swap_u2(SENDER_DEAD) {
             task.notify();
@@ -42,7 +42,7 @@ impl Drop for SignalSender {
     }
 }
 
-impl SignalSender {
+impl Sender {
     pub fn signal(&self) {
         if let DecodedRef::U2(SIGNALLED) = self.shared.state.load() {
             return;
@@ -57,11 +57,10 @@ impl SignalSender {
     }
 }
 
-impl Stream for SignalReceiver {
-    type Item = ();
-    type Error = ();
+pub struct SenderDead;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+impl Receiver {
+    fn poll_ready(&self) -> Poll<(), SenderDead> {
         loop {
             let l = self.shared.state.load();
             match l {
@@ -72,14 +71,27 @@ impl Stream for SignalReceiver {
                 }
                 DecodedRef::U2(SIGNALLED) => {
                     if let Ok(_) = self.shared.state.compare_exchange(l, DecodedBox::U2(NOTHING)) {
-                        return Ok(Async::Ready(Some(())));
+                        return Ok(Async::Ready(()));
                     }
                 }
                 DecodedRef::U2(SENDER_DEAD) => {
-                    return Ok(Async::Ready(None));
+                    return Err(SenderDead);
                 }
                 _ => unreachable!(),
             }
+        }
+    }
+}
+
+impl Stream for Receiver {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match self.poll_ready() {
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(())) => Ok(Async::Ready(Some(()))),
+            Err(SenderDead) => Ok(Async::Ready(None)),
         }
     }
 }
