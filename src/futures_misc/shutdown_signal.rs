@@ -6,6 +6,9 @@ use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
 use futures::sync::mpsc::UnboundedReceiver;
 
+use void::Void;
+
+
 pub fn shutdown_signal() -> (ShutdownSignal, ShutdownFuture) {
     let (tx, rx) = unbounded();
     (ShutdownSignal { tx: tx }, ShutdownFuture { rx: rx })
@@ -33,7 +36,7 @@ pub struct ShutdownFuture {
 }
 
 impl Future for ShutdownFuture {
-    type Item = ();
+    type Item = Void;
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {

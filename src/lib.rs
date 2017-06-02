@@ -8,6 +8,7 @@ extern crate tokio_io;
 extern crate tokio_tls;
 extern crate tokio_timer;
 
+extern crate void;
 extern crate net2;
 extern crate bytes;
 

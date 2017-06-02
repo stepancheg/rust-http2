@@ -7,6 +7,9 @@ use futures::stream::Stream;
 use futures::task::Task;
 use futures::task;
 
+use void::Void;
+
+
 use super::atomic_int_box::*;
 
 
@@ -85,7 +88,7 @@ impl Receiver {
 
 impl Stream for Receiver {
     type Item = ();
-    type Error = ();
+    type Error = Void;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.poll_ready() {

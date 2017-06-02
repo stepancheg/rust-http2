@@ -20,6 +20,7 @@ tokio-core      = "0.*"
 tokio-io        = "0.*"
 tokio-timer     = "0.*"
 tokio-tls       = "0.*"
+void            = "1"
 net2 = "0.2"
 bytes = "0.*"
 

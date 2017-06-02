@@ -7,6 +7,8 @@ use futures::Async;
 use futures::Poll;
 use futures::stream::Stream;
 
+use void::Void;
+
 use super::atomic_int_box::*;
 
 
@@ -86,7 +88,7 @@ impl Latch {
 
 impl Stream for Latch {
     type Item = ();
-    type Error = ();
+    type Error = Void;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.poll_ready() {
