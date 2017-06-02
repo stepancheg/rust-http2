@@ -627,11 +627,24 @@ impl<T : Types> ConnData<T>
     }
 
     fn increase_in_window(&mut self, stream_id: StreamId) -> result::Result<()> {
-        if let Some(_stream) = self.streams.get_mut(stream_id) {
-            unimplemented!()
+        let inc = if let Some(mut stream) = self.streams.get_mut(stream_id) {
+            // TODO: use different value
+            if stream.stream().in_window_size.size() < DEFAULT_SETTINGS.initial_window_size as i32 {
+                let inc = (DEFAULT_SETTINGS.initial_window_size as i32
+                    - stream.stream().in_window_size.size()) as u32;
+                stream.stream().in_window_size.try_increase(inc).expect("increase");
+
+                inc
+            } else {
+                return Ok(());
+            }
         } else {
-            Ok(())
-        }
+            return Ok(());
+        };
+
+        self.send_frame(WindowUpdateFrame::for_stream(stream_id, inc))?;
+        
+        Ok(())
     }
 }
 

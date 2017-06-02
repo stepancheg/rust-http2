@@ -34,6 +34,8 @@ use service::Service;
 use stream_part::*;
 use common::*;
 
+use common::stream_queue_sync::stream_queue_sync;
+
 use server_tls::*;
 use server_conf::*;
 
@@ -129,10 +131,13 @@ impl ServerInner {
         latch_ctr.open();
 
         {
+            let (inc_tx, _inc_rx) = stream_queue_sync();
+
             // New stream initiated by the client
             let stream = HttpStreamCommon::new(
                 self.conn.peer_settings.initial_window_size,
                 req_tx,
+                inc_tx,
                 latch_ctr,
                 ServerStreamData {});
             self.streams.insert(stream_id, stream);

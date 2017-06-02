@@ -23,6 +23,7 @@ use error::ErrorCode;
 use super::types::Types;
 
 use super::stream_queue::StreamQueue;
+use super::stream_queue_sync::StreamQueueSyncSender;
 
 
 pub enum HttpStreamCommand {
@@ -63,6 +64,7 @@ pub struct HttpStreamCommon<T : Types> {
     pub out_window_size: WindowSize,
     pub in_window_size: WindowSize,
     pub outgoing: StreamQueue,
+    pub incoming: StreamQueueSyncSender,
     // channel for data to be sent as request on server, and as response on client
     // TODO: client code should drive the stream instead of unbounded channel
     // it is necessary for proper flow control
@@ -75,6 +77,7 @@ impl<T : Types> HttpStreamCommon<T> {
     pub fn new(
         out_window_size: u32,
         peer_tx: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
+        incoming: StreamQueueSyncSender,
         ready_to_write: latch::Controller,
         specific: T::HttpStreamSpecific)
             -> HttpStreamCommon<T>
@@ -85,6 +88,7 @@ impl<T : Types> HttpStreamCommon<T> {
             in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
+            incoming: incoming,
             peer_tx: Some(peer_tx),
             ready_to_write: ready_to_write,
         }

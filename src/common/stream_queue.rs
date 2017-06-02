@@ -6,7 +6,7 @@ use stream_part::HttpStreamPartContent;
 use error::ErrorCode;
 
 
-fn data_size(content: &HttpStreamPartContent) -> usize {
+pub fn data_size(content: &HttpStreamPartContent) -> usize {
     match *content {
         HttpStreamPartContent::Headers(_) => 0,
         HttpStreamPartContent::Data(ref d) => d.len(),

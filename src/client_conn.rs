@@ -44,6 +44,8 @@ use client_tls::*;
 
 use rc_mut::*;
 
+use common::stream_queue_sync::stream_queue_sync;
+
 
 struct ClientTypes;
 
@@ -162,9 +164,12 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
             let (latch_ctr, latch) = latch::latch();
 
+            let (inc_tx, _inc_rx) = stream_queue_sync();
+
             let mut stream = HttpStreamCommon::new(
                 inner.conn.peer_settings.initial_window_size,
                 resp_channel_tx,
+                inc_tx,
                 latch_ctr,
                 ClientStreamData { });
 

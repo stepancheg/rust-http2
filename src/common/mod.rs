@@ -8,7 +8,7 @@ mod conf;
 mod pump_stream_to_write_loop;
 mod stream_from_network;
 mod stream_queue;
-mod stream_queue_sync;
+pub mod stream_queue_sync;
 
 pub use self::conn::*;
 pub use self::stream::*;
