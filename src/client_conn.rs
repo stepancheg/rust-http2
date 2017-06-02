@@ -99,6 +99,7 @@ impl ConnInner for ClientInner {
     {
         if let Some(mut stream) = self.get_stream_or_send_stream_closed(stream_id)? {
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
+                // TODO: reset stream on error
                 drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
                     content: HttpStreamPartContent::Headers(headers),
                     last: end_stream == EndStream::Yes,
@@ -154,12 +155,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let inner_rc = self.inner.clone();
 
-        let (resp_channel_tx, resp_channel_rx) = channel_network_to_user();
-
-        if let Err(_) = resp_tx.send(Response::from_stream(resp_channel_rx)) {
-            warn!("caller died");
-        }
-
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
             let (inc_tx, inc_rx) = stream_queue_sync();
@@ -171,7 +166,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             let mut http_stream = HttpStreamCommon::new(
                 in_window_size,
                 inner.conn.peer_settings.initial_window_size,
-                resp_channel_tx,
                 inc_tx,
                 latch_ctr,
                 ClientStreamData { });
@@ -180,10 +174,14 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
             let stream_id = inner.insert_stream(http_stream);
 
-            let _resp_stream = inner.new_stream_from_network(
+            let resp_stream = inner.new_stream_from_network(
                 inc_rx,
                 stream_id,
                 in_window_size);
+
+            if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
+                warn!("caller died");
+            }
 
             inner.pump_stream_to_write_loop(inner_rc, stream_id, body, latch);
 

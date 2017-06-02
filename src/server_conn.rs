@@ -72,7 +72,7 @@ impl ServerStream {
                 content: HttpStreamPartContent::Headers(headers),
                 last: last,
             };
-            // ignore error
+            // TODO: reset on error
             sender.send(ResultOrEof::Item(part)).ok();
         }
     }
@@ -108,14 +108,12 @@ impl ServerInner {
 
         debug!("new stream: {}", stream_id);
 
-        let (req_tx, req_rx) = channel_network_to_user();
-
         let (latch_ctr, latch) = latch::latch();
 
         // TODO
         latch_ctr.open();
 
-        {
+        let req_rx = {
             let (inc_tx, inc_rx) = stream_queue_sync();
 
             let in_window_size = DEFAULT_SETTINGS.initial_window_size;
@@ -124,18 +122,19 @@ impl ServerInner {
             let stream = HttpStreamCommon::new(
                 in_window_size,
                 self.conn.peer_settings.initial_window_size,
-                req_tx,
                 inc_tx,
                 latch_ctr,
                 ServerStreamData {});
 
             self.streams.insert(stream_id, stream);
 
-            let _resp_stream = self.new_stream_from_network(
+            self.new_stream_from_network(
                 inc_rx,
                 stream_id,
-                in_window_size);
-        }
+                in_window_size)
+        };
+
+        let req_rx = HttpPartStream::new(req_rx);
 
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             self.specific.factory.start_request(headers, req_rx)

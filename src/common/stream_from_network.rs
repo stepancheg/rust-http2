@@ -17,6 +17,8 @@ use super::types::Types;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 
 
+/// Stream that provides data from network.
+/// Most importantly, it increases WINDOW.
 pub struct StreamFromNetwork<T : Types> {
     pub rx: StreamQueueSyncReceiver,
     pub stream_id: StreamId,
@@ -40,7 +42,7 @@ impl<T : Types> Stream for StreamFromNetwork<T> {
             self.in_window_size -= b.len() as u32;
 
             // TODO: use different
-            // TODO: increment after process of the frame
+            // TODO: increment after process of the frame (i. e. on next poll)
             let edge = DEFAULT_SETTINGS.initial_window_size / 2;
             if self.in_window_size + self.rx.data_size() < edge {
                 let inc = DEFAULT_SETTINGS.initial_window_size;
@@ -53,5 +55,11 @@ impl<T : Types> Stream for StreamFromNetwork<T> {
         }
 
         Ok(Async::Ready(Some(part)))
+    }
+}
+
+impl<T : Types> Drop for StreamFromNetwork<T> {
+    fn drop(&mut self) {
+        // TODO: reset stream
     }
 }

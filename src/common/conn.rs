@@ -5,8 +5,6 @@ use futures::future;
 use futures::future::Future;
 use futures::future::Loop;
 use futures::future::loop_fn;
-use futures::stream::Stream;
-use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
 
 use tokio_core::reactor;
@@ -50,23 +48,6 @@ use stream_part::*;
 pub use resp::Response;
 
 use rc_mut::*;
-
-
-pub fn channel_network_to_user() ->
-    (UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>, HttpPartStream)
-{
-    let (tx, rx) = unbounded::<ResultOrEof<HttpStreamPart, error::Error>>();
-
-    let rx = rx.map_err(|()| unreachable!());
-
-    let rx = stream_with_eof_and_error(
-        rx,
-        || error::Error::Other("unexpected EOF, conn likely died"));
-
-    let rx = HttpPartStream::new(rx);
-
-    (tx, rx)
-}
 
 
 pub enum CommonToWriteMessage {
@@ -450,7 +431,7 @@ impl<T : Types> ConnData<T>
                 None
             };
 
-        let increment_stream = {
+        {
             // If a DATA frame is received whose stream is not in "open" or
             // "half-closed (local)" state, the recipient MUST respond with
             // a stream error (Section 5.4.2) of type STREAM_CLOSED.
@@ -464,28 +445,11 @@ impl<T : Types> ConnData<T>
             stream.stream().in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
 
-            let increment_stream =
-                if stream.stream().in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
-                    let increment = DEFAULT_SETTINGS.initial_window_size;
-                    stream.stream().in_window_size.try_increase(increment)
-                        .map_err(|()| error::Error::Other("failed to increase window size"))?;
-
-                    Some(increment)
-                } else {
-                    None
-                };
-
             stream.stream().new_data_chunk(&frame.data.as_ref(), frame.is_end_of_stream());
-
-            increment_stream
         };
 
         if let Some(increment_conn) = increment_conn {
             self.send_frame(WindowUpdateFrame::for_connection(increment_conn))?;
-        }
-
-        if let Some(increment_stream) = increment_stream {
-            self.send_frame(WindowUpdateFrame::for_stream(stream_id, increment_stream))?;
         }
 
         Ok(Some(self.streams.get_mut(stream_id).expect("stream must be found")))

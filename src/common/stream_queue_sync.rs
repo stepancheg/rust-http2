@@ -33,19 +33,26 @@ pub struct StreamQueueSyncReceiver {
 }
 
 impl StreamQueueSyncSender {
-    pub fn send(&self, part: HttpStreamPart) -> Result<(), ()> {
-        if let HttpStreamPartContent::Data(ref b) = part.content {
-            self.shared.data_size.fetch_add(b.len(), Ordering::SeqCst);
+    pub fn send(&self, item: ResultOrEof<HttpStreamPart, error::Error>) -> Result<(), ()> {
+        if let ResultOrEof::Item(ref part) = item {
+            if let &HttpStreamPart { content: HttpStreamPartContent::Data(ref b), .. } = part {
+                self.shared.data_size.fetch_add(b.len(), Ordering::SeqCst);
+            }
         }
-        self.sender.send(ResultOrEof::Item(part)).map_err(|_| ())
+
+        self.sender.send(item).map_err(|_| ())
+    }
+
+    pub fn send_part(&self, part: HttpStreamPart) -> Result<(), ()> {
+        self.send(ResultOrEof::Item(part))
     }
 
     pub fn send_error(&self, e: error::Error) -> Result<(), ()> {
-        self.sender.send(ResultOrEof::Error(e)).map_err(|_| ())
+        self.send(ResultOrEof::Error(e))
     }
 
     pub fn send_eof(&self) -> Result<(), ()> {
-        self.sender.send(ResultOrEof::Eof).map_err(|_| ())
+        self.send(ResultOrEof::Eof)
     }
 }
 

@@ -1,7 +1,5 @@
 use std::cmp;
 
-use futures::sync::mpsc::UnboundedSender;
-
 use bytes::Bytes;
 
 use error;
@@ -63,11 +61,7 @@ pub struct HttpStreamCommon<T : Types> {
     pub out_window_size: WindowSize,
     pub in_window_size: WindowSize,
     pub outgoing: StreamQueue,
-    pub incoming: StreamQueueSyncSender,
-    // channel for data to be sent as request on server, and as response on client
-    // TODO: client code should drive the stream instead of unbounded channel
-    // it is necessary for proper flow control
-    pub peer_tx: Option<UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>>,
+    pub peer_tx: Option<StreamQueueSyncSender>,
     // task waiting for window increase
     pub ready_to_write: latch::Controller,
 }
@@ -76,7 +70,6 @@ impl<T : Types> HttpStreamCommon<T> {
     pub fn new(
         in_window_size: u32,
         out_window_size: u32,
-        peer_tx: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
         incoming: StreamQueueSyncSender,
         ready_to_write: latch::Controller,
         specific: T::HttpStreamSpecific)
@@ -88,8 +81,7 @@ impl<T : Types> HttpStreamCommon<T> {
             in_window_size: WindowSize::new(in_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
-            incoming: incoming,
-            peer_tx: Some(peer_tx),
+            peer_tx: Some(incoming),
             ready_to_write: ready_to_write,
         }
     }
@@ -118,7 +110,7 @@ impl<T : Types> HttpStreamCommon<T> {
         };
 
         if let Some(response_handler) = self.peer_tx.take() {
-            // it is OK to ignore error: handler may be already dead
+            // TODO: reset on error
             drop(response_handler.send(ResultOrEof::Eof));
         }
     }
