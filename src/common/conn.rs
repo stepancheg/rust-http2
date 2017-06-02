@@ -42,6 +42,8 @@ use super::stream_map::*;
 use super::types::*;
 use super::conf::*;
 use super::pump_stream_to_write_loop::PumpStreamToWriteLoop;
+use super::stream_from_network::StreamFromNetwork;
+use super::stream_queue_sync::StreamQueueSyncReceiver;
 
 use stream_part::*;
 
@@ -69,7 +71,7 @@ pub fn channel_network_to_user() ->
 
 pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
-    IncreaseInWindow(StreamId),
+    IncreaseInWindow(StreamId, u32),
     Frame(HttpFrame),
     StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
 }
@@ -337,6 +339,7 @@ impl<T : Types> ConnData<T>
                         // a receiver MUST adjust the size of all stream flow-control windows
                         // that it maintains by the difference between the new value
                         // and the old value.
+                        // TODO: check for overflow
                         s.out_window_size.0 += delta;
                     }
 
@@ -613,8 +616,23 @@ impl<T : Types> ConnData<T>
         goaway && no_streams
     }
 
+    pub fn new_stream_from_network(
+        &self,
+        rx: StreamQueueSyncReceiver,
+        stream_id: StreamId,
+        in_window_size: u32)
+            -> StreamFromNetwork<T>
+    {
+        StreamFromNetwork {
+            rx: rx,
+            stream_id: stream_id,
+            to_write_tx: self.to_write_tx.clone(),
+            in_window_size: in_window_size,
+        }
+    }
+
     pub fn pump_stream_to_write_loop(
-        &mut self,
+        &self,
         self_rc: RcMut<Self>,
         stream_id: StreamId,
         stream: HttpPartStream,
@@ -622,27 +640,25 @@ impl<T : Types> ConnData<T>
     {
         let stream = stream.catch_unwind();
         // TODO: spawn in provided executor
-        self.loop_handle.spawn(PumpStreamToWriteLoop::new(
-            self_rc, self.to_write_tx.clone(), stream_id, ready_to_write, stream));
+        self.loop_handle.spawn(PumpStreamToWriteLoop {
+            conn_rc: self_rc,
+            to_write_tx: self.to_write_tx.clone(),
+            stream_id: stream_id,
+            ready_to_write: ready_to_write,
+            stream: stream,
+        });
     }
 
-    fn increase_in_window(&mut self, stream_id: StreamId) -> result::Result<()> {
-        let inc = if let Some(mut stream) = self.streams.get_mut(stream_id) {
-            // TODO: use different value
-            if stream.stream().in_window_size.size() < DEFAULT_SETTINGS.initial_window_size as i32 {
-                let inc = (DEFAULT_SETTINGS.initial_window_size as i32
-                    - stream.stream().in_window_size.size()) as u32;
-                stream.stream().in_window_size.try_increase(inc).expect("increase");
-
-                inc
-            } else {
-                return Ok(());
+    fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
+        if let Some(mut stream) = self.streams.get_mut(stream_id) {
+            if let Err(_) = stream.stream().in_window_size.try_increase(increase) {
+                return Err(error::Error::Other("in window overflow"));
             }
         } else {
             return Ok(());
         };
 
-        self.send_frame(WindowUpdateFrame::for_stream(stream_id, inc))?;
+        self.send_frame(WindowUpdateFrame::for_stream(stream_id, increase))?;
         
         Ok(())
     }
@@ -798,9 +814,9 @@ impl<I, T> WriteLoopData<I, T>
         }
     }
 
-    fn increase_in_window(self, stream_id: StreamId) -> HttpFuture<Self> {
+    fn increase_in_window(self, stream_id: StreamId, increase: u32) -> HttpFuture<Self> {
         let r = self.inner.with(move |inner| {
-            inner.increase_in_window(stream_id)
+            inner.increase_in_window(stream_id, increase)
         });
         Box::new(future::result(r.map(|()| self)))
     }
@@ -819,8 +835,8 @@ impl<I, T> WriteLoopData<I, T>
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)
             },
-            CommonToWriteMessage::IncreaseInWindow(stream_id) => {
-                self.increase_in_window(stream_id)
+            CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
+                self.increase_in_window(stream_id, increase)
             },
         }
     }

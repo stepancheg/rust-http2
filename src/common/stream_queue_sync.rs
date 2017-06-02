@@ -22,12 +22,6 @@ struct Shared {
     data_size: AtomicUsize,
 }
 
-impl Shared {
-    pub fn data_size(&self) -> usize {
-        self.data_size.load(Ordering::SeqCst)
-    }
-}
-
 pub struct StreamQueueSyncSender {
     shared: Arc<Shared>,
     sender: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
@@ -52,6 +46,12 @@ impl StreamQueueSyncSender {
 
     pub fn send_eof(&self) -> Result<(), ()> {
         self.sender.send(ResultOrEof::Eof).map_err(|_| ())
+    }
+}
+
+impl StreamQueueSyncReceiver {
+    pub fn data_size(&self) -> u32 {
+        self.shared.data_size.load(Ordering::SeqCst) as u32
     }
 }
 

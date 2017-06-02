@@ -18,30 +18,11 @@ use super::*;
 
 /// Poll the stream and enqueues frames
 pub struct PumpStreamToWriteLoop<T : Types> {
-    conn_rc: RcMut<ConnData<T>>,
-    to_write_tx: UnboundedSender<T::ToWriteMessage>,
-    stream_id: StreamId,
-    ready_to_write: latch::Latch,
-    stream: HttpPartStream,
-}
-
-impl<T : Types> PumpStreamToWriteLoop<T> {
-    pub fn new(
-        conn_rc: RcMut<ConnData<T>>,
-        to_write_tx: UnboundedSender<T::ToWriteMessage>,
-        stream_id: StreamId,
-        ready_to_write: latch::Latch,
-        stream: HttpPartStream)
-            -> PumpStreamToWriteLoop<T>
-    {
-        PumpStreamToWriteLoop {
-            conn_rc: conn_rc,
-            to_write_tx: to_write_tx,
-            stream_id: stream_id,
-            ready_to_write: ready_to_write,
-            stream: stream,
-        }
-    }
+    pub conn_rc: RcMut<ConnData<T>>,
+    pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
+    pub stream_id: StreamId,
+    pub ready_to_write: latch::Latch,
+    pub stream: HttpPartStream,
 }
 
 impl<T : Types> Future for PumpStreamToWriteLoop<T> {

@@ -7,9 +7,8 @@ use futures::sync::mpsc::UnboundedSender;
 
 use stream_part::*;
 
-use futures_misc::signal;
-
 use solicit::StreamId;
+use solicit::DEFAULT_SETTINGS;
 
 use error;
 
@@ -19,10 +18,10 @@ use super::stream_queue_sync::StreamQueueSyncReceiver;
 
 
 pub struct StreamFromNetwork<T : Types> {
-    signal: signal::Receiver,
-    rx: StreamQueueSyncReceiver,
-    stream_id: StreamId,
-    to_write_tx: UnboundedSender<T::ToWriteMessage>,
+    pub rx: StreamQueueSyncReceiver,
+    pub stream_id: StreamId,
+    pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
+    pub in_window_size: u32,
 }
 
 impl<T : Types> Stream for StreamFromNetwork<T> {
@@ -37,10 +36,19 @@ impl<T : Types> Stream for StreamFromNetwork<T> {
             Ok(Async::Ready(Some(part))) => part,
         };
 
-        if let HttpStreamPart { content: HttpStreamPartContent::Data(_), .. } = part {
-            let increase_window = CommonToWriteMessage::IncreaseInWindow(self.stream_id);
-            if let Err(_) = self.to_write_tx.send(increase_window.into()) {
-                return Err(error::Error::Other("failed to send to conn; likely died"));
+        if let HttpStreamPart { content: HttpStreamPartContent::Data(ref b), .. } = part {
+            self.in_window_size -= b.len() as u32;
+
+            // TODO: use different
+            // TODO: increment after process of the frame
+            let edge = DEFAULT_SETTINGS.initial_window_size / 2;
+            if self.in_window_size + self.rx.data_size() < edge {
+                let inc = DEFAULT_SETTINGS.initial_window_size;
+                let m = CommonToWriteMessage::IncreaseInWindow(self.stream_id, inc);
+                if let Err(_) = self.to_write_tx.send(m.into()) {
+                    return Err(error::Error::Other("failed to send to conn; likely died"));
+                }
+                self.in_window_size += inc;
             }
         }
 

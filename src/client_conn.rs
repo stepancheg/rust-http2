@@ -162,20 +162,28 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
+            let (inc_tx, inc_rx) = stream_queue_sync();
+
             let (latch_ctr, latch) = latch::latch();
 
-            let (inc_tx, _inc_rx) = stream_queue_sync();
+            let in_window_size = DEFAULT_SETTINGS.initial_window_size;
 
-            let mut stream = HttpStreamCommon::new(
+            let mut http_stream = HttpStreamCommon::new(
+                in_window_size,
                 inner.conn.peer_settings.initial_window_size,
                 resp_channel_tx,
                 inc_tx,
                 latch_ctr,
                 ClientStreamData { });
 
-            stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
+            http_stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
 
-            let stream_id = inner.insert_stream(stream);
+            let stream_id = inner.insert_stream(http_stream);
+
+            let _resp_stream = inner.new_stream_from_network(
+                inc_rx,
+                stream_id,
+                in_window_size);
 
             inner.pump_stream_to_write_loop(inner_rc, stream_id, body, latch);
 

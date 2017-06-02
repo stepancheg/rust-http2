@@ -8,7 +8,6 @@ use error;
 
 use solicit::session::StreamState;
 use solicit::WindowSize;
-use solicit::DEFAULT_SETTINGS;
 use solicit::header::Headers;
 use solicit::connection::EndStream;
 
@@ -75,6 +74,7 @@ pub struct HttpStreamCommon<T : Types> {
 
 impl<T : Types> HttpStreamCommon<T> {
     pub fn new(
+        in_window_size: u32,
         out_window_size: u32,
         peer_tx: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
         incoming: StreamQueueSyncSender,
@@ -85,7 +85,7 @@ impl<T : Types> HttpStreamCommon<T> {
         HttpStreamCommon {
             specific: specific,
             state: StreamState::Open,
-            in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
+            in_window_size: WindowSize::new(in_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
             incoming: incoming,

@@ -110,6 +110,33 @@ impl ServerInner {
 
         let (req_tx, req_rx) = channel_network_to_user();
 
+        let (latch_ctr, latch) = latch::latch();
+
+        // TODO
+        latch_ctr.open();
+
+        {
+            let (inc_tx, inc_rx) = stream_queue_sync();
+
+            let in_window_size = DEFAULT_SETTINGS.initial_window_size;
+
+            // New stream initiated by the client
+            let stream = HttpStreamCommon::new(
+                in_window_size,
+                self.conn.peer_settings.initial_window_size,
+                req_tx,
+                inc_tx,
+                latch_ctr,
+                ServerStreamData {});
+
+            self.streams.insert(stream_id, stream);
+
+            let _resp_stream = self.new_stream_from_network(
+                inc_rx,
+                stream_id,
+                in_window_size);
+        }
+
         let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             self.specific.factory.start_request(headers, req_rx)
         }));
@@ -124,24 +151,6 @@ impl ServerInner {
                 Ok(HttpStreamPart::last_data(Bytes::from(format!("handler panicked: {}", e)))),
             ]))
         });
-
-        let (latch_ctr, latch) = latch::latch();
-
-        // TODO
-        latch_ctr.open();
-
-        {
-            let (inc_tx, _inc_rx) = stream_queue_sync();
-
-            // New stream initiated by the client
-            let stream = HttpStreamCommon::new(
-                self.conn.peer_settings.initial_window_size,
-                req_tx,
-                inc_tx,
-                latch_ctr,
-                ServerStreamData {});
-            self.streams.insert(stream_id, stream);
-        }
 
         self.pump_stream_to_write_loop(self_rc, stream_id, response.into_part_stream(), latch);
 
