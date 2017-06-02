@@ -69,6 +69,7 @@ pub fn channel_network_to_user() ->
 
 pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
+    IncreaseInWindow(StreamId),
     Frame(HttpFrame),
     StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
 }
@@ -624,6 +625,14 @@ impl<T : Types> ConnData<T>
         self.loop_handle.spawn(PumpStreamToWriteLoop::new(
             self_rc, self.to_write_tx.clone(), stream_id, ready_to_write, stream));
     }
+
+    fn increase_in_window(&mut self, stream_id: StreamId) -> result::Result<()> {
+        if let Some(_stream) = self.streams.get_mut(stream_id) {
+            unimplemented!()
+        } else {
+            Ok(())
+        }
+    }
 }
 
 
@@ -776,12 +785,30 @@ impl<I, T> WriteLoopData<I, T>
         }
     }
 
+    fn increase_in_window(self, stream_id: StreamId) -> HttpFuture<Self> {
+        let r = self.inner.with(move |inner| {
+            inner.request_window(stream_id)
+        });
+        Box::new(future::result(r.map(|()| self)))
+    }
+
     pub fn process_common(self, common: CommonToWriteMessage) -> HttpFuture<Self> {
         match common {
-            CommonToWriteMessage::TryFlushStream(None) => self.send_outg_conn(),
-            CommonToWriteMessage::TryFlushStream(Some(stream_id)) => self.send_outg_stream(stream_id),
-            CommonToWriteMessage::Frame(frame) => self.write_frame(frame),
-            CommonToWriteMessage::StreamEnd(stream_id, error_code) => self.process_stream_end(stream_id, error_code),
+            CommonToWriteMessage::TryFlushStream(None) => {
+                self.send_outg_conn()
+            },
+            CommonToWriteMessage::TryFlushStream(Some(stream_id)) => {
+                self.send_outg_stream(stream_id)
+            },
+            CommonToWriteMessage::Frame(frame) => {
+                self.write_frame(frame)
+            },
+            CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
+                self.process_stream_end(stream_id, error_code)
+            },
+            CommonToWriteMessage::IncreaseInWindow(stream_id) => {
+                self.increase_in_window(stream_id)
+            },
         }
     }
 }

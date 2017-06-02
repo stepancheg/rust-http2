@@ -10,12 +10,17 @@ use stream_part::*;
 use futures_misc::signal;
 use futures_misc::ResultOrEof;
 
+use solicit::StreamId;
+
 use error;
+
+use super::conn::CommonToWriteMessage;
 
 
 pub struct StreamFromNetwork {
     signal: signal::Receiver,
     rx: mpsc::Receiver<ResultOrEof<HttpStreamPart, error::Error>>,
+    stream_id: StreamId,
 }
 
 impl Stream for StreamFromNetwork {
@@ -35,6 +40,8 @@ impl Stream for StreamFromNetwork {
                     return Err(error::Error::Other("channel disconnected, likely conn died"));
                 },
             }
+
+            let _request_window = CommonToWriteMessage::IncreaseInWindow(self.stream_id);
         }
     }
 }
