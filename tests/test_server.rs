@@ -3,9 +3,8 @@
 extern crate regex;
 extern crate bytes;
 extern crate futures;
-extern crate native_tls;
 extern crate tokio_core;
-extern crate tokio_tls;
+extern crate tokio_tls_api;
 extern crate httpbis;
 #[macro_use]
 extern crate log;
@@ -157,7 +156,7 @@ fn response_large() {
         Response::headers_and_bytes(Headers::ok_200(), Bytes::from(large_resp_copy.clone()))
     });
 
-    let client = Client::new("::1", server.port(), false, Default::default()).expect("connect");
+    let client = Client::new_plain("::1", server.port(), Default::default()).expect("connect");
     let resp = client.start_post("/foobar", "localhost", Bytes::from(&b""[..])).collect().wait().expect("wait");
     assert_eq!(large_resp.len(), resp.body.len());
     assert_eq!((large_resp.len(), &large_resp[..]), (resp.body.len(), &resp.body[..]));

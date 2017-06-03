@@ -11,8 +11,6 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::sync::oneshot;
 
-use native_tls::TlsAcceptor;
-
 use tokio_core;
 use tokio_core::reactor;
 
@@ -38,17 +36,11 @@ impl HttpServerOneConn {
     pub fn new_fn<S>(port: u16, service: S) -> Self
         where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
     {
-        HttpServerOneConn::new_fn_impl(port, None, service)
-    }
-
-    pub fn new_tls_fn<S>(port: u16, server_context: TlsAcceptor, service: S) -> Self
-        where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
-    {
-        HttpServerOneConn::new_fn_impl(port, Some(server_context), service)
+        HttpServerOneConn::new_fn_impl(port, service)
     }
 
     #[allow(dead_code)]
-    fn new_fn_impl<S>(port: u16, server_context: Option<TlsAcceptor>, service: S) -> Self
+    fn new_fn_impl<S>(port: u16, service: S) -> Self
         where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
     {
         let (from_loop_tx, from_loop_rx) = oneshot::channel();
@@ -79,15 +71,10 @@ impl HttpServerOneConn {
                     // close listening port
                     drop(listener);
 
-                    if let Some(_server_context) = server_context {
-                        //HttpServerConnectionAsync::new_tls_fn(&handle, conn, server_context, service)
-                        unimplemented!()
-                    } else {
-                        let (conn, future) = ServerConnection::new_plain_fn(
+                    let (conn, future) = ServerConnection::new_plain_fn(
                             &handle, conn, Default::default(), service);
                         *conn_for_thread.lock().unwrap() = Some(conn);
-                        future
-                    }
+                    future
                 });
 
             let shutdown_rx = shutdown_rx.then(|_| future::finished::<_, ()>(()));

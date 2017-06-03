@@ -6,7 +6,8 @@ extern crate httpbis_interop;
 extern crate log;
 extern crate env_logger;
 extern crate clap;
-extern crate native_tls;
+extern crate tls_api;
+extern crate tls_api_native_tls;
 
 use std::sync::Arc;
 use std::net::SocketAddr;
@@ -14,8 +15,11 @@ use std::net::IpAddr;
 
 use bytes::Bytes;
 
-use native_tls::TlsConnector;
-use native_tls::Certificate;
+use tls_api_native_tls::TlsConnector;
+use tls_api_native_tls::Certificate;
+use tls_api::Certificate as tls_api_Certificate;
+use tls_api::TlsConnector as tls_api_TlsConnector;
+use tls_api::TlsConnectorBuilder;
 
 use futures::future::Future;
 

@@ -29,16 +29,14 @@ impl Service for Megabyte {
 #[bench]
 fn bench(b: &mut Bencher) {
     b.iter(|| {
-        let server = Server::new(
+        let server = Server::new_plain(
             "[::1]:0",
-            ServerTlsOption::Plain,
             Default::default(),
             Megabyte);
 
-        let client = Client::new(
+        let client = Client::new_plain(
             "::1",
             server.local_addr().port(),
-            false,
             Default::default())
                 .unwrap();
 

@@ -3,13 +3,16 @@ extern crate httpbis_interop;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
-extern crate native_tls;
+extern crate tls_api;
+extern crate tls_api_native_tls;
 
 use std::sync::Arc;
 use std::thread;
 
-use native_tls::TlsAcceptor;
-use native_tls::Pkcs12;
+use tls_api_native_tls::TlsAcceptor;
+use tls_api::Pkcs12;
+use tls_api::TlsAcceptor as tls_api_TlsAcceptor;
+use tls_api::TlsAcceptorBuilder;
 
 use httpbis::message::SimpleHttpMessage;
 use httpbis::Headers;

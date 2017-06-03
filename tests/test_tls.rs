@@ -2,9 +2,10 @@
 
 extern crate bytes;
 extern crate futures;
-extern crate native_tls;
+extern crate tls_api;
+extern crate tls_api_native_tls;
 extern crate tokio_core;
-extern crate tokio_tls;
+extern crate tokio_tls_api;
 extern crate httpbis;
 extern crate log;
 extern crate env_logger;
@@ -20,10 +21,16 @@ use httpbis::solicit::header::Headers;
 use httpbis::*;
 use httpbis::message::SimpleHttpMessage;
 
-use native_tls::TlsAcceptor;
-use native_tls::TlsConnector;
-use native_tls::Pkcs12;
-use native_tls::Certificate;
+use tls_api_native_tls::TlsAcceptor;
+use tls_api_native_tls::TlsConnector;
+use tls_api_native_tls::Pkcs12;
+use tls_api_native_tls::Certificate;
+use tls_api::Pkcs12 as tls_api_Pkcs12;
+use tls_api::Certificate as tls_api_Certificate;
+use tls_api::TlsAcceptor as tls_api_TlsAcceptor;
+use tls_api::TlsConnector as tls_api_TlsConnector;
+use tls_api::TlsAcceptorBuilder;
+use tls_api::TlsConnectorBuilder;
 
 
 fn test_tls_acceptor() -> TlsAcceptor {

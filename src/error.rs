@@ -6,7 +6,7 @@ use assert_types::*;
 
 use hpack::decoder::DecoderError;
 
-use native_tls;
+use tls_api;
 
 use tokio_timer::TimeoutError;
 
@@ -111,7 +111,7 @@ impl Into<u32> for ErrorCode {
 pub enum Error {
     /// The underlying IO layer raised an error
     IoError(io::Error),
-    TlsError(native_tls::Error),
+    TlsError(tls_api::Error),
     CodeError(ErrorCode),
     /// The HTTP/2 connection received an invalid HTTP/2 frame
     InvalidFrame(String),
@@ -145,8 +145,8 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<native_tls::Error> for Error {
-    fn from(error: native_tls::Error) -> Error {
+impl From<tls_api::Error> for Error {
+    fn from(error: tls_api::Error) -> Error {
         Error::TlsError(error)
     }
 }

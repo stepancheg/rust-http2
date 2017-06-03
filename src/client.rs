@@ -17,7 +17,9 @@ use futures::sync::oneshot;
 
 use tokio_core::reactor;
 
-use native_tls::TlsConnector;
+use tls_api::TlsConnector;
+use tls_api::TlsConnectorBuilder;
+use tls_api_stub;
 
 use futures_misc::*;
 
@@ -56,25 +58,32 @@ pub struct Client {
 
 impl Client {
 
-    pub fn new(host: &str, port: u16, tls: bool, conf: ClientConf) -> Result<Client> {
+    pub fn new_plain(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
         // TODO: sync
         // TODO: try connect to all addrs
         let socket_addr = (host, port).to_socket_addrs()?.next().expect("resolve host/port");
 
-        let tls_enabled = match tls {
-            true => {
-                let tls_connector = TlsConnector::builder().expect("TlsConnector::Builder")
-                    .build().expect("TlsConnectorBuilder::build");
-                let connector = Arc::new(tls_connector);
-                ClientTlsOption::Tls(host.to_owned(), connector)
-            },
-            false => ClientTlsOption::Plain,
+        let tls_enabled: ClientTlsOption<tls_api_stub::TlsConnector> = ClientTlsOption::Plain;
+
+        Client::new_expl(&socket_addr, tls_enabled, conf)
+    }
+
+    pub fn new_tls<C : TlsConnector>(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
+        // TODO: sync
+        // TODO: try connect to all addrs
+        let socket_addr = (host, port).to_socket_addrs()?.next().expect("resolve host/port");
+
+        let tls_enabled = {
+            let tls_connector = C::builder().expect("TlsConnector::Builder")
+                .build().expect("TlsConnectorBuilder::build");
+            let connector = Arc::new(tls_connector);
+            ClientTlsOption::Tls(host.to_owned(), connector)
         };
 
         Client::new_expl(&socket_addr, tls_enabled, conf)
     }
 
-    pub fn new_expl(addr: &SocketAddr, tls: ClientTlsOption, conf: ClientConf) -> Result<Client> {
+    pub fn new_expl<C : TlsConnector>(addr: &SocketAddr, tls: ClientTlsOption<C>, conf: ClientConf) -> Result<Client> {
         // We need some data back from event loop.
         // This channel is used to exchange that data
         let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
@@ -194,17 +203,17 @@ enum ControllerCommand {
     DumpState(oneshot::Sender<ConnectionStateSnapshot>),
 }
 
-struct ControllerState {
+struct ControllerState<C : TlsConnector> {
     handle: reactor::Handle,
     socket_addr: SocketAddr,
-    tls: ClientTlsOption,
+    tls: ClientTlsOption<C>,
     conf: ClientConf,
     // current connection
     conn: Arc<ClientConnection>,
     tx: UnboundedSender<ControllerCommand>,
 }
 
-impl ControllerState {
+impl<C : TlsConnector> ControllerState<C> {
     fn init_conn(&mut self) {
         let (conn, future) = ClientConnection::new(
             self.handle.clone(),
@@ -220,7 +229,7 @@ impl ControllerState {
         self.conn = Arc::new(conn);
     }
 
-    fn iter(mut self, cmd: ControllerCommand) -> ControllerState {
+    fn iter(mut self, cmd: ControllerCommand) -> ControllerState<C> {
         match cmd {
             ControllerCommand::GoAway => {
                 self.init_conn();
@@ -277,9 +286,9 @@ impl ClientConnectionCallbacks for CallbacksImpl {
 }
 
 // Event loop entry point
-fn run_client_event_loop(
+fn run_client_event_loop<C : TlsConnector>(
     socket_addr: SocketAddr,
-    tls: ClientTlsOption,
+    tls: ClientTlsOption<C>,
     conf: ClientConf,
     send_to_back: mpsc::Sender<LoopToClient>)
 {

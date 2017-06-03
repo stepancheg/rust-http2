@@ -1,16 +1,24 @@
 use std::sync::Arc;
 
-use native_tls::TlsConnector;
+use tls_api::TlsConnector;
 
 use solicit::HttpScheme;
 
-#[derive(Clone)]
-pub enum ClientTlsOption {
+pub enum ClientTlsOption<C : TlsConnector> {
     Plain,
-    Tls(String, Arc<TlsConnector>), // domain
+    Tls(String, Arc<C>), // domain
 }
 
-impl ClientTlsOption {
+impl<C : TlsConnector> Clone for ClientTlsOption<C> {
+    fn clone(&self) -> Self {
+        match self {
+            &ClientTlsOption::Plain => ClientTlsOption::Plain,
+            &ClientTlsOption::Tls(ref d, ref c) => ClientTlsOption::Tls(d.clone(), c.clone()),
+        }
+    }
+}
+
+impl<C : TlsConnector> ClientTlsOption<C> {
     pub fn http_scheme(&self) -> HttpScheme {
         match self {
             &ClientTlsOption::Plain => HttpScheme::Http,

@@ -24,6 +24,9 @@ use futures_misc::*;
 
 use net2;
 
+use tls_api::TlsAcceptor;
+use tls_api_stub;
+
 use super::server_conn::*;
 use super::common::*;
 
@@ -112,15 +115,15 @@ fn listener(
     TcpListener::from_listener(listener, addr, handle)
 }
 
-fn run_server_event_loop<S>(
+fn run_server_event_loop<S, A>(
     listen_addr: SocketAddr,
     state: Arc<Mutex<ServerState>>,
-    tls: ServerTlsOption,
+    tls: ServerTlsOption<A>,
     conf: ServerConf,
     service: S,
     send_to_back: mpsc::Sender<LoopToServer>,
     _alive_tx: mpsc::Sender<()>)
-        where S : Service,
+        where S : Service, A : TlsAcceptor,
 {
     let service = Arc::new(service);
 
@@ -182,9 +185,16 @@ fn run_server_event_loop<S>(
 }
 
 impl Server {
+    pub fn new_plain<T, S>(addr: T, conf: ServerConf, service: S) -> Server
+        where S : Service, T : ToSocketAddrs
+    {
+        let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
+        Server::new(addr, no_tls, conf, service)
+    }
+
     // TODO: result
-    pub fn new<A: ToSocketAddrs, S>(addr: A, tls: ServerTlsOption, conf: ServerConf, service: S) -> Server
-        where S : Service
+    pub fn new<T, S, A>(addr: T, tls: ServerTlsOption<A>, conf: ServerConf, service: S) -> Server
+        where S : Service, T : ToSocketAddrs, A : TlsAcceptor
     {
         let listen_addr = addr.to_socket_addrs().unwrap().next().unwrap();
 

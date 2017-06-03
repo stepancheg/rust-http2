@@ -24,14 +24,14 @@ use futures::sync::oneshot;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
 
-use native_tls::TlsConnector;
+use tls_api::TlsConnector;
 
 use tokio_core::net::TcpStream;
 use tokio_core::reactor;
 use tokio_timer::Timer;
 use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
-use tokio_tls::TlsConnectorExt;
+use tokio_tls_api;
 
 use futures_misc::*;
 
@@ -270,14 +270,14 @@ impl ClientConnection {
         (c, Box::new(future))
     }
 
-    pub fn new<C>(
+    pub fn new<H, C>(
         lh: reactor::Handle,
         addr: &SocketAddr,
-        tls: ClientTlsOption,
+        tls: ClientTlsOption<C>,
         conf: ClientConf,
-        callbacks: C)
+        callbacks: H)
             -> (Self, HttpFuture<()>)
-        where C : ClientConnectionCallbacks
+        where H : ClientConnectionCallbacks, C : TlsConnector + Sync
     {
         match tls {
             ClientTlsOption::Plain =>
@@ -317,15 +317,15 @@ impl ClientConnection {
         ClientConnection::connected(lh, connect, conf, callbacks)
     }
 
-    pub fn new_tls<C>(
+    pub fn new_tls<H, C>(
         lh: reactor::Handle,
         domain: &str,
-        connector: Arc<TlsConnector>,
+        connector: Arc<C>,
         addr: &SocketAddr,
         conf: ClientConf,
-        callbacks: C)
+        callbacks: H)
             -> (Self, HttpFuture<()>)
-        where C : ClientConnectionCallbacks
+        where H : ClientConnectionCallbacks, C : TlsConnector + Sync
     {
         let domain = domain.to_owned();
         let addr = addr.clone();
@@ -335,7 +335,7 @@ impl ClientConnection {
             .map_err(|e| e.into());
 
         let tls_conn = connect.and_then(move |conn| {
-            connector.connect_async(&domain, conn).map_err(|e| {
+            tokio_tls_api::connect_async(&*connector, &domain, conn).map_err(|e| {
                 Error::IoError(io::Error::new(io::ErrorKind::Other, e))
             })
         });

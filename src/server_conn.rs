@@ -25,7 +25,10 @@ use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor;
-use tokio_tls::TlsAcceptorExt;
+use tokio_tls_api;
+
+use tls_api::TlsAcceptor;
+use tls_api_stub;
 
 use futures_misc::*;
 
@@ -308,10 +311,9 @@ impl ServerConnection {
         }, future)
     }
 
-    pub fn new<S>(lh: &reactor::Handle, socket: TcpStream, tls: ServerTlsOption, conf: ServerConf, service: Arc<S>)
+    pub fn new<S, A>(lh: &reactor::Handle, socket: TcpStream, tls: ServerTlsOption<A>, conf: ServerConf, service: Arc<S>)
                   -> (ServerConnection, HttpFuture<()>)
-        where
-            S : Service,
+        where S : Service, A : TlsAcceptor
     {
         match tls {
             ServerTlsOption::Plain =>
@@ -319,7 +321,7 @@ impl ServerConnection {
                     lh, Box::new(future::finished(socket)), conf, service),
             ServerTlsOption::Tls(acceptor) =>
                 ServerConnection::connected(
-                    lh, Box::new(acceptor.accept_async(socket).map_err(error::Error::from)), conf, service),
+                    lh, Box::new(tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from)), conf, service),
         }
     }
 
@@ -328,7 +330,8 @@ impl ServerConnection {
         where
             S : Service,
     {
-        ServerConnection::new(lh, socket, ServerTlsOption::Plain, conf, service)
+        let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
+        ServerConnection::new(lh, socket, no_tls, conf, service)
     }
 
     pub fn new_plain_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)

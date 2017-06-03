@@ -6,7 +6,6 @@ use bytes::Bytes;
 
 use httpbis;
 use httpbis::server::Server;
-use httpbis::server::ServerTlsOption;
 use httpbis::*;
 
 use regex::Regex;
@@ -46,7 +45,7 @@ impl httpbis::Service for TestService {
 
 impl HttpServerTest {
     pub fn new() -> HttpServerTest {
-        let http_server = Server::new("[::1]:0", ServerTlsOption::Plain, Default::default(), TestService {});
+        let http_server = Server::new_plain("[::1]:0", Default::default(), TestService {});
         let port = http_server.local_addr().port();
         HttpServerTest {
             server: http_server,

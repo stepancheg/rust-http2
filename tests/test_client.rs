@@ -8,9 +8,7 @@ extern crate regex;
 extern crate bytes;
 extern crate httpbis;
 extern crate futures;
-extern crate native_tls;
 extern crate tokio_core;
-extern crate tokio_tls;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -36,7 +34,7 @@ fn stream_count() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new("::1", server.port(), false, Default::default()).expect("connect");
+        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -74,7 +72,7 @@ fn rst_is_error() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new("::1", server.port(), false, Default::default()).expect("connect");
+        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -105,7 +103,7 @@ fn client_call_dropped() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new("::1", server.port(), false, Default::default()).expect("connect");
+        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -140,7 +138,7 @@ fn reconnect_on_disconnect() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new("::1", server.port(), false, Default::default()).expect("connect");
+        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -183,7 +181,7 @@ fn reconnect_on_goaway() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new("::1", server.port(), false, Default::default()).expect("connect");
+        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
 
     {
         let mut server_tester = server.accept();
