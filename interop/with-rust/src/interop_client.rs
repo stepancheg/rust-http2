@@ -15,9 +15,8 @@ use std::net::IpAddr;
 
 use bytes::Bytes;
 
+use tls_api::Certificate;
 use tls_api_native_tls::TlsConnector;
-use tls_api_native_tls::Certificate;
-use tls_api::Certificate as tls_api_Certificate;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
 
@@ -59,7 +58,7 @@ fn find_test_case(name: &str) -> Option<fn(Client)> {
 
 fn test_tls_connector() -> TlsConnector {
     let root_ca = include_bytes!("../../root-ca.der");
-    let root_ca = Certificate::from_der(root_ca).unwrap();
+    let root_ca = Certificate::from_der(root_ca.to_vec());
 
     let mut builder = TlsConnector::builder().unwrap();
     builder.add_root_certificate(root_ca).expect("add_root_certificate");

@@ -10,9 +10,8 @@ use std::sync::Arc;
 use std::thread;
 
 use tls_api_native_tls::TlsAcceptor;
-use tls_api::Pkcs12;
-use tls_api::TlsAcceptor as tls_api_TlsAcceptor;
-use tls_api::TlsAcceptorBuilder;
+use tls_api_native_tls::TlsAcceptorBuilder;
+use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
 use httpbis::message::SimpleHttpMessage;
 use httpbis::Headers;
@@ -39,9 +38,8 @@ impl httpbis::Service for ServiceImpl {
 }
 
 fn test_tls_acceptor() -> TlsAcceptor {
-    let buf = include_bytes!("../../identity.p12");
-    let pkcs12 = Pkcs12::from_der(buf, "mypass").unwrap();
-    let builder = TlsAcceptor::builder(pkcs12).unwrap();
+    let pkcs12 = include_bytes!("../../identity.p12");
+    let builder = TlsAcceptorBuilder::from_pkcs12(pkcs12, "mypass").unwrap();
     builder.build().unwrap()
 }
 

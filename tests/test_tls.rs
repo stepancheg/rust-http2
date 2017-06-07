@@ -21,28 +21,26 @@ use httpbis::solicit::header::Headers;
 use httpbis::*;
 use httpbis::message::SimpleHttpMessage;
 
+use tls_api::Certificate;
 use tls_api_native_tls::TlsAcceptor;
+use tls_api_native_tls::TlsAcceptorBuilder;
 use tls_api_native_tls::TlsConnector;
-use tls_api_native_tls::Pkcs12;
-use tls_api_native_tls::Certificate;
-use tls_api::Pkcs12 as tls_api_Pkcs12;
 use tls_api::Certificate as tls_api_Certificate;
 use tls_api::TlsAcceptor as tls_api_TlsAcceptor;
+use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use tls_api::TlsConnector as tls_api_TlsConnector;
-use tls_api::TlsAcceptorBuilder;
 use tls_api::TlsConnectorBuilder;
 
 
 fn test_tls_acceptor() -> TlsAcceptor {
-    let buf = include_bytes!("identity.p12");
-    let pkcs12 = Pkcs12::from_der(buf, "mypass").unwrap();
-    let builder = TlsAcceptor::builder(pkcs12).unwrap();
+    let pkcs12 = include_bytes!("identity.p12");
+    let builder = TlsAcceptorBuilder::from_pkcs12(pkcs12, "mypass").unwrap();
     builder.build().unwrap()
 }
 
 fn test_tls_connector() -> TlsConnector {
     let root_ca = include_bytes!("root-ca.der");
-    let root_ca = Certificate::from_der(root_ca).unwrap();
+    let root_ca = Certificate::from_der(root_ca.to_vec());
 
     let mut builder = TlsConnector::builder().unwrap();
     builder.add_root_certificate(root_ca).expect("add_root_certificate");
