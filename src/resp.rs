@@ -55,6 +55,12 @@ impl Response {
         Response::headers(Headers::not_found_404())
     }
 
+    pub fn redirect_302(location: &str) -> Response {
+        let mut headers = Headers::from_status(302);
+        headers.add("location", location);
+        Response::headers(headers)
+    }
+
     pub fn from_stream<S>(stream: S) -> Response
         where S : Stream<Item=HttpStreamPart, Error=Error> + Send + 'static
     {

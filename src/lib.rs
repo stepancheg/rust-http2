@@ -61,6 +61,7 @@ pub use client_tls::ClientTlsOption;
 
 pub use server::Server;
 pub use server_conf::ServerConf;
+pub use server_conf::ServerAlpn;
 pub use server_tls::ServerTlsOption;
 
 pub use resp::Response;
