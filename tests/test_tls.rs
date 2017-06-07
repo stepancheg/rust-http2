@@ -25,7 +25,6 @@ use tls_api::Certificate;
 use tls_api_native_tls::TlsAcceptor;
 use tls_api_native_tls::TlsAcceptorBuilder;
 use tls_api_native_tls::TlsConnector;
-use tls_api::TlsAcceptor as tls_api_TlsAcceptor;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;

@@ -15,6 +15,7 @@ use bytes::Bytes;
 mod test_misc;
 
 use std::io::Write as _Write;
+use std::io::Read as _Read;
 
 use futures::future::Future;
 use futures::stream;
@@ -28,6 +29,7 @@ use httpbis::solicit::frame::headers::*;
 use httpbis::solicit::DEFAULT_SETTINGS;
 
 use std::iter::FromIterator;
+use std::net::TcpStream;
 
 use test_misc::*;
 
@@ -312,4 +314,19 @@ pub fn server_sends_continuation_frame() {
     assert_eq!(headers, headers_recv);
 
     assert_eq!(&b"there"[..], &tester.recv_frame_data_check(1, true)[..]);
+}
+
+#[test]
+pub fn http_1_1() {
+    env_logger::init().ok();
+
+    let server = HttpServerTest::new();
+
+    let mut tcp_stream = TcpStream::connect(("::1", server.port)).expect("connect");
+
+    tcp_stream.write_all(b"GET / HTTP/1.1\n").expect("write");
+
+    let mut read = Vec::new();
+    tcp_stream.read_to_end(&mut read).expect("read");
+    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", httpbis::misc::BsDebug(&read));
 }
