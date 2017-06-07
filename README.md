@@ -8,3 +8,16 @@
 HTTP/2 client and server implementation in Rust based on tokio.
 
 Currently it is used as base for implementation of [grpc-rust](https://github.com/stepancheg/grpc-rust).
+
+## Example server
+
+Checkout the source code and execute command:
+
+```
+cargo run --example server
+```
+
+Server will be available on https://localhost:8443/.
+You need any modern browser with HTTP/2 support to open the page (e. g. Firefox, Safari, Chrome).
+
+Server only works over HTTP/2, if browser doesn't send HTTP/2 preface, server closes the connection.
