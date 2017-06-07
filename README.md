@@ -3,6 +3,7 @@
 <!-- https://travis-ci.org/stepancheg/rust-http2.png -->
 [![Build Status](https://img.shields.io/travis/stepancheg/rust-http2.svg)](https://travis-ci.org/stepancheg/rust-http2)
 [![License](https://img.shields.io/crates/l/httpbis.svg)](https://github.com/stepancheg/rust-http2/blob/master/LICENSE.txt)
+[![crates.io](https://img.shields.io/crates/v/httpbis.svg)](https://crates.io/crates/httpbis) 
 
 HTTP/2 client and server implementation in Rust based on tokio.
 
