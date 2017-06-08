@@ -22,7 +22,7 @@ You need any modern browser with HTTP/2 support to open the page (e. g. Firefox,
 
 Server only works over HTTP/2, if browser doesn't send HTTP/2 preface, server closes the connection.
 
-## Example client:
+## Example client
 
 ```
 cargo run --example client https://google.com/
