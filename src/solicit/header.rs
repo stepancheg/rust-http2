@@ -1,17 +1,83 @@
 use std::str;
 use std::str::FromStr;
 use std::fmt;
-use std::borrow::Cow;
+
+use req_resp::RequestOrResponse;
+
+use result::Result;
+use error::Error;
 
 use assert_types::*;
 
 use bytes::Bytes;
 
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PseudoHeaderName {
+    // 8.1.2.3 Request Pseudo-Header Fields
+    Method,
+    Scheme,
+    Authority,
+    Path,
+
+    // 8.1.2.4 Response Pseudo-Header Fields
+    Status,
+}
+
+impl PseudoHeaderName {
+    pub fn name(&self) -> &'static str {
+        match *self {
+            PseudoHeaderName::Method =>    ":method",
+            PseudoHeaderName::Scheme =>    ":scheme",
+            PseudoHeaderName::Authority => ":authority",
+            PseudoHeaderName::Path =>      ":path",
+            PseudoHeaderName::Status =>    ":status",
+        }
+    }
+
+    pub fn parse(value: &[u8]) -> Result<PseudoHeaderName> {
+        match value {
+            b":method"    => Ok(PseudoHeaderName::Method),
+            b":scheme"    => Ok(PseudoHeaderName::Scheme),
+            b":authority" => Ok(PseudoHeaderName::Authority),
+            b":path"      => Ok(PseudoHeaderName::Path),
+            b":status"    => Ok(PseudoHeaderName::Status),
+            _             => Err(Error::Other("invalid pseudo header")),
+        }
+    }
+
+    pub fn req_or_resp(&self) -> RequestOrResponse {
+        match *self {
+            PseudoHeaderName::Method    => RequestOrResponse::Request,
+            PseudoHeaderName::Scheme    => RequestOrResponse::Request,
+            PseudoHeaderName::Authority => RequestOrResponse::Request,
+            PseudoHeaderName::Path      => RequestOrResponse::Request,
+            PseudoHeaderName::Status    => RequestOrResponse::Response,
+        }
+    }
+
+    pub fn name_bytes(&self) -> Bytes {
+        Bytes::from_static(self.name().as_bytes())
+    }
+}
+
+
+#[allow(dead_code)]
+pub struct HeaderName(Bytes);
+
+impl<'a> From<&'a str> for HeaderName {
+    fn from(_name: &'a str) -> HeaderName {
+        unimplemented!()
+    }
+}
+
+
+
 /// A convenience struct representing a part of a header (either the name or the value).
 pub struct HeaderPart(Bytes);
 
 impl fmt::Debug for HeaderPart {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.0, fmt)
     }
 }
@@ -31,12 +97,6 @@ impl From<Bytes> for HeaderPart {
 impl<'a> From<&'a [u8]> for HeaderPart {
     fn from(buf: &'a [u8]) -> HeaderPart {
         HeaderPart(Bytes::from(buf))
-    }
-}
-
-impl<'a> From<Cow<'a, [u8]>> for HeaderPart {
-    fn from(cow: Cow<'a, [u8]>) -> HeaderPart {
-        HeaderPart(Bytes::from(cow.into_owned()))
     }
 }
 
@@ -94,12 +154,6 @@ impl From<String> for HeaderPart {
 impl<'a> From<&'a str> for HeaderPart {
     fn from(s: &'a str) -> HeaderPart {
         From::from(s.as_bytes())
-    }
-}
-
-impl<'a> From<Cow<'a, str>> for HeaderPart {
-    fn from(cow: Cow<'a, str>) -> HeaderPart {
-        From::from(cow.into_owned())
     }
 }
 
