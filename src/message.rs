@@ -15,6 +15,11 @@ impl SimpleHttpMessage {
         Default::default()
     }
 
+    /// Multiline string
+    pub fn dump(&self) -> String {
+        format!("{}\n{}", self.headers.dump(), String::from_utf8_lossy(&self.body))
+    }
+
     pub fn from_parts<I>(iter: I) -> SimpleHttpMessage
         where I : IntoIterator<Item=HttpStreamPart>
     {

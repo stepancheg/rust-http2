@@ -135,6 +135,11 @@ impl Header {
     pub fn value(&self) -> &[u8] {
         &self.value
     }
+
+    /// name: value
+    pub fn format(&self) -> String {
+        format!("{}: {}", String::from_utf8_lossy(&self.name), String::from_utf8_lossy(&self.value))
+    }
 }
 
 impl<N: Into<HeaderPart>, V: Into<HeaderPart>> From<(N, V)> for Header {
@@ -149,6 +154,16 @@ pub struct Headers(pub Vec<Header>);
 impl Headers {
     pub fn new() -> Headers {
         Default::default()
+    }
+
+    /// Multiline string
+    pub fn dump(&self) -> String {
+        let mut r = String::new();
+        for h in &self.0 {
+            r.push_str(&h.format());
+            r.push_str("\n");
+        }
+        r
     }
 
     pub fn new_get(path: &str) -> Headers {

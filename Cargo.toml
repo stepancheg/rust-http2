@@ -31,6 +31,7 @@ env_logger         = "0.*"
 regex              = "0.2"
 tls-api-native-tls = "0.*"
 tls-api-openssl    = "0.*"
+url                = "1"
 
 [workspace]
 members = ["interop/with-rust"]

@@ -74,10 +74,17 @@ impl Client {
         let socket_addr = (host, port).to_socket_addrs()?.next().expect("resolve host/port");
 
         let tls_enabled = {
-            let tls_connector = C::builder().expect("TlsConnector::Builder")
-                .build().expect("TlsConnectorBuilder::build");
-            let connector = Arc::new(tls_connector);
-            ClientTlsOption::Tls(host.to_owned(), connector)
+            let mut tls_connector = C::builder()?;
+
+            if C::supports_alpn() {
+                // TODO: check negotiated protocol after connect
+                tls_connector.set_alpn_protocols(&[b"h2"])?;
+            }
+
+            let tls_connector = tls_connector.build()?;
+
+            let tls_connector = Arc::new(tls_connector);
+            ClientTlsOption::Tls(host.to_owned(), tls_connector)
         };
 
         Client::new_expl(&socket_addr, tls_enabled, conf)
