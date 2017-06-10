@@ -9,6 +9,8 @@ use error;
 use error::Error;
 use result;
 
+use exec::CpuPoolOption;
+
 use solicit::StreamId;
 use solicit::header::*;
 use solicit::connection::EndStream;
@@ -253,6 +255,7 @@ impl ClientConnection {
 
             let inner = RcMut::new(ConnData::new(
                 lh,
+                CpuPoolOption::Inline,
                 ClientConnData {
                     callbacks: Box::new(callbacks),
                 },

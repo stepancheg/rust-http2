@@ -15,6 +15,9 @@ use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 use tokio_io::io as tokio_io;
 
+use exec::Executor;
+use exec::CpuPoolOption;
+
 use error;
 use error::ErrorCode;
 use result;
@@ -68,6 +71,8 @@ pub struct ConnData<T : Types> {
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     /// Reactor we are using
     pub loop_handle: reactor::Handle,
+    /// Executor which drives requests on client and responses on server
+    pub exec: Box<Executor>,
     /// Connection state
     pub conn: HttpConnection,
     /// Known streams
@@ -103,9 +108,9 @@ impl<T : Types> ConnData<T>
         Self : ConnInner<Types=T>,
         HttpStreamCommon<T> : HttpStream,
 {
-
     pub fn new(
         loop_handle: reactor::Handle,
+        exec: CpuPoolOption,
         specific: T::ConnDataSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
@@ -122,6 +127,7 @@ impl<T : Types> ConnData<T>
             streams: StreamMap::new(),
             last_local_stream_id: 0,
             last_peer_stream_id: 0,
+            exec: exec.make_executor(&loop_handle),
             loop_handle: loop_handle,
             goaway_sent: None,
             goaway_received: None,
@@ -595,6 +601,24 @@ impl<T : Types> ConnData<T>
         }
     }
 
+    pub fn new_pump_stream_to_write_loop(
+        &self,
+        self_rc: RcMut<Self>,
+        stream_id: StreamId,
+        stream: HttpPartStream,
+        ready_to_write: latch::Latch)
+        -> PumpStreamToWriteLoop<T>
+    {
+        let stream = stream.catch_unwind();
+        PumpStreamToWriteLoop {
+            conn_rc: self_rc,
+            to_write_tx: self.to_write_tx.clone(),
+            stream_id: stream_id,
+            ready_to_write: ready_to_write,
+            stream: stream,
+        }
+    }
+
     pub fn pump_stream_to_write_loop(
         &self,
         self_rc: RcMut<Self>,
@@ -603,14 +627,11 @@ impl<T : Types> ConnData<T>
         ready_to_write: latch::Latch)
     {
         let stream = stream.catch_unwind();
-        // TODO: spawn in provided executor
-        self.loop_handle.spawn(PumpStreamToWriteLoop {
-            conn_rc: self_rc,
-            to_write_tx: self.to_write_tx.clone(),
-            stream_id: stream_id,
-            ready_to_write: ready_to_write,
-            stream: stream,
-        });
+        self.exec.execute(Box::new(self.new_pump_stream_to_write_loop(
+            self_rc,
+            stream_id,
+            stream,
+            ready_to_write)));
     }
 
     fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {

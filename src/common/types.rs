@@ -3,7 +3,7 @@ use solicit::StreamId;
 use super::*;
 
 /// Client or server type names for connection and stream
-pub trait Types {
+pub trait Types : 'static {
     type HttpStream : HttpStream;
     type HttpStreamSpecific : HttpStreamDataSpecific;
     type ConnDataSpecific : ConnDataSpecific;

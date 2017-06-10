@@ -2,6 +2,7 @@
 extern crate log;
 #[macro_use]
 extern crate futures;
+extern crate futures_cpupool;
 
 extern crate tokio_core;
 extern crate tokio_io;
@@ -53,11 +54,15 @@ mod rc_mut;
 
 mod resp;
 
+mod exec;
+
 pub use solicit::HttpScheme;
 pub use solicit::header::Header;
 pub use solicit::header::Headers;
 
 pub use service::Service;
+
+pub use exec::CpuPoolOption;
 
 pub use client::Client;
 pub use client_conf::ClientConf;

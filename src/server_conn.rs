@@ -5,6 +5,8 @@ use std::panic;
 use error;
 use result;
 
+use exec::CpuPoolOption;
+
 use solicit::StreamId;
 use solicit::header::*;
 use solicit::connection::EndStream;
@@ -139,22 +141,34 @@ impl ServerInner {
 
         let req_rx = HttpPartStream::new(req_rx);
 
-        let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            self.specific.factory.start_request(headers, req_rx)
-        }));
+        let factory = self.specific.factory.clone();
 
-        let response = response.unwrap_or_else(|e| {
-            let e = any_to_string(e);
-            warn!("handler panicked: {}", e);
+        self.exec.execute(Box::new(future::lazy(move || {
+            let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                // TODO: do start request in executor
+                factory.start_request(headers, req_rx)
+            }));
 
-            let headers = Headers::internal_error_500();
-            Response::from_stream(stream::iter(vec![
-                Ok(HttpStreamPart::intermediate_headers(headers)),
-                Ok(HttpStreamPart::last_data(Bytes::from(format!("handler panicked: {}", e)))),
-            ]))
-        });
+            let response = response.unwrap_or_else(|e| {
+                let e = any_to_string(e);
+                warn!("handler panicked: {}", e);
 
-        self.pump_stream_to_write_loop(self_rc, stream_id, response.into_part_stream(), latch);
+                let headers = Headers::internal_error_500();
+                Response::from_stream(stream::iter(vec![
+                    Ok(HttpStreamPart::intermediate_headers(headers)),
+                    Ok(HttpStreamPart::last_data(Bytes::from(format!("handler panicked: {}", e)))),
+                ]))
+            });
+
+            let response = response.into_part_stream();
+
+            let self_rc_copy = self_rc.clone();
+            let pump_stream = self_rc.with(|self_rc| {
+                self_rc.new_pump_stream_to_write_loop(self_rc_copy, stream_id, response, latch)
+            });
+
+            pump_stream
+        })));
 
         Ok(self.streams.get_mut(stream_id).expect("get stream"))
     }
@@ -290,6 +304,7 @@ impl ServerConnection {
 
             let inner = RcMut::new(ConnData::new(
                 lh,
+                CpuPoolOption::Inline,
                 ServerConnData {
                     factory: service,
                 },

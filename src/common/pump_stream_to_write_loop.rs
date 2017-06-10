@@ -4,6 +4,8 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::sync::mpsc::UnboundedSender;
 
+use void::Void;
+
 use solicit::StreamId;
 
 use futures_misc::latch;
@@ -18,6 +20,7 @@ use super::*;
 
 /// Poll the stream and enqueues frames
 pub struct PumpStreamToWriteLoop<T : Types> {
+    // TODO: this is not thread-safe
     pub conn_rc: RcMut<ConnData<T>>,
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     pub stream_id: StreamId,
@@ -25,11 +28,14 @@ pub struct PumpStreamToWriteLoop<T : Types> {
     pub stream: HttpPartStream,
 }
 
+//unsafe impl <T : Types> Send for PumpStreamToWriteLoop<T> {}
+//unsafe impl <T : Types> Sync for PumpStreamToWriteLoop<T> {}
+
 impl<T : Types> Future for PumpStreamToWriteLoop<T> {
     type Item = ();
-    type Error = ();
+    type Error = Void;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(&mut self) -> Poll<(), Void> {
         loop {
             match self.ready_to_write.poll_ready() {
                 Err(latch::ControllerDead) => {
