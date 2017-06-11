@@ -311,6 +311,8 @@ impl HttpConnectionTester {
         assert!(data.is_empty());
     }
 
+    /// Receive at most two frames till END_STREAM frame
+    /// * if first frame has not END_STREAM, second must have empty payload
     pub fn recv_frame_data_tail(&mut self, stream_id: StreamId) -> Vec<u8> {
         let frame = self.recv_frame_data();
         assert_eq!(stream_id, frame.stream_id);

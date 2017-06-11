@@ -231,7 +231,7 @@ fn increase_frame_size() {
     tester.send_get(1, "/blocks/30000/1");
     assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
     assert_eq!(20000, tester.recv_frame_data_check(1, false).len());
-    assert_eq!(10000, tester.recv_frame_data_check(1, true).len());
+    assert_eq!(10000, tester.recv_frame_data_tail(1).len());
 }
 
 #[test]
@@ -368,7 +368,7 @@ pub fn server_sends_continuation_frame() {
     assert!(cont_count > 0);
     assert_eq!(headers, headers_recv);
 
-    assert_eq!(&b"there"[..], &tester.recv_frame_data_check(1, true)[..]);
+    assert_eq!(&b"there"[..], &tester.recv_frame_data_tail(1)[..]);
 }
 
 #[test]

@@ -62,7 +62,7 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
                     break;
                 }
 
-                let exit = match part_opt {
+                match part_opt {
                     Some(part) => {
                         match &part.content {
                             &HttpStreamPartContent::Data(ref d) => {
@@ -74,23 +74,21 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
 
                         stream.stream().outgoing.push_back_part(part);
 
-                        false
+                        let flush_stream = CommonToWriteMessage::TryFlushStream(Some(self.stream_id));
+                        if let Err(e) = self.to_write_tx.send(flush_stream.into()) {
+                            warn!("failed to write to channel, probably connection is closed: {:?}", e);
+                        }
+
+                        continue;
                     }
                     None => {
-                        stream.stream().outgoing.close(ErrorCode::NoError);
-                        true
+                        let msg = CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::NoError);
+                        if let Err(e) = self.to_write_tx.send(msg.into()) {
+                            warn!("failed to write to channel, probably connection is closed: {:?}", e);
+                        }
+
+                        break;
                     }
-                };
-
-                let flush_stream = CommonToWriteMessage::TryFlushStream(Some(self.stream_id));
-                if let Err(e) = self.to_write_tx.send(flush_stream.into()) {
-                    warn!("failed to write to channel, probably connection is closed: {:?}", e);
-                }
-
-                if exit {
-                    break;
-                } else {
-                    continue;
                 }
             } else {
                 break;
