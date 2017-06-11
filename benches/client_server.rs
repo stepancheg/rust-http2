@@ -32,13 +32,14 @@ fn bench(b: &mut Bencher) {
         let server = Server::new_plain(
             "[::1]:0",
             Default::default(),
-            Megabyte);
+            Megabyte)
+                .expect("server");
 
         let client = Client::new_plain(
             "::1",
             server.local_addr().port(),
             Default::default())
-                .unwrap();
+                .expect("client");
 
         let (header, body) = client.start_get("/any", "localhost").0.wait().expect("headers");
         assert_eq!(200, header.status());

@@ -61,7 +61,7 @@ fn tls() {
         "[::1]:0".parse::<SocketAddr>().unwrap(),
         ServerTlsOption::Tls(Arc::new(test_tls_acceptor())),
         Default::default(),
-        ServiceImpl {});
+        ServiceImpl {}).expect("server");
 
     let client: Client = Client::new_expl(
         server.local_addr(),

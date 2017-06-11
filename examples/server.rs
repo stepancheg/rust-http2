@@ -63,7 +63,8 @@ fn main() {
         ("::0", 8443),
         httpbis::ServerTlsOption::Tls(Arc::new(tls_acceptor.build().expect("acceptor"))),
         conf,
-        ServiceImpl { counter: Default::default() });
+        ServiceImpl { counter: Default::default() })
+            .expect("server");
 
     println!("started server");
     println!("check it at: https://localhost:{}/", server.local_addr().port());

@@ -17,6 +17,7 @@ use futures::stream;
 use futures::stream::Stream;
 
 use error::Error;
+use result::Result;
 
 use solicit_async::*;
 
@@ -185,7 +186,7 @@ fn run_server_event_loop<S, A>(
 }
 
 impl Server {
-    pub fn new_plain<T, S>(addr: T, conf: ServerConf, service: S) -> Server
+    pub fn new_plain<T, S>(addr: T, conf: ServerConf, service: S) -> Result<Server>
         where S : Service, T : ToSocketAddrs
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
@@ -193,10 +194,11 @@ impl Server {
     }
 
     // TODO: result
-    pub fn new<T, S, A>(addr: T, tls: ServerTlsOption<A>, conf: ServerConf, service: S) -> Server
+    pub fn new<T, S, A>(addr: T, tls: ServerTlsOption<A>, conf: ServerConf, service: S)
+        -> Result<Server>
         where S : Service, T : ToSocketAddrs, A : TlsAcceptor
     {
-        let listen_addr = addr.to_socket_addrs().unwrap().next().unwrap();
+        let listen_addr = addr.to_socket_addrs()?.next().unwrap();
 
         let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
         let (alive_tx, alive_rx) = mpsc::channel();
@@ -215,17 +217,17 @@ impl Server {
                     conf, service,
                     get_from_loop_tx,
                     alive_tx);
-            })
-            .expect("spawn");
+            })?;
 
-        let loop_to_server = get_from_loop_rx.recv().unwrap();
+        let loop_to_server = get_from_loop_rx.recv()
+            .map_err(|_| Error::Other("failed to recv from event loop"))?;
 
-        Server {
+        Ok(Server {
             state: state,
             loop_to_server: loop_to_server,
             thread_join_handle: Some(join_handle),
             alive_rx: alive_rx,
-        }
+        })
     }
 
     pub fn local_addr(&self) -> &SocketAddr {
