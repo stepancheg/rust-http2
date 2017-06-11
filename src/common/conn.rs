@@ -30,7 +30,6 @@ use solicit::DEFAULT_SETTINGS;
 use solicit::connection::EndStream;
 use solicit::connection::HttpConnection;
 use solicit::connection::HttpFrame;
-use solicit::connection::HttpFrameType;
 use solicit::frame::settings::HttpSettings;
 
 use solicit_misc::*;
@@ -54,11 +53,31 @@ pub use resp::Response;
 use rc_mut::*;
 
 
+
+pub enum DirectlyToNetworkFrame {
+    RstStream(RstStreamFrame),
+    WindowUpdate(WindowUpdateFrame),
+    Ping(PingFrame),
+    Settings(SettingsFrame),
+}
+
+impl DirectlyToNetworkFrame {
+    fn into_http_frame(self) -> HttpFrame {
+        match self {
+            DirectlyToNetworkFrame::RstStream(f) => f.into(),
+            DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
+            DirectlyToNetworkFrame::Ping(f) => f.into(),
+            DirectlyToNetworkFrame::Settings(f) => f.into(),
+        }
+    }
+}
+
+
 pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
     IncreaseInWindow(StreamId, u32),
-    Frame(HttpFrame),
-    StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
+    Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
+    StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
 }
 
 pub trait ConnDataSpecific : 'static {
@@ -476,7 +495,8 @@ impl<T : Types> ConnData<T>
     pub fn send_rst_stream(&mut self, stream_id: StreamId, error_code: ErrorCode)
         -> result::Result<()>
     {
-        self.send_frame(RstStreamFrame::new(stream_id, error_code))
+        let rst_stream = RstStreamFrame::new(stream_id, error_code);
+        self.send_directly_to_network(DirectlyToNetworkFrame::RstStream(rst_stream))
     }
 
     pub fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
@@ -530,7 +550,8 @@ impl<T : Types> ConnData<T>
         };
 
         if let Some(increment_conn) = increment_conn {
-            self.send_frame(WindowUpdateFrame::for_connection(increment_conn))?;
+            let window_update = WindowUpdateFrame::for_connection(increment_conn);
+            self.send_directly_to_network(DirectlyToNetworkFrame::WindowUpdate(window_update))?;
         }
 
         Ok(Some(self.streams.get_mut(stream_id).expect("stream must be found")))
@@ -548,7 +569,8 @@ impl<T : Types> ConnData<T>
                 Err(error::Error::Other("PING ACK without PING"))
             }
         } else {
-            self.send_frame(PingFrame::new_ack(frame.opaque_data()))
+            let ping = PingFrame::new_ack(frame.opaque_data());
+            self.send_directly_to_network(DirectlyToNetworkFrame::Ping(ping))
         }
     }
 
@@ -639,10 +661,7 @@ impl<T : Types> ConnData<T>
 
     /// Schedule a write for HTTP frame
     /// Must not be data frame
-    fn send_frame<F : Into<HttpFrame>>(&mut self, frame: F) -> result::Result<()> {
-        let frame = frame.into();
-        assert!(frame.frame_type() != HttpFrameType::Data);
-        assert!(frame.frame_type() != HttpFrameType::Headers);
+    fn send_directly_to_network(&mut self, frame: DirectlyToNetworkFrame) -> result::Result<()> {
         self.send_common(CommonToWriteMessage::Frame(frame))
     }
 
@@ -652,7 +671,8 @@ impl<T : Types> ConnData<T>
 
     /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
     fn ack_settings(&mut self) -> result::Result<()> {
-        self.send_frame(SettingsFrame::new_ack())
+        let settings = SettingsFrame::new_ack();
+        self.send_directly_to_network(DirectlyToNetworkFrame::Settings(settings))
     }
 
     /// Should we close the connection because of GOAWAY state
@@ -704,7 +724,8 @@ impl<T : Types> ConnData<T>
             return Ok(());
         };
 
-        self.send_frame(WindowUpdateFrame::for_stream(stream_id, increase))?;
+        let window_update = WindowUpdateFrame::for_stream(stream_id, increase);
+        self.send_directly_to_network(DirectlyToNetworkFrame::WindowUpdate(window_update))?;
         
         Ok(())
     }
@@ -876,7 +897,7 @@ impl<I, T> WriteLoopData<I, T>
                 self.send_outg_stream(stream_id)
             },
             CommonToWriteMessage::Frame(frame) => {
-                self.write_frame(frame)
+                self.write_frame(frame.into_http_frame())
             },
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)
