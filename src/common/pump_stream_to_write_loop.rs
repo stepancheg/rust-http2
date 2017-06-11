@@ -66,7 +66,7 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
                     Some(part) => {
                         match &part.content {
                             &HttpStreamPartContent::Data(ref d) => {
-                                self.out_window.decrease(d.len() as u32); // TODO: check overflow
+                                self.out_window.decrease(d.len());
                             }
                             &HttpStreamPartContent::Headers(_) => {
                             }

@@ -95,7 +95,7 @@ impl StreamOutWindowSender {
 }
 
 impl StreamOutWindowReceiver {
-    pub fn decrease(&self, size: u32) {
+    pub fn decrease(&self, size: usize) {
         self.shared.conn.window_size.fetch_sub(size as isize, Ordering::SeqCst);
         self.shared.window_size.fetch_sub(size as isize, Ordering::SeqCst);
     }
