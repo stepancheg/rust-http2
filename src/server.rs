@@ -193,7 +193,6 @@ impl Server {
         Server::new(addr, no_tls, conf, service)
     }
 
-    // TODO: result
     pub fn new<T, S, A>(addr: T, tls: ServerTlsOption<A>, conf: ServerConf, service: S)
         -> Result<Server>
         where S : Service, T : ToSocketAddrs, A : TlsAcceptor
