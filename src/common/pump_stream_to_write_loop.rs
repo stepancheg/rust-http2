@@ -66,10 +66,6 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
             let conn: &mut ConnData<T> = &mut conn;
 
             if let Some(mut stream) = conn.streams.get_mut(self.stream_id) {
-                if stream.stream().state.is_closed_local() {
-                    break;
-                }
-
                 match part_opt {
                     Some(part) => {
                         match &part.content {
