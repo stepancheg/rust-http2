@@ -1,5 +1,7 @@
 //! The module implements the framing layer of HTTP/2 and exposes an API for using it.
+
 use std::u32;
+use std::fmt;
 
 use self::frame::settings::HttpSettings;
 
@@ -145,6 +147,13 @@ impl WindowSize {
         self.0
     }
 }
+
+impl fmt::Display for WindowSize {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
 
 /// An enum representing the two possible HTTP schemes.
 #[derive(Debug, Copy, Clone, PartialEq)]
