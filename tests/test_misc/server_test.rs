@@ -12,7 +12,7 @@ use regex::Regex;
 
 
 /// HTTP/2 server used by tests
-pub struct HttpServerTest {
+pub struct ServerTest {
     pub server: Server,
     pub port: u16,
 }
@@ -43,11 +43,11 @@ impl httpbis::Service for TestService {
     }
 }
 
-impl HttpServerTest {
-    pub fn new() -> HttpServerTest {
+impl ServerTest {
+    pub fn new() -> ServerTest {
         let http_server = Server::new_plain("[::1]:0", Default::default(), TestService {});
         let port = http_server.local_addr().port();
-        HttpServerTest {
+        ServerTest {
             server: http_server,
             port: port,
         }

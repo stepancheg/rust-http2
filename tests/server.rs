@@ -38,7 +38,7 @@ use test_misc::*;
 fn simple_new() {
     env_logger::init().ok();
 
-    let server = HttpServerOneConn::new_fn(0, |_headers, req| {
+    let server = ServerOneConn::new_fn(0, |_headers, req| {
         Response::headers_and_stream(Headers::ok_200(), req)
     });
 
@@ -65,7 +65,7 @@ fn simple_new() {
 fn panic_in_handler() {
     env_logger::init().ok();
 
-    let server = HttpServerOneConn::new_fn(0, |headers, _req| {
+    let server = ServerOneConn::new_fn(0, |headers, _req| {
         if headers.path() == "/panic" {
             panic!("requested");
         } else {
@@ -101,7 +101,7 @@ fn panic_in_handler() {
 fn panic_in_stream() {
     env_logger::init().ok();
 
-    let server = HttpServerOneConn::new_fn(0, |headers, _req| {
+    let server = ServerOneConn::new_fn(0, |headers, _req| {
         if headers.path() == "/panic" {
             Response::from_stream(stream::iter((0..2).map(|i| {
                 match i {
@@ -154,7 +154,7 @@ fn response_large() {
 
     let large_resp_copy = large_resp.clone();
 
-    let server = HttpServerOneConn::new_fn(0, move |_headers, _req| {
+    let server = ServerOneConn::new_fn(0, move |_headers, _req| {
         Response::headers_and_bytes(Headers::ok_200(), Bytes::from(large_resp_copy.clone()))
     });
 
@@ -170,7 +170,7 @@ fn response_large() {
 fn rst_stream_on_data_without_stream() {
     env_logger::init().ok();
 
-    let server = HttpServerTest::new();
+    let server = ServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -189,7 +189,7 @@ fn rst_stream_on_data_without_stream() {
 fn exceed_max_frame_size() {
     env_logger::init().ok();
 
-    let server = HttpServerTest::new();
+    let server = ServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -210,7 +210,7 @@ fn exceed_max_frame_size() {
 fn increase_frame_size() {
     env_logger::init().ok();
 
-    let server = HttpServerTest::new();
+    let server = ServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -230,7 +230,7 @@ fn increase_frame_size() {
 fn exceed_window_size() {
     env_logger::init().ok();
 
-    let server = HttpServerTest::new();
+    let server = ServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -256,7 +256,7 @@ fn exceed_window_size() {
 fn stream_window_gt_conn_window() {
     env_logger::init().ok();
 
-    let server = HttpServerTest::new();
+    let server = ServerTest::new();
 
     let mut tester = HttpConnectionTester::connect(server.port);
     tester.send_preface();
@@ -299,7 +299,7 @@ pub fn server_sends_continuation_frame() {
 
     let headers_copy = headers.clone();
 
-    let server = HttpServerOneConn::new_fn(0, move |_headers, _req| {
+    let server = ServerOneConn::new_fn(0, move |_headers, _req| {
         Response::headers_and_bytes(headers_copy.clone(), "there")
     });
 
@@ -320,7 +320,7 @@ pub fn server_sends_continuation_frame() {
 pub fn http_1_1() {
     env_logger::init().ok();
 
-    let server = HttpServerTest::new();
+    let server = ServerTest::new();
 
     let mut tcp_stream = TcpStream::connect(("::1", server.port)).expect("connect");
 

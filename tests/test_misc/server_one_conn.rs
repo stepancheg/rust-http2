@@ -21,7 +21,7 @@ use httpbis::for_test::*;
 
 /// Single connection HTTP/server.
 /// Accepts only one connection.
-pub struct HttpServerOneConn {
+pub struct ServerOneConn {
     from_loop: FromLoop,
     join_handle: Option<thread::JoinHandle<()>>,
     shutdown_tx: Option<oneshot::Sender<()>>,
@@ -32,11 +32,11 @@ struct FromLoop {
     port: u16,
 }
 
-impl HttpServerOneConn {
+impl ServerOneConn {
     pub fn new_fn<S>(port: u16, service: S) -> Self
         where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + 'static
     {
-        HttpServerOneConn::new_fn_impl(port, service)
+        ServerOneConn::new_fn_impl(port, service)
     }
 
     #[allow(dead_code)]
@@ -83,7 +83,7 @@ impl HttpServerOneConn {
             lp.run(shutdown_rx.select(future)).ok();
         }).expect("spawn");
 
-        HttpServerOneConn {
+        ServerOneConn {
             from_loop: from_loop_rx.wait().unwrap(),
             join_handle: Some(join_handle),
             shutdown_tx: Some(shutdown_tx),
@@ -93,7 +93,7 @@ impl HttpServerOneConn {
 }
 
 #[allow(dead_code)]
-impl HttpServerOneConn {
+impl ServerOneConn {
     pub fn port(&self) -> u16 {
         self.from_loop.port
     }
@@ -105,7 +105,7 @@ impl HttpServerOneConn {
     }
 }
 
-impl Drop for HttpServerOneConn {
+impl Drop for ServerOneConn {
     fn drop(&mut self) {
         drop(self.shutdown_tx.take().unwrap().send(()));
         self.join_handle.take().unwrap().join().ok();
