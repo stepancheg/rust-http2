@@ -13,7 +13,7 @@ pub const WINDOW_UPDATE_FRAME_TYPE: u8 = 0x8;
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowUpdateFrame {
     pub stream_id: StreamId,
-    increment: u32,
+    pub increment: u32,
     flags: Flags<NoFlag>,
 }
 
@@ -36,11 +36,6 @@ impl WindowUpdateFrame {
             increment: increment,
             flags: Flags::default(),
         }
-    }
-
-    /// Returns the window increment indicated by the frame.
-    pub fn increment(&self) -> u32 {
-        self.increment
     }
 }
 
@@ -104,7 +99,7 @@ mod tests {
     fn test_parse_valid_connection_level() {
         let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 0), vec![0, 0, 0, 1]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
-        assert_eq!(frame.increment(), 1);
+        assert_eq!(frame.increment, 1);
         assert_eq!(frame.get_stream_id(), 0);
     }
 
@@ -113,14 +108,14 @@ mod tests {
         let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 0), vec![0xff, 0xff, 0xff, 0xff]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("valid WINDOW_UPDATE");
         // Automatically ignores the reserved bit...
-        assert_eq!(frame.increment(), 0x7FFFFFFF);
+        assert_eq!(frame.increment, 0x7FFFFFFF);
     }
 
     #[test]
     fn test_parse_valid_stream_level() {
         let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 1]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
-        assert_eq!(frame.increment(), 1);
+        assert_eq!(frame.increment, 1);
         assert_eq!(frame.get_stream_id(), 1);
     }
 
@@ -130,7 +125,7 @@ mod tests {
     fn test_parse_increment_zero() {
         let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 0]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
-        assert_eq!(frame.increment(), 0);
+        assert_eq!(frame.increment, 0);
         assert_eq!(frame.get_stream_id(), 1);
     }
 

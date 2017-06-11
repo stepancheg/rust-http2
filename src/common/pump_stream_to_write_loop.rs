@@ -8,11 +8,10 @@ use void::Void;
 
 use solicit::StreamId;
 
-use futures_misc::latch;
-
 use rc_mut::RcMut;
 
 use stream_part::HttpPartStream;
+use stream_part::HttpStreamPartContent;
 
 use error::ErrorCode;
 
@@ -24,7 +23,7 @@ pub struct PumpStreamToWriteLoop<T : Types> {
     pub conn_rc: RcMut<ConnData<T>>,
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     pub stream_id: StreamId,
-    pub ready_to_write: latch::Latch,
+    pub out_window: window_size::StreamOutWindowReceiver,
     pub stream: HttpPartStream,
 }
 
@@ -37,13 +36,9 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
 
     fn poll(&mut self) -> Poll<(), Void> {
         loop {
-            match self.ready_to_write.poll_ready() {
-                Err(latch::ControllerDead) => {
-                    warn!("error from latch; stream must be closed");
-                    break;
-                }
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Ok(Async::Ready(())) => {}
+            match self.out_window.poll() {
+                Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(()) => {}
             }
 
             let part_opt = match self.stream.poll() {
@@ -69,8 +64,16 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
 
                 let exit = match part_opt {
                     Some(part) => {
+                        match &part.content {
+                            &HttpStreamPartContent::Data(ref d) => {
+                                self.out_window.decrease(d.len() as u32); // TODO: check overflow
+                            }
+                            &HttpStreamPartContent::Headers(_) => {
+                            }
+                        }
+
                         stream.stream().outgoing.push_back_part(part);
-                        stream.stream().check_ready_to_poll(&mut conn.conn.out_window_size);
+
                         false
                     }
                     None => {

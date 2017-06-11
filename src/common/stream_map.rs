@@ -75,12 +75,6 @@ impl<T : Types> StreamMap<T> {
     pub fn snapshot(&self) -> HashMap<StreamId, HttpStreamStateSnapshot> {
         self.map.iter().map(|(&k, s)| (k, s.snapshot())).collect()
     }
-
-    pub fn check_ready_to_poll(&mut self, conn_out_window_size: &mut WindowSize) {
-        for (_, stream) in &mut self.map {
-            stream.check_ready_to_poll(conn_out_window_size);
-        }
-    }
 }
 
 impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
@@ -115,7 +109,6 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
             if let Some(c) = self.stream().pop_outg(conn_out_window_size) {
                 r.push(c);
             } else {
-                self.stream().check_ready_to_poll(conn_out_window_size);
                 self.remove_if_closed();
                 return r;
             }

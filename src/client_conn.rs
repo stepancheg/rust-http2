@@ -46,8 +46,6 @@ use client_tls::*;
 
 use rc_mut::*;
 
-use common::stream_queue_sync::stream_queue_sync;
-
 
 struct ClientTypes;
 
@@ -84,14 +82,6 @@ impl ConnDataSpecific for ClientConnData {
 }
 
 type ClientInner = ConnData<ClientTypes>;
-
-impl ClientInner {
-    fn insert_stream(&mut self, stream: ClientStream) -> StreamId {
-        let id = self.next_local_stream_id();
-        self.streams.insert(id, stream);
-        id
-    }
-}
 
 impl ConnInner for ClientInner {
     type Types = ClientTypes;
@@ -159,33 +149,23 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
-            let (inc_tx, inc_rx) = stream_queue_sync();
+            let stream_id = inner.next_local_stream_id();
 
-            let (latch_ctr, latch) = latch::latch();
+            let out_window = {
+                let (mut http_stream, resp_stream, out_window) = inner.new_stream_data(
+                    stream_id,
+                    ClientStreamData { });
 
-            let in_window_size = DEFAULT_SETTINGS.initial_window_size;
+                if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
+                    warn!("caller died");
+                }
 
-            let mut http_stream = HttpStreamCommon::new(
-                in_window_size,
-                inner.conn.peer_settings.initial_window_size,
-                inc_tx,
-                latch_ctr,
-                ClientStreamData { });
+                http_stream.stream().outgoing.push_back(HttpStreamPartContent::Headers(headers));
 
-            http_stream.outgoing.push_back(HttpStreamPartContent::Headers(headers));
+                out_window
+            };
 
-            let stream_id = inner.insert_stream(http_stream);
-
-            let resp_stream = inner.new_stream_from_network(
-                inc_rx,
-                stream_id,
-                in_window_size);
-
-            if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
-                warn!("caller died");
-            }
-
-            inner.pump_stream_to_write_loop(inner_rc, stream_id, body, latch);
+            inner.pump_stream_to_write_loop(inner_rc, stream_id, body, out_window);
 
             stream_id
         });

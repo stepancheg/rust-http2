@@ -33,8 +33,6 @@ use solicit::connection::HttpFrame;
 use solicit::connection::HttpFrameType;
 use solicit::frame::settings::HttpSettings;
 
-use futures_misc::*;
-
 use solicit_misc::*;
 use solicit_async::*;
 
@@ -45,6 +43,9 @@ use super::conf::*;
 use super::pump_stream_to_write_loop::PumpStreamToWriteLoop;
 use super::stream_from_network::StreamFromNetwork;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
+use super::window_size;
+use super::stream_queue_sync::stream_queue_sync;
+
 
 use stream_part::*;
 
@@ -77,6 +78,10 @@ pub struct ConnData<T : Types> {
     pub conn: HttpConnection,
     /// Known streams
     pub streams: StreamMap<T>,
+
+    /// Window size from pumper point of view
+    pub pump_out_window_size: window_size::ConnOutWindowSender,
+
     pub last_local_stream_id: StreamId,
     pub last_peer_stream_id: StreamId,
     pub goaway_sent: Option<GoawayFrame>,
@@ -120,6 +125,8 @@ impl<T : Types> ConnData<T>
         let mut conn = HttpConnection::new();
         conn.our_settings_sent = Some(sent_settings);
 
+        let pump_window_size = window_size::ConnOutWindowSender::new(conn.out_window_size.0 as u32);
+
         ConnData {
             specific: specific,
             to_write_tx: to_write_tx,
@@ -132,6 +139,7 @@ impl<T : Types> ConnData<T>
             goaway_sent: None,
             goaway_received: None,
             ping_sent: None,
+            pump_out_window_size: pump_window_size,
         }
     }
 
@@ -144,6 +152,53 @@ impl<T : Types> ConnData<T>
         self.last_local_stream_id = id;
         id
     }
+
+
+    pub fn new_stream_data(
+        &mut self,
+        stream_id: StreamId,
+        specific: T::HttpStreamSpecific)
+        -> (HttpStreamRef<T>, StreamFromNetwork<T>, window_size::StreamOutWindowReceiver)
+    {
+        let (inc_tx, inc_rx) = stream_queue_sync();
+
+        let in_window_size = self.conn.in_window_size.0 as u32;
+
+        let stream_from_network = self.new_stream_from_network(
+            inc_rx,
+            stream_id,
+            in_window_size);
+
+        let (out_window_sender, out_window_receiver) =
+            self.pump_out_window_size.new_stream(self.conn.peer_settings.initial_window_size as u32);
+
+        let stream = HttpStreamCommon::new(
+            in_window_size,
+            self.conn.peer_settings.initial_window_size,
+            inc_tx,
+            out_window_sender,
+            specific);
+
+        let stream = self.streams.insert(stream_id, stream);
+
+        (stream, stream_from_network, out_window_receiver)
+    }
+
+    fn new_stream_from_network(
+        &self,
+        rx: StreamQueueSyncReceiver,
+        stream_id: StreamId,
+        in_window_size: u32)
+            -> StreamFromNetwork<T>
+    {
+        StreamFromNetwork {
+            rx: rx,
+            stream_id: stream_id,
+            to_write_tx: self.to_write_tx.clone(),
+            in_window_size: in_window_size,
+        }
+    }
+
 
     pub fn pop_outg_all_for_stream(&mut self, stream_id: StreamId) -> Vec<HttpStreamCommand> {
         if let Some(stream) = self.streams.get_mut(stream_id) {
@@ -328,6 +383,7 @@ impl<T : Types> ConnData<T>
                         // and the old value.
                         // TODO: check for overflow
                         s.out_window_size.0 += delta;
+                        s.pump_out_window.increase(delta);
                     }
 
                     if !self.streams.map.is_empty() && delta > 0 {
@@ -342,7 +398,6 @@ impl<T : Types> ConnData<T>
         self.ack_settings()?;
 
         if out_window_increased {
-            self.streams.check_ready_to_poll(&mut self.conn.out_window_size);
             self.out_window_increased(None)?;
         }
 
@@ -360,15 +415,22 @@ impl<T : Types> ConnData<T>
     fn process_stream_window_update_frame(&mut self, frame: WindowUpdateFrame)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
-        self.out_window_increased(Some(frame.get_stream_id()))?;
+        self.out_window_increased(Some(frame.stream_id))?;
 
-        match self.streams.get_mut(frame.get_stream_id()) {
+        match self.streams.get_mut(frame.stream_id) {
             Some(mut stream) => {
                 // TODO: stream error, not conn error
-                stream.stream().out_window_size.try_increase(frame.increment())
+                let old_window_size = stream.stream().out_window_size.0;
+
+                stream.stream().out_window_size.try_increase(frame.increment)
                     .map_err(|()| error::Error::Other("failed to increment stream window"))?;
 
-                stream.stream().check_ready_to_poll(&mut self.conn.out_window_size);
+                let new_window_size = stream.stream().out_window_size.0;
+
+                debug!("stream {} out window size change: {} -> {}",
+                    frame.stream_id, old_window_size, new_window_size);
+
+                stream.stream().pump_out_window.increase(frame.increment as i32);
 
                 Ok(Some(stream))
             }
@@ -389,12 +451,12 @@ impl<T : Types> ConnData<T>
 
         let old_window_size = self.conn.out_window_size.0;
 
-        self.conn.out_window_size.try_increase(frame.increment())
+        self.conn.out_window_size.try_increase(frame.increment)
             .map_err(|()| error::Error::Other("failed to increment conn window"))?;
 
         debug!("conn out window size change: {} -> {}", old_window_size, self.conn.out_window_size);
 
-        self.streams.check_ready_to_poll(&mut self.conn.out_window_size);
+        self.pump_out_window_size.increase(frame.increment);
 
         self.out_window_increased(None)
     }
@@ -599,27 +661,12 @@ impl<T : Types> ConnData<T>
         goaway && no_streams
     }
 
-    pub fn new_stream_from_network(
-        &self,
-        rx: StreamQueueSyncReceiver,
-        stream_id: StreamId,
-        in_window_size: u32)
-            -> StreamFromNetwork<T>
-    {
-        StreamFromNetwork {
-            rx: rx,
-            stream_id: stream_id,
-            to_write_tx: self.to_write_tx.clone(),
-            in_window_size: in_window_size,
-        }
-    }
-
     pub fn new_pump_stream_to_write_loop(
         &self,
         self_rc: RcMut<Self>,
         stream_id: StreamId,
         stream: HttpPartStream,
-        ready_to_write: latch::Latch)
+        out_window: window_size::StreamOutWindowReceiver)
         -> PumpStreamToWriteLoop<T>
     {
         let stream = stream.catch_unwind();
@@ -627,7 +674,7 @@ impl<T : Types> ConnData<T>
             conn_rc: self_rc,
             to_write_tx: self.to_write_tx.clone(),
             stream_id: stream_id,
-            ready_to_write: ready_to_write,
+            out_window: out_window,
             stream: stream,
         }
     }
@@ -637,14 +684,14 @@ impl<T : Types> ConnData<T>
         self_rc: RcMut<Self>,
         stream_id: StreamId,
         stream: HttpPartStream,
-        ready_to_write: latch::Latch)
+        out_window: window_size::StreamOutWindowReceiver)
     {
         let stream = stream.catch_unwind();
         self.exec.execute(Box::new(self.new_pump_stream_to_write_loop(
             self_rc,
             stream_id,
             stream,
-            ready_to_write)));
+            out_window)));
     }
 
     fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {

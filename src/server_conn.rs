@@ -39,8 +39,6 @@ use service::Service;
 use stream_part::*;
 use common::*;
 
-use common::stream_queue_sync::stream_queue_sync;
-
 use server_tls::*;
 use server_conf::*;
 
@@ -98,7 +96,7 @@ impl ConnDataSpecific for ServerConnData {
 type ServerInner = ConnData<ServerTypes>;
 
 impl ServerInner {
-    fn new_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
+    fn new_stream_from_client(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
         -> result::Result<HttpStreamRef<ServerTypes>>
     {
         if ServerTypes::is_init_locally(stream_id) {
@@ -113,40 +111,18 @@ impl ServerInner {
 
         debug!("new stream: {}", stream_id);
 
-        let (latch_ctr, latch) = latch::latch();
+        let (_, req_stream, out_window) = self.new_stream_data(
+            stream_id,
+            ServerStreamData {});
 
-        // TODO
-        latch_ctr.open();
-
-        let req_rx = {
-            let (inc_tx, inc_rx) = stream_queue_sync();
-
-            let in_window_size = DEFAULT_SETTINGS.initial_window_size;
-
-            // New stream initiated by the client
-            let stream = HttpStreamCommon::new(
-                in_window_size,
-                self.conn.peer_settings.initial_window_size,
-                inc_tx,
-                latch_ctr,
-                ServerStreamData {});
-
-            self.streams.insert(stream_id, stream);
-
-            self.new_stream_from_network(
-                inc_rx,
-                stream_id,
-                in_window_size)
-        };
-
-        let req_rx = HttpPartStream::new(req_rx);
+        let req_stream = HttpPartStream::new(req_stream);
 
         let factory = self.specific.factory.clone();
 
         self.exec.execute(Box::new(future::lazy(move || {
             let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
                 // TODO: do start request in executor
-                factory.start_request(headers, req_rx)
+                factory.start_request(headers, req_stream)
             }));
 
             let response = response.unwrap_or_else(|e| {
@@ -164,7 +140,7 @@ impl ServerInner {
 
             let self_rc_copy = self_rc.clone();
             let pump_stream = self_rc.with(|self_rc| {
-                self_rc.new_pump_stream_to_write_loop(self_rc_copy, stream_id, response, latch)
+                self_rc.new_pump_stream_to_write_loop(self_rc_copy, stream_id, response, out_window)
             });
 
             pump_stream
@@ -182,7 +158,7 @@ impl ServerInner {
             stream.stream().set_headers(headers, last);
             Ok(stream)
         } else {
-            self.new_stream(self_rc, stream_id, headers)
+            self.new_stream_from_client(self_rc, stream_id, headers)
         }
     }
 }

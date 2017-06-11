@@ -165,6 +165,7 @@ fn response_large() {
         Response::headers_and_bytes(Headers::ok_200(), Bytes::from(large_resp_copy.clone()))
     });
 
+    // TODO: rewrite with TCP
     let client = Client::new_plain("::1", server.port(), Default::default()).expect("connect");
     let resp = client.start_post("/foobar", "localhost", Bytes::from(&b""[..])).collect().wait().expect("wait");
     assert_eq!(large_resp.len(), resp.body.len());
@@ -292,8 +293,7 @@ fn stream_window_gt_conn_window() {
 
     tester.send_window_update_conn(w);
 
-    assert_eq!(w as usize, tester.recv_frame_data_check(1, false).len());
-    assert_eq!(0, tester.recv_frame_data_check(1, true).len());
+    assert_eq!(w as usize, tester.recv_frame_data_tail(1).len());
 }
 
 #[test]
