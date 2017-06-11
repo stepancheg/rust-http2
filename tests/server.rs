@@ -10,6 +10,10 @@ extern crate httpbis;
 extern crate log;
 extern crate env_logger;
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+
 use bytes::Bytes;
 
 mod test_misc;
@@ -17,7 +21,10 @@ mod test_misc;
 use std::io::Write as _Write;
 use std::io::Read as _Read;
 
+use futures::Async;
+use futures::Poll;
 use futures::future::Future;
+use futures::stream::Stream;
 use futures::stream;
 
 use httpbis::solicit::header::*;
@@ -285,7 +292,55 @@ fn stream_window_gt_conn_window() {
 
     tester.send_window_update_conn(w);
 
-    assert_eq!(w as usize, tester.recv_frame_data_check(1, true).len());
+    assert_eq!(w as usize, tester.recv_frame_data_check(1, false).len());
+    assert_eq!(0, tester.recv_frame_data_check(1, true).len());
+}
+
+#[test]
+fn do_not_poll_when_not_enough_window() {
+    env_logger::init().ok();
+
+    let polls = Arc::new(AtomicUsize::new(0));
+    let polls_copy = polls.clone();
+
+    let server = ServerOneConn::new_fn(0, move |_, _| {
+        struct StreamImpl {
+            polls: Arc<AtomicUsize>,
+        }
+
+        impl Stream for StreamImpl {
+            type Item = Bytes;
+            type Error = Error;
+
+            fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+                let polls = self.polls.fetch_add(1, Ordering::SeqCst);
+                Ok(Async::Ready(match polls {
+                    0 | 1 | 2 => Some(Bytes::from(vec![
+                        polls as u8; DEFAULT_SETTINGS.initial_window_size as usize])),
+                    _ => None,
+                }))
+            }
+        }
+
+        Response::headers_and_bytes_stream(Headers::ok_200(), StreamImpl {
+            polls: polls_copy.clone(),
+        })
+    });
+
+    let mut tester = HttpConnectionTester::connect(server.port());
+    tester.send_preface();
+    tester.settings_xchg();
+
+    tester.send_recv_settings(SettingsFrame::from_settings(vec![
+        HttpSetting::MaxFrameSize(DEFAULT_SETTINGS.initial_window_size * 5)]));
+
+    tester.send_get(1, "/fgfg");
+    assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
+    assert_eq!(
+        DEFAULT_SETTINGS.initial_window_size as usize,
+        tester.recv_frame_data_check(1, false).len());
+
+    assert_eq!(2, polls.load(Ordering::SeqCst));
 }
 
 #[test]

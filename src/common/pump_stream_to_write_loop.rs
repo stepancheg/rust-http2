@@ -70,7 +70,7 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
                 let exit = match part_opt {
                     Some(part) => {
                         stream.stream().outgoing.push_back_part(part);
-                        stream.check_ready_to_write(&mut conn.conn.out_window_size);
+                        stream.stream().check_ready_to_poll(&mut conn.conn.out_window_size);
                         false
                     }
                     None => {

@@ -342,6 +342,7 @@ impl<T : Types> ConnData<T>
         self.ack_settings()?;
 
         if out_window_increased {
+            self.streams.check_ready_to_poll(&mut self.conn.out_window_size);
             self.out_window_increased(None)?;
         }
 
@@ -366,6 +367,9 @@ impl<T : Types> ConnData<T>
                 // TODO: stream error, not conn error
                 stream.stream().out_window_size.try_increase(frame.increment())
                     .map_err(|()| error::Error::Other("failed to increment stream window"))?;
+
+                stream.stream().check_ready_to_poll(&mut self.conn.out_window_size);
+
                 Ok(Some(stream))
             }
             None => {
@@ -381,8 +385,17 @@ impl<T : Types> ConnData<T>
     }
 
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
+        assert_eq!(0, frame.stream_id);
+
+        let old_window_size = self.conn.out_window_size.0;
+
         self.conn.out_window_size.try_increase(frame.increment())
             .map_err(|()| error::Error::Other("failed to increment conn window"))?;
+
+        debug!("conn out window size change: {} -> {}", old_window_size, self.conn.out_window_size);
+
+        self.streams.check_ready_to_poll(&mut self.conn.out_window_size);
+
         self.out_window_increased(None)
     }
 

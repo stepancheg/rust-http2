@@ -52,6 +52,8 @@ pub struct HttpStreamStateSnapshot {
     pub state: StreamState,
     pub out_window_size: i32,
     pub in_window_size: i32,
+    pub ready_to_poll: bool,
+    pub out_data_size: usize,
 }
 
 
@@ -63,7 +65,7 @@ pub struct HttpStreamCommon<T : Types> {
     pub outgoing: StreamQueue,
     pub peer_tx: Option<StreamQueueSyncSender>,
     // task waiting for window increase
-    pub ready_to_write: latch::Controller,
+    pub ready_to_poll: latch::Controller,
 }
 
 impl<T : Types> HttpStreamCommon<T> {
@@ -71,7 +73,7 @@ impl<T : Types> HttpStreamCommon<T> {
         in_window_size: u32,
         out_window_size: u32,
         incoming: StreamQueueSyncSender,
-        ready_to_write: latch::Controller,
+        ready_to_poll: latch::Controller,
         specific: T::HttpStreamSpecific)
             -> HttpStreamCommon<T>
     {
@@ -82,7 +84,7 @@ impl<T : Types> HttpStreamCommon<T> {
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
             peer_tx: Some(incoming),
-            ready_to_write: ready_to_write,
+            ready_to_poll: ready_to_poll,
         }
     }
 
@@ -91,6 +93,8 @@ impl<T : Types> HttpStreamCommon<T> {
             state: self.state,
             out_window_size: self.out_window_size.0,
             in_window_size: self.in_window_size.0,
+            ready_to_poll: self.ready_to_poll.is_open(),
+            out_data_size: self.outgoing.data_size(),
         }
     }
 
@@ -184,6 +188,18 @@ impl<T : Types> HttpStreamCommon<T> {
             content: HttpStreamPartContent::Data(data),
             last: last,
         }))
+    }
+
+    pub fn check_ready_to_poll(&mut self, conn_out_window_size: &mut WindowSize) {
+        let data_size = self.outgoing.data_size() as i32;
+        // >= because we need to poll end of stream
+        if conn_out_window_size.size() >= data_size
+            && self.out_window_size.size() >= data_size
+        {
+            self.ready_to_poll.open();
+        } else {
+            self.ready_to_poll.close();
+        }
     }
 
     pub fn _pop_outg_all(&mut self, conn_out_window_size: &mut WindowSize) -> Vec<HttpStreamCommand> {

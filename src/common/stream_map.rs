@@ -75,6 +75,12 @@ impl<T : Types> StreamMap<T> {
     pub fn snapshot(&self) -> HashMap<StreamId, HttpStreamStateSnapshot> {
         self.map.iter().map(|(&k, s)| (k, s.snapshot())).collect()
     }
+
+    pub fn check_ready_to_poll(&mut self, conn_out_window_size: &mut WindowSize) {
+        for (_, stream) in &mut self.map {
+            stream.check_ready_to_poll(conn_out_window_size);
+        }
+    }
 }
 
 impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
@@ -101,14 +107,6 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
         }
     }
 
-    pub fn check_ready_to_write(&mut self, conn_out_window_size: &mut WindowSize) {
-        if conn_out_window_size.size() > 0 && self.stream().out_window_size.size() > 0 {
-            self.stream().ready_to_write.open();
-        } else {
-            self.stream().ready_to_write.close();
-        }
-    }
-
     pub fn pop_outg_all_maybe_remove(mut self, conn_out_window_size: &mut WindowSize)
         -> Vec<HttpStreamCommand>
     {
@@ -117,7 +115,7 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
             if let Some(c) = self.stream().pop_outg(conn_out_window_size) {
                 r.push(c);
             } else {
-                self.check_ready_to_write(conn_out_window_size);
+                self.stream().check_ready_to_poll(conn_out_window_size);
                 self.remove_if_closed();
                 return r;
             }

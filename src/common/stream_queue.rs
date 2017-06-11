@@ -38,6 +38,10 @@ impl StreamQueue {
         self.queue.is_empty()
     }
 
+    pub fn data_size(&self) -> usize {
+        self.data_size
+    }
+
     pub fn push_back(&mut self, part: HttpStreamPartContent) {
         if let Some(_) = self.end {
             return;
