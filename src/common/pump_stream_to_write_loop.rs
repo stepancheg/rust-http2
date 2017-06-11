@@ -24,9 +24,6 @@ pub struct PumpStreamToWriteLoop<T : Types> {
     pub stream: HttpPartStream,
 }
 
-//unsafe impl <T : Types> Send for PumpStreamToWriteLoop<T> {}
-//unsafe impl <T : Types> Sync for PumpStreamToWriteLoop<T> {}
-
 impl<T : Types> Future for PumpStreamToWriteLoop<T> {
     type Item = ();
     type Error = Void;

@@ -96,7 +96,7 @@ impl ConnDataSpecific for ServerConnData {
 type ServerInner = ConnData<ServerTypes>;
 
 impl ServerInner {
-    fn new_stream_from_client(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
+    fn new_stream_from_client(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
         -> result::Result<HttpStreamRef<ServerTypes>>
     {
         if ServerTypes::is_init_locally(stream_id) {
@@ -119,6 +119,8 @@ impl ServerInner {
 
         let factory = self.specific.factory.clone();
 
+        let to_write_tx = self.to_write_tx.clone();
+
         self.exec.execute(Box::new(future::lazy(move || {
             let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
                 // TODO: do start request in executor
@@ -137,12 +139,14 @@ impl ServerInner {
             });
 
             let response = response.into_part_stream();
+            let response = response.catch_unwind();
 
-            let pump_stream = self_rc.with(|self_rc| {
-                self_rc.new_pump_stream_to_write_loop(stream_id, response, out_window)
-            });
-
-            pump_stream
+            PumpStreamToWriteLoop::<ServerTypes> {
+                to_write_tx: to_write_tx,
+                stream_id: stream_id,
+                out_window: out_window,
+                stream: response,
+            }
         })));
 
         Ok(self.streams.get_mut(stream_id).expect("get stream"))
@@ -327,12 +331,12 @@ impl ServerConnection {
     pub fn new_plain_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
                            -> (ServerConnection, HttpFuture<()>)
         where
-            F : Fn(Headers, HttpPartStream) -> Response + Send + 'static,
+            F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static,
     {
         struct HttpServiceFn<F>(F);
 
         impl<F> Service for HttpServiceFn<F>
-            where F : Fn(Headers, HttpPartStream) -> Response + Send + 'static
+            where F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static
         {
             fn start_request(&self, headers: Headers, req: HttpPartStream) -> Response {
                 (self.0)(headers, req)

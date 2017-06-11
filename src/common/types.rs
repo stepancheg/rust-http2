@@ -8,7 +8,7 @@ pub trait Types : 'static {
     type HttpStreamSpecific : HttpStreamDataSpecific;
     type ConnDataSpecific : ConnDataSpecific;
     // Message sent to write loop
-    type ToWriteMessage : From<CommonToWriteMessage>;
+    type ToWriteMessage : From<CommonToWriteMessage> + Send;
 
     /// First stream id used by either client or server
     fn first_id() -> StreamId;
