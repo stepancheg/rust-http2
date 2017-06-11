@@ -37,8 +37,16 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
     fn poll(&mut self) -> Poll<(), Void> {
         loop {
             match self.out_window.poll() {
-                Async::NotReady => return Ok(Async::NotReady),
-                Async::Ready(()) => {}
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Ok(Async::Ready(())) => {}
+                Err(window_size::StreamDead::Conn) => {
+                    warn!("conn dead");
+                    return Ok(Async::Ready(()));
+                }
+                Err(window_size::StreamDead::Stream) => {
+                    warn!("stream {} dead", self.stream_id);
+                    return Ok(Async::Ready(()));
+                }
             }
 
             let part_opt = match self.stream.poll() {
