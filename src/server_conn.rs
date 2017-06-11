@@ -138,9 +138,8 @@ impl ServerInner {
 
             let response = response.into_part_stream();
 
-            let self_rc_copy = self_rc.clone();
             let pump_stream = self_rc.with(|self_rc| {
-                self_rc.new_pump_stream_to_write_loop(self_rc_copy, stream_id, response, out_window)
+                self_rc.new_pump_stream_to_write_loop(stream_id, response, out_window)
             });
 
             pump_stream

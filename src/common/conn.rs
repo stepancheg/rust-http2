@@ -77,6 +77,7 @@ pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
     IncreaseInWindow(StreamId, u32),
     Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
+    StreamEnqueue(StreamId, HttpStreamPart),
     StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
 }
 
@@ -684,7 +685,6 @@ impl<T : Types> ConnData<T>
 
     pub fn new_pump_stream_to_write_loop(
         &self,
-        self_rc: RcMut<Self>,
         stream_id: StreamId,
         stream: HttpPartStream,
         out_window: window_size::StreamOutWindowReceiver)
@@ -692,7 +692,6 @@ impl<T : Types> ConnData<T>
     {
         let stream = stream.catch_unwind();
         PumpStreamToWriteLoop {
-            conn_rc: self_rc,
             to_write_tx: self.to_write_tx.clone(),
             stream_id: stream_id,
             out_window: out_window,
@@ -702,14 +701,12 @@ impl<T : Types> ConnData<T>
 
     pub fn pump_stream_to_write_loop(
         &self,
-        self_rc: RcMut<Self>,
         stream_id: StreamId,
         stream: HttpPartStream,
         out_window: window_size::StreamOutWindowReceiver)
     {
         let stream = stream.catch_unwind();
         self.exec.execute(Box::new(self.new_pump_stream_to_write_loop(
-            self_rc,
             stream_id,
             stream,
             out_window)));
@@ -881,6 +878,23 @@ impl<I, T> WriteLoopData<I, T>
         }
     }
 
+    fn process_stream_enqueue(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
+        let stream_id = self.inner.with(move |inner| {
+            let stream = inner.streams.get_mut(stream_id);
+            if let Some(mut stream) = stream {
+                stream.stream().outgoing.push_back_part(part);
+                Some(stream_id)
+            } else {
+                None
+            }
+        });
+        if let Some(stream_id) = stream_id {
+            self.send_outg_stream(stream_id)
+        } else {
+            Box::new(future::finished(self))
+        }
+    }
+
     fn increase_in_window(self, stream_id: StreamId, increase: u32) -> HttpFuture<Self> {
         let r = self.inner.with(move |inner| {
             inner.increase_in_window(stream_id, increase)
@@ -901,6 +915,9 @@ impl<I, T> WriteLoopData<I, T>
             },
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)
+            },
+            CommonToWriteMessage::StreamEnqueue(stream_id, part) => {
+                self.process_stream_enqueue(stream_id, part)
             },
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
                 self.increase_in_window(stream_id, increase)

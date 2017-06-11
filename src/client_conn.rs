@@ -145,8 +145,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_start(self, start: StartRequestMessage) -> HttpFuture<Self> {
         let StartRequestMessage { headers, body, resp_tx } = start;
 
-        let inner_rc = self.inner.clone();
-
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
 
             let stream_id = inner.next_local_stream_id();
@@ -165,7 +163,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                 out_window
             };
 
-            inner.pump_stream_to_write_loop(inner_rc, stream_id, body, out_window);
+            inner.pump_stream_to_write_loop(stream_id, body, out_window);
 
             stream_id
         });
