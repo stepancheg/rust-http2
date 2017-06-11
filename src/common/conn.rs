@@ -642,6 +642,7 @@ impl<T : Types> ConnData<T>
     fn send_frame<F : Into<HttpFrame>>(&mut self, frame: F) -> result::Result<()> {
         let frame = frame.into();
         assert!(frame.frame_type() != HttpFrameType::Data);
+        assert!(frame.frame_type() != HttpFrameType::Headers);
         self.send_common(CommonToWriteMessage::Frame(frame))
     }
 
