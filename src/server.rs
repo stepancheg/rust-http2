@@ -16,6 +16,10 @@ use futures::future::join_all;
 use futures::stream;
 use futures::stream::Stream;
 
+use futures_cpupool::CpuPool;
+
+use exec::CpuPoolOption;
+
 use error::Error;
 use result::Result;
 
@@ -120,6 +124,7 @@ fn run_server_event_loop<S, A>(
     listen_addr: SocketAddr,
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
+    exec: CpuPoolOption,
     conf: ServerConf,
     service: S,
     send_to_back: mpsc::Sender<LoopToServer>,
@@ -148,7 +153,8 @@ fn run_server_event_loop<S, A>(
             let no_delay = conf.no_delay.unwrap_or(true);
             socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
 
-            let (conn, future) = ServerConnection::new(&loop_handle, socket, tls, conf, service);
+            let (conn, future) = ServerConnection::new(
+                &loop_handle, socket, tls, exec.clone(), conf, service);
 
             let conn_id = {
                 let mut g = state.lock().expect("lock");
@@ -186,14 +192,39 @@ fn run_server_event_loop<S, A>(
 }
 
 impl Server {
-    pub fn new_plain<T, S>(addr: T, conf: ServerConf, service: S) -> Result<Server>
+    pub fn new_plain_single_thread<T, S>(addr: T, conf: ServerConf, service: S)
+        -> Result<Server>
         where S : Service, T : ToSocketAddrs
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        Server::new(addr, no_tls, conf, service)
+        Server::new(addr, no_tls, CpuPoolOption::SingleThread, conf, service)
     }
 
-    pub fn new<T, S, A>(addr: T, tls: ServerTlsOption<A>, conf: ServerConf, service: S)
+    pub fn new_plain_cpu_pool<T, S>(addr: T, cpu_pool: CpuPool, conf: ServerConf, service: S)
+        -> Result<Server>
+        where S : Service, T : ToSocketAddrs
+    {
+        let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
+        Server::new(addr, no_tls, CpuPoolOption::CpuPool(cpu_pool), conf, service)
+    }
+
+    pub fn new_tls_single_thread<T, S, A>(addr: T, tls: A, conf: ServerConf, service: S)
+        -> Result<Server>
+        where S : Service, T : ToSocketAddrs, A : TlsAcceptor
+    {
+        let tls = ServerTlsOption::Tls(Arc::new(tls));
+        Server::new(addr, tls, CpuPoolOption::SingleThread, conf, service)
+    }
+
+    pub fn new_tls_cpu_pool<T, S, A>(addr: T, tls: A, cpu_pool: CpuPool, conf: ServerConf, service: S)
+        -> Result<Server>
+        where S : Service, T : ToSocketAddrs, A : TlsAcceptor
+    {
+        let tls = ServerTlsOption::Tls(Arc::new(tls));
+        Server::new(addr, tls, CpuPoolOption::CpuPool(cpu_pool), conf, service)
+    }
+
+    pub fn new<T, S, A>(addr: T, tls: ServerTlsOption<A>, exec: CpuPoolOption, conf: ServerConf, service: S)
         -> Result<Server>
         where S : Service, T : ToSocketAddrs, A : TlsAcceptor
     {
@@ -213,6 +244,7 @@ impl Server {
                     listen_addr,
                     state_copy,
                     tls,
+                    exec,
                     conf, service,
                     get_from_loop_tx,
                     alive_tx);

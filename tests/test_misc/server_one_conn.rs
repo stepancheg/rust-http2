@@ -71,7 +71,7 @@ impl ServerOneConn {
                     // close listening port
                     drop(listener);
 
-                    let (conn, future) = ServerConnection::new_plain_fn(
+                    let (conn, future) = ServerConnection::new_plain_single_thread_fn(
                             &handle, conn, Default::default(), service);
                         *conn_for_thread.lock().unwrap() = Some(conn);
                     future

@@ -233,7 +233,7 @@ impl ClientConnection {
 
             let inner = RcMut::new(ConnData::new(
                 lh,
-                CpuPoolOption::Inline,
+                CpuPoolOption::SingleThread,
                 ClientConnData {
                     callbacks: Box::new(callbacks),
                 },

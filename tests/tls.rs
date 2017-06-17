@@ -57,9 +57,9 @@ fn tls() {
         }
     }
 
-    let server = Server::new(
+    let server = Server::new_tls_single_thread(
         "[::1]:0".parse::<SocketAddr>().unwrap(),
-        ServerTlsOption::Tls(Arc::new(test_tls_acceptor())),
+        test_tls_acceptor(),
         Default::default(),
         ServiceImpl {}).expect("server");
 

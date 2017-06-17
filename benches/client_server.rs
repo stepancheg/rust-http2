@@ -29,7 +29,7 @@ impl Service for Megabyte {
 #[bench]
 fn bench(b: &mut Bencher) {
     b.iter(|| {
-        let server = Server::new_plain(
+        let server = Server::new_plain_single_thread(
             "[::1]:0",
             Default::default(),
             Megabyte)

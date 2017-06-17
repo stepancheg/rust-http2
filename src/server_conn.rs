@@ -258,8 +258,8 @@ pub struct ServerConnection {
 }
 
 impl ServerConnection {
-    fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, conf: ServerConf, service: Arc<F>)
-                       -> (ServerConnection, HttpFuture<()>)
+    fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, cpu_pool: CpuPoolOption, conf: ServerConf, service: Arc<F>)
+        -> (ServerConnection, HttpFuture<()>)
         where
             F : Service,
             I : AsyncRead + AsyncWrite + Send + 'static,
@@ -283,7 +283,7 @@ impl ServerConnection {
 
             let inner = RcMut::new(ConnData::new(
                 lh,
-                CpuPoolOption::Inline,
+                cpu_pool,
                 ServerConnData {
                     factory: service,
                 },
@@ -305,31 +305,39 @@ impl ServerConnection {
         }, future)
     }
 
-    pub fn new<S, A>(lh: &reactor::Handle, socket: TcpStream, tls: ServerTlsOption<A>, conf: ServerConf, service: Arc<S>)
-                  -> (ServerConnection, HttpFuture<()>)
+    pub fn new<S, A>(
+        lh: &reactor::Handle,
+        socket: TcpStream,
+        tls: ServerTlsOption<A>,
+        exec: CpuPoolOption,
+        conf: ServerConf, service: Arc<S>)
+            -> (ServerConnection, HttpFuture<()>)
         where S : Service, A : TlsAcceptor
     {
         match tls {
-            ServerTlsOption::Plain =>
-                ServerConnection::connected(
-                    lh, Box::new(future::finished(socket)), conf, service),
-            ServerTlsOption::Tls(acceptor) =>
-                ServerConnection::connected(
-                    lh, Box::new(tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from)), conf, service),
+            ServerTlsOption::Plain => {
+                let socket = Box::new(future::finished(socket));
+                ServerConnection::connected(lh, socket, exec, conf, service)
+            }
+            ServerTlsOption::Tls(acceptor) => {
+                let socket = Box::new(
+                    tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from));
+                ServerConnection::connected(lh, socket, exec, conf, service)
+            }
         }
     }
 
-    pub fn new_plain<S>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, service: Arc<S>)
-                        -> (ServerConnection, HttpFuture<()>)
+    pub fn new_plain_single_thread<S>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, service: Arc<S>)
+        -> (ServerConnection, HttpFuture<()>)
         where
             S : Service,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        ServerConnection::new(lh, socket, no_tls, conf, service)
+        ServerConnection::new(lh, socket, no_tls, CpuPoolOption::SingleThread, conf, service)
     }
 
-    pub fn new_plain_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
-                           -> (ServerConnection, HttpFuture<()>)
+    pub fn new_plain_single_thread_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
+        -> (ServerConnection, HttpFuture<()>)
         where
             F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static,
     {
@@ -343,7 +351,7 @@ impl ServerConnection {
             }
         }
 
-        ServerConnection::new_plain(lh, socket, conf, Arc::new(HttpServiceFn(f)))
+        ServerConnection::new_plain_single_thread(lh, socket, conf, Arc::new(HttpServiceFn(f)))
     }
 
     /// For tests

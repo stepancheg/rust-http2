@@ -45,7 +45,7 @@ impl httpbis::Service for TestService {
 
 impl ServerTest {
     pub fn new() -> ServerTest {
-        let http_server = Server::new_plain("[::1]:0", Default::default(), TestService {})
+        let http_server = Server::new_plain_single_thread("[::1]:0", Default::default(), TestService {})
             .expect("server");
         let port = http_server.local_addr().port();
         ServerTest {

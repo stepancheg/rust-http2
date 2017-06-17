@@ -1,3 +1,5 @@
+use std::fmt;
+
 use void::Void;
 
 use futures::future::Future;
@@ -21,17 +23,27 @@ impl Executor for reactor::Handle {
 }
 
 // Where execute requests on client and responses on server
+#[derive(Clone)]
 pub enum CpuPoolOption {
     // Execute in event loop
-    Inline,
+    SingleThread,
     // Execute in provided CpuPool
     CpuPool(CpuPool),
+}
+
+impl fmt::Debug for CpuPoolOption {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &CpuPoolOption::SingleThread => write!(f, "SingleThread"),
+            &CpuPoolOption::CpuPool(..) => write!(f, "CpuPool"),
+        }
+    }
 }
 
 impl CpuPoolOption {
     pub(crate) fn make_executor(&self, lh: &reactor::Handle) -> Box<Executor> {
         match self {
-            &CpuPoolOption::Inline => Box::new(lh.clone()),
+            &CpuPoolOption::SingleThread => Box::new(lh.clone()),
             &CpuPoolOption::CpuPool(ref pool) => Box::new(pool.clone()),
         }
     }

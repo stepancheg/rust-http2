@@ -59,9 +59,9 @@ fn main() {
     tls_acceptor.set_alpn_protocols(&[b"h2"]).expect("set_alpn_protocols");
 
     conf.alpn = Some(httpbis::ServerAlpn::Require);
-    let server = httpbis::Server::new(
+    let server = httpbis::Server::new_tls_single_thread(
         ("::0", 8443),
-        httpbis::ServerTlsOption::Tls(Arc::new(tls_acceptor.build().expect("acceptor"))),
+        tls_acceptor.build().expect("acceptor"),
         conf,
         ServiceImpl { counter: Default::default() })
             .expect("server");
