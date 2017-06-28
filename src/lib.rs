@@ -26,6 +26,7 @@ pub mod client_conf;
 pub mod client_conn;
 mod client_tls;
 mod service;
+mod service_paths;
 pub mod client;
 pub mod server_conf;
 pub mod server_conn;
@@ -61,6 +62,7 @@ pub use solicit::header::Header;
 pub use solicit::header::Headers;
 
 pub use service::Service;
+pub use service_paths::ServicePaths;
 
 pub use exec::CpuPoolOption;
 
@@ -69,6 +71,7 @@ pub use client_conf::ClientConf;
 pub use client_tls::ClientTlsOption;
 
 pub use server::Server;
+pub use server::ServerBuilder;
 pub use server_conf::ServerConf;
 pub use server_conf::ServerAlpn;
 pub use server_tls::ServerTlsOption;

@@ -1,12 +1,17 @@
 #![allow(dead_code)]
 
+use std::sync::Arc;
+
 use futures::stream;
 
 use bytes::Bytes;
 
-use httpbis;
-use httpbis::server::Server;
-use httpbis::*;
+use httpbis::Headers;
+use httpbis::HttpPartStream;
+use httpbis::Response;
+use httpbis::Server;
+use httpbis::ServerBuilder;
+use httpbis::Service;
 
 use regex::Regex;
 
@@ -17,14 +22,13 @@ pub struct ServerTest {
     pub port: u16,
 }
 
-struct TestService {
-}
 
-impl httpbis::Service for TestService {
-    fn start_request(&self, headers: Headers, req: httpbis::HttpPartStream) -> Response {
+struct Blocks {}
+
+impl Service for Blocks {
+    fn start_request(&self, headers: Headers, _req: HttpPartStream) -> Response {
 
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
-        let echo_re = Regex::new("^/echo$").expect("regex");
 
         if let Some(captures) = blocks_re.captures(headers.path()) {
             let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
@@ -35,21 +39,30 @@ impl httpbis::Service for TestService {
                     .map(move |i| Ok(Bytes::from(vec![(i % 0xff) as u8; size as usize])))));
         }
 
-        if let Some(_) = echo_re.captures(headers.path()) {
-            return Response::headers_and_stream(Headers::ok_200(), req);
-        }
-
         return Response::not_found_404()
     }
 }
 
+
+struct Echo {}
+
+impl Service for Echo {
+    fn start_request(&self, _headers: Headers, req: HttpPartStream) -> Response {
+        Response::headers_and_stream(Headers::ok_200(), req)
+    }
+}
+
+
 impl ServerTest {
     pub fn new() -> ServerTest {
-        let http_server = Server::new_plain_single_thread("[::1]:0", Default::default(), TestService {})
-            .expect("server");
-        let port = http_server.local_addr().port();
+        let mut server = ServerBuilder::new_plain();
+        server.set_port(0);
+        server.service.add_service("/blocks", Arc::new(Blocks {}));
+        server.service.add_service("/echo", Arc::new(Echo {}));
+        let server = server.build().expect("server");
+        let port = server.local_addr().port();
         ServerTest {
-            server: http_server,
+            server: server,
             port: port,
         }
     }

@@ -1,4 +1,5 @@
 use std::thread;
+use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::collections::HashMap;
@@ -6,6 +7,8 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::io;
+
+use tls_api;
 
 use tokio_core::reactor;
 use tokio_core::net::TcpListener;
@@ -16,6 +19,7 @@ use futures::future::join_all;
 use futures::stream;
 use futures::stream::Stream;
 
+use futures_cpupool;
 use futures_cpupool::CpuPool;
 
 use exec::CpuPoolOption;
@@ -36,6 +40,7 @@ use super::server_conn::*;
 use super::common::*;
 
 use service::Service;
+use service_paths::ServicePaths;
 
 use server_conf::*;
 
@@ -48,6 +53,66 @@ struct LoopToServer {
 }
 
 
+
+pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
+    pub conf: ServerConf,
+    pub cpu_pool: CpuPoolOption,
+    pub tls: ServerTlsOption<A>,
+    pub addr: Option<SocketAddr>,
+    pub service: ServicePaths,
+}
+
+impl ServerBuilder<tls_api_stub::TlsAcceptor> {
+    /// New server builder with defaults.
+    ///
+    /// Port must be set, other properties are optional.
+    pub fn new_plain() -> ServerBuilder<tls_api_stub::TlsAcceptor> {
+        ServerBuilder::new()
+    }
+}
+
+impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
+    /// New server builder with defaults.
+    ///
+    /// To call this function `ServerBuilder` must be parameterized with TLS acceptor.
+    /// If TLS is not needed, `ServerBuilder::new_plain` function can be used.
+    ///
+    /// Port must be set, other properties are optional.
+    pub fn new() -> ServerBuilder<A> {
+        ServerBuilder {
+            conf: ServerConf::new(),
+            cpu_pool: CpuPoolOption::SingleThread,
+            tls: ServerTlsOption::Plain,
+            addr: None,
+            service: ServicePaths::new(),
+        }
+    }
+
+    /// Create a CPU pool, and use it in HTTP server
+    pub fn set_cpu_pool_threads(&mut self, threads: usize) {
+        let cpu_pool = futures_cpupool::Builder::new()
+            .pool_size(threads)
+            .name_prefix("httpbis-server-")
+            .create();
+        self.cpu_pool = CpuPoolOption::CpuPool(cpu_pool);
+    }
+
+    pub fn set_tls(&mut self, acceptor: A) {
+        self.tls = ServerTlsOption::Tls(Arc::new(acceptor));
+    }
+
+    /// Set port server listens on.
+    /// Can be zero to bind on any available port,
+    /// which can be later obtained by `Server::local_addr`.
+    pub fn set_port(&mut self, port: u16) {
+        self.addr = Some(SocketAddr::from(("::".parse::<IpAddr>().unwrap(), port)))
+    }
+
+    pub fn build(self) -> Result<Server> {
+        let addr = self.addr.expect("listen addr is unset");
+        Server::new(addr, self.tls, self.cpu_pool, self.conf, self.service)
+    }
+}
 
 pub struct Server {
     state: Arc<Mutex<ServerState>>,
