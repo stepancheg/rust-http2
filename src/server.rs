@@ -1,5 +1,4 @@
 use std::thread;
-use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::collections::HashMap;
@@ -105,7 +104,19 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
     /// Can be zero to bind on any available port,
     /// which can be later obtained by `Server::local_addr`.
     pub fn set_port(&mut self, port: u16) {
-        self.addr = Some(SocketAddr::from(("::".parse::<IpAddr>().unwrap(), port)))
+        self.set_addr(("::", port)).expect("set_addr");
+    }
+
+    /// Set port server listens on.
+    pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
+        let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
+        if addrs.is_empty() {
+            return Err(Error::Other("addr is resolved to empty list"));
+        } else if addrs.len() > 1 {
+            return Err(Error::Other("addr is resolved to more than one addr"));
+        }
+        self.addr = Some(addrs.into_iter().next().unwrap());
+        Ok(())
     }
 
     pub fn build(self) -> Result<Server> {
