@@ -34,6 +34,22 @@ impl Node {
         }
     }
 
+    fn remove_service(&mut self, path: &str) -> Option<Arc<Service>> {
+        match split_path(path) {
+            None => {
+                self.service.take()
+            }
+            Some((first, rem)) => {
+                match self.children.get_mut(first) {
+                    Some(child) => {
+                        child.remove_service(rem)
+                    }
+                    None => None,
+                }
+            }
+        }
+    }
+
     fn find_service(&self, path: &str) -> Option<&Service> {
         if let Some((first, rem)) = split_path(path) {
             if let Some(node) = self.children.get(first) {
@@ -90,8 +106,14 @@ impl ServicePaths {
         Default::default()
     }
 
-    pub fn add_service(&mut self, path: &str, service: Arc<Service>) {
+    pub fn set_service(&mut self, path: &str, service: Arc<Service>) {
+        assert!(path.starts_with("/"));
         self.root.add_service(path, service);
+    }
+
+    pub fn remove_service(&mut self, path: &str) ->Option<Arc<Service>> {
+        assert!(path.starts_with("/"));
+        self.root.remove_service(path)
     }
 
     fn find_service(&self, path: &str) -> Option<&Service> {

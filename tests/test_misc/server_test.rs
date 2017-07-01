@@ -57,8 +57,8 @@ impl ServerTest {
     pub fn new() -> ServerTest {
         let mut server = ServerBuilder::new_plain();
         server.set_port(0);
-        server.service.add_service("/blocks", Arc::new(Blocks {}));
-        server.service.add_service("/echo", Arc::new(Echo {}));
+        server.service.set_service("/blocks", Arc::new(Blocks {}));
+        server.service.set_service("/echo", Arc::new(Echo {}));
         let server = server.build().expect("server");
         let port = server.local_addr().port();
         ServerTest {
