@@ -45,12 +45,6 @@ use server_conf::*;
 pub use server_tls::ServerTlsOption;
 
 
-struct LoopToServer {
-    local_addr: SocketAddr,
-}
-
-
-
 pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
     pub cpu_pool: CpuPoolOption,
@@ -122,7 +116,6 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let listen_addr = addr.to_socket_addrs()?.next().unwrap();
 
-        let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
         let (alive_tx, alive_rx) = mpsc::channel();
 
         let state: Arc<Mutex<ServerState>> = Default::default();
@@ -131,6 +124,10 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let (shutdown_signal, shutdown_future) = shutdown_signal();
 
+        let listen = listener(&listen_addr, &self.conf)?;
+
+        let local_addr = listen.local_addr().unwrap();
+
         let join_handle = thread::Builder::new()
             .name(self.conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
             .spawn(move || {
@@ -138,21 +135,18 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
                     listen_addr,
                     state_copy,
                     self.tls,
+                    listen,
                     self.cpu_pool,
                     shutdown_future,
                     self.conf,
                     self.service,
-                    get_from_loop_tx,
                     alive_tx);
             })?;
-
-        let loop_to_server = get_from_loop_rx.recv()
-            .map_err(|_| Error::Other("failed to recv from event loop"))?;
 
         Ok(Server {
             state: state,
             shutdown: shutdown_signal,
-            loop_to_server: loop_to_server,
+            local_addr: local_addr,
             thread_join_handle: Some(join_handle),
             alive_rx: alive_rx,
         })
@@ -161,7 +155,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
 pub struct Server {
     state: Arc<Mutex<ServerState>>,
-    loop_to_server: LoopToServer,
+    local_addr: SocketAddr,
     shutdown: ShutdownSignal,
     alive_rx: mpsc::Receiver<()>,
     thread_join_handle: Option<thread::JoinHandle<()>>,
@@ -215,9 +209,8 @@ fn configure_tcp(_tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
 
 fn listener(
     addr: &SocketAddr,
-    handle: &reactor::Handle,
     conf: &ServerConf)
-        -> io::Result<TcpListener>
+        -> io::Result<::std::net::TcpListener>
 {
     let listener = match *addr {
         SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
@@ -227,19 +220,18 @@ fn listener(
     listener.reuse_address(true)?;
     listener.bind(addr)?;
     let backlog = conf.backlog.unwrap_or(1024);
-    let listener = listener.listen(backlog)?;
-    TcpListener::from_listener(listener, addr, handle)
+    listener.listen(backlog)
 }
 
 fn run_server_event_loop<S, A>(
     listen_addr: SocketAddr,
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
+    listen: ::std::net::TcpListener,
     exec: CpuPoolOption,
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
     service: S,
-    send_to_back: mpsc::Sender<LoopToServer>,
     _alive_tx: mpsc::Sender<()>)
         where S : Service, A : TlsAcceptor,
 {
@@ -247,14 +239,9 @@ fn run_server_event_loop<S, A>(
 
     let mut lp = reactor::Core::new().expect("http2server");
 
-    let listen = listener(&listen_addr, &lp.handle(), &conf).unwrap();
+    let listen = TcpListener::from_listener(listen, &listen_addr, &lp.handle()).unwrap();
 
     let stuff = stream::repeat((lp.handle(), service, state, tls, conf));
-
-    let local_addr = listen.local_addr().unwrap();
-    send_to_back
-        .send(LoopToServer { local_addr: local_addr })
-        .expect("send back");
 
     let loop_run = listen.incoming().map_err(Error::from).zip(stuff)
         .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
@@ -303,7 +290,7 @@ fn run_server_event_loop<S, A>(
 
 impl Server {
     pub fn local_addr(&self) -> &SocketAddr {
-        &self.loop_to_server.local_addr
+        &self.local_addr
     }
 
     pub fn is_alive(&self) -> bool {
