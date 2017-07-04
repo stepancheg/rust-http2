@@ -1,5 +1,7 @@
 #![feature(test)]
 
+use std::sync::Arc;
+
 extern crate test;
 extern crate httpbis;
 extern crate futures;
@@ -29,11 +31,10 @@ impl Service for Megabyte {
 #[bench]
 fn bench(b: &mut Bencher) {
     b.iter(|| {
-        let server = Server::new_plain_single_thread(
-            "[::1]:0",
-            Default::default(),
-            Megabyte)
-                .expect("server");
+        let mut server = ServerBuilder::new_plain();
+        server.set_port(0);
+        server.service.set_service("/", Arc::new(Megabyte));
+        let server = server.build().expect("server");
 
         let client = Client::new_plain(
             "::1",
