@@ -120,7 +120,39 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
     pub fn build(self) -> Result<Server> {
         let addr = self.addr.expect("listen addr is unset");
-        Server::new(addr, self.tls, self.cpu_pool, self.conf, self.service)
+
+        let listen_addr = addr.to_socket_addrs()?.next().unwrap();
+
+        let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
+        let (alive_tx, alive_rx) = mpsc::channel();
+
+        let state: Arc<Mutex<ServerState>> = Default::default();
+
+        let state_copy = state.clone();
+
+        let join_handle = thread::Builder::new()
+            .name(self.conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
+            .spawn(move || {
+                run_server_event_loop(
+                    listen_addr,
+                    state_copy,
+                    self.tls,
+                    self.cpu_pool,
+                    self.conf,
+                    self.service,
+                    get_from_loop_tx,
+                    alive_tx);
+            })?;
+
+        let loop_to_server = get_from_loop_rx.recv()
+            .map_err(|_| Error::Other("failed to recv from event loop"))?;
+
+        Ok(Server {
+            state: state,
+            loop_to_server: loop_to_server,
+            thread_join_handle: Some(join_handle),
+            alive_rx: alive_rx,
+        })
     }
 }
 
@@ -267,43 +299,6 @@ fn run_server_event_loop<S, A>(
 }
 
 impl Server {
-    fn new<T, S, A>(addr: T, tls: ServerTlsOption<A>, exec: CpuPoolOption, conf: ServerConf, service: S)
-        -> Result<Server>
-        where S : Service, T : ToSocketAddrs, A : TlsAcceptor
-    {
-        let listen_addr = addr.to_socket_addrs()?.next().unwrap();
-
-        let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
-        let (alive_tx, alive_rx) = mpsc::channel();
-
-        let state: Arc<Mutex<ServerState>> = Default::default();
-
-        let state_copy = state.clone();
-
-        let join_handle = thread::Builder::new()
-            .name(conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
-            .spawn(move || {
-                run_server_event_loop(
-                    listen_addr,
-                    state_copy,
-                    tls,
-                    exec,
-                    conf, service,
-                    get_from_loop_tx,
-                    alive_tx);
-            })?;
-
-        let loop_to_server = get_from_loop_rx.recv()
-            .map_err(|_| Error::Other("failed to recv from event loop"))?;
-
-        Ok(Server {
-            state: state,
-            loop_to_server: loop_to_server,
-            thread_join_handle: Some(join_handle),
-            alive_rx: alive_rx,
-        })
-    }
-
     pub fn local_addr(&self) -> &SocketAddr {
         &self.loop_to_server.local_addr
     }
