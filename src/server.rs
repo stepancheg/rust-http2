@@ -46,7 +46,6 @@ pub use server_tls::ServerTlsOption;
 
 
 struct LoopToServer {
-    shutdown: ShutdownSignal,
     local_addr: SocketAddr,
 }
 
@@ -130,6 +129,8 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let state_copy = state.clone();
 
+        let (shutdown_signal, shutdown_future) = shutdown_signal();
+
         let join_handle = thread::Builder::new()
             .name(self.conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
             .spawn(move || {
@@ -138,6 +139,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
                     state_copy,
                     self.tls,
                     self.cpu_pool,
+                    shutdown_future,
                     self.conf,
                     self.service,
                     get_from_loop_tx,
@@ -149,6 +151,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         Ok(Server {
             state: state,
+            shutdown: shutdown_signal,
             loop_to_server: loop_to_server,
             thread_join_handle: Some(join_handle),
             alive_rx: alive_rx,
@@ -159,6 +162,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 pub struct Server {
     state: Arc<Mutex<ServerState>>,
     loop_to_server: LoopToServer,
+    shutdown: ShutdownSignal,
     alive_rx: mpsc::Receiver<()>,
     thread_join_handle: Option<thread::JoinHandle<()>>,
 }
@@ -232,6 +236,7 @@ fn run_server_event_loop<S, A>(
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
     exec: CpuPoolOption,
+    shutdown_future: ShutdownFuture,
     conf: ServerConf,
     service: S,
     send_to_back: mpsc::Sender<LoopToServer>,
@@ -242,15 +247,13 @@ fn run_server_event_loop<S, A>(
 
     let mut lp = reactor::Core::new().expect("http2server");
 
-    let (shutdown_signal, shutdown_future) = shutdown_signal();
-
     let listen = listener(&listen_addr, &lp.handle(), &conf).unwrap();
 
     let stuff = stream::repeat((lp.handle(), service, state, tls, conf));
 
     let local_addr = listen.local_addr().unwrap();
     send_to_back
-        .send(LoopToServer { shutdown: shutdown_signal, local_addr: local_addr })
+        .send(LoopToServer { local_addr: local_addr })
         .expect("send back");
 
     let loop_run = listen.incoming().map_err(Error::from).zip(stuff)
@@ -317,7 +320,7 @@ impl Server {
 // We shutdown the server in the destructor.
 impl Drop for Server {
     fn drop(&mut self) {
-        self.loop_to_server.shutdown.shutdown();
+        self.shutdown.shutdown();
 
         // do not ignore errors of take
         // ignore errors of join, it means that server event loop crashed
