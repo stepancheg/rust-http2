@@ -13,7 +13,6 @@ extern crate env_logger;
 use bytes::Bytes;
 
 use std::sync::Arc;
-use std::net::SocketAddr;
 
 use futures::future::Future;
 
@@ -57,11 +56,11 @@ fn tls() {
         }
     }
 
-    let server = Server::new_tls_single_thread(
-        "[::1]:0".parse::<SocketAddr>().unwrap(),
-        test_tls_acceptor(),
-        Default::default(),
-        ServiceImpl {}).expect("server");
+    let mut server = ServerBuilder::new();
+    server.set_port(0);
+    server.set_tls(test_tls_acceptor());
+    server.service.set_service("/", Arc::new(ServiceImpl {}));
+    let server = server.build().expect("server");
 
     let client: Client = Client::new_expl(
         server.local_addr(),

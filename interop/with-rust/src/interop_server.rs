@@ -16,9 +16,7 @@ use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use httpbis::message::SimpleHttpMessage;
 use httpbis::Headers;
 use httpbis::Response;
-use httpbis::Server;
-use httpbis::ServerTlsOption;
-use httpbis::ServerConf;
+use httpbis::ServerBuilder;
 use httpbis::HttpPartStream;
 use httpbis_interop::PORT;
 
@@ -46,11 +44,11 @@ fn test_tls_acceptor() -> TlsAcceptor {
 fn main() {
     env_logger::init().expect("env_logger::init");
 
-    let _server = Server::new(
-        ("::", PORT),
-        ServerTlsOption::Tls(Arc::new(test_tls_acceptor())),
-        ServerConf::new(),
-        ServiceImpl {});
+    let mut server = ServerBuilder::new();
+    server.set_port(PORT);
+    server.set_tls(test_tls_acceptor());
+    server.service.set_service("/", Arc::new(ServiceImpl {}));
+    let _server = server.build().expect("server");
 
     loop {
         thread::park();
