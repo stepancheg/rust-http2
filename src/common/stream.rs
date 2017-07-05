@@ -173,8 +173,8 @@ impl<T : Types> HttpStreamCommon<T> {
             self.outgoing.push_front(HttpStreamPartContent::Data(rem));
         };
 
-        self.out_window_size.try_decrease(data.len() as i32).unwrap();
-        conn_out_window_size.try_decrease(data.len() as i32).unwrap();
+        self.out_window_size.try_decrease_to_positive(data.len() as i32).unwrap();
+        conn_out_window_size.try_decrease_to_positive(data.len() as i32).unwrap();
 
         let last = self.outgoing.end() == Some(ErrorCode::NoError);
         if last {
