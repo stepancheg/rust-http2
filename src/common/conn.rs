@@ -268,7 +268,7 @@ impl<T : Types> ConnData<T>
                             EndStream::No
                         };
 
-                    let mut frame = DataFrame::with_data(stream_id, &data[pos..end]);
+                    let mut frame = DataFrame::with_data(stream_id, data.slice(pos, end));
                     if end_stream_in_frame == EndStream::Yes {
                         frame.set_flag(DataFlag::EndStream);
                     }
