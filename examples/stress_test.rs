@@ -84,24 +84,28 @@ fn get_200(client: Client, still_alive: Arc<AtomicBool>) {
 }
 
 fn inf_impl(client: Client, still_alive: Arc<AtomicBool>, path: &str, size: usize) {
-    let (headers, resp) = client.start_get(path, "localhost").0.wait().expect("get");
-
-    assert_eq!(200, headers.status());
-
-    let mut resp = resp.filter_data().wait();
-
-    let exp = vec![17; size as usize];
-
     loop {
-        still_alive.store(true, Ordering::SeqCst);
+        let (headers, resp) = client.start_get(path, "localhost").0.wait().expect("get");
 
-        let mut v = Vec::new();
-        while v.len() < size as usize {
+        assert_eq!(200, headers.status());
+
+        let mut resp = resp.filter_data().wait();
+
+        let exp = vec![17; size as usize];
+
+        let iterations = 1_000_000_000 / size;
+
+        for _ in 0..iterations {
             still_alive.store(true, Ordering::SeqCst);
-            v.extend(resp.next().unwrap().unwrap());
+
+            let mut v = Vec::new();
+            while v.len() < size as usize {
+                still_alive.store(true, Ordering::SeqCst);
+                v.extend(resp.next().unwrap().unwrap());
+            }
+            assert_eq!(&exp[..], &v[..size]);
+            v.drain(..size);
         }
-        assert_eq!(&exp[..], &v[..size]);
-        v.drain(..size);
     }
 }
 
