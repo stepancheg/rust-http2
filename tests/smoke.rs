@@ -7,13 +7,24 @@ extern crate tokio_core;
 extern crate log;
 extern crate env_logger;
 
+use std::sync::Arc;
+use std::sync::Mutex;
+
 mod test_misc;
+
+use bytes::Bytes;
 
 use futures::future;
 use futures::future::Future;
 use futures::stream::Stream;
+use futures::sync::mpsc;
 
 use httpbis::Client;
+use httpbis::ServerBuilder;
+use httpbis::Service;
+use httpbis::Response;
+use httpbis::Headers;
+use httpbis::HttpPartStream;
 use test_misc::*;
 
 #[test]
@@ -76,4 +87,59 @@ fn seq_long() {
     }
 
     assert_eq!(100000 * 100, sum_len);
+}
+
+#[test]
+fn seq_slow() {
+    env_logger::init().ok();
+
+    let (tx, rx) = mpsc::unbounded();
+
+    struct Handler {
+        rx: Mutex<Option<mpsc::UnboundedReceiver<Bytes>>>,
+    }
+
+    impl Service for Handler {
+        fn start_request(&self, _headers: Headers, _req: HttpPartStream) -> Response {
+            let rx = self.rx.lock().unwrap().take().expect("can be called only once");
+            Response::headers_and_bytes_stream(
+                Headers::ok_200(),
+                rx.map_err(|_| unreachable!()))
+        }
+    }
+
+    let mut server = ServerBuilder::new_plain();
+    server.set_port(0);
+    server.service.set_service("/", Arc::new(Handler { rx: Mutex::new(Some(rx)) }));
+    let server = server.build().expect("server");
+
+    let client: Client =
+        Client::new_plain("::1", server.local_addr().port(), Default::default()).expect("client");
+
+    let (headers, resp) = client.start_get("/gfgfg", "localhost").0.wait().expect("get");
+
+    assert_eq!(200, headers.status());
+
+    let mut resp = resp.filter_data().wait();
+
+    for i in 1..100 {
+        let b = vec![(i % 0x100) as u8; i * 1011];
+        tx.send(Bytes::from(&b[..])).expect("send");
+
+        let mut c = Vec::new();
+        while c.len() != b.len() {
+            c.extend(resp.next().unwrap().unwrap());
+        }
+
+        assert_eq!(b, c);
+    }
+
+    drop(tx);
+
+    if false {
+        // TODO
+        assert_eq!(None, resp.next().map(|e| format!("{:?}", e)));
+    } else {
+        assert_eq!(Some(Ok(Bytes::new())), resp.next().map(|r| r.map_err(|e| format!("{:?}", e))));
+    }
 }
