@@ -182,7 +182,7 @@ impl<T : Types> ConnData<T>
     {
         let (inc_tx, inc_rx) = stream_queue_sync();
 
-        let in_window_size = self.conn.in_window_size.0 as u32;
+        let in_window_size = self.conn.our_settings_sent().initial_window_size;
 
         let stream_from_network = self.new_stream_from_network(
             inc_rx,

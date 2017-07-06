@@ -140,6 +140,7 @@ impl HttpConnectionTester {
             data_frame.set_flag(DataFlag::EndStream);
         }
         self.send_frame(data_frame);
+        self.conn.out_window_size.try_decrease_to_positive(data.len() as i32).expect("decrease");
     }
 
     pub fn send_rst(&mut self, stream_id: StreamId, error_code: ErrorCode) {
@@ -160,16 +161,30 @@ impl HttpConnectionTester {
         frame
     }
 
+    pub fn recv_special_frame_process_special(&mut self) -> Option<HttpFrame> {
+        let frame = self.fn_recv_frame_no_check_ack();
+        if let HttpFrame::Settings(ref f) = frame {
+            if self.conn.our_settings_sent.is_some() && f.is_ack() {
+                self.process_peer_settings_ack(&f);
+                return None;
+            }
+        }
+        if let HttpFrame::WindowUpdate(ref f) = frame {
+            if f.stream_id == 0 {
+                self.conn.out_window_size.try_increase(f.increment).expect("increment");
+            } else {
+                // TODO: store for use by test
+            }
+            return None;
+        }
+        Some(frame)
+    }
+
     pub fn recv_frame(&mut self) -> HttpFrame {
         loop {
-            let frame = self.fn_recv_frame_no_check_ack();
-            if let HttpFrame::Settings(ref f) = frame {
-                if self.conn.our_settings_sent.is_some() && f.is_ack() {
-                    self.process_peer_settings_ack(&f);
-                    continue;
-                }
+            if let Some(frame) = self.recv_special_frame_process_special() {
+                return frame;
             }
-            return frame;
         }
     }
 

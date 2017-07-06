@@ -16,14 +16,15 @@ extern crate env_logger;
 use bytes::Bytes;
 
 use futures::future::Future;
+use futures::stream::Stream;
 
 mod test_misc;
 
-use httpbis::solicit::header::*;
 use httpbis::error::Error;
 use httpbis::error::ErrorCode;
 use httpbis::*;
 use httpbis::for_test::*;
+use httpbis::solicit::DEFAULT_SETTINGS;
 
 use test_misc::*;
 
@@ -215,4 +216,47 @@ fn reconnect_on_goaway() {
         let resp = req.wait().expect("OK");
         assert_eq!(200, resp.headers.status());
     }
+}
+
+#[test]
+pub fn issue_89() {
+    env_logger::init().ok();
+
+    let server = HttpServerTester::new();
+
+    let client: Client =
+        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+
+    let mut server_tester = server.accept();
+    server_tester.recv_preface();
+    server_tester.settings_xchg();
+
+    let r1 = client.start_get("/r1", "localhost");
+
+    server_tester.recv_frame_headers_check(1, false);
+    assert!(server_tester.recv_frame_data_tail(1).is_empty());
+
+    server_tester.send_headers(1, Headers::ok_200(), false);
+    let (_, resp1) = r1.0.wait().unwrap();
+    let mut resp1 = resp1.filter_data().wait();
+
+    assert_eq!(
+        server_tester.conn.out_window_size.0,
+        client.dump_state().wait().unwrap().in_window_size);
+
+    let w = DEFAULT_SETTINGS.initial_window_size;
+    assert_eq!(w as i32, client.dump_state().wait().unwrap().in_window_size);
+
+    server_tester.send_data(1, &[17, 19], false);
+    assert_eq!(2, resp1.next().unwrap().unwrap().len());
+
+    // client does not send WINDOW_UPDATE on such small changes
+    assert_eq!((w - 2) as i32, client.dump_state().wait().unwrap().in_window_size);
+
+    let _r3 = client.start_get("/r3", "localhost");
+
+    // This is the cause of issue #89
+    assert_eq!(w as i32, client.dump_state().wait().unwrap().streams[&3].in_window_size);
+
+    // Cannot reliably check that stream actually resets
 }

@@ -250,6 +250,8 @@ fn exceed_window_size() {
 
     let data = Vec::from_iter((0..tester.conn.peer_settings.initial_window_size + 3).map(|_| 2));
 
+    // Deliberately set wrong out_windows_size so `send_data` wouldn't fail.
+    tester.conn.out_window_size.0 += 10000000;
     tester.send_data(1, &data, false);
     tester.recv_eof();
 
