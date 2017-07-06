@@ -195,11 +195,11 @@ impl<T : Types> HttpStreamCommon<T> {
         r
     }
 
-    pub fn new_data_chunk(&mut self, data: &[u8], last: bool) {
+    pub fn new_data_chunk(&mut self, data: Bytes, last: bool) {
         if let Some(ref mut response_handler) = self.peer_tx {
             // TODO: reset stream if rx is dead
             drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
-                content: HttpStreamPartContent::Data(Bytes::from(data)),
+                content: HttpStreamPartContent::Data(data),
                 last: last,
             })));
         }

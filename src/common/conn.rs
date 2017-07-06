@@ -547,7 +547,8 @@ impl<T : Types> ConnData<T>
             stream.stream().in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
 
-            stream.stream().new_data_chunk(&frame.data.as_ref(), frame.is_end_of_stream());
+            let end_of_stream = frame.is_end_of_stream();
+            stream.stream().new_data_chunk(frame.data, end_of_stream);
         };
 
         if let Some(increment_conn) = increment_conn {
