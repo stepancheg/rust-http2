@@ -7,7 +7,7 @@ extern crate log;
 extern crate env_logger;
 extern crate clap;
 extern crate tls_api;
-extern crate tls_api_native_tls;
+extern crate tls_api_openssl;
 
 use std::sync::Arc;
 use std::net::SocketAddr;
@@ -16,7 +16,7 @@ use std::net::IpAddr;
 use bytes::Bytes;
 
 use tls_api::Certificate;
-use tls_api_native_tls::TlsConnector;
+use tls_api_openssl::TlsConnector;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
 
