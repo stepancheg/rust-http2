@@ -111,6 +111,18 @@ impl ServicePaths {
         self.root.add_service(path, service);
     }
 
+    pub fn set_service_fn<F>(&mut self, path: &str, service: F)
+        where F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static
+    {
+        impl<F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static> Service for F {
+            fn start_request(&self, headers: Headers, req: HttpPartStream) -> Response {
+                self(headers, req)
+            }
+        }
+
+        self.set_service(path, Arc::new(service))
+    }
+
     pub fn remove_service(&mut self, path: &str) ->Option<Arc<Service>> {
         assert!(path.starts_with("/"));
         self.root.remove_service(path)
