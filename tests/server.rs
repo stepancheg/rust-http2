@@ -16,18 +16,20 @@ use std::sync::atomic::Ordering;
 
 use bytes::Bytes;
 
+use tokio_core::reactor;
+
 mod test_misc;
 
 use std::io::Write as _Write;
 use std::io::Read as _Read;
+use std::thread;
 
 use futures::Async;
 use futures::Poll;
 use futures::future::Future;
 use futures::stream::Stream;
 use futures::stream;
-
-use httpbis::solicit::header::*;
+use futures::sync::oneshot;
 
 use httpbis::*;
 use httpbis::stream_part::HttpStreamPart;
@@ -37,6 +39,7 @@ use httpbis::solicit::DEFAULT_SETTINGS;
 
 use std::iter::FromIterator;
 use std::net::TcpStream;
+use std::sync::mpsc;
 
 use test_misc::*;
 
@@ -386,4 +389,44 @@ pub fn http_1_1() {
     let mut read = Vec::new();
     tcp_stream.read_to_end(&mut read).expect("read");
     assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", httpbis::misc::BsDebug(&read));
+}
+
+#[test]
+fn external_event_loop() {
+    env_logger::init().ok();
+
+    let (tx, rx) = mpsc::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+
+    let t = thread::spawn(move || {
+        let mut core = reactor::Core::new().expect("Core::new");
+
+        let mut servers = Vec::new();
+        for _ in 0..2 {
+            let mut server = ServerBuilder::new_plain();
+            server.event_loop = Some(core.handle());
+            server.set_port(0);
+            server.service.set_service_fn(
+                "/",
+                |_, _| Response::headers_and_bytes(Headers::ok_200(), "aabb"));
+            servers.push(server.build().expect("server"));
+        }
+
+        tx.send(servers.iter().map(|s| s.local_addr().port()).collect::<Vec<_>>()).expect("send");
+
+        core.run(shutdown_rx).expect("run");
+    });
+
+    let ports = rx.recv().expect("recv");
+
+    for port in ports {
+        let client = Client::new_plain("::1", port, ClientConf::new())
+            .expect("client");
+        let resp = client.start_get("/", "localhost").collect().wait().expect("ok");
+        assert_eq!(b"aabb", &resp.body[..]);
+    }
+
+    shutdown_tx.send(()).expect("send");
+
+    t.join().expect("thread join");
 }

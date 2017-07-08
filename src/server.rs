@@ -17,6 +17,7 @@ use futures::future::Future;
 use futures::future::join_all;
 use futures::stream;
 use futures::stream::Stream;
+use futures::sync::oneshot;
 
 use futures_cpupool;
 
@@ -50,6 +51,9 @@ pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub cpu_pool: CpuPoolOption,
     pub tls: ServerTlsOption<A>,
     pub addr: Option<SocketAddr>,
+    /// Event loop to spawn server.
+    /// If not specified, builder will create new event loop in a new thread.
+    pub event_loop: Option<reactor::Handle>,
     pub service: ServicePaths,
 }
 
@@ -75,6 +79,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
             cpu_pool: CpuPoolOption::SingleThread,
             tls: ServerTlsOption::Plain,
             addr: None,
+            event_loop: None,
             service: ServicePaths::new(),
         }
     }
@@ -128,29 +133,58 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let local_addr = listen.local_addr().unwrap();
 
-        let join_handle = thread::Builder::new()
-            .name(self.conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
-            .spawn(move || {
-                run_server_event_loop(
-                    listen_addr,
-                    state_copy,
-                    self.tls,
-                    listen,
-                    self.cpu_pool,
-                    shutdown_future,
-                    self.conf,
-                    self.service,
-                    alive_tx);
-            })?;
+        let join = if let Some(handle) = self.event_loop {
+            let done_rx = spawn_server_event_loop(
+                handle,
+                listen_addr,
+                state_copy,
+                self.tls,
+                listen,
+                self.cpu_pool,
+                shutdown_future,
+                self.conf,
+                self.service,
+                alive_tx
+            );
+            Completion::Rx(done_rx)
+        } else {
+            let tls = self.tls;
+            let cpu_pool = self.cpu_pool;
+            let conf = self.conf;
+            let service = self.service;
+            let join_handle = thread::Builder::new()
+                .name(conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
+                .spawn(move || {
+                    let mut lp = reactor::Core::new().expect("http2server");
+                    let done_rx = spawn_server_event_loop(
+                        lp.handle(),
+                        listen_addr,
+                        state_copy,
+                        tls,
+                        listen,
+                        cpu_pool,
+                        shutdown_future,
+                        conf,
+                        service,
+                        alive_tx);
+                    drop(lp.run(done_rx));
+                })?;
+            Completion::Thread(join_handle)
+        };
 
         Ok(Server {
             state: state,
             shutdown: shutdown_signal,
             local_addr: local_addr,
-            thread_join_handle: Some(join_handle),
+            join: Some(join),
             alive_rx: alive_rx,
         })
     }
+}
+
+enum Completion {
+    Thread(thread::JoinHandle<()>),
+    Rx(oneshot::Receiver<()>),
 }
 
 pub struct Server {
@@ -158,7 +192,7 @@ pub struct Server {
     local_addr: SocketAddr,
     shutdown: ShutdownSignal,
     alive_rx: mpsc::Receiver<()>,
-    thread_join_handle: Option<thread::JoinHandle<()>>,
+    join: Option<Completion>,
 }
 
 #[derive(Default)]
@@ -223,7 +257,8 @@ fn listener(
     listener.listen(backlog)
 }
 
-fn run_server_event_loop<S, A>(
+fn spawn_server_event_loop<S, A>(
+    handle: reactor::Handle,
     listen_addr: SocketAddr,
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
@@ -233,15 +268,14 @@ fn run_server_event_loop<S, A>(
     conf: ServerConf,
     service: S,
     _alive_tx: mpsc::Sender<()>)
-        where S : Service, A : TlsAcceptor,
+        -> oneshot::Receiver<()>
+    where S : Service, A : TlsAcceptor,
 {
     let service = Arc::new(service);
 
-    let mut lp = reactor::Core::new().expect("http2server");
+    let listen = TcpListener::from_listener(listen, &listen_addr, &handle).unwrap();
 
-    let listen = TcpListener::from_listener(listen, &listen_addr, &lp.handle()).unwrap();
-
-    let stuff = stream::repeat((lp.handle(), service, state, tls, conf));
+    let stuff = stream::repeat((handle.clone(), service, state, tls, conf));
 
     let loop_run = listen.incoming().map_err(Error::from).zip(stuff)
         .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
@@ -273,6 +307,8 @@ fn run_server_event_loop<S, A>(
             Ok(())
         });
 
+    let (done_tx, done_rx) = oneshot::channel();
+
     let shutdown_future = shutdown_future
         .then(move |_| {
             // Must complete with error,
@@ -284,8 +320,14 @@ fn run_server_event_loop<S, A>(
     // or shutdown signal.
     let done = loop_run.join(shutdown_future);
 
-    // TODO: do not ignore error
-    lp.run(done).ok();
+    let done = done.then(|_| {
+        drop(done_tx.send(()));
+        Ok(())
+    });
+
+    handle.spawn(done);
+
+    done_rx
 }
 
 impl Server {
@@ -311,7 +353,12 @@ impl Drop for Server {
 
         // do not ignore errors of take
         // ignore errors of join, it means that server event loop crashed
-        drop(self.thread_join_handle.take().unwrap().join());
+        match self.join.take().unwrap() {
+            Completion::Thread(join) => drop(join.join()),
+            Completion::Rx(_rx) => {
+                // cannot wait on _rx, because Core might not be running
+            },
+        };
     }
 }
 
