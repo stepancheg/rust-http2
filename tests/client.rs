@@ -3,6 +3,7 @@
 use std::str;
 use std::thread;
 use std::time::Duration;
+use std::sync::mpsc;
 
 extern crate regex;
 extern crate bytes;
@@ -17,6 +18,9 @@ use bytes::Bytes;
 
 use futures::future::Future;
 use futures::stream::Stream;
+use futures::sync::oneshot;
+
+use tokio_core::reactor;
 
 mod test_misc;
 
@@ -259,4 +263,41 @@ pub fn issue_89() {
     assert_eq!(w as i32, client.dump_state().wait().unwrap().streams[&3].in_window_size);
 
     // Cannot reliably check that stream actually resets
+}
+
+#[test]
+fn external_event_loop() {
+    env_logger::init().ok();
+
+    let server = ServerTest::new();
+
+    let port = server.port;
+
+    let (tx, rx) = mpsc::channel();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+
+    let t = thread::spawn(move || {
+        let mut core = reactor::Core::new().expect("Core::new");
+
+        let mut clients = Vec::new();
+        for _ in 0..2 {
+            let mut client = ClientBuilder::new_plain();
+            client.set_addr(("::1", port)).expect("set_addr");
+            client.event_loop = Some(core.handle());
+            clients.push(client.build().expect("client"));
+        }
+
+        tx.send(clients).expect("send clients");
+
+        core.run(shutdown_rx.map_err(|_| panic!("aaa"))).expect("run");
+    });
+
+    for client in rx.recv().expect("rx") {
+        let get = client.start_get("/echo", "localhost");
+        assert_eq!(200, get.collect().wait().expect("get").headers.status());
+    }
+
+    shutdown_tx.send(()).expect("send");
+
+    t.join().expect("join");
 }

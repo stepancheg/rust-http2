@@ -1,7 +1,5 @@
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
-use std::io;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 
@@ -42,14 +40,124 @@ use service::Service;
 pub use client_tls::ClientTlsOption;
 
 
-// Data sent from event loop to Http2Client
-struct LoopToClient {
-    controller_tx: UnboundedSender<ControllerCommand>,
+pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector> {
+    pub event_loop: Option<reactor::Handle>,
+    pub addr: Option<SocketAddr>,
+    pub tls: ClientTlsOption<C>,
+    pub conf: ClientConf,
+}
+
+impl ClientBuilder<tls_api_stub::TlsConnector> {
+    pub fn new_plain() -> ClientBuilder<tls_api_stub::TlsConnector> {
+        ClientBuilder::new()
+    }
+}
+
+impl<C : TlsConnector> ClientBuilder<C> {
+    pub fn new() -> ClientBuilder<C> {
+        ClientBuilder {
+            event_loop: None,
+            addr: None,
+            tls: ClientTlsOption::Plain,
+            conf: ClientConf::new(),
+        }
+    }
+
+    pub fn set_tls(&mut self, host: &str) -> Result<()> {
+        let mut tls_connector = C::builder()?;
+
+        if C::supports_alpn() {
+            // TODO: check negotiated protocol after connect
+            tls_connector.set_alpn_protocols(&[b"h2"])?;
+        }
+
+        let tls_connector = tls_connector.build()?;
+
+        let tls_connector = Arc::new(tls_connector);
+        self.tls = ClientTlsOption::Tls(host.to_owned(), tls_connector);
+        Ok(())
+    }
+
+    /// Set the addr client connects to.
+    pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
+        // TODO: sync
+        let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
+        if addrs.is_empty() {
+            return Err(Error::Other("addr is resolved to empty list"));
+        } else if addrs.len() > 1 {
+            // TODO: allow multiple addresses
+            return Err(Error::Other("addr is resolved to more than one addr"));
+        }
+        self.addr = Some(addrs.into_iter().next().unwrap());
+        Ok(())
+    }
+
+    pub fn build(self) -> Result<Client> {
+        let addr = self.addr.expect("addr is not specified");
+
+        let http_scheme = self.tls.http_scheme();
+
+        // Create a channel to receive shutdown signal.
+        let (shutdown_signal, shutdown_future) = shutdown_signal();
+
+        let (controller_tx, controller_rx) = unbounded();
+
+        let join = if let Some(handle) = self.event_loop {
+            let done_rx = spawn_client_event_loop(
+                handle,
+                shutdown_future,
+                addr,
+                self.tls,
+                self.conf,
+                controller_tx.clone(),
+                controller_rx);
+            Completion::Rx(done_rx)
+        } else {
+            // Start event loop.
+            let tls = self.tls;
+            let conf = self.conf;
+            let thread_name = conf.thread_name.clone()
+                .unwrap_or_else(|| "http2-client-loop".to_owned()).to_string();
+            let controller_tx = controller_tx.clone();
+            let join_handle = thread::Builder::new()
+                .name(thread_name)
+                .spawn(move || {
+                    // Create an event loop.
+                    let mut lp: reactor::Core = reactor::Core::new().expect("Core::new");
+
+                    let done_rx = spawn_client_event_loop(
+                        lp.handle(),
+                        shutdown_future,
+                        addr,
+                        tls,
+                        conf,
+                        controller_tx,
+                        controller_rx);
+
+                    lp.run(done_rx).expect("run");
+                })
+                .expect("spawn");
+            Completion::Thread(join_handle)
+        };
+
+        Ok(Client {
+            join: Some(join),
+            controller_tx: controller_tx,
+            http_scheme: http_scheme,
+            shutdown: shutdown_signal,
+        })
+    }
+}
+
+
+enum Completion {
+    Thread(thread::JoinHandle<()>),
+    Rx(oneshot::Receiver<()>),
 }
 
 pub struct Client {
-    loop_to_client: LoopToClient,
-    thread_join_handle: Option<thread::JoinHandle<()>>,
+    controller_tx: UnboundedSender<ControllerCommand>,
+    join: Option<Completion>,
     http_scheme: HttpScheme,
     // used only once to send shutdown signal
     shutdown: ShutdownSignal,
@@ -58,66 +166,26 @@ pub struct Client {
 impl Client {
 
     pub fn new_plain(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
-        // TODO: sync
-        // TODO: try connect to all addrs
-        let socket_addr = (host, port).to_socket_addrs()?.next().expect("resolve host/port");
-
-        let tls_enabled: ClientTlsOption<tls_api_stub::TlsConnector> = ClientTlsOption::Plain;
-
-        Client::new_expl(&socket_addr, tls_enabled, conf)
+        let mut client = ClientBuilder::new_plain();
+        client.conf = conf;
+        client.set_addr((host, port))?;
+        client.build()
     }
 
     pub fn new_tls<C : TlsConnector>(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
-        // TODO: sync
-        // TODO: try connect to all addrs
-        let socket_addr = (host, port).to_socket_addrs()?.next().expect("resolve host/port");
-
-        let tls_enabled = {
-            let mut tls_connector = C::builder()?;
-
-            if C::supports_alpn() {
-                // TODO: check negotiated protocol after connect
-                tls_connector.set_alpn_protocols(&[b"h2"])?;
-            }
-
-            let tls_connector = tls_connector.build()?;
-
-            let tls_connector = Arc::new(tls_connector);
-            ClientTlsOption::Tls(host.to_owned(), tls_connector)
-        };
-
-        Client::new_expl(&socket_addr, tls_enabled, conf)
+        let mut client = ClientBuilder::<C>::new();
+        client.conf = conf;
+        client.set_addr((host, port))?;
+        client.set_tls(host)?;
+        client.build()
     }
 
     pub fn new_expl<C : TlsConnector>(addr: &SocketAddr, tls: ClientTlsOption<C>, conf: ClientConf) -> Result<Client> {
-        // We need some data back from event loop.
-        // This channel is used to exchange that data
-        let (get_from_loop_tx, get_from_loop_rx) = mpsc::channel();
-
-        let addr = addr.clone();
-        let http_scheme = tls.http_scheme();
-
-        // Create a channel to receive shutdown signal.
-        let (shutdown_signal, shutdown_future) = shutdown_signal();
-
-        // Start event loop.
-        let join_handle = thread::Builder::new()
-            .name(conf.thread_name.clone().unwrap_or_else(|| "http2-client-loop".to_owned()).to_string())
-            .spawn(move || {
-                run_client_event_loop(shutdown_future, addr, tls, conf, get_from_loop_tx);
-            })
-            .expect("spawn");
-
-        // Get back call channel and shutdown channel.
-        let loop_to_client = get_from_loop_rx.recv()
-            .map_err(|_| Error::IoError(io::Error::new(io::ErrorKind::Other, "get response from loop")))?;
-
-        Ok(Client {
-            loop_to_client: loop_to_client,
-            thread_join_handle: Some(join_handle),
-            http_scheme: http_scheme,
-            shutdown: shutdown_signal,
-        })
+        let mut client = ClientBuilder::new();
+        client.addr = Some(addr.clone());
+        client.tls = tls;
+        client.conf = conf;
+        client.build()
     }
 
     pub fn start_request_simple(
@@ -165,14 +233,14 @@ impl Client {
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
         let (tx, rx) = oneshot::channel();
         // ignore error
-        drop(self.loop_to_client.controller_tx.send(ControllerCommand::DumpState(tx)));
+        drop(self.controller_tx.send(ControllerCommand::DumpState(tx)));
         Box::new(rx.map_err(|_| error::Error::Other("conn died")))
     }
 
     pub fn wait_for_connect(&self) -> HttpFutureSend<()> {
         let (tx, rx) = oneshot::channel();
         // ignore error
-        drop(self.loop_to_client.controller_tx.send(ControllerCommand::WaitForConnect(tx)));
+        drop(self.controller_tx.send(ControllerCommand::WaitForConnect(tx)));
         Box::new(rx.map_err(|_| error::Error::Other("conn died")).and_then(|r| r))
     }
 }
@@ -193,7 +261,7 @@ impl Service for Client {
             resp_tx: resp_tx,
         };
 
-        if let Err(_) = self.loop_to_client.controller_tx.send(ControllerCommand::StartRequest(start)) {
+        if let Err(_) = self.controller_tx.send(ControllerCommand::StartRequest(start)) {
             return Response::err(error::Error::Other("client controller died"));
         }
 
@@ -296,42 +364,33 @@ impl ClientConnectionCallbacks for CallbacksImpl {
 }
 
 // Event loop entry point
-fn run_client_event_loop<C : TlsConnector>(
+fn spawn_client_event_loop<C : TlsConnector>(
+    handle: reactor::Handle,
     shutdown_future: ShutdownFuture,
     socket_addr: SocketAddr,
     tls: ClientTlsOption<C>,
     conf: ClientConf,
-    send_to_back: mpsc::Sender<LoopToClient>)
+    controller_tx: UnboundedSender<ControllerCommand>,
+    controller_rx: UnboundedReceiver<ControllerCommand>)
+        -> oneshot::Receiver<()>
 {
-    // Create an event loop.
-    let mut lp: reactor::Core = reactor::Core::new().expect("Core::new");
-
-    let (controller_tx, controller_rx) = unbounded();
-
     let (http_conn, conn_future) =
-        ClientConnection::new(lp.handle(), &socket_addr, tls.clone(), conf.clone(), CallbacksImpl {
+        ClientConnection::new(handle.clone(), &socket_addr, tls.clone(), conf.clone(), CallbacksImpl {
             tx: controller_tx.clone(),
         });
 
-    lp.handle().spawn(conn_future.map_err(|e| { warn!("client error: {:?}", e); () }));
+    handle.spawn(conn_future.map_err(|e| { warn!("client error: {:?}", e); () }));
 
     let init = ControllerState {
-        handle: lp.handle(),
+        handle: handle.clone(),
         socket_addr: socket_addr.clone(),
         tls: tls,
         conf: conf,
         conn: Arc::new(http_conn),
-        tx: controller_tx.clone(),
+        tx: controller_tx,
     };
 
     let controller_future = init.run(controller_rx);
-
-    // Send channels back to Http2Client
-    send_to_back
-        .send(LoopToClient {
-            controller_tx: controller_tx,
-        })
-        .expect("send back");
 
     let shutdown_future = shutdown_future
         .then(move |_| {
@@ -344,13 +403,18 @@ fn run_client_event_loop<C : TlsConnector>(
     // or shutdown signal.
     let done = controller_future.join(shutdown_future);
 
-    match lp.run(done) {
-        Ok(_) => {}
-        Err(Error::Shutdown) => {}
-        Err(e) => {
-            error!("Core::run failed: {:?}", e);
-        }
-    }
+    let (done_tx, done_rx) = oneshot::channel();
+
+    let done = done.then(|_| {
+        // OK to ignore error, because rx might be already dead
+        drop(done_tx.send(()));
+        info!("client stopped");
+        Ok(())
+    });
+
+    handle.spawn(done);
+
+    done_rx
 }
 
 // We shutdown the client in the destructor.
@@ -358,8 +422,13 @@ impl Drop for Client {
     fn drop(&mut self) {
         self.shutdown.shutdown();
 
-        // do not ignore errors because we own event loop thread
-        self.thread_join_handle.take().expect("handle.take")
-            .join().expect("join thread");
+        // do not ignore errors of take
+        // ignore errors of join, it means that server event loop crashed
+        match self.join.take().unwrap() {
+            Completion::Thread(join) => drop(join.join()),
+            Completion::Rx(_rx) => {
+                // cannot wait on _rx, because Core might not be running
+            },
+        };
     }
 }

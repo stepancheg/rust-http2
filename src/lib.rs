@@ -67,6 +67,7 @@ pub use service_paths::ServicePaths;
 pub use exec::CpuPoolOption;
 
 pub use client::Client;
+pub use client::ClientBuilder;
 pub use client_conf::ClientConf;
 pub use client_tls::ClientTlsOption;
 
