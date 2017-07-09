@@ -283,7 +283,7 @@ fn external_event_loop() {
         for _ in 0..2 {
             let mut client = ClientBuilder::new_plain();
             client.set_addr(("::1", port)).expect("set_addr");
-            client.event_loop = Some(core.handle());
+            client.event_loop = Some(core.remote());
             clients.push(client.build().expect("client"));
         }
 

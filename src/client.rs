@@ -41,7 +41,7 @@ pub use client_tls::ClientTlsOption;
 
 
 pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector> {
-    pub event_loop: Option<reactor::Handle>,
+    pub event_loop: Option<reactor::Remote>,
     pub addr: Option<SocketAddr>,
     pub tls: ClientTlsOption<C>,
     pub conf: ClientConf,
@@ -102,15 +102,24 @@ impl<C : TlsConnector> ClientBuilder<C> {
 
         let (controller_tx, controller_rx) = unbounded();
 
-        let join = if let Some(handle) = self.event_loop {
-            let done_rx = spawn_client_event_loop(
-                handle,
-                shutdown_future,
-                addr,
-                self.tls,
-                self.conf,
-                controller_tx.clone(),
-                controller_rx);
+        let (done_tx, done_rx) = oneshot::channel();
+
+        let join = if let Some(remote) = self.event_loop {
+            let tls = self.tls;
+            let conf = self.conf;
+            let controller_tx = controller_tx.clone();
+            remote.spawn(move |handle| {
+                spawn_client_event_loop(
+                    handle.clone(),
+                    shutdown_future,
+                    addr,
+                    tls,
+                    conf,
+                    done_tx,
+                    controller_tx,
+                    controller_rx);
+                future::finished(())
+            });
             Completion::Rx(done_rx)
         } else {
             // Start event loop.
@@ -125,12 +134,13 @@ impl<C : TlsConnector> ClientBuilder<C> {
                     // Create an event loop.
                     let mut lp: reactor::Core = reactor::Core::new().expect("Core::new");
 
-                    let done_rx = spawn_client_event_loop(
+                    spawn_client_event_loop(
                         lp.handle(),
                         shutdown_future,
                         addr,
                         tls,
                         conf,
+                        done_tx,
                         controller_tx,
                         controller_rx);
 
@@ -370,9 +380,9 @@ fn spawn_client_event_loop<C : TlsConnector>(
     socket_addr: SocketAddr,
     tls: ClientTlsOption<C>,
     conf: ClientConf,
+    done_tx: oneshot::Sender<()>,
     controller_tx: UnboundedSender<ControllerCommand>,
     controller_rx: UnboundedReceiver<ControllerCommand>)
-        -> oneshot::Receiver<()>
 {
     let (http_conn, conn_future) =
         ClientConnection::new(handle.clone(), &socket_addr, tls.clone(), conf.clone(), CallbacksImpl {
@@ -403,8 +413,6 @@ fn spawn_client_event_loop<C : TlsConnector>(
     // or shutdown signal.
     let done = controller_future.join(shutdown_future);
 
-    let (done_tx, done_rx) = oneshot::channel();
-
     let done = done.then(|_| {
         // OK to ignore error, because rx might be already dead
         drop(done_tx.send(()));
@@ -413,8 +421,6 @@ fn spawn_client_event_loop<C : TlsConnector>(
     });
 
     handle.spawn(done);
-
-    done_rx
 }
 
 // We shutdown the client in the destructor.

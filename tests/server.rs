@@ -404,7 +404,7 @@ fn external_event_loop() {
         let mut servers = Vec::new();
         for _ in 0..2 {
             let mut server = ServerBuilder::new_plain();
-            server.event_loop = Some(core.handle());
+            server.event_loop = Some(core.remote());
             server.set_port(0);
             server.service.set_service_fn(
                 "/",

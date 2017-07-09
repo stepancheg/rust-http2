@@ -53,7 +53,7 @@ pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub addr: Option<SocketAddr>,
     /// Event loop to spawn server.
     /// If not specified, builder will create new event loop in a new thread.
-    pub event_loop: Option<reactor::Handle>,
+    pub event_loop: Option<reactor::Remote>,
     pub service: ServicePaths,
 }
 
@@ -129,23 +129,32 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let (shutdown_signal, shutdown_future) = shutdown_signal();
 
+        let (done_tx, done_rx) = oneshot::channel();
+
         let listen = listener(&listen_addr, &self.conf)?;
 
         let local_addr = listen.local_addr().unwrap();
 
-        let join = if let Some(handle) = self.event_loop {
-            let done_rx = spawn_server_event_loop(
-                handle,
-                listen_addr,
-                state_copy,
-                self.tls,
-                listen,
-                self.cpu_pool,
-                shutdown_future,
-                self.conf,
-                self.service,
-                alive_tx
-            );
+        let join = if let Some(remote) = self.event_loop {
+            let tls = self.tls;
+            let cpu_pool = self.cpu_pool;
+            let conf = self.conf;
+            let service = self.service;
+            remote.spawn(move |handle| {
+                spawn_server_event_loop(
+                    handle.clone(),
+                    listen_addr,
+                    state_copy,
+                    tls,
+                    listen,
+                    cpu_pool,
+                    shutdown_future,
+                    conf,
+                    service,
+                    alive_tx
+                );
+                future::finished(())
+            });
             Completion::Rx(done_rx)
         } else {
             let tls = self.tls;
