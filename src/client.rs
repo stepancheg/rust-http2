@@ -44,9 +44,6 @@ pub use client_tls::ClientTlsOption;
 
 // Data sent from event loop to Http2Client
 struct LoopToClient {
-    // used only once to send shutdown signal
-    shutdown: ShutdownSignal,
-    _loop_handle: reactor::Remote,
     controller_tx: UnboundedSender<ControllerCommand>,
 }
 
@@ -54,6 +51,8 @@ pub struct Client {
     loop_to_client: LoopToClient,
     thread_join_handle: Option<thread::JoinHandle<()>>,
     http_scheme: HttpScheme,
+    // used only once to send shutdown signal
+    shutdown: ShutdownSignal,
 }
 
 impl Client {
@@ -98,11 +97,14 @@ impl Client {
         let addr = addr.clone();
         let http_scheme = tls.http_scheme();
 
+        // Create a channel to receive shutdown signal.
+        let (shutdown_signal, shutdown_future) = shutdown_signal();
+
         // Start event loop.
         let join_handle = thread::Builder::new()
             .name(conf.thread_name.clone().unwrap_or_else(|| "http2-client-loop".to_owned()).to_string())
             .spawn(move || {
-                run_client_event_loop(addr, tls, conf, get_from_loop_tx);
+                run_client_event_loop(shutdown_future, addr, tls, conf, get_from_loop_tx);
             })
             .expect("spawn");
 
@@ -114,6 +116,7 @@ impl Client {
             loop_to_client: loop_to_client,
             thread_join_handle: Some(join_handle),
             http_scheme: http_scheme,
+            shutdown: shutdown_signal,
         })
     }
 
@@ -294,6 +297,7 @@ impl ClientConnectionCallbacks for CallbacksImpl {
 
 // Event loop entry point
 fn run_client_event_loop<C : TlsConnector>(
+    shutdown_future: ShutdownFuture,
     socket_addr: SocketAddr,
     tls: ClientTlsOption<C>,
     conf: ClientConf,
@@ -301,9 +305,6 @@ fn run_client_event_loop<C : TlsConnector>(
 {
     // Create an event loop.
     let mut lp: reactor::Core = reactor::Core::new().expect("Core::new");
-
-    // Create a channel to receive shutdown signal.
-    let (shutdown_signal, shutdown_future) = shutdown_signal();
 
     let (controller_tx, controller_rx) = unbounded();
 
@@ -328,8 +329,6 @@ fn run_client_event_loop<C : TlsConnector>(
     // Send channels back to Http2Client
     send_to_back
         .send(LoopToClient {
-            shutdown: shutdown_signal,
-            _loop_handle: lp.remote(),
             controller_tx: controller_tx,
         })
         .expect("send back");
@@ -357,7 +356,7 @@ fn run_client_event_loop<C : TlsConnector>(
 // We shutdown the client in the destructor.
 impl Drop for Client {
     fn drop(&mut self) {
-        self.loop_to_client.shutdown.shutdown();
+        self.shutdown.shutdown();
 
         // do not ignore errors because we own event loop thread
         self.thread_join_handle.take().expect("handle.take")
