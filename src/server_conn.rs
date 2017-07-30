@@ -41,6 +41,7 @@ use common::*;
 
 use server_tls::*;
 use server_conf::*;
+use socket::StreamItem;
 
 use misc::any_to_string;
 use rc_mut::*;
@@ -307,7 +308,7 @@ impl ServerConnection {
 
     pub fn new<S, A>(
         lh: &reactor::Handle,
-        socket: TcpStream,
+        socket: Box<StreamItem>,
         tls: ServerTlsOption<A>,
         exec: CpuPoolOption,
         conf: ServerConf, service: Arc<S>)
@@ -333,7 +334,7 @@ impl ServerConnection {
             S : Service,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        ServerConnection::new(lh, socket, no_tls, CpuPoolOption::SingleThread, conf, service)
+        ServerConnection::new(lh, Box::new(socket), no_tls, CpuPoolOption::SingleThread, conf, service)
     }
 
     pub fn new_plain_single_thread_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
