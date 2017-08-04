@@ -38,44 +38,43 @@ use service::Service;
 use service_paths::ServicePaths;
 
 use server_conf::*;
+use socket::AnySocketAddr;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
 
 pub use server_tls::ServerTlsOption;
 
-
-pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor,
-                         T : ToSocketListener = SocketAddr> {
+pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
     pub cpu_pool: CpuPoolOption,
     pub tls: ServerTlsOption<A>,
-    pub addr: Option<T>,
+    pub addr: Option<AnySocketAddr>,
     /// Event loop to spawn server.
     /// If not specified, builder will create new event loop in a new thread.
     pub event_loop: Option<reactor::Remote>,
     pub service: ServicePaths,
 }
 
-impl<T: ToSocketListener + Clone + 'static> ServerBuilder<tls_api_stub::TlsAcceptor, T> {
+impl ServerBuilder<tls_api_stub::TlsAcceptor> {
     /// New server builder with defaults.
     ///
     /// Port must be set, other properties are optional.
-    pub fn new_plain() -> ServerBuilder<tls_api_stub::TlsAcceptor, T> {
+    pub fn new_plain() -> ServerBuilder<tls_api_stub::TlsAcceptor> {
         ServerBuilder::new()
     }
 }
 
 #[cfg(unix)]
-impl ServerBuilder<tls_api_stub::TlsAcceptor, String> {
+impl ServerBuilder<tls_api_stub::TlsAcceptor> {
     /// New unix domain socket server with defaults
     ///
     /// Addr must be set, other properties are optional.
-    pub fn new_plain_unix() -> ServerBuilder<tls_api_stub::TlsAcceptor, String> {
-        ServerBuilder::<tls_api_stub::TlsAcceptor, String>::new()
+    pub fn new_plain_unix() -> ServerBuilder<tls_api_stub::TlsAcceptor> {
+        ServerBuilder::<tls_api_stub::TlsAcceptor>::new()
     }
 }
 
-impl<A : tls_api::TlsAcceptor> ServerBuilder<A, SocketAddr> {
+impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
     /// Set port server listens on.
     /// Can be zero to bind on any available port,
     /// which can be later obtained by `Server::local_addr`.
@@ -91,28 +90,28 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A, SocketAddr> {
         } else if addrs.len() > 1 {
             return Err(Error::Other("addr is resolved to more than one addr"));
         }
-        self.addr = Some(addrs.into_iter().next().unwrap());
+        self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())
     }
 }
 
 #[cfg(unix)]
-impl<A: tls_api::TlsAcceptor> ServerBuilder<A, String> {
+impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     // Set name of unix domain socket
     pub fn set_unix_addr(&mut self, addr: String) -> Result<()> {
-        self.addr = Some(addr);
+        self.addr = Some(AnySocketAddr::Unix(addr));
         Ok(())
     }
 }
 
-impl<A : tls_api::TlsAcceptor, T : ToSocketListener + Clone + 'static> ServerBuilder<A, T> {
+impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
     /// New server builder with defaults.
     ///
     /// To call this function `ServerBuilder` must be parameterized with TLS acceptor.
     /// If TLS is not needed, `ServerBuilder::new_plain` function can be used.
     ///
     /// Port must be set, other properties are optional.
-    pub fn new() -> ServerBuilder<A, T> {
+    pub fn new() -> ServerBuilder<A> {
         ServerBuilder {
             conf: ServerConf::new(),
             cpu_pool: CpuPoolOption::SingleThread,
@@ -136,7 +135,7 @@ impl<A : tls_api::TlsAcceptor, T : ToSocketListener + Clone + 'static> ServerBui
         self.tls = ServerTlsOption::Tls(Arc::new(acceptor));
     }
 
-    pub fn build(self) -> Result<Server<T>> {
+    pub fn build(self) -> Result<Server> {
         let (alive_tx, alive_rx) = mpsc::channel();
 
         let state: Arc<Mutex<ServerState>> = Default::default();
@@ -150,7 +149,7 @@ impl<A : tls_api::TlsAcceptor, T : ToSocketListener + Clone + 'static> ServerBui
         let listen = self.addr.unwrap().to_listener(&self.conf);
 
         let local_addr = listen.local_addr().unwrap();
-        let local_addr = local_addr.downcast_ref::<T>().expect("downcast socket_addr").clone();
+        //let local_addr = local_addr.downcast_ref::<T>().expect("downcast socket_addr").clone();
 
         let join = if let Some(remote) = self.event_loop {
             let tls = self.tls;
@@ -211,9 +210,9 @@ enum Completion {
     Rx(oneshot::Receiver<()>),
 }
 
-pub struct Server<T : ToSocketListener = SocketAddr> {
+pub struct Server {
     state: Arc<Mutex<ServerState>>,
-    local_addr: T,
+    local_addr: AnySocketAddr,
     shutdown: ShutdownSignal,
     alive_rx: mpsc::Receiver<()>,
     join: Option<Completion>,
@@ -327,8 +326,8 @@ fn spawn_server_event_loop<S, A>(
     done_rx
 }
 
-impl<T: ToSocketListener> Server<T> {
-    pub fn local_addr(&self) -> &T {
+impl Server {
+    pub fn local_addr(&self) -> &AnySocketAddr {
         &self.local_addr
     }
 
@@ -344,7 +343,7 @@ impl<T: ToSocketListener> Server<T> {
 }
 
 // We shutdown the server in the destructor.
-impl <T: ToSocketListener> Drop for Server<T> {
+impl Drop for Server {
     fn drop(&mut self) {
         self.shutdown.shutdown();
 

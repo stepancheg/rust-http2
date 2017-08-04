@@ -14,6 +14,7 @@ use server_conf::ServerConf;
 
 use net2;
 
+use socket::AnySocketAddr;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
 use socket::ToServerStream;
@@ -66,8 +67,8 @@ impl ToTokioListener for ::std::net::TcpListener {
         Box::new(TcpListener::from_listener(*self, &local_addr, handle).unwrap())
     }
 
-    fn local_addr(&self) -> io::Result<Box<Any>> {
-        Ok(Box::new(self.local_addr().unwrap()))
+    fn local_addr(&self) -> io::Result<AnySocketAddr> {
+        Ok(AnySocketAddr::Inet(self.local_addr().unwrap()))
     }
 }
 

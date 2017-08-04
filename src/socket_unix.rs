@@ -12,6 +12,7 @@ use futures::Future;
 use futures::future::ok;
 use futures::future::err;
 
+use socket::AnySocketAddr;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
 use socket::ToServerStream;
@@ -38,12 +39,12 @@ impl ToTokioListener for ::std::os::unix::net::UnixListener {
         Box::new(UnixListener::from_listener(*self, handle).unwrap())
     }
 
-    fn local_addr(&self) -> io::Result<Box<Any>> {
+    fn local_addr(&self) -> io::Result<AnySocketAddr> {
         let addr = self.local_addr().unwrap();
         let path = addr.as_pathname().unwrap();
         let string = path.to_str().unwrap().to_owned();
 
-        Ok(Box::new(string))
+        Ok(AnySocketAddr::Unix(string))
     }
 }
 

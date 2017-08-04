@@ -53,7 +53,7 @@ fn smoke_unix_domain_sockets() {
     env_logger::init().ok();
     let test_addr = "/tmp/rust_http2_smoke_test";
 
-    let _server = ServerTestUnixSocket::new(test_addr.to_owned());
+    let _server = ServerTest::new_unix(test_addr.to_owned());
 
     let client: Client =
         Client::new_plain_unix(
@@ -139,7 +139,7 @@ fn seq_slow() {
     let server = server.build().expect("server");
 
     let client: Client =
-        Client::new_plain("::1", server.local_addr().port(), Default::default()).expect("client");
+        Client::new_plain("::1", server.local_addr().port().unwrap(), Default::default()).expect("client");
 
     let (headers, resp) = client.start_get("/gfgfg", "localhost").0.wait().expect("get");
 
