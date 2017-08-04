@@ -37,33 +37,26 @@ use common::*;
 use stream_part::*;
 use service::Service;
 use socket::ToClientStream;
+use socket::AnySocketAddr;
 
 pub use client_tls::ClientTlsOption;
 
 
-pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector,
-                         T : ToClientStream = SocketAddr>
+pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector>
 {
     pub event_loop: Option<reactor::Remote>,
-    pub addr: Option<T>,
+    pub addr: Option<AnySocketAddr>,
     pub tls: ClientTlsOption<C>,
     pub conf: ClientConf,
 }
 
-impl<T: ToClientStream + Send + Clone + 'static> ClientBuilder<tls_api_stub::TlsConnector, T> {
-    pub fn new_plain() -> ClientBuilder<tls_api_stub::TlsConnector, T> {
+impl ClientBuilder<tls_api_stub::TlsConnector> {
+    pub fn new_plain() -> ClientBuilder<tls_api_stub::TlsConnector> {
         ClientBuilder::new()
     }
 }
 
-#[cfg(unix)]
-impl ClientBuilder<tls_api_stub::TlsConnector, String> {
-    pub fn new_plain_unix() -> ClientBuilder<tls_api_stub::TlsConnector, String> {
-        ClientBuilder::<tls_api_stub::TlsConnector, String>::new()
-    }
-}
-
-impl<C : TlsConnector> ClientBuilder<C, SocketAddr> {
+impl<C : TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
     pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
         // TODO: sync
@@ -74,22 +67,22 @@ impl<C : TlsConnector> ClientBuilder<C, SocketAddr> {
             // TODO: allow multiple addresses
             return Err(Error::Other("addr is resolved to more than one addr"));
         }
-        self.addr = Some(addrs.into_iter().next().unwrap());
+        self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())
     }
 }
 
 #[cfg(unix)]
-impl<C : TlsConnector> ClientBuilder<C, String> {
+impl<C : TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
     pub fn set_unix_addr(&mut self, addr: &str) -> Result<()> {
-        self.addr = Some(addr.to_owned());
+        self.addr = Some(AnySocketAddr::Unix(addr.to_owned()));
         Ok(())
     }
 }
 
-impl<C : TlsConnector, T : ToClientStream + Send + Clone + 'static> ClientBuilder<C, T> {
-    pub fn new() -> ClientBuilder<C, T> {
+impl<C : TlsConnector> ClientBuilder<C> {
+    pub fn new() -> ClientBuilder<C> {
         ClientBuilder {
             event_loop: None,
             addr: None,
@@ -203,26 +196,33 @@ impl Client {
         client.build()
     }
 
-
-    #[cfg(unix)]
-    pub fn new_plain_unix(addr: &str, conf: ClientConf) -> Result<Client> {
-        let mut client = ClientBuilder::new_plain_unix();
-        client.conf = conf;
-        client.set_unix_addr(addr)?;
-        client.build()
-    }
-
     pub fn new_tls<C : TlsConnector>(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
-        let mut client = ClientBuilder::<C, SocketAddr>::new();
+        let mut client = ClientBuilder::<C>::new();
         client.conf = conf;
         client.set_addr((host, port))?;
         client.set_tls(host)?;
         client.build()
     }
 
+    #[cfg(unix)]
+    pub fn new_plain_unix(addr: &str, conf: ClientConf) -> Result<Client> {
+        let mut client = ClientBuilder::new_plain();
+        client.conf = conf;
+        client.set_unix_addr(addr)?;
+        client.build()
+    }
+
+    #[cfg(unix)]
+    pub fn new_tls_unix<C: TlsConnector>(addr: &str, conf: ClientConf) -> Result<Client> {
+        let mut client = ClientBuilder::<C>::new();
+        client.conf = conf;
+        client.set_unix_addr(addr)?;
+        client.build()
+    }
+
     pub fn new_expl<C : TlsConnector>(addr: &SocketAddr, tls: ClientTlsOption<C>, conf: ClientConf) -> Result<Client> {
         let mut client = ClientBuilder::new();
-        client.addr = Some(addr.clone());
+        client.addr = Some(AnySocketAddr::Inet(addr.clone()));
         client.tls = tls;
         client.conf = conf;
         client.build()

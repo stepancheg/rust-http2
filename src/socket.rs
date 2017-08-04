@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::any::Any;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::fmt::Formatter;
 
 use tokio_core::reactor;
 use tokio_io::AsyncRead;
@@ -20,10 +21,21 @@ pub trait ToSocketListener {
     fn cleanup(&self);
 }
 
+#[derive(Clone)]
 pub enum AnySocketAddr {
     Inet(SocketAddr),
     #[cfg(unix)]
     Unix(String)
+}
+
+impl Display for AnySocketAddr {
+    fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
+          match *self {
+            AnySocketAddr::Inet(ref inet_addr) => Display::fmt(inet_addr, f),
+            #[cfg(unix)]
+            AnySocketAddr::Unix(ref unix_addr) => Display::fmt(unix_addr, f),
+        }
+    }
 }
 
 impl AnySocketAddr {
@@ -31,7 +43,7 @@ impl AnySocketAddr {
          match self {
             &AnySocketAddr::Inet(ref inet_addr) => Ok(inet_addr.port()),
             #[cfg(unix)]
-            &AnySocketAddr::Unix(ref unix_addr) =>
+            &AnySocketAddr::Unix(_) =>
                 Err(io::Error::new(io::ErrorKind::Other, "Cannot get port from unix domain socket"))
         }
     }
@@ -51,6 +63,18 @@ impl ToSocketListener for AnySocketAddr {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.cleanup(),
             #[cfg(unix)]
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.cleanup(),
+        }
+    }
+}
+
+impl ToClientStream for AnySocketAddr {
+    fn connect(&self, handle: &reactor::Handle)
+        -> Box<Future<Item=Box<StreamItem>, Error=io::Error> + Send>
+    {
+        match self {
+            &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
+            #[cfg(unix)]
+            &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
         }
     }
 }
