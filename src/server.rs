@@ -5,12 +5,10 @@ use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::io;
 
 use tls_api;
 
 use tokio_core::reactor;
-use tokio_core::net::TcpListener;
 
 use futures::future;
 use futures::future::Future;
@@ -30,8 +28,6 @@ use solicit_async::*;
 
 use futures_misc::*;
 
-use net2;
-
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
@@ -42,15 +38,17 @@ use service::Service;
 use service_paths::ServicePaths;
 
 use server_conf::*;
+use socket::AnySocketAddr;
+use socket::ToSocketListener;
+use socket::ToTokioListener;
 
 pub use server_tls::ServerTlsOption;
-
 
 pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
     pub cpu_pool: CpuPoolOption,
     pub tls: ServerTlsOption<A>,
-    pub addr: Option<SocketAddr>,
+    pub addr: Option<AnySocketAddr>,
     /// Event loop to spawn server.
     /// If not specified, builder will create new event loop in a new thread.
     pub event_loop: Option<reactor::Remote>,
@@ -63,6 +61,46 @@ impl ServerBuilder<tls_api_stub::TlsAcceptor> {
     /// Port must be set, other properties are optional.
     pub fn new_plain() -> ServerBuilder<tls_api_stub::TlsAcceptor> {
         ServerBuilder::new()
+    }
+}
+
+#[cfg(unix)]
+impl ServerBuilder<tls_api_stub::TlsAcceptor> {
+    /// New unix domain socket server with defaults
+    ///
+    /// Addr must be set, other properties are optional.
+    pub fn new_plain_unix() -> ServerBuilder<tls_api_stub::TlsAcceptor> {
+        ServerBuilder::<tls_api_stub::TlsAcceptor>::new()
+    }
+}
+
+impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
+    /// Set port server listens on.
+    /// Can be zero to bind on any available port,
+    /// which can be later obtained by `Server::local_addr`.
+    pub fn set_port(&mut self, port: u16) {
+        self.set_addr(("::", port)).expect("set_addr");
+    }
+
+    /// Set port server listens on.
+    pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
+        let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
+        if addrs.is_empty() {
+            return Err(Error::Other("addr is resolved to empty list"));
+        } else if addrs.len() > 1 {
+            return Err(Error::Other("addr is resolved to more than one addr"));
+        }
+        self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
+    // Set name of unix domain socket
+    pub fn set_unix_addr(&mut self, addr: String) -> Result<()> {
+        self.addr = Some(AnySocketAddr::Unix(addr));
+        Ok(())
     }
 }
 
@@ -97,30 +135,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
         self.tls = ServerTlsOption::Tls(Arc::new(acceptor));
     }
 
-    /// Set port server listens on.
-    /// Can be zero to bind on any available port,
-    /// which can be later obtained by `Server::local_addr`.
-    pub fn set_port(&mut self, port: u16) {
-        self.set_addr(("::", port)).expect("set_addr");
-    }
-
-    /// Set port server listens on.
-    pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
-        let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
-        if addrs.is_empty() {
-            return Err(Error::Other("addr is resolved to empty list"));
-        } else if addrs.len() > 1 {
-            return Err(Error::Other("addr is resolved to more than one addr"));
-        }
-        self.addr = Some(addrs.into_iter().next().unwrap());
-        Ok(())
-    }
-
     pub fn build(self) -> Result<Server> {
-        let addr = self.addr.expect("listen addr is unset");
-
-        let listen_addr = addr.to_socket_addrs()?.next().unwrap();
-
         let (alive_tx, alive_rx) = mpsc::channel();
 
         let state: Arc<Mutex<ServerState>> = Default::default();
@@ -131,9 +146,10 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let (done_tx, done_rx) = oneshot::channel();
 
-        let listen = listener(&listen_addr, &self.conf)?;
+        let listen = self.addr.unwrap().to_listener(&self.conf);
 
         let local_addr = listen.local_addr().unwrap();
+        //let local_addr = local_addr.downcast_ref::<T>().expect("downcast socket_addr").clone();
 
         let join = if let Some(remote) = self.event_loop {
             let tls = self.tls;
@@ -143,7 +159,6 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
             remote.spawn(move |handle| {
                 spawn_server_event_loop(
                     handle.clone(),
-                    listen_addr,
                     state_copy,
                     tls,
                     listen,
@@ -167,7 +182,6 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
                     let mut lp = reactor::Core::new().expect("http2server");
                     let done_rx = spawn_server_event_loop(
                         lp.handle(),
-                        listen_addr,
                         state_copy,
                         tls,
                         listen,
@@ -198,7 +212,7 @@ enum Completion {
 
 pub struct Server {
     state: Arc<Mutex<ServerState>>,
-    local_addr: SocketAddr,
+    local_addr: AnySocketAddr,
     shutdown: ShutdownSignal,
     alive_rx: mpsc::Receiver<()>,
     join: Option<Completion>,
@@ -236,42 +250,11 @@ impl ServerStateSnapshot {
     }
 }
 
-#[cfg(unix)]
-fn configure_tcp(tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
-    use net2::unix::UnixTcpBuilderExt;
-    if let Some(reuse_port) = conf.reuse_port {
-        tcp.reuse_port(reuse_port)?;
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn configure_tcp(_tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
-    Ok(())
-}
-
-fn listener(
-    addr: &SocketAddr,
-    conf: &ServerConf)
-        -> io::Result<::std::net::TcpListener>
-{
-    let listener = match *addr {
-        SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
-        SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
-    };
-    configure_tcp(&listener, conf)?;
-    listener.reuse_address(true)?;
-    listener.bind(addr)?;
-    let backlog = conf.backlog.unwrap_or(1024);
-    listener.listen(backlog)
-}
-
 fn spawn_server_event_loop<S, A>(
     handle: reactor::Handle,
-    listen_addr: SocketAddr,
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
-    listen: ::std::net::TcpListener,
+    listen: Box<ToTokioListener + Send>,
     exec: CpuPoolOption,
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
@@ -282,16 +265,20 @@ fn spawn_server_event_loop<S, A>(
 {
     let service = Arc::new(service);
 
-    let listen = TcpListener::from_listener(listen, &listen_addr, &handle).unwrap();
+    let tokio_listener = listen.to_tokio_listener(&handle);
 
     let stuff = stream::repeat((handle.clone(), service, state, tls, conf));
 
-    let loop_run = listen.incoming().map_err(Error::from).zip(stuff)
+    let loop_run = tokio_listener.incoming().map_err(Error::from).zip(stuff)
         .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
-            info!("accepted connection from {}", peer_addr);
 
-            let no_delay = conf.no_delay.unwrap_or(true);
-            socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
+            if socket.is_tcp() {
+                info!("accepted connection from {}",
+                    peer_addr.downcast_ref::<SocketAddr>().unwrap());
+
+                let no_delay = conf.no_delay.unwrap_or(true);
+                socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
+            }
 
             let (conn, future) = ServerConnection::new(
                 &loop_handle, socket, tls, exec.clone(), conf, service);
@@ -340,7 +327,7 @@ fn spawn_server_event_loop<S, A>(
 }
 
 impl Server {
-    pub fn local_addr(&self) -> &SocketAddr {
+    pub fn local_addr(&self) -> &AnySocketAddr {
         &self.local_addr
     }
 
@@ -368,6 +355,8 @@ impl Drop for Server {
                 // cannot wait on _rx, because Core might not be running
             },
         };
+
+        self.local_addr.cleanup();
     }
 }
 

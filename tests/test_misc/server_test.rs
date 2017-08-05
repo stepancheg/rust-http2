@@ -22,7 +22,6 @@ pub struct ServerTest {
     pub port: u16,
 }
 
-
 struct Blocks {}
 
 impl Service for Blocks {
@@ -43,7 +42,6 @@ impl Service for Blocks {
     }
 }
 
-
 struct Echo {}
 
 impl Service for Echo {
@@ -52,7 +50,6 @@ impl Service for Echo {
     }
 }
 
-
 impl ServerTest {
     pub fn new() -> ServerTest {
         let mut server = ServerBuilder::new_plain();
@@ -60,10 +57,24 @@ impl ServerTest {
         server.service.set_service("/blocks", Arc::new(Blocks {}));
         server.service.set_service("/echo", Arc::new(Echo {}));
         let server = server.build().expect("server");
-        let port = server.local_addr().port();
+        let port = server.local_addr().port().unwrap();
         ServerTest {
             server: server,
             port: port,
+        }
+    }
+
+    #[cfg(unix)]
+    pub fn new_unix(addr: String) -> ServerTest {
+        let mut server = ServerBuilder::new_plain_unix();
+        server.set_unix_addr(addr).unwrap();
+
+        server.service.set_service("/blocks", Arc::new(Blocks {}));
+        server.service.set_service("/echo", Arc::new(Echo {}));
+        let server = server.build().expect("server");
+        ServerTest {
+            server: server,
+            port: 0,
         }
     }
 }

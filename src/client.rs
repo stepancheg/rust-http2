@@ -36,13 +36,16 @@ use client_conf::*;
 use common::*;
 use stream_part::*;
 use service::Service;
+use socket::ToClientStream;
+use socket::AnySocketAddr;
 
 pub use client_tls::ClientTlsOption;
 
 
-pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector> {
+pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector>
+{
     pub event_loop: Option<reactor::Remote>,
-    pub addr: Option<SocketAddr>,
+    pub addr: Option<AnySocketAddr>,
     pub tls: ClientTlsOption<C>,
     pub conf: ClientConf,
 }
@@ -50,6 +53,31 @@ pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector> {
 impl ClientBuilder<tls_api_stub::TlsConnector> {
     pub fn new_plain() -> ClientBuilder<tls_api_stub::TlsConnector> {
         ClientBuilder::new()
+    }
+}
+
+impl<C : TlsConnector> ClientBuilder<C> {
+    /// Set the addr client connects to.
+    pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
+        // TODO: sync
+        let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
+        if addrs.is_empty() {
+            return Err(Error::Other("addr is resolved to empty list"));
+        } else if addrs.len() > 1 {
+            // TODO: allow multiple addresses
+            return Err(Error::Other("addr is resolved to more than one addr"));
+        }
+        self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl<C : TlsConnector> ClientBuilder<C> {
+    /// Set the addr client connects to.
+    pub fn set_unix_addr(&mut self, addr: &str) -> Result<()> {
+        self.addr = Some(AnySocketAddr::Unix(addr.to_owned()));
+        Ok(())
     }
 }
 
@@ -75,20 +103,6 @@ impl<C : TlsConnector> ClientBuilder<C> {
 
         let tls_connector = Arc::new(tls_connector);
         self.tls = ClientTlsOption::Tls(host.to_owned(), tls_connector);
-        Ok(())
-    }
-
-    /// Set the addr client connects to.
-    pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
-        // TODO: sync
-        let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
-        if addrs.is_empty() {
-            return Err(Error::Other("addr is resolved to empty list"));
-        } else if addrs.len() > 1 {
-            // TODO: allow multiple addresses
-            return Err(Error::Other("addr is resolved to more than one addr"));
-        }
-        self.addr = Some(addrs.into_iter().next().unwrap());
         Ok(())
     }
 
@@ -190,9 +204,25 @@ impl Client {
         client.build()
     }
 
+    #[cfg(unix)]
+    pub fn new_plain_unix(addr: &str, conf: ClientConf) -> Result<Client> {
+        let mut client = ClientBuilder::new_plain();
+        client.conf = conf;
+        client.set_unix_addr(addr)?;
+        client.build()
+    }
+
+    #[cfg(unix)]
+    pub fn new_tls_unix<C: TlsConnector>(addr: &str, conf: ClientConf) -> Result<Client> {
+        let mut client = ClientBuilder::<C>::new();
+        client.conf = conf;
+        client.set_unix_addr(addr)?;
+        client.build()
+    }
+
     pub fn new_expl<C : TlsConnector>(addr: &SocketAddr, tls: ClientTlsOption<C>, conf: ClientConf) -> Result<Client> {
         let mut client = ClientBuilder::new();
-        client.addr = Some(addr.clone());
+        client.addr = Some(AnySocketAddr::Inet(addr.clone()));
         client.tls = tls;
         client.conf = conf;
         client.build()
@@ -291,9 +321,9 @@ enum ControllerCommand {
     DumpState(oneshot::Sender<ConnectionStateSnapshot>),
 }
 
-struct ControllerState<C : TlsConnector> {
+struct ControllerState<T : ToClientStream, C : TlsConnector> {
     handle: reactor::Handle,
-    socket_addr: SocketAddr,
+    socket_addr: T,
     tls: ClientTlsOption<C>,
     conf: ClientConf,
     // current connection
@@ -301,11 +331,11 @@ struct ControllerState<C : TlsConnector> {
     tx: UnboundedSender<ControllerCommand>,
 }
 
-impl<C : TlsConnector> ControllerState<C> {
+impl<T : ToClientStream + 'static + Clone, C : TlsConnector> ControllerState<T, C> {
     fn init_conn(&mut self) {
         let (conn, future) = ClientConnection::new(
             self.handle.clone(),
-            &self.socket_addr,
+            Box::new(self.socket_addr.clone()),
             self.tls.clone(),
             self.conf.clone(),
             CallbacksImpl {
@@ -317,7 +347,7 @@ impl<C : TlsConnector> ControllerState<C> {
         self.conn = Arc::new(conn);
     }
 
-    fn iter(mut self, cmd: ControllerCommand) -> ControllerState<C> {
+    fn iter(mut self, cmd: ControllerCommand) -> ControllerState<T, C> {
         match cmd {
             ControllerCommand::GoAway => {
                 self.init_conn();
@@ -374,10 +404,10 @@ impl ClientConnectionCallbacks for CallbacksImpl {
 }
 
 // Event loop entry point
-fn spawn_client_event_loop<C : TlsConnector>(
+fn spawn_client_event_loop<T : ToClientStream + Send + Clone + 'static, C : TlsConnector>(
     handle: reactor::Handle,
     shutdown_future: ShutdownFuture,
-    socket_addr: SocketAddr,
+    socket_addr: T,
     tls: ClientTlsOption<C>,
     conf: ClientConf,
     done_tx: oneshot::Sender<()>,
@@ -385,7 +415,7 @@ fn spawn_client_event_loop<C : TlsConnector>(
     controller_rx: UnboundedReceiver<ControllerCommand>)
 {
     let (http_conn, conn_future) =
-        ClientConnection::new(handle.clone(), &socket_addr, tls.clone(), conf.clone(), CallbacksImpl {
+        ClientConnection::new(handle.clone(), Box::new(socket_addr.clone()), tls.clone(), conf.clone(), CallbacksImpl {
             tx: controller_tx.clone(),
         });
 

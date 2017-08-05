@@ -20,6 +20,8 @@ use httpbis::solicit::header::Headers;
 use httpbis::*;
 use httpbis::message::SimpleHttpMessage;
 
+use httpbis::socket::AnySocketAddr;
+
 use tls_api::Certificate;
 use tls_api_native_tls::TlsAcceptor;
 use tls_api_native_tls::TlsAcceptorBuilder;
@@ -62,8 +64,13 @@ fn tls() {
     server.service.set_service("/", Arc::new(ServiceImpl {}));
     let server = server.build().expect("server");
 
+    let socket_addr = match server.local_addr() {
+        &AnySocketAddr::Inet(ref sock_addr) => sock_addr,
+        _ => panic!("Assumed server was an inet server")
+    };
+
     let client: Client = Client::new_expl(
-        server.local_addr(),
+        socket_addr,
         ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
         Default::default())
             .expect("http client");

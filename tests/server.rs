@@ -41,6 +41,11 @@ use std::iter::FromIterator;
 use std::net::TcpStream;
 use std::sync::mpsc;
 
+#[cfg(unix)]
+extern crate unix_socket;
+#[cfg(unix)]
+use unix_socket::UnixStream;
+
 use test_misc::*;
 
 
@@ -391,6 +396,22 @@ pub fn http_1_1() {
     assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", httpbis::misc::BsDebug(&read));
 }
 
+#[cfg(unix)]
+#[test]
+pub fn http_1_1_unix() {
+    env_logger::init().ok();
+
+    let _server = ServerTest::new_unix("/tmp/rust_http2_test".to_owned());
+
+    let mut unix_stream = UnixStream::connect("/tmp/rust_http2_test").expect("connect");
+
+    unix_stream.write_all(b"GET / HTTP/1.1\n").expect("write");
+
+    let mut read = Vec::new();
+    unix_stream.read_to_end(&mut read).expect("read");
+    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", httpbis::misc::BsDebug(&read));
+}
+
 #[test]
 fn external_event_loop() {
     env_logger::init().ok();
@@ -412,7 +433,7 @@ fn external_event_loop() {
             servers.push(server.build().expect("server"));
         }
 
-        tx.send(servers.iter().map(|s| s.local_addr().port()).collect::<Vec<_>>()).expect("send");
+        tx.send(servers.iter().map(|s| s.local_addr().port().unwrap()).collect::<Vec<_>>()).expect("send");
 
         core.run(shutdown_rx).expect("run");
     });

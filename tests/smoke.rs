@@ -47,6 +47,31 @@ fn smoke() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn smoke_unix_domain_sockets() {
+    env_logger::init().ok();
+    let test_addr = "/tmp/rust_http2_smoke_test";
+
+    let _server = ServerTest::new_unix(test_addr.to_owned());
+
+    let client: Client =
+        Client::new_plain_unix(
+            test_addr,
+            Default::default()
+        ).expect("client");
+
+    let mut futures = Vec::new();
+    for _ in 0..10 {
+        futures.push(client.start_get("/blocks/200000/5", "localhost").collect());
+    }
+
+    let r = future::join_all(futures).wait().expect("wait");
+    for rr in r {
+        assert_eq!(200000 * 5, rr.body.len());
+    }
+}
+
 #[test]
 fn parallel_large() {
     env_logger::init().ok();
@@ -114,7 +139,7 @@ fn seq_slow() {
     let server = server.build().expect("server");
 
     let client: Client =
-        Client::new_plain("::1", server.local_addr().port(), Default::default()).expect("client");
+        Client::new_plain("::1", server.local_addr().port().unwrap(), Default::default()).expect("client");
 
     let (headers, resp) = client.start_get("/gfgfg", "localhost").0.wait().expect("get");
 
