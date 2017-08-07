@@ -28,6 +28,7 @@ bytes = "0.*"
 [target.'cfg(unix)'.dependencies]
 tokio-uds       = "0.*"
 unix_socket     = "0.*"
+tempdir         = "0.*"
 
 [dev-dependencies]
 

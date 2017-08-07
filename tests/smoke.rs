@@ -6,6 +6,8 @@ extern crate tokio_core;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+#[cfg(unix)]
+extern crate tempdir;
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -51,7 +53,10 @@ fn smoke() {
 #[test]
 fn smoke_unix_domain_sockets() {
     env_logger::init().ok();
-    let test_addr = "/tmp/rust_http2_smoke_test";
+
+    let tempdir = tempdir::TempDir::new("rust_http2_test").unwrap();
+    let socket_path = tempdir.path().join("test_socket");
+    let test_addr = socket_path.to_str().unwrap();
 
     let _server = ServerTest::new_unix(test_addr.to_owned());
 

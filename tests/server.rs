@@ -44,6 +44,8 @@ use std::sync::mpsc;
 #[cfg(unix)]
 extern crate unix_socket;
 #[cfg(unix)]
+extern crate tempdir;
+#[cfg(unix)]
 use unix_socket::UnixStream;
 
 use test_misc::*;
@@ -401,9 +403,11 @@ pub fn http_1_1() {
 pub fn http_1_1_unix() {
     env_logger::init().ok();
 
-    let _server = ServerTest::new_unix("/tmp/rust_http2_test".to_owned());
+    let tempdir = tempdir::TempDir::new("rust_http2_test").unwrap();
+    let socket_path = tempdir.path().join("test_socket");
+    let _server = ServerTest::new_unix(socket_path.to_str().unwrap().to_owned());
 
-    let mut unix_stream = UnixStream::connect("/tmp/rust_http2_test").expect("connect");
+    let mut unix_stream = UnixStream::connect(socket_path).expect("connect");
 
     unix_stream.write_all(b"GET / HTTP/1.1\n").expect("write");
 
