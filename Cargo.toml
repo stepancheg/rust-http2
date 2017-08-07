@@ -37,5 +37,9 @@ tls-api-native-tls = "0.*"
 tls-api-openssl    = "0.*"
 url                = "1"
 
+[target.'cfg(unix)'.dev-dependencies]
+
+tempdir         = "0.*"
+
 [workspace]
 members = ["interop/with-rust"]
