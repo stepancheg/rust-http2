@@ -28,7 +28,6 @@ bytes = "0.*"
 [target.'cfg(unix)'.dependencies]
 tokio-uds       = "0.*"
 unix_socket     = "0.*"
-tempdir         = "0.*"
 
 [dev-dependencies]
 
@@ -37,6 +36,10 @@ regex              = "0.2"
 tls-api-native-tls = "0.*"
 tls-api-openssl    = "0.*"
 url                = "1"
+
+[target.'cfg(unix)'.dev-dependencies]
+
+tempdir         = "0.*"
 
 [workspace]
 members = ["interop/with-rust"]
