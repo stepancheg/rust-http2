@@ -1,6 +1,7 @@
 use std::str;
 use std::str::FromStr;
 use std::fmt;
+use std::iter::FromIterator;
 
 use req_resp::RequestOrResponse;
 
@@ -287,6 +288,12 @@ impl Headers {
         self.0.extend(headers.0);
     }
 
+}
+
+impl FromIterator<Header> for Headers {
+    fn from_iter<T : IntoIterator<Item=Header>>(iter: T) -> Headers {
+        Headers(iter.into_iter().collect())
+    }
 }
 
 #[cfg(test)]
