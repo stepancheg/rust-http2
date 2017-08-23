@@ -27,6 +27,15 @@ pub enum AnySocketAddr {
     #[cfg(unix)]
     Unix(String)
 }
+impl AnySocketAddr {
+    pub fn get_addr(&self) -> &::std::net::SocketAddr {
+        match self {
+            &AnySocketAddr::Inet(ref socket) => socket,
+            #[cfg(unix)]
+            &AnySocketAddr::Unix(_) => panic!("Unix not supported")
+        }
+    }
+}
 
 impl Display for AnySocketAddr {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {

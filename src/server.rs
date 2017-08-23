@@ -327,6 +327,11 @@ fn spawn_server_event_loop<S, A>(
 }
 
 impl Server {
+
+    pub fn socket_addr(&self) -> &::std::net::SocketAddr {
+        &self.local_addr.get_addr()
+    }
+
     pub fn local_addr(&self) -> &AnySocketAddr {
         &self.local_addr
     }
