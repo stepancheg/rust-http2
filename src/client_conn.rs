@@ -315,7 +315,7 @@ impl ClientConnection {
 
         let tls_conn = connect.and_then(move |conn| {
             tokio_tls_api::connect_async(&*connector, &domain, conn).map_err(|e| {
-                Error::IoError(io::Error::new(io::ErrorKind::Other, e))
+                Error::IoError(io::Error::new(io::ErrorKind::Other, format!("TLS connection failed {:?}", e)))
             })
         });
 
