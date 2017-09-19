@@ -281,7 +281,7 @@ impl Client {
         let (tx, rx) = oneshot::channel();
         // ignore error
         drop(self.controller_tx.send(ControllerCommand::WaitForConnect(tx)));
-        Box::new(rx.map_err(|_| error::Error::Other("conn died")).and_then(|r| r))
+        Box::new(rx.map_err(|e| error::Error::InvalidFrame(format!("conn died reason: {:?}", e))).and_then(|r| r))
     }
 }
 
@@ -301,8 +301,8 @@ impl Service for Client {
             resp_tx: resp_tx,
         };
 
-        if let Err(_) = self.controller_tx.send(ControllerCommand::StartRequest(start)) {
-            return Response::err(error::Error::Other("client controller died"));
+        if let Err(ref e) = self.controller_tx.send(ControllerCommand::StartRequest(start)) {
+            return Response::err(error::Error::InvalidFrame(format!("client controller died {:?}", e)));
         }
 
         let resp_rx = resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
