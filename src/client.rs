@@ -63,9 +63,6 @@ impl<C : TlsConnector> ClientBuilder<C> {
         let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
         if addrs.is_empty() {
             return Err(Error::Other("addr is resolved to empty list"));
-        } else if addrs.len() > 1 {
-            // TODO: allow multiple addresses
-            return Err(Error::Other("addr is resolved to more than one addr"));
         }
         self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())
