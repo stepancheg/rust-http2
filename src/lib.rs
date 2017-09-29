@@ -4,6 +4,7 @@ extern crate log;
 extern crate futures;
 extern crate futures_cpupool;
 
+extern crate rand;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_timer;
