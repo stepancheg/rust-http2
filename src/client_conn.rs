@@ -315,7 +315,7 @@ impl ClientConnection {
 
         let tls_conn = connect.and_then(move |conn| {
             tokio_tls_api::connect_async(&*connector, &domain, conn).map_err(|e| {
-                Error::IoError(io::Error::new(io::ErrorKind::Other, e))
+                Error::IoError(io::Error::new(io::ErrorKind::Other, format!("TLS connection failed {:?}", e)))
             })
         });
 
@@ -387,7 +387,7 @@ impl Service for ClientConnection {
             return Response::err(error::Error::Other("client died"));
         }
 
-        let resp_rx = resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
+        let resp_rx = resp_rx.map_err(|e| error::Error::InvalidFrame(format!("client likely died {:?}", e)));
 
         let resp_rx = resp_rx.map(|r| r.into_stream_flag());
 

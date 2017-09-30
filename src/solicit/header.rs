@@ -206,6 +206,12 @@ impl<N: Into<HeaderPart>, V: Into<HeaderPart>> From<(N, V)> for Header {
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct Headers(pub Vec<Header>);
 
+impl FromIterator<Header> for Headers {
+    fn from_iter<T: IntoIterator<Item=Header>>(iter: T) -> Headers {
+        Headers( iter.into_iter().collect())
+    }
+}
+
 impl Headers {
     pub fn new() -> Headers {
         Default::default()

@@ -63,9 +63,6 @@ impl<C : TlsConnector> ClientBuilder<C> {
         let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
         if addrs.is_empty() {
             return Err(Error::Other("addr is resolved to empty list"));
-        } else if addrs.len() > 1 {
-            // TODO: allow multiple addresses
-            return Err(Error::Other("addr is resolved to more than one addr"));
         }
         self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())
@@ -281,7 +278,7 @@ impl Client {
         let (tx, rx) = oneshot::channel();
         // ignore error
         drop(self.controller_tx.send(ControllerCommand::WaitForConnect(tx)));
-        Box::new(rx.map_err(|_| error::Error::Other("conn died")).and_then(|r| r))
+        Box::new(rx.map_err(|e| error::Error::InvalidFrame(format!("conn died reason: {:?}", e))).and_then(|r| r))
     }
 }
 
@@ -301,8 +298,8 @@ impl Service for Client {
             resp_tx: resp_tx,
         };
 
-        if let Err(_) = self.controller_tx.send(ControllerCommand::StartRequest(start)) {
-            return Response::err(error::Error::Other("client controller died"));
+        if let Err(ref e) = self.controller_tx.send(ControllerCommand::StartRequest(start)) {
+            return Response::err(error::Error::InvalidFrame(format!("client controller died {:?}", e)));
         }
 
         let resp_rx = resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
