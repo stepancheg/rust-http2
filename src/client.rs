@@ -75,7 +75,7 @@ impl<C : TlsConnector> ClientBuilder<C> {
                     Ok(x) => x,
                     Err(e) => return Err(error::Error::IoError(e))
                 };
-                let range = rng.gen_range(0,x);
+                let range = rng.gen_range(0,x-1);
                 self.addr = Some(AnySocketAddr::Inet(addrs[x].clone()));
                 Ok(())
             }
