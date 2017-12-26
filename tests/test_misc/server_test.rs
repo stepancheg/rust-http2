@@ -34,8 +34,8 @@ impl Service for Blocks {
             let count: u32 = captures.get(2).expect("2").as_str().parse().expect("parse");
             return Response::headers_and_bytes_stream(
                 Headers::ok_200(),
-                stream::iter((0..count)
-                    .map(move |i| Ok(Bytes::from(vec![(i % 0xff) as u8; size as usize])))));
+                stream::iter_ok((0..count)
+                    .map(move |i| Bytes::from(vec![(i % 0xff) as u8; size as usize]))));
         }
 
         return Response::not_found_404()

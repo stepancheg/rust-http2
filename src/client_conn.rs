@@ -287,11 +287,11 @@ impl ClientConnection {
             socket
         };
 
-        let connect = if let Some(timeout) = conf.connection_timeout {
+        let connect: Box<Future<Item=_, Error=_> + Send> = if let Some(timeout) = conf.connection_timeout {
             let timer = Timer::default();
-            timer.timeout(connect, timeout).map(map_callback).boxed()
+            Box::new(timer.timeout(connect, timeout).map(map_callback))
         } else {
-            connect.map(map_callback).boxed()
+            Box::new(connect.map(map_callback))
         };
 
         ClientConnection::connected(lh, connect, conf, callbacks)
@@ -329,7 +329,7 @@ impl ClientConnection {
         start: StartRequestMessage)
             -> Result<(), StartRequestMessage>
     {
-        self.write_tx.send(ClientToWriteMessage::Start(start))
+        self.write_tx.unbounded_send(ClientToWriteMessage::Start(start))
             .map_err(|send_error| {
                 match send_error.into_inner() {
                     ClientToWriteMessage::Start(start) => start,
@@ -340,7 +340,7 @@ impl ClientConnection {
 
     pub fn dump_state_with_resp_sender(&self, tx: oneshot::Sender<ConnectionStateSnapshot>) {
         // ignore error
-        drop(self.command_tx.send(ClientCommandMessage::DumpState(tx)));
+        drop(self.command_tx.unbounded_send(ClientCommandMessage::DumpState(tx)));
     }
 
     /// For tests
@@ -357,7 +357,7 @@ impl ClientConnection {
     pub fn wait_for_connect_with_resp_sender(&self, tx: oneshot::Sender<result::Result<()>>)
         -> std_Result<(), oneshot::Sender<result::Result<()>>>
     {
-        self.command_tx.send(ClientCommandMessage::WaitForHandshake(tx))
+        self.command_tx.unbounded_send(ClientCommandMessage::WaitForHandshake(tx))
             .map_err(|send_error| {
                 match send_error.into_inner() {
                     ClientCommandMessage::WaitForHandshake(tx) => tx,

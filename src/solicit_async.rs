@@ -10,9 +10,7 @@ use futures::future;
 use futures::future::Loop;
 use futures::future::loop_fn;
 use futures::future::Future;
-use futures::future::BoxFuture;
 use futures::stream::Stream;
-use futures::stream::BoxStream;
 
 use tokio_io::io::read_exact;
 use tokio_io::io::write_all;
@@ -45,8 +43,8 @@ pub type HttpFuture<T> = Box<Future<Item=T, Error=Error>>;
 // to avoid confusion with streams from HTTP/2 spec
 pub type HttpFutureStream<T> = Box<Stream<Item=T, Error=Error>>;
 
-pub type HttpFutureSend<T> = BoxFuture<T, Error>;
-pub type HttpFutureStreamSend<T> = BoxStream<T, Error>;
+pub type HttpFutureSend<T> = Box<Future<Item=T, Error=Error> + Send>;
+pub type HttpFutureStreamSend<T> = Box<Stream<Item=T, Error=Error> + Send>;
 
 
 struct VecWithPos<T> {

@@ -1,6 +1,5 @@
 //! Tests for client.
 
-use std::str;
 use std::thread;
 use std::time::Duration;
 use std::sync::mpsc;

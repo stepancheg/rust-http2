@@ -133,9 +133,9 @@ impl ServerInner {
                 warn!("handler panicked: {}", e);
 
                 let headers = Headers::internal_error_500();
-                Response::from_stream(stream::iter(vec![
-                    Ok(HttpStreamPart::intermediate_headers(headers)),
-                    Ok(HttpStreamPart::last_data(Bytes::from(format!("handler panicked: {}", e)))),
+                Response::from_stream(stream::iter_ok(vec![
+                    HttpStreamPart::intermediate_headers(headers),
+                    HttpStreamPart::last_data(Bytes::from(format!("handler panicked: {}", e))),
                 ]))
             });
 
@@ -359,7 +359,7 @@ impl ServerConnection {
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
         let (tx, rx) = oneshot::channel();
 
-        self.command_tx.clone().send(ServerCommandMessage::DumpState(tx))
+        self.command_tx.clone().unbounded_send(ServerCommandMessage::DumpState(tx))
             .expect("send request to dump state");
 
         let rx = rx.map_err(|_| error::Error::Other("oneshot canceled"));

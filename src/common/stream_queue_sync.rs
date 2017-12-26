@@ -40,7 +40,7 @@ impl StreamQueueSyncSender {
             }
         }
 
-        self.sender.send(item).map_err(|_| ())
+        self.sender.unbounded_send(item).map_err(|_| ())
     }
 
     pub fn send_part(&self, part: HttpStreamPart) -> Result<(), ()> {

@@ -49,7 +49,7 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
                 Err(e) => {
                     warn!("stream error: {:?}", e);
                     let stream_end = CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::InternalError);
-                    if let Err(e) = self.to_write_tx.send(stream_end.into()) {
+                    if let Err(e) = self.to_write_tx.unbounded_send(stream_end.into()) {
                         warn!("failed to write to channel, probably connection is closed: {:?}", e);
                     }
                     break;
@@ -67,7 +67,7 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
                     }
 
                     let msg = CommonToWriteMessage::StreamEnqueue(self.stream_id, part);
-                    if let Err(e) = self.to_write_tx.send(msg.into()) {
+                    if let Err(e) = self.to_write_tx.unbounded_send(msg.into()) {
                         warn!("failed to write to channel, probably connection is closed: {:?}", e);
                         break;
                     }
@@ -76,7 +76,7 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
                 }
                 None => {
                     let msg = CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::NoError);
-                    if let Err(e) = self.to_write_tx.send(msg.into()) {
+                    if let Err(e) = self.to_write_tx.unbounded_send(msg.into()) {
                         warn!("failed to write to channel, probably connection is closed: {:?}", e);
                         break;
                     }

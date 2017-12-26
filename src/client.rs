@@ -273,14 +273,14 @@ impl Client {
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
         let (tx, rx) = oneshot::channel();
         // ignore error
-        drop(self.controller_tx.send(ControllerCommand::DumpState(tx)));
+        drop(self.controller_tx.unbounded_send(ControllerCommand::DumpState(tx)));
         Box::new(rx.map_err(|_| error::Error::Other("conn died")))
     }
 
     pub fn wait_for_connect(&self) -> HttpFutureSend<()> {
         let (tx, rx) = oneshot::channel();
         // ignore error
-        drop(self.controller_tx.send(ControllerCommand::WaitForConnect(tx)));
+        drop(self.controller_tx.unbounded_send(ControllerCommand::WaitForConnect(tx)));
         Box::new(rx.map_err(|_| error::Error::Other("conn died")).and_then(|r| r))
     }
 }
@@ -301,7 +301,7 @@ impl Service for Client {
             resp_tx: resp_tx,
         };
 
-        if let Err(_) = self.controller_tx.send(ControllerCommand::StartRequest(start)) {
+        if let Err(_) = self.controller_tx.unbounded_send(ControllerCommand::StartRequest(start)) {
             return Response::err(error::Error::Other("client controller died"));
         }
 
@@ -399,7 +399,7 @@ struct CallbacksImpl {
 
 impl ClientConnectionCallbacks for CallbacksImpl {
     fn goaway(&self, _stream_id: StreamId, _error_code: u32) {
-        drop(self.tx.send(ControllerCommand::GoAway));
+        drop(self.tx.unbounded_send(ControllerCommand::GoAway));
     }
 }
 

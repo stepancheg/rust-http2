@@ -15,7 +15,7 @@ impl<T> UnboundedSenderWithFinal<T> {
     }
 
     pub fn send(&self, msg: T) -> Result<(), SendError<T>> {
-        self.sender.send(msg)
+        self.sender.unbounded_send(msg)
     }
 
     pub fn cancel_last(&mut self) {
@@ -26,7 +26,7 @@ impl<T> UnboundedSenderWithFinal<T> {
 impl<T> Drop for UnboundedSenderWithFinal<T> {
     fn drop(&mut self) {
         if let Some(last) = self.last.take() {
-            drop(self.sender.send(last));
+            drop(self.sender.unbounded_send(last));
         }
     }
 }

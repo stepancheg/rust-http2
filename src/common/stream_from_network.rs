@@ -47,7 +47,7 @@ impl<T : Types> Stream for StreamFromNetwork<T> {
             if self.in_window_size + self.rx.data_size() < edge {
                 let inc = DEFAULT_SETTINGS.initial_window_size;
                 let m = CommonToWriteMessage::IncreaseInWindow(self.stream_id, inc);
-                if let Err(_) = self.to_write_tx.send(m.into()) {
+                if let Err(_) = self.to_write_tx.unbounded_send(m.into()) {
                     return Err(error::Error::Other("failed to send to conn; likely died"));
                 }
                 self.in_window_size += inc;

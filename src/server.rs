@@ -144,7 +144,8 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let (shutdown_signal, shutdown_future) = shutdown_signal();
 
-        let (done_tx, done_rx) = oneshot::channel();
+        // TODO: why done_tx is unused?
+        let (_done_tx, done_rx) = oneshot::channel();
 
         let listen = self.addr.unwrap().to_listener(&self.conf);
 
@@ -157,7 +158,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
             let conf = self.conf;
             let service = self.service;
             remote.spawn(move |handle| {
-                spawn_server_event_loop(
+                drop(spawn_server_event_loop(
                     handle.clone(),
                     state_copy,
                     tls,
@@ -167,7 +168,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
                     conf,
                     service,
                     alive_tx
-                );
+                ));
                 future::finished(())
             });
             Completion::Rx(done_rx)

@@ -21,7 +21,7 @@ pub struct ShutdownSignal {
 impl ShutdownSignal {
     pub fn shutdown(&self) {
         // ignore error, because receiver may be already removed
-        drop(self.tx.send(()));
+        drop(self.tx.unbounded_send(()));
     }
 }
 

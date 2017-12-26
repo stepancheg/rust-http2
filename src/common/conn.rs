@@ -657,7 +657,7 @@ impl<T : Types> ConnData<T>
             -> result::Result<()>
         where T::ToWriteMessage : From<CommonToWriteMessage>
     {
-        self.to_write_tx.send(message.into())
+        self.to_write_tx.unbounded_send(message.into())
             .map_err(|_| error::Error::Other("write loop died"))
     }
 
