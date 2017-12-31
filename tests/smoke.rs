@@ -155,7 +155,7 @@ fn seq_slow() {
 
     for i in 1..100 {
         let b = vec![(i % 0x100) as u8; i * 1011];
-        tx.send(Bytes::from(&b[..])).expect("send");
+        tx.unbounded_send(Bytes::from(&b[..])).expect("send");
 
         let mut c = Vec::new();
         while c.len() != b.len() {

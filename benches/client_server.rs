@@ -24,7 +24,7 @@ impl Service for Megabyte {
     fn start_request(&self, _headers: Headers, _req: HttpPartStream) -> Response {
         Response::headers_and_bytes_stream(
             Headers::ok_200(),
-            stream::iter((0..1024).map(|i| Ok(Bytes::from(vec![(i % 0xff) as u8; 1024])))))
+            stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))))
     }
 }
 

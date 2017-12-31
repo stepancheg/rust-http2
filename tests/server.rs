@@ -120,9 +120,9 @@ fn panic_in_stream() {
 
     let server = ServerOneConn::new_fn(0, |headers, _req| {
         if headers.path() == "/panic" {
-            Response::from_stream(stream::iter((0..2).map(|i| {
+            Response::from_stream(stream::iter_ok((0..2).map(|i| {
                 match i {
-                    0 => Ok(HttpStreamPart::intermediate_headers(Headers::ok_200())),
+                    0 => HttpStreamPart::intermediate_headers(Headers::ok_200()),
                     _ => panic!("should reset stream"),
                 }
             })))
