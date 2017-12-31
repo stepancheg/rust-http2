@@ -67,7 +67,7 @@ fn spawn<F : FnOnce(Client, Arc<AtomicBool>) + Send + 'static>(port: u16, f: F) 
     let still_alive = Arc::new(AtomicBool::new(false));
     let still_alive_copy = still_alive.clone();
     thread::spawn(move || {
-        let client = Client::new_plain("::1", port, ClientConf::new()).expect("client");
+        let client = Client::new_plain("127.0.0.1", port, ClientConf::new()).expect("client");
 
         f(client, still_alive_copy)
     });

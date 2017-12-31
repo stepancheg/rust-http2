@@ -176,7 +176,7 @@ fn response_large() {
     });
 
     // TODO: rewrite with TCP
-    let client = Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+    let client = Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
     let resp = client.start_post("/foobar", "localhost", Bytes::from(&b""[..])).collect().wait().expect("wait");
     assert_eq!(large_resp.len(), resp.body.len());
     assert_eq!((large_resp.len(), &large_resp[..]), (resp.body.len(), &resp.body[..]));
@@ -389,7 +389,7 @@ pub fn http_1_1() {
 
     let server = ServerTest::new();
 
-    let mut tcp_stream = TcpStream::connect(("::1", server.port)).expect("connect");
+    let mut tcp_stream = TcpStream::connect((BIND_HOST, server.port)).expect("connect");
 
     tcp_stream.write_all(b"GET / HTTP/1.1\n").expect("write");
 
@@ -445,7 +445,7 @@ fn external_event_loop() {
     let ports = rx.recv().expect("recv");
 
     for port in ports {
-        let client = Client::new_plain("::1", port, ClientConf::new())
+        let client = Client::new_plain(BIND_HOST, port, ClientConf::new())
             .expect("client");
         let resp = client.start_get("/", "localhost").collect().wait().expect("ok");
         assert_eq!(b"aabb", &resp.body[..]);

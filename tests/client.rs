@@ -38,7 +38,7 @@ fn stream_count() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -76,7 +76,7 @@ fn rst_is_error() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -107,7 +107,7 @@ fn client_call_dropped() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -142,7 +142,7 @@ fn reconnect_on_disconnect() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -185,7 +185,7 @@ fn reconnect_on_goaway() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
 
     {
         let mut server_tester = server.accept();
@@ -228,7 +228,7 @@ pub fn issue_89() {
     let server = HttpServerTester::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port(), Default::default()).expect("connect");
+        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -281,7 +281,7 @@ fn external_event_loop() {
         let mut clients = Vec::new();
         for _ in 0..2 {
             let mut client = ClientBuilder::new_plain();
-            client.set_addr(("::1", port)).expect("set_addr");
+            client.set_addr((BIND_HOST, port)).expect("set_addr");
             client.event_loop = Some(core.remote());
             clients.push(client.build().expect("client"));
         }

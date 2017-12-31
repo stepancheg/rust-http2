@@ -67,7 +67,7 @@ fn test_tls_connector() -> TlsConnector {
 
 fn new_http_client() -> Client {
     Client::new_expl(
-        &SocketAddr::from(("::1".parse::<IpAddr>().unwrap(), PORT)),
+        &SocketAddr::from(("127.0.0.1".parse::<IpAddr>().unwrap(), PORT)),
         ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
         ClientConf::new())
             .expect("client")

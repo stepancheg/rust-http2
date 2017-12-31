@@ -30,12 +30,14 @@ use httpbis::solicit::frame::rst_stream::RstStreamFrame;
 use httpbis::solicit::connection::HttpFrame;
 use httpbis::solicit::connection::HttpConnection;
 
+use super::BIND_HOST;
+
 
 pub struct HttpServerTester(net::TcpListener);
 
 impl HttpServerTester {
     pub fn on_port(port: u16) -> HttpServerTester {
-        let socket = net::TcpListener::bind(("::1", port)).expect("bind");
+        let socket = net::TcpListener::bind((BIND_HOST, port)).expect("bind");
         let server = HttpServerTester(socket);
 
         debug!("started HttpServerTester on {}", server.port());
@@ -72,7 +74,7 @@ pub struct HttpConnectionTester {
 impl HttpConnectionTester {
     pub fn connect(port: u16) -> HttpConnectionTester {
         HttpConnectionTester {
-            tcp: net::TcpStream::connect(("::1", port).to_socket_addrs().unwrap().next().unwrap())
+            tcp: net::TcpStream::connect((BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap())
                 .expect("connect"),
             conn: HttpConnection::new(),
         }

@@ -27,6 +27,7 @@ use httpbis::Service;
 use httpbis::Response;
 use httpbis::Headers;
 use httpbis::HttpPartStream;
+
 use test_misc::*;
 
 #[test]
@@ -36,7 +37,7 @@ fn smoke() {
     let server = ServerTest::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port, Default::default()).expect("client");
+        Client::new_plain(BIND_HOST, server.port, Default::default()).expect("client");
 
     let mut futures = Vec::new();
     for _ in 0..10 {
@@ -84,7 +85,7 @@ fn parallel_large() {
     let server = ServerTest::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port, Default::default()).expect("client");
+        Client::new_plain(BIND_HOST, server.port, Default::default()).expect("client");
 
     let mut futures = Vec::new();
     for _ in 0..50 {
@@ -104,7 +105,7 @@ fn seq_long() {
     let server = ServerTest::new();
 
     let client: Client =
-        Client::new_plain("::1", server.port, Default::default()).expect("client");
+        Client::new_plain(BIND_HOST, server.port, Default::default()).expect("client");
 
     let (headers, parts) = client.start_get("/blocks/100000/100", "localhost").0
         .wait().expect("get");
@@ -144,7 +145,7 @@ fn seq_slow() {
     let server = server.build().expect("server");
 
     let client: Client =
-        Client::new_plain("::1", server.local_addr().port().unwrap(), Default::default()).expect("client");
+        Client::new_plain(BIND_HOST, server.local_addr().port().unwrap(), Default::default()).expect("client");
 
     let (headers, resp) = client.start_get("/gfgfg", "localhost").0.wait().expect("get");
 

@@ -18,6 +18,8 @@ use httpbis;
 use httpbis::*;
 use httpbis::for_test::*;
 
+use super::BIND_HOST;
+
 
 /// Single connection HTTP/server.
 /// Accepts only one connection.
@@ -53,7 +55,7 @@ impl ServerOneConn {
         let join_handle = thread::Builder::new().name("server_one_conn".to_owned()).spawn(move || {
             let mut lp = reactor::Core::new().unwrap();
 
-            let listener = tokio_core::net::TcpListener::bind(&("::1", port).to_socket_addrs().unwrap().next().unwrap(), &lp.handle()).unwrap();
+            let listener = tokio_core::net::TcpListener::bind(&(BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap(), &lp.handle()).unwrap();
 
             let actual_port = listener.local_addr().unwrap().port();
             from_loop_tx.send(FromLoop {
