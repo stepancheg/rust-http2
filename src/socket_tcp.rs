@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
 use std::io;
 use std::any::Any;
 
@@ -24,8 +23,7 @@ use socket::StreamItem;
 
 impl ToSocketListener for SocketAddr {
     fn to_listener(&self, conf: &ServerConf) -> Box<ToTokioListener + Send> {
-        let listen_addr = self.to_socket_addrs().unwrap().next().unwrap();
-        Box::new(listener(&listen_addr, conf).unwrap())
+        Box::new(listener(self, conf).unwrap())
     }
 
     fn cleanup(&self) {}
