@@ -13,6 +13,9 @@ use futures::sync::mpsc::UnboundedSender;
 use futures::sync::mpsc::UnboundedReceiver;
 use futures::sync::oneshot;
 
+use rand::os::OsRng;
+use rand::Rng;
+
 use tokio_core::reactor;
 
 use tls_api::TlsConnector;
@@ -60,15 +63,23 @@ impl<C : TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
     pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
         // TODO: sync
-        let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
-        if addrs.is_empty() {
-            return Err(Error::Other("addr is resolved to empty list"));
-        } else if addrs.len() > 1 {
-            // TODO: allow multiple addresses
-            return Err(Error::Other("addr is resolved to more than one addr"));
+        let mut addrs: Vec<_> = addr.to_socket_addrs()?.collect();
+        match addrs.len() {
+            0 => Err(Error::Other("addr is resolved to empty list")),
+            1 => {
+                self.addr = Some(AnySocketAddr::Inet(addrs[0].clone()));
+                Ok(())
+            }
+            x => {
+                let mut rng = match OsRng::new() {
+                    Ok(x) => x,
+                    Err(e) => return Err(error::Error::IoError(e))
+                };
+                let range = rng.gen_range(0,x-1);
+                self.addr = Some(AnySocketAddr::Inet(addrs[x].clone()));
+                Ok(())
+            }
         }
-        self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
-        Ok(())
     }
 }
 
