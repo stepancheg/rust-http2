@@ -16,6 +16,9 @@ pub struct ServerConf {
 
     pub alpn: Option<ServerAlpn>,
 
+    // Bind on both IPv4 and IPv6 addresses when addr is IPv6
+    pub only_v6: Option<bool>,
+
     /// Ignored on Windows
     pub reuse_port: Option<bool>,
     pub backlog: Option<i32>,

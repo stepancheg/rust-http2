@@ -54,6 +54,14 @@ fn listener(
         SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
         SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
     };
+
+    if let SocketAddr::V6(_) = *addr {
+        // Assume only_v6 = false by default
+        // Note: it is not default behavior for Rust
+        let only_v6 = conf.only_v6.unwrap_or(false);
+        listener.only_v6(only_v6)?;
+    }
+
     configure_tcp(&listener, conf)?;
     listener.reuse_address(true)?;
     listener.bind(addr)?;
