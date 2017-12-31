@@ -7,8 +7,10 @@ extern crate tls_api_native_tls;
 extern crate tokio_core;
 extern crate tokio_tls_api;
 extern crate httpbis;
+#[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate regex;
 
 use bytes::Bytes;
 
@@ -29,6 +31,10 @@ use tls_api_native_tls::TlsConnector;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
+
+mod test_misc;
+
+use test_misc::BIND_HOST;
 
 
 fn test_tls_acceptor() -> TlsAcceptor {
@@ -59,7 +65,7 @@ fn tls() {
     }
 
     let mut server = ServerBuilder::new();
-    server.set_port(0);
+    server.set_addr((BIND_HOST, 0)).expect("set_addr");
     server.set_tls(test_tls_acceptor());
     server.service.set_service("/", Arc::new(ServiceImpl {}));
     let server = server.build().expect("server");
