@@ -24,7 +24,6 @@ pub trait ToSocketListener {
 #[derive(Clone)]
 pub enum AnySocketAddr {
     Inet(SocketAddr),
-    #[cfg(unix)]
     Unix(String)
 }
 
@@ -32,7 +31,6 @@ impl Display for AnySocketAddr {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
           match *self {
             AnySocketAddr::Inet(ref inet_addr) => Display::fmt(inet_addr, f),
-            #[cfg(unix)]
             AnySocketAddr::Unix(ref unix_addr) => Display::fmt(unix_addr, f),
         }
     }
@@ -42,7 +40,6 @@ impl AnySocketAddr {
     pub fn port(&self) -> io::Result<u16> {
          match self {
             &AnySocketAddr::Inet(ref inet_addr) => Ok(inet_addr.port()),
-            #[cfg(unix)]
             &AnySocketAddr::Unix(_) =>
                 Err(io::Error::new(io::ErrorKind::Other, "Cannot get port from unix domain socket"))
         }
@@ -54,7 +51,10 @@ impl ToSocketListener for AnySocketAddr {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.to_listener(conf),
             #[cfg(unix)]
-            &AnySocketAddr::Unix(ref unix_addr) => unix_addr.to_listener(conf)
+            &AnySocketAddr::Unix(ref unix_addr) => unix_addr.to_listener(conf),
+            #[cfg(not(unix))]
+            // TODO: error instead of panic
+            &AnySocketAddr::Unix(..) => panic!("cannot use unix sockets on non-unix"),
         }
     }
 
@@ -63,6 +63,8 @@ impl ToSocketListener for AnySocketAddr {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.cleanup(),
             #[cfg(unix)]
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.cleanup(),
+            #[cfg(not(unix))]
+            &AnySocketAddr::Unix(..) => {},
         }
     }
 }
@@ -75,6 +77,8 @@ impl ToClientStream for AnySocketAddr {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
             #[cfg(unix)]
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
+            #[cfg(not(unix))]
+            &AnySocketAddr::Unix(..) => panic!("cannot use unix sockets on non-unix"),
         }
     }
 }
