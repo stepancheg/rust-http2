@@ -51,9 +51,13 @@ use unix_socket::UnixStream;
 use test_misc::*;
 
 
+fn init_logger() {
+    env_logger::try_init().ok();
+}
+
 #[test]
 fn simple_new() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerOneConn::new_fn(0, |_headers, req| {
         Response::headers_and_stream(Headers::ok_200(), req)
@@ -80,7 +84,7 @@ fn simple_new() {
 
 #[test]
 fn panic_in_handler() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerOneConn::new_fn(0, |headers, _req| {
         if headers.path() == "/panic" {
@@ -116,7 +120,7 @@ fn panic_in_handler() {
 
 #[test]
 fn panic_in_stream() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerOneConn::new_fn(0, |headers, _req| {
         if headers.path() == "/panic" {
@@ -158,7 +162,7 @@ fn panic_in_stream() {
 
 #[test]
 fn response_large() {
-    env_logger::init().ok();
+    init_logger();
 
     let mut large_resp = Vec::new();
     while large_resp.len() < 100_000 {
@@ -186,7 +190,7 @@ fn response_large() {
 
 #[test]
 fn rst_stream_on_data_without_stream() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -205,7 +209,7 @@ fn rst_stream_on_data_without_stream() {
 
 #[test]
 fn exceed_max_frame_size() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -226,7 +230,7 @@ fn exceed_max_frame_size() {
 
 #[test]
 fn increase_frame_size() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -246,7 +250,7 @@ fn increase_frame_size() {
 
 #[test]
 fn exceed_window_size() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -274,7 +278,7 @@ fn exceed_window_size() {
 
 #[test]
 fn stream_window_gt_conn_window() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -310,7 +314,7 @@ fn stream_window_gt_conn_window() {
 
 #[test]
 fn do_not_poll_when_not_enough_window() {
-    env_logger::init().ok();
+    init_logger();
 
     let polls = Arc::new(AtomicUsize::new(0));
     let polls_copy = polls.clone();
@@ -357,7 +361,7 @@ fn do_not_poll_when_not_enough_window() {
 
 #[test]
 pub fn server_sends_continuation_frame() {
-    env_logger::init().ok();
+    init_logger();
 
     let mut headers = Headers::ok_200();
     for i in 0..1000 {
@@ -385,7 +389,7 @@ pub fn server_sends_continuation_frame() {
 
 #[test]
 pub fn http_1_1() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -401,7 +405,7 @@ pub fn http_1_1() {
 #[cfg(unix)]
 #[test]
 pub fn http_1_1_unix() {
-    env_logger::init().ok();
+    init_logger();
 
     let tempdir = tempdir::TempDir::new("rust_http2_test").unwrap();
     let socket_path = tempdir.path().join("test_socket");
@@ -418,7 +422,7 @@ pub fn http_1_1_unix() {
 
 #[test]
 fn external_event_loop() {
-    env_logger::init().ok();
+    init_logger();
 
     let (tx, rx) = mpsc::channel();
     let (shutdown_tx, shutdown_rx) = oneshot::channel();

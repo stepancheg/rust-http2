@@ -30,9 +30,13 @@ use httpbis::HttpPartStream;
 
 use test_misc::*;
 
+fn init_logger() {
+    env_logger::try_init().ok();
+}
+
 #[test]
 fn smoke() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -53,7 +57,7 @@ fn smoke() {
 #[cfg(unix)]
 #[test]
 fn smoke_unix_domain_sockets() {
-    env_logger::init().ok();
+    init_logger();
 
     let tempdir = tempdir::TempDir::new("rust_http2_test").unwrap();
     let socket_path = tempdir.path().join("test_socket");
@@ -80,7 +84,7 @@ fn smoke_unix_domain_sockets() {
 
 #[test]
 fn parallel_large() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -100,7 +104,7 @@ fn parallel_large() {
 
 #[test]
 fn seq_long() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
@@ -122,7 +126,7 @@ fn seq_long() {
 
 #[test]
 fn seq_slow() {
-    env_logger::init().ok();
+    init_logger();
 
     let (tx, rx) = mpsc::unbounded();
 

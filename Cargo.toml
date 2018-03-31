@@ -31,7 +31,7 @@ unix_socket     = "0.*"
 
 [dev-dependencies]
 
-env_logger         = "0.*"
+env_logger         = "0.5"
 regex              = "0.2"
 tls-api-native-tls = "0.*"
 tls-api-openssl    = "0.*"
