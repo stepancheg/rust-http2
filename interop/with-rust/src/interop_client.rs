@@ -86,7 +86,7 @@ fn run_all_test_cases() {
 }
 
 fn main() {
-    env_logger::init().expect("env_logger::init");
+    env_logger::init();
 
     let options = App::new("http2 interop client")
         .arg(Arg::with_name("test_case")

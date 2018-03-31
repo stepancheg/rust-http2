@@ -65,7 +65,7 @@ fn test_tls_acceptor() -> TlsAcceptor {
 }
 
 fn main() {
-    env_logger::init().expect("env_logger::init");
+    env_logger::init();
 
     let mut server = ServerBuilder::new();
     server.set_port(PORT);

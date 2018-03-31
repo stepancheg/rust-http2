@@ -31,9 +31,13 @@ use httpbis::solicit::DEFAULT_SETTINGS;
 
 use test_misc::*;
 
+fn init_logger() {
+    env_logger::try_init().ok();
+}
+
 #[test]
 fn stream_count() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = HttpServerTester::new();
 
@@ -71,7 +75,7 @@ fn stream_count() {
 
 #[test]
 fn rst_is_error() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = HttpServerTester::new();
 
@@ -102,7 +106,7 @@ fn rst_is_error() {
 
 #[test]
 fn client_call_dropped() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = HttpServerTester::new();
 
@@ -137,7 +141,7 @@ fn client_call_dropped() {
 
 #[test]
 fn reconnect_on_disconnect() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = HttpServerTester::new();
 
@@ -180,7 +184,7 @@ fn reconnect_on_disconnect() {
 
 #[test]
 fn reconnect_on_goaway() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = HttpServerTester::new();
 
@@ -223,7 +227,7 @@ fn reconnect_on_goaway() {
 
 #[test]
 pub fn issue_89() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = HttpServerTester::new();
 
@@ -266,7 +270,7 @@ pub fn issue_89() {
 
 #[test]
 fn external_event_loop() {
-    env_logger::init().ok();
+    init_logger();
 
     let server = ServerTest::new();
 
