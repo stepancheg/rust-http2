@@ -328,8 +328,11 @@ fn spawn_server_event_loop<S, A>(
 }
 
 impl Server {
-    pub fn local_addr(&self) -> &AnySocketAddr {
-        &self.local_addr
+    pub fn local_addr(&self) -> &SocketAddr {
+        match self.local_addr {
+            AnySocketAddr::Inet(ref sa) => &sa,
+            AnySocketAddr::Unix(..) => panic!("not implemented"),
+        }
     }
 
     pub fn is_alive(&self) -> bool {
