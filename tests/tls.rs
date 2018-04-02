@@ -70,10 +70,7 @@ fn tls() {
     server.service.set_service("/", Arc::new(ServiceImpl {}));
     let server = server.build().expect("server");
 
-    let socket_addr = match server.local_addr() {
-        &AnySocketAddr::Inet(ref sock_addr) => sock_addr,
-        _ => panic!("Assumed server was an inet server")
-    };
+    let socket_addr = server.local_addr();
 
     let client: Client = Client::new_expl(
         socket_addr,

@@ -129,11 +129,11 @@ fn bq_10m(client: Client, still_alive: Arc<AtomicBool>) {
 fn main() {
     let server = new_server();
 
-    let get_200 = spawn(server.local_addr().port().unwrap(), get_200);
-    let inf_100 = spawn(server.local_addr().port().unwrap(), inf_100);
-    let inf_10m = spawn(server.local_addr().port().unwrap(), inf_10m);
-    let bq_100 = spawn(server.local_addr().port().unwrap(), bq_100);
-    let bq_10m = spawn(server.local_addr().port().unwrap(), bq_10m);
+    let get_200 = spawn(server.local_addr().port(), get_200);
+    let inf_100 = spawn(server.local_addr().port(), inf_100);
+    let inf_10m = spawn(server.local_addr().port(), inf_10m);
+    let bq_100 = spawn(server.local_addr().port(), bq_100);
+    let bq_10m = spawn(server.local_addr().port(), bq_10m);
 
     let all = vec![
         ("get_200", get_200),

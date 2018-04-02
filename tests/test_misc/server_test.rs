@@ -57,7 +57,7 @@ impl ServerTest {
         server.service.set_service("/blocks", Arc::new(Blocks {}));
         server.service.set_service("/echo", Arc::new(Echo {}));
         let server = server.build().expect("server");
-        let port = server.local_addr().port().unwrap();
+        let port = server.local_addr().port();
         ServerTest {
             server: server,
             port: port,

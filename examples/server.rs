@@ -75,7 +75,7 @@ fn main() {
     let server = server.build().expect("server");
 
     println!("started server");
-    println!("check it at: https://localhost:{}/", server.local_addr().port().unwrap());
+    println!("check it at: https://localhost:{}/", server.local_addr().port());
 
     loop {
         thread::park();

@@ -38,7 +38,7 @@ fn bench(b: &mut Bencher) {
 
         let client = Client::new_plain(
             "127.0.0.1",
-            server.local_addr().port().unwrap(),
+            server.local_addr().port(),
             Default::default())
                 .expect("client");
 

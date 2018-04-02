@@ -441,7 +441,7 @@ fn external_event_loop() {
             servers.push(server.build().expect("server"));
         }
 
-        tx.send(servers.iter().map(|s| s.local_addr().port().unwrap()).collect::<Vec<_>>()).expect("send");
+        tx.send(servers.iter().map(|s| s.local_addr().port()).collect::<Vec<_>>()).expect("send");
 
         core.run(shutdown_rx).expect("run");
     });
