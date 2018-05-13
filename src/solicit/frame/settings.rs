@@ -3,6 +3,9 @@
 use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
+use result::Result;
+use error::Error;
+use error::ErrorCode;
 
 pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
 
@@ -27,16 +30,23 @@ impl HttpSetting {
     /// Creates a new `HttpSetting` with the correct variant corresponding to
     /// the given setting id, based on the settings IDs defined in section
     /// 6.5.2.
-    pub fn from_id(id: u16, val: u32) -> Option<HttpSetting> {
-        match id {
-            1 => Some(HttpSetting::HeaderTableSize(val)),
-            2 => Some(HttpSetting::EnablePush(val != 0)),
-            3 => Some(HttpSetting::MaxConcurrentStreams(val)),
-            4 => Some(HttpSetting::InitialWindowSize(val)),
-            5 => Some(HttpSetting::MaxFrameSize(val)),
-            6 => Some(HttpSetting::MaxHeaderListSize(val)),
-            _ => None,
-        }
+    pub fn from_id(id: u16, val: u32) -> Result<Option<HttpSetting>> {
+        Ok(Some(match id {
+            1 => HttpSetting::HeaderTableSize(val),
+            2 => {
+                let b = match val {
+                    0 => false,
+                    1 => true,
+                    _ => return Err(Error::CodeError(ErrorCode::ProtocolError)),
+                };
+                HttpSetting::EnablePush(b)
+            },
+            3 => HttpSetting::MaxConcurrentStreams(val),
+            4 => HttpSetting::InitialWindowSize(val),
+            5 => HttpSetting::MaxFrameSize(val),
+            6 => HttpSetting::MaxHeaderListSize(val),
+            _ => return Ok(None),
+        }))
     }
 
     /// Creates a new `HttpSetting` by parsing the given buffer of 6 bytes,
@@ -49,7 +59,7 @@ impl HttpSetting {
     /// # Panics
     ///
     /// If given a buffer shorter than 6 bytes, the function will panic.
-    fn parse_setting(raw_setting: &[u8]) -> Option<HttpSetting> {
+    fn parse_setting(raw_setting: &[u8]) -> Result<Option<HttpSetting>> {
         let id: u16 = ((raw_setting[0] as u16) << 8) | (raw_setting[1] as u16);
         let val: u32 = unpack_octets_4!(raw_setting, 2, u32);
 
@@ -239,16 +249,20 @@ impl SettingsFrame {
     ///
     /// If the frame is invalid (i.e. the length of the payload is not a
     /// multiple of 6) it returns `None`.
-    fn parse_payload(payload: &[u8]) -> Option<Vec<HttpSetting>> {
+    fn parse_payload(payload: &[u8]) -> Result<Vec<HttpSetting>> {
         if payload.len() % 6 != 0 {
-            return None;
+            return Err(Error::CodeError(ErrorCode::ProtocolError));
         }
 
         // Iterates through chunks of the raw payload of size 6 bytes and
         // parses each of them into an `HttpSetting`
-        Some(payload.chunks(6)
-                    .filter_map(|chunk| HttpSetting::parse_setting(chunk))
-                    .collect())
+        let mut settings = Vec::new();
+        for chunk in payload.chunks(6) {
+            if let Some(setting) = HttpSetting::parse_setting(chunk)? {
+                settings.push(setting);
+            }
+        }
+        Ok(settings)
     }
 
     /// Sets the given flag for the frame.
@@ -303,15 +317,14 @@ impl Frame for SettingsFrame {
             }
         }
 
-        match SettingsFrame::parse_payload(&raw_frame.payload()) {
-            Some(settings) => {
-                Some(SettingsFrame {
-                    settings: settings,
-                    flags: Flags::new(flags),
-                })
-            }
-            None => None,
-        }
+        let settings = match SettingsFrame::parse_payload(&raw_frame.payload()) {
+            Ok(settings) => settings,
+            Err(_) => return None,
+        };
+        Some(SettingsFrame {
+            settings,
+            flags: Flags::new(flags),
+        })
     }
 
     /// Tests if the given flag is set for the frame.
@@ -602,56 +615,56 @@ mod tests {
         {
             let buf = [0, 1, 0, 0, 1, 0];
 
-            let setting = HttpSetting::parse_setting(&buf).unwrap();
+            let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
 
             assert_eq!(setting, HttpSetting::HeaderTableSize(1 << 8));
         }
         {
             let buf = [0, 2, 0, 0, 0, 1];
 
-            let setting = HttpSetting::parse_setting(&buf).unwrap();
+            let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
 
             assert_eq!(setting, HttpSetting::EnablePush(true));
         }
         {
             let buf = [0, 3, 0, 0, 0, 0];
 
-            let setting = HttpSetting::parse_setting(&buf).unwrap();
+            let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
 
             assert_eq!(setting, HttpSetting::MaxConcurrentStreams(0));
         }
         {
             let buf = [0, 4, 0, 0, 0, 1];
 
-            let setting = HttpSetting::parse_setting(&buf).unwrap();
+            let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
 
             assert_eq!(setting, HttpSetting::InitialWindowSize(1));
         }
         {
             let buf = [0, 5, 0, 0, 0, 255];
 
-            let setting = HttpSetting::parse_setting(&buf).unwrap();
+            let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
 
             assert_eq!(setting, HttpSetting::MaxFrameSize((1 << 8) - 1));
         }
         {
             let buf = [0, 6, 0, 0, 0, 255];
 
-            let setting = HttpSetting::parse_setting(&buf).unwrap();
+            let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
 
             assert_eq!(setting, HttpSetting::MaxHeaderListSize((1 << 8) - 1));
         }
         {
             let buf = [0, 7, 0, 0, 0, 255];
 
-            let setting = HttpSetting::parse_setting(&buf);
+            let setting = HttpSetting::parse_setting(&buf).unwrap();
 
             assert!(setting.is_none());
         }
         {
             let buf = [0, 0, 0, 0, 0, 255];
 
-            let setting = HttpSetting::parse_setting(&buf);
+            let setting = HttpSetting::parse_setting(&buf).unwrap();
 
             assert!(setting.is_none());
         }

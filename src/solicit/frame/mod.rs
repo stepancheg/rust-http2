@@ -188,6 +188,7 @@ pub trait Frame : Sized {
     /// frame's rules, etc.
     ///
     /// Otherwise, returns a newly constructed `Frame`.
+    // TODO: return Result
     fn from_raw(raw_frame: &RawFrame) -> Option<Self>;
 
     /// Frame flags
