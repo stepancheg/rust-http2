@@ -31,6 +31,7 @@ use solicit::connection::EndStream;
 use solicit::connection::HttpConnection;
 use solicit::connection::HttpFrame;
 use solicit::frame::settings::HttpSettings;
+use solicit::session::StreamStateIdleOrClosed;
 
 use solicit_misc::*;
 use solicit_async::*;
@@ -53,9 +54,9 @@ pub use resp::Response;
 use rc_mut::*;
 
 
-
 pub enum DirectlyToNetworkFrame {
     RstStream(RstStreamFrame),
+    GoAway(GoawayFrame),
     WindowUpdate(WindowUpdateFrame),
     Ping(PingFrame),
     Settings(SettingsFrame),
@@ -65,6 +66,7 @@ impl DirectlyToNetworkFrame {
     fn into_http_frame(self) -> HttpFrame {
         match self {
             DirectlyToNetworkFrame::RstStream(f) => f.into(),
+            DirectlyToNetworkFrame::GoAway(f) => f.into(),
             DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
             DirectlyToNetworkFrame::Ping(f) => f.into(),
             DirectlyToNetworkFrame::Settings(f) => f.into(),
@@ -79,6 +81,7 @@ pub enum CommonToWriteMessage {
     Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
     StreamEnqueue(StreamId, HttpStreamPart),
     StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
+    CloseConn,
 }
 
 pub trait ConnDataSpecific : 'static {
@@ -500,6 +503,30 @@ impl<T : Types> ConnData<T>
         self.send_directly_to_network(DirectlyToNetworkFrame::RstStream(rst_stream))
     }
 
+    fn send_goaway(&mut self, error_code: ErrorCode)
+        -> result::Result<()>
+    {
+        let goaway = GoawayFrame::new(self.last_peer_stream_id, error_code);
+        self.send_directly_to_network(DirectlyToNetworkFrame::GoAway(goaway))?;
+        self.send_common(CommonToWriteMessage::CloseConn)?;
+        Ok(())
+    }
+
+    fn stream_state_idle_or_closed(&self, stream_id: StreamId) -> StreamStateIdleOrClosed {
+        let last_stream_id =
+            if T::is_init_locally(stream_id) {
+                self.last_local_stream_id
+            } else {
+                self.last_peer_stream_id
+            };
+
+        if stream_id > last_stream_id {
+            StreamStateIdleOrClosed::Idle
+        } else {
+            StreamStateIdleOrClosed::Closed
+        }
+    }
+
     pub fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
@@ -508,8 +535,18 @@ impl<T : Types> ConnData<T>
             return Ok(Some(self.streams.get_mut(stream_id).unwrap()));
         }
 
-        debug!("stream not found: {}, sending RST_STREAM", stream_id);
-        self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
+        let stream_state = self.stream_state_idle_or_closed(stream_id);
+
+        match stream_state {
+            StreamStateIdleOrClosed::Closed => {
+                debug!("stream is closed: {}, sending RST_STREAM", stream_id);
+                self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
+            }
+            StreamStateIdleOrClosed::Idle => {
+                debug!("stream is closed: {}, sending conn error", stream_id);
+                self.send_goaway(ErrorCode::StreamClosed)?;
+            }
+        }
 
         return Ok(None);
     }
@@ -923,6 +960,9 @@ impl<I, T> WriteLoopData<I, T>
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
                 self.increase_in_window(stream_id, increase)
             },
+            CommonToWriteMessage::CloseConn => {
+                Box::new(future::err(error::Error::Other("close connection")))
+            }
         }
     }
 }

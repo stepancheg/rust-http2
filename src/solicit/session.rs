@@ -42,3 +42,8 @@ impl StreamState {
         }
     }
 }
+
+pub enum StreamStateIdleOrClosed {
+    Idle,
+    Closed,
+}

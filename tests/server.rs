@@ -201,10 +201,9 @@ fn rst_stream_on_data_without_stream() {
     // DATA frame without open stream
     tester.send_data(11, &[10, 20, 30], false);
 
-    tester.recv_rst_frame_check(11, ErrorCode::StreamClosed);
+    tester.recv_goaway_frame_check(ErrorCode::StreamClosed);
 
-    let r = tester.get(1, "/echo");
-    assert_eq!(200, r.headers.status());
+    tester.recv_eof();
 }
 
 #[test]

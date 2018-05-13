@@ -256,9 +256,21 @@ impl HttpConnectionTester {
         }
     }
 
+    pub fn recv_goaway_frame(&mut self) -> GoawayFrame {
+        match self.recv_frame() {
+            HttpFrame::Goaway(goaway) => goaway,
+            f => panic!("expecting GOAWAY, got: {:?}", f),
+        }
+    }
+
     pub fn recv_rst_frame_check(&mut self, stream_id: StreamId, error_code: ErrorCode) {
         let frame = self.recv_rst_frame();
         assert_eq!(stream_id, frame.stream_id);
+        assert_eq!(error_code, frame.error_code());
+    }
+
+    pub fn recv_goaway_frame_check(&mut self, error_code: ErrorCode) {
+        let frame = self.recv_goaway_frame();
         assert_eq!(error_code, frame.error_code());
     }
 
