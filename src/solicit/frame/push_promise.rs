@@ -1,7 +1,6 @@
 use bytes::Bytes;
 use bytes::Buf;
 use bytes::IntoBuf;
-use bytes::BigEndian;
 
 use solicit::StreamId;
 use solicit::frame::Frame;
@@ -107,7 +106,7 @@ impl Frame for PushPromiseFrame {
 
         let mut buf = (&payload).into_buf();
 
-        let promised_stream_id = buf.get_u32::<BigEndian>();
+        let promised_stream_id = buf.get_u32_be();
 
         let header_fragment = payload.slice(
             (length as usize) - buf.remaining(),

@@ -1,5 +1,4 @@
 use bytes::IntoBuf;
-use bytes::BigEndian;
 use bytes::Buf;
 
 use solicit::StreamId;
@@ -42,7 +41,7 @@ impl Frame for PriorityFrame {
         }
 
         let mut payload = raw_frame.payload().into_buf();
-        let first = payload.get_u32::<BigEndian>();
+        let first = payload.get_u32_be();
         let exclusive = (first & 0x80000000) != 0;
         let stream_dep = first & !0x80000000;
         let weight = payload.get_u8();
