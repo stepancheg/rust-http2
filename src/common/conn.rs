@@ -487,10 +487,8 @@ impl<T : Types> ConnData<T>
     fn process_rst_stream_frame(&mut self, frame: RstStreamFrame)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
-        if let Some(stream) = self.streams.get_mut(frame.get_stream_id()) {
+        if let Some(stream) = self.get_stream_or_send_goaway(frame.get_stream_id())? {
             stream.rst_remove(frame.error_code());
-        } else {
-            warn!("RST_STREAM on non-existent stream: {}", frame.stream_id);
         }
 
         Ok(None)
@@ -527,7 +525,7 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    pub fn get_stream_or_send_stream_closed(&mut self, stream_id: StreamId)
+    pub fn get_stream_or_send_rst_goaway(&mut self, stream_id: StreamId)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
         // Another day in endless bitter war against borrow checker
@@ -543,12 +541,35 @@ impl<T : Types> ConnData<T>
                 self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
             }
             StreamStateIdleOrClosed::Idle => {
-                debug!("stream is closed: {}, sending conn error", stream_id);
+                debug!("stream is idle: {}, sending GOAWAY", stream_id);
                 self.send_goaway(ErrorCode::StreamClosed)?;
             }
         }
 
-        return Ok(None);
+        Ok(None)
+    }
+
+    pub fn get_stream_or_send_goaway(&mut self, stream_id: StreamId)
+        -> result::Result<Option<HttpStreamRef<T>>>
+    {
+        // Another day in endless bitter war against borrow checker
+        if self.streams.get_mut(stream_id).is_some() {
+            return Ok(Some(self.streams.get_mut(stream_id).unwrap()));
+        }
+
+        let stream_state = self.stream_state_idle_or_closed(stream_id);
+
+        match stream_state {
+            StreamStateIdleOrClosed::Closed => {
+                debug!("stream is closed: {}, ignoring", stream_id);
+            }
+            StreamStateIdleOrClosed::Idle => {
+                debug!("stream is idle: {}, sending GOAWAY", stream_id);
+                self.send_goaway(ErrorCode::StreamClosed)?;
+            }
+        }
+
+        Ok(None)
     }
 
     fn process_data_frame(&mut self, frame: DataFrame)
@@ -574,7 +595,7 @@ impl<T : Types> ConnData<T>
             // If a DATA frame is received whose stream is not in "open" or
             // "half-closed (local)" state, the recipient MUST respond with
             // a stream error (Section 5.4.2) of type STREAM_CLOSED.
-            let mut stream = match self.get_stream_or_send_stream_closed(frame.get_stream_id())? {
+            let mut stream = match self.get_stream_or_send_rst_goaway(frame.get_stream_id())? {
                 Some(stream) => stream,
                 None => {
                     return Ok(None);
