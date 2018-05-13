@@ -440,7 +440,7 @@ impl<T : Types> ConnData<T>
     {
         self.out_window_increased(Some(frame.stream_id))?;
 
-        match self.streams.get_mut(frame.stream_id) {
+        match self.get_stream_or_send_goaway(frame.stream_id)? {
             Some(mut stream) => {
                 // TODO: stream error, not conn error
                 let old_window_size = stream.stream().out_window_size.0;
@@ -549,6 +549,8 @@ impl<T : Types> ConnData<T>
         Ok(None)
     }
 
+    /// Get stream reference or send GOAWAY and close connection
+    /// if stream is in idle state.
     pub fn get_stream_or_send_goaway(&mut self, stream_id: StreamId)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
