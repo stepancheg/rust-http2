@@ -591,7 +591,7 @@ impl<T : Types> ConnData<T>
                 };
 
                 if send_stream_closed {
-                    debug!("stream is closed: {}, sending RST_STREAM", stream_id);
+                    debug!("stream is closed: {}, sending GOAWAY", stream_id);
                     self.send_goaway(ErrorCode::StreamClosed)?;
                 }
             }
