@@ -42,4 +42,4 @@ url                = "1"
 tempdir         = "0.3"
 
 [workspace]
-members = ["interop/with-rust"]
+members = ["interop/with-rust", "h2spec-test"]

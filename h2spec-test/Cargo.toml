@@ -1,0 +1,13 @@
+[package]
+name = "httpbis-h2spec-test"
+version = "0.0.0"
+publish = false
+authors = ["Stepan Koltsov <stepan.koltsov@gmail.com>"]
+license = "MIT/Apache-2.0"
+description = "Rust implementation of HTTP/2 protocol"
+repository = "https://github.com/stepancheg/rust-http2"
+keywords = ["http2"]
+
+[dependencies]
+httpbis = { path = ".." }
+env_logger = "~0.5"
