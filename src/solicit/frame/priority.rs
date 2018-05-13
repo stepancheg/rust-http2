@@ -49,6 +49,10 @@ impl Frame for PriorityFrame {
         let weight = payload.get_u8();
         assert_eq!(0, payload.remaining());
 
+        if stream_dep == stream_id {
+            return Err(ParseFrameError::StreamDependencyOnItself(stream_id));
+        }
+
         Ok(PriorityFrame {
             flags: Flags::new(flags),
             stream_id,
