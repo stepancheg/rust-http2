@@ -178,6 +178,7 @@ pub enum ParseFrameError {
     IncorrectPayloadLen,
     StreamIdMustBeNonZero,
     StreamIdMustBeZero(u32),
+    StreamDependencyOnItself(u32),
     IncorrectFrameLength(u32),
     IncorrectFlags(u8),
     IncorrectSettingsPushValue(u32),

@@ -259,7 +259,14 @@ impl Frame for HeadersFrame {
         // the appropriate flag is set.
         let priority = flags.is_set(HeadersFlag::Priority);
         let (data, stream_dep) = if priority {
-            (actual.slice_from(5), Some(StreamDependency::parse(&actual[..5])))
+            let dep = StreamDependency::parse(&actual[..5]);
+            if dep.stream_id == stream_id {
+                // 5.3.1
+                // A stream cannot depend on itself.  An endpoint MUST treat this as a
+                // stream error (Section 5.4.2) of type PROTOCOL_ERROR.
+                return Err(ParseFrameError::StreamDependencyOnItself(stream_id));
+            }
+            (actual.slice_from(5), Some(dep))
         } else {
             (actual, None)
         };

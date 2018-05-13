@@ -10,7 +10,6 @@ use exec::CpuPoolOption;
 use solicit::StreamId;
 use solicit::header::*;
 use solicit::connection::EndStream;
-use solicit::connection::HttpFrameType;
 use solicit::frame::settings::*;
 use solicit::DEFAULT_SETTINGS;
 
@@ -157,7 +156,7 @@ impl ServerInner {
     fn get_or_create_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers, last: bool)
         -> result::Result<HttpStreamRef<ServerTypes>>
     {
-        if self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)?.is_some() {
+        if self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some() {
             // https://github.com/rust-lang/rust/issues/36403
             let mut stream = self.streams.get_mut(stream_id).unwrap();
             stream.stream().set_headers(headers, last);

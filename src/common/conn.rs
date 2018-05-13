@@ -600,6 +600,12 @@ impl<T : Types> ConnData<T>
         Ok(self.streams.get_mut(stream_id))
     }
 
+    pub fn get_stream_for_headers_maybe_send_error(&mut self, stream_id: StreamId)
+        -> result::Result<Option<HttpStreamRef<T>>>
+    {
+        self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)
+    }
+
     fn process_data_frame(&mut self, frame: DataFrame)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
