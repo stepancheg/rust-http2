@@ -61,7 +61,7 @@ pub enum HttpFrame {
 }
 
 impl HttpFrame{
-    pub fn from_raw(raw_frame: &RawFrame) -> Result<HttpFrame> {
+    pub fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HttpFrame> {
         let frame = match raw_frame.header().frame_type {
             frame::data::DATA_FRAME_TYPE =>
                 HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
@@ -98,15 +98,8 @@ impl HttpFrame{
     /// Failing to decode the given `Frame` from the `raw_frame`, an
     /// `HttpError::InvalidFrame` error is returned.
     #[inline] // TODO: take by value
-    fn parse_frame<F: Frame>(raw_frame: &RawFrame) -> Result<F> {
-        // TODO: The reason behind being unable to decode the frame should be
-        //       extracted to allow an appropriate connection-level action to be
-        //       taken (e.g. responding with a PROTOCOL_ERROR).
-        match Frame::from_raw(&raw_frame) {
-            Some(f) => Ok(f),
-            None => Err(Error::InvalidFrame(
-                format!("failed to parse frame {:?}", raw_frame.header()))),
-        }
+    fn parse_frame<F: Frame>(raw_frame: &RawFrame) -> ParseFrameResult<F> {
+        Frame::from_raw(&raw_frame)
     }
 
     /// Get stream id, zero for special frames

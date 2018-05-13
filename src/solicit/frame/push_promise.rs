@@ -9,6 +9,8 @@ use solicit::frame::RawFrame;
 use solicit::frame::FrameHeader;
 use solicit::frame::parse_padded_payload;
 use solicit::frame::builder::FrameBuilder;
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 
 use super::flags::Flag;
 use super::flags::Flags;
@@ -70,19 +72,19 @@ impl PushPromiseFrame {
 impl Frame for PushPromiseFrame {
     type FlagType = PushPromiseFlag;
 
-    fn from_raw(raw_frame: &RawFrame) -> Option<PushPromiseFrame> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<PushPromiseFrame> {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != PUSH_PROMISE_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError)
         }
 
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
         if (length as usize) != raw_frame.payload().len() {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
 
         let flags = Flags::new(flags);
@@ -99,10 +101,7 @@ impl Frame for PushPromiseFrame {
 
         let padded = flags.is_set(PushPromiseFlag::Padded);
 
-        let (payload, pad_len) = match parse_padded_payload(raw_frame.payload(), padded) {
-            None => return None,
-            Some(t) => t,
-        };
+        let (payload, padding_len) = parse_padded_payload(raw_frame.payload(), padded)?;
 
         let mut buf = (&payload).into_buf();
 
@@ -112,12 +111,12 @@ impl Frame for PushPromiseFrame {
             (length as usize) - buf.remaining(),
             payload.len());
 
-        Some(PushPromiseFrame {
-            header_fragment: header_fragment,
-            stream_id: stream_id,
-            padding_len: pad_len,
-            flags: flags,
-            promised_stream_id: promised_stream_id,
+        Ok(PushPromiseFrame {
+            header_fragment,
+            stream_id,
+            padding_len,
+            flags,
+            promised_stream_id,
         })
     }
 

@@ -133,9 +133,9 @@ pub fn pack_header(header: &FrameHeader) -> FrameHeaderBuffer {
 ///
 /// If the padded payload is invalid (e.g. the length of the padding is equal
 /// to the total length), returns `None`.
-fn parse_padded_payload(payload: Bytes, flag: bool) -> Option<(Bytes, u8)> {
+fn parse_padded_payload(payload: Bytes, flag: bool) -> ParseFrameResult<(Bytes, u8)> {
     if !flag {
-        return Some((payload, 0));
+        return Ok((payload, 0));
     }
     if payload.len() == 0 {
         // We make sure not to index the payload before we're sure how
@@ -143,16 +143,16 @@ fn parse_padded_payload(payload: Bytes, flag: bool) -> Option<(Bytes, u8)> {
         // If this is the case, the frame is invalid as no padding
         // length can be extracted, even though the frame should be
         // padded.
-        return None;
+        return Err(ParseFrameError::ProtocolError);
     }
     let pad_len = payload[0] as usize;
     if pad_len >= payload.len() {
         // This is invalid: the padding length MUST be less than the
         // total frame size.
-        return None;
+        return Err(ParseFrameError::ProtocolError);
     }
 
-    Some((payload.slice(1, payload.len() - pad_len), pad_len as u8))
+    Ok((payload.slice(1, payload.len() - pad_len), pad_len as u8))
 }
 
 /// A trait that types that are an intermediate representation of HTTP/2 frames should implement.
@@ -171,6 +171,22 @@ pub trait FrameIR {
     }
 }
 
+#[derive(Debug)]
+pub enum ParseFrameError {
+    InternalError,
+    BufMustBeAtLeast9Bytes(usize),
+    IncorrectPayloadLen,
+    StreamIdMustBeNonZero,
+    StreamIdMustBeZero(u32),
+    IncorrectFrameLength(u32),
+    IncorrectFlags(u8),
+    IncorrectSettingsPushValue(u32),
+    ProtocolError, // generic error
+}
+
+pub type ParseFrameResult<T> = Result<T, ParseFrameError>;
+
+
 /// A trait that all HTTP/2 frame structs need to implement.
 pub trait Frame : Sized {
     /// The type that represents the flags that the particular `Frame` can take.
@@ -188,8 +204,7 @@ pub trait Frame : Sized {
     /// frame's rules, etc.
     ///
     /// Otherwise, returns a newly constructed `Frame`.
-    // TODO: return Result
-    fn from_raw(raw_frame: &RawFrame) -> Option<Self>;
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self>;
 
     /// Frame flags
     fn flags(&self) -> Flags<Self::FlagType>;
@@ -259,15 +274,17 @@ impl RawFrame {
     /// let frame = RawFrame::parse(&buf[..]).unwrap();
     /// assert_eq!(frame.as_ref(), &buf[..]);
     /// ```
-    pub fn parse<B : Into<Bytes>>(into_buf: B) -> Option<RawFrame> {
+    pub fn parse<B : Into<Bytes>>(into_buf: B) -> ParseFrameResult<RawFrame> {
         // TODO(mlalic): This might allow an extra parameter that specifies the maximum frame
         //               payload length?
 
         let buf = into_buf.into();
 
         if buf.len() < 9 {
-            return None;
+            return Err(ParseFrameError::BufMustBeAtLeast9Bytes(buf.len()));
         }
+
+        // TODO: do not transmute
         let header = unpack_header(unsafe {
             assert!(buf.len() >= 9);
             // We just asserted that this transmute is safe.
@@ -276,11 +293,11 @@ impl RawFrame {
 
         let payload_len = header.length as usize;
         if buf[9..].len() < payload_len {
-            return None;
+            return Err(ParseFrameError::IncorrectPayloadLen);
         }
 
         let raw = &buf[..9 + payload_len];
-        Some(raw.into())
+        Ok(raw.into())
     }
 
     pub fn as_frame_ref(&self) -> RawFrameRef {

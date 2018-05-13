@@ -5,6 +5,8 @@ use solicit::frame::RawFrame;
 use solicit::frame::Frame;
 use solicit::frame::FrameIR;
 use solicit::frame::FrameHeader;
+use solicit::frame::ParseFrameResult;
+use solicit::frame::ParseFrameError;
 use solicit::frame::builder::FrameBuilder;
 
 use super::flags::Flag;
@@ -83,27 +85,27 @@ impl ContinuationFrame {
 impl Frame for ContinuationFrame {
     type FlagType = ContinuationFlag;
 
-    fn from_raw(raw_frame: &RawFrame) -> Option<ContinuationFrame> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<ContinuationFrame> {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != CONTINUATION_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
         if (length as usize) != raw_frame.payload().len() {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // Check that the HEADERS frame is not associated to stream 0
         if stream_id == 0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
 
-        Some(ContinuationFrame {
+        Ok(ContinuationFrame {
             header_fragment: raw_frame.payload(),
-            stream_id: stream_id,
+            stream_id,
             flags: Flags::new(flags),
         })
     }

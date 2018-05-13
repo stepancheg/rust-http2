@@ -2,6 +2,8 @@
 
 use solicit::StreamId;
 use solicit::frame::{Frame, FrameIR, FrameBuilder, FrameHeader, RawFrame};
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 use solicit::frame::flags::*;
 
 use error::ErrorCode;
@@ -54,23 +56,23 @@ impl RstStreamFrame {
 impl Frame for RstStreamFrame {
     type FlagType = NoFlag;
 
-    fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         if length != RST_STREAM_FRAME_LEN {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         if frame_type != RST_STREAM_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         if stream_id == 0x0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
 
         let error = unpack_octets_4!(raw_frame.payload(), 0, u32);
 
-        Some(RstStreamFrame {
+        Ok(RstStreamFrame {
             raw_error_code: error,
-            stream_id: stream_id,
+            stream_id,
             flags: Flags::new(flags),
         })
     }
@@ -150,19 +152,19 @@ mod tests {
     #[test]
     fn test_parse_invalid_stream_id() {
         let raw = prepare_frame_bytes(FrameHeader::new(4, 0x3, 0x80, 0), vec![0, 0, 0, 1]);
-        assert!(RstStreamFrame::from_raw(&raw.into()).is_none());
+        assert!(RstStreamFrame::from_raw(&raw.into()).is_err());
     }
 
     #[test]
     fn test_parse_invalid_payload_size() {
         let raw = prepare_frame_bytes(FrameHeader::new(5, 0x3, 0x00, 2), vec![0, 0, 0, 1, 0]);
-        assert!(RstStreamFrame::from_raw(&raw.into()).is_none());
+        assert!(RstStreamFrame::from_raw(&raw.into()).is_err());
     }
 
     #[test]
     fn test_parse_invalid_id() {
         let raw = prepare_frame_bytes(FrameHeader::new(4, 0x1, 0x00, 2), vec![0, 0, 0, 1, 0]);
-        assert!(RstStreamFrame::from_raw(&raw.into()).is_none());
+        assert!(RstStreamFrame::from_raw(&raw.into()).is_err());
     }
 
     #[test]

@@ -4,6 +4,8 @@ use bytes::Bytes;
 
 use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame, parse_padded_payload};
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 use solicit::frame::flags::*;
 
 pub const HEADERS_FRAME_TYPE: u8 = 0x1;
@@ -227,22 +229,22 @@ impl Frame for HeadersFrame {
     /// `RawFrame`. The stream ID *must not* be 0.
     ///
     /// Otherwise, returns a newly constructed `HeadersFrame`.
-    fn from_raw(raw_frame: &RawFrame) -> Option<HeadersFrame> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HeadersFrame> {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != HEADERS_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
         if (length as usize) != raw_frame.payload().len() {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // Check that the HEADERS frame is not associated to stream 0
         if stream_id == 0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
 
         let flags = Flags::new(flags);
@@ -251,10 +253,7 @@ impl Frame for HeadersFrame {
         // the frame is padded.
         let padded = flags.is_set(HeadersFlag::Padded);
 
-        let (actual, pad_len) = match parse_padded_payload(raw_frame.payload(), padded) {
-            None => return None,
-            Some(t) => t,
-        };
+        let (actual, pad_len) = parse_padded_payload(raw_frame.payload(), padded)?;
 
         // From the actual payload we extract the stream dependency info, if
         // the appropriate flag is set.
@@ -265,12 +264,12 @@ impl Frame for HeadersFrame {
             (actual, None)
         };
 
-        Some(HeadersFrame {
+        Ok(HeadersFrame {
             header_fragment: data,
-            stream_id: stream_id,
-            stream_dep: stream_dep,
+            stream_id,
+            stream_dep,
             padding_len: pad_len,
-            flags: flags,
+            flags,
         })
     }
 
@@ -504,9 +503,9 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 0x1, 0, 0);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<HeadersFrame> = Frame::from_raw(&raw);
+        let frame = HeadersFrame::from_raw(&raw);
 
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that the `HeadersFrame::parse` method considers any frame with
@@ -518,9 +517,9 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 0x2, 0, 1);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<HeadersFrame> = Frame::from_raw(&raw);
+        let frame = HeadersFrame::from_raw(&raw);
 
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that a simple HEADERS frame (no padding, no priority) gets

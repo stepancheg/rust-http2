@@ -8,6 +8,8 @@ use solicit::frame::{
     FrameHeader,
     RawFrame,
 };
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 use solicit::frame::flags::*;
 
 /// Ping frames are always 8 bytes
@@ -76,22 +78,22 @@ impl PingFrame {
 impl Frame for PingFrame {
     type FlagType = PingFlag;
 
-    fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         if length != PING_FRAME_LEN {
-            return None;
+            return Err(ParseFrameError::IncorrectPayloadLen);
         }
         if frame_type != PING_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         if stream_id != 0x0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeZero(stream_id));
         }
 
         let data = unpack_octets_4!(raw_frame.payload(), 0, u64) << 32 |
                    unpack_octets_4!(raw_frame.payload(), 4, u64);
 
-        Some(PingFrame {
+        Ok(PingFrame {
             opaque_data: data,
             flags: Flags::new(flags),
         })

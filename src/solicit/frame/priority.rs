@@ -9,6 +9,8 @@ use solicit::frame::RawFrame;
 use solicit::frame::builder::FrameBuilder;
 use solicit::frame::flags::NoFlag;
 use solicit::frame::flags::Flags;
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -25,19 +27,19 @@ pub const PRIORITY_FRAME_TYPE: u8 = 0x2;
 impl Frame for PriorityFrame {
     type FlagType = NoFlag;
 
-    fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         if length != 5 {
-            return None;
+            return Err(ParseFrameError::IncorrectFrameLength(length));
         }
         if frame_type != PRIORITY_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         if flags != 0 {
-            return None;
+            return Err(ParseFrameError::IncorrectFlags(flags));
         }
         if stream_id == 0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
 
         let mut payload = raw_frame.payload().into_buf();
@@ -47,12 +49,12 @@ impl Frame for PriorityFrame {
         let weight = payload.get_u8();
         assert_eq!(0, payload.remaining());
 
-        Some(PriorityFrame {
+        Ok(PriorityFrame {
             flags: Flags::new(flags),
-            stream_id: stream_id,
-            exclusive: exclusive,
-            stream_dep: stream_dep,
-            weight: weight,
+            stream_id,
+            exclusive,
+            stream_dep,
+            weight,
         })
     }
 

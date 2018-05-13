@@ -6,6 +6,8 @@ use error::ErrorCode;
 use solicit::StreamId;
 use solicit::frame::{Frame, FrameIR, FrameBuilder, FrameHeader, RawFrame, parse_stream_id};
 use solicit::frame::flags::*;
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 
 /// The minimum size for the `GOAWAY` frame payload.
 /// It is 8 octets, as the last stream id and error code are required parts of the GOAWAY frame.
@@ -69,26 +71,26 @@ impl GoawayFrame {
 impl Frame for GoawayFrame {
     type FlagType = NoFlag;
 
-    fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         if length < GOAWAY_MIN_FRAME_LEN {
-            return None;
+            return Err(ParseFrameError::IncorrectPayloadLen);
         }
         if frame_type != GOAWAY_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         if stream_id != 0x0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
 
         let last_stream_id = parse_stream_id(&raw_frame.payload());
         let error = unpack_octets_4!(raw_frame.payload(), 4, u32);
         let debug_data = raw_frame.payload().slice_from(GOAWAY_MIN_FRAME_LEN as usize);
 
-        Some(GoawayFrame {
-            last_stream_id: last_stream_id,
+        Ok(GoawayFrame {
+            last_stream_id,
             raw_error_code: error,
-            debug_data: debug_data,
+            debug_data,
             flags: Flags::new(flags),
         })
     }
@@ -171,13 +173,13 @@ mod tests {
     #[test]
     fn test_parse_invalid_id() {
         let raw = raw_frame_from_parts(FrameHeader::new(12, 0x1, 0, 0), vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4]);
-        assert!(GoawayFrame::from_raw(&raw).is_none(), "expected invalid id");
+        assert!(GoawayFrame::from_raw(&raw).is_err(), "expected invalid id");
     }
 
     #[test]
     fn test_parse_invalid_stream_id() {
         let raw = raw_frame_from_parts(FrameHeader::new(8, 0x7, 0, 3), vec![0, 0, 0, 0, 0, 0, 0, 1]);
-        assert!(GoawayFrame::from_raw(&raw).is_none(),
+        assert!(GoawayFrame::from_raw(&raw).is_err(),
                 "expected invalid stream id");
     }
 
@@ -185,7 +187,7 @@ mod tests {
     fn test_parse_invalid_length() {
         // Too short!
         let raw = raw_frame_from_parts(FrameHeader::new(7, 0x1, 0, 0), vec![0, 0, 0, 0, 0, 0, 1]);
-        assert!(GoawayFrame::from_raw(&raw).is_none(), "expected too short");
+        assert!(GoawayFrame::from_raw(&raw).is_err(), "expected too short");
     }
 
     #[test]

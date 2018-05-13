@@ -2,6 +2,8 @@
 
 use solicit::StreamId;
 use solicit::frame::{Frame, FrameIR, FrameBuilder, FrameHeader, RawFrame};
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 use solicit::frame::flags::*;
 
 /// The minimum size for the `WINDOW_UPDATE` frame payload.
@@ -42,22 +44,22 @@ impl WindowUpdateFrame {
 impl Frame for WindowUpdateFrame {
     type FlagType = NoFlag;
 
-    fn from_raw(raw_frame: &RawFrame) -> Option<Self> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         if length != WINDOW_UPDATE_FRAME_LEN {
-            return None;
+            return Err(ParseFrameError::IncorrectFrameLength(length));
         }
         if frame_type != WINDOW_UPDATE_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
 
         let num = unpack_octets_4!(raw_frame.payload(), 0, u32);
         // Clear the reserved most-significant bit
         let increment = num & !0x80000000;
 
-        Some(WindowUpdateFrame {
-            stream_id: stream_id,
-            increment: increment,
+        Ok(WindowUpdateFrame {
+            stream_id,
+            increment,
             flags: Flags::new(flags),
         })
     }

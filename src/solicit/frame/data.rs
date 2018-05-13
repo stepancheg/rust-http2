@@ -3,6 +3,8 @@
 use std::borrow::Cow;
 use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame, parse_padded_payload};
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 use solicit::frame::flags::*;
 
 use bytes::Bytes;
@@ -137,7 +139,7 @@ impl DataFrame {
     /// If there was no padding, returns `None` for the second tuple member.
     ///
     /// If the payload was invalid for a DATA frame, returns `None`
-    fn parse_payload(payload: Bytes, padded: bool) -> Option<(Bytes, u8)> {
+    fn parse_payload(payload: Bytes, padded: bool) -> ParseFrameResult<(Bytes, u8)> {
         parse_padded_payload(payload, padded)
     }
 
@@ -153,40 +155,36 @@ impl Frame for DataFrame {
     /// Creates a new `DataFrame` from the given `RawFrame` (i.e. header and
     /// payload), if possible.  Returns `None` if a valid `DataFrame` cannot be
     /// constructed from the given `RawFrame`.
-    fn from_raw(raw_frame: &RawFrame) -> Option<DataFrame> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<DataFrame> {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != DATA_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
         if (length as usize) != raw_frame.payload().len() {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // A DATA frame cannot be associated to the connection itself.
         if stream_id == 0x0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
         // No validation is required for the flags, since according to the spec,
         // unknown flags MUST be ignored.
         // Everything has been validated so far: try to extract the data from
         // the payload.
         let padded = (flags & DataFlag::Padded.bitmask()) != 0;
-        match DataFrame::parse_payload(raw_frame.payload(), padded) {
-            Some((data, padding_len)) => {
-                // The data got extracted (from a padded frame)
-                Some(DataFrame {
-                    stream_id: stream_id,
-                    flags: Flags::new(flags),
-                    data: data,
-                    padding_len: padding_len,
-                })
-            }
-            None => None,
-        }
+        let (data, padding_len) = DataFrame::parse_payload(raw_frame.payload(), padded)?;
+        // The data got extracted (from a padded frame)
+        Ok(DataFrame {
+            stream_id,
+            flags: Flags::new(flags),
+            data,
+            padding_len,
+        })
     }
 
     /// Tests if the given flag is set for the frame.
@@ -313,10 +311,10 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 0u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<DataFrame> = Frame::from_raw(&raw);
+        let frame = DataFrame::from_raw(&raw);
 
         // The frame was not even created since the raw bytes are invalid
-        assert!(frame.is_none())
+        assert!(frame.is_err())
     }
 
     /// Tests that if a frame that should be parsed has a stream ID of 0, it is
@@ -329,10 +327,10 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 0u8, 0u8, 0u32);
 
         let raw = raw_frame_from_parts(header, payload.to_vec());
-        let frame: Option<DataFrame> = Frame::from_raw(&raw);
+        let frame = DataFrame::from_raw(&raw);
 
         // The frame is not valid.
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that the `DataFrame` struct correctly interprets a DATA frame
@@ -359,11 +357,11 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 0u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<DataFrame> = Frame::from_raw(&raw);
+        let frame = DataFrame::from_raw(&raw);
 
         // In this case, we cannot receive a frame, since the payload did not
         // contain even the first byte, necessary to find the padding length.
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that the `DataFrame` struct correctly interprets a DATA frame
@@ -395,9 +393,9 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 1u8, 8u8, 1u32);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<DataFrame> = Frame::from_raw(&raw);
+        let frame = DataFrame::from_raw(&raw);
 
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that `DataFrame`s get correctly serialized when created with no

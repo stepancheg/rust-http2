@@ -10,6 +10,8 @@ use tls_api;
 
 use tokio_timer::TimeoutError;
 
+use solicit::frame::ParseFrameError;
+
 /// The enum represents an error code that are used in `RST_STREAM` and `GOAWAY` frames.
 /// These are defined in [Section 7](http://http2.github.io/http2-spec/#ErrorCodes) of the HTTP/2
 /// spec.
@@ -129,6 +131,7 @@ pub enum Error {
     /// Shutdown of local client or server
     Shutdown,
     HandlerPanicked(String),
+    ParseFrameError(ParseFrameError),
     Other(&'static str),
 }
 
@@ -157,6 +160,12 @@ impl<F> From<TimeoutError<F>> for Error {
     }
 }
 
+impl From<ParseFrameError> for Error {
+    fn from(e: ParseFrameError) -> Self {
+        Error::ParseFrameError(e)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "HTTP/2 Error: {}", self.description())
@@ -178,6 +187,7 @@ impl StdError for Error {
             Error::ConnectionTimeout => "Connection time out",
             Error::Shutdown => "Local shutdown",
             Error::HandlerPanicked(_) => "Handler panicked",
+            Error::ParseFrameError(_) => "Failed to parse frame",
             Error::Other(_) => "An unknown error",
         }
     }

@@ -3,9 +3,8 @@
 use solicit::StreamId;
 use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
-use result::Result;
-use error::Error;
-use error::ErrorCode;
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
 
 pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
 
@@ -30,14 +29,14 @@ impl HttpSetting {
     /// Creates a new `HttpSetting` with the correct variant corresponding to
     /// the given setting id, based on the settings IDs defined in section
     /// 6.5.2.
-    pub fn from_id(id: u16, val: u32) -> Result<Option<HttpSetting>> {
+    pub fn from_id(id: u16, val: u32) -> ParseFrameResult<Option<HttpSetting>> {
         Ok(Some(match id {
             1 => HttpSetting::HeaderTableSize(val),
             2 => {
                 let b = match val {
                     0 => false,
                     1 => true,
-                    _ => return Err(Error::CodeError(ErrorCode::ProtocolError)),
+                    _ => return Err(ParseFrameError::IncorrectSettingsPushValue(val)),
                 };
                 HttpSetting::EnablePush(b)
             },
@@ -59,7 +58,7 @@ impl HttpSetting {
     /// # Panics
     ///
     /// If given a buffer shorter than 6 bytes, the function will panic.
-    fn parse_setting(raw_setting: &[u8]) -> Result<Option<HttpSetting>> {
+    fn parse_setting(raw_setting: &[u8]) -> ParseFrameResult<Option<HttpSetting>> {
         let id: u16 = ((raw_setting[0] as u16) << 8) | (raw_setting[1] as u16);
         let val: u32 = unpack_octets_4!(raw_setting, 2, u32);
 
@@ -249,9 +248,9 @@ impl SettingsFrame {
     ///
     /// If the frame is invalid (i.e. the length of the payload is not a
     /// multiple of 6) it returns `None`.
-    fn parse_payload(payload: &[u8]) -> Result<Vec<HttpSetting>> {
+    fn parse_payload(payload: &[u8]) -> ParseFrameResult<Vec<HttpSetting>> {
         if payload.len() % 6 != 0 {
-            return Err(Error::CodeError(ErrorCode::ProtocolError));
+            return Err(ParseFrameError::ProtocolError);
         }
 
         // Iterates through chunks of the raw payload of size 6 bytes and
@@ -287,41 +286,38 @@ impl Frame for SettingsFrame {
     /// total payload length must be multiple of 6.
     ///
     /// Otherwise, returns a newly constructed `SettingsFrame`.
-    fn from_raw(raw_frame: &RawFrame) -> Option<SettingsFrame> {
+    fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<SettingsFrame> {
         // Unpack the header
         let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != SETTINGS_FRAME_TYPE {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
         if (length as usize) != raw_frame.payload().len() {
-            return None;
+            return Err(ParseFrameError::InternalError);
         }
         // Check that the SETTINGS frame is associated to stream 0
         if stream_id != 0 {
-            return None;
+            return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
         if (flags & SettingsFlag::Ack.bitmask()) != 0 {
             return if length == 0 {
                 // Ack is set and there's no payload => just an Ack frame
-                Some(SettingsFrame {
+                Ok(SettingsFrame {
                     settings: Vec::new(),
                     flags: Flags::new(flags),
                 })
             } else {
                 // The SETTINGS flag MUST not have a payload if Ack is set
-                None
+                Err(ParseFrameError::ProtocolError)
             }
         }
 
-        let settings = match SettingsFrame::parse_payload(&raw_frame.payload()) {
-            Ok(settings) => settings,
-            Err(_) => return None,
-        };
-        Some(SettingsFrame {
+        let settings = SettingsFrame::parse_payload(&raw_frame.payload())?;
+        Ok(SettingsFrame {
             settings,
             flags: Flags::new(flags),
         })
@@ -517,9 +513,9 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 4, 1, 0);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<SettingsFrame> = Frame::from_raw(&raw);
+        let frame = SettingsFrame::from_raw(&raw);
 
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that a `SettingsFrame` correctly handles a SETTINGS frame which
@@ -531,9 +527,9 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 4, 1, 1);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<SettingsFrame> = Frame::from_raw(&raw);
+        let frame = SettingsFrame::from_raw(&raw);
 
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that a `SettingsFrame` correctly handles a SETTINGS frame which
@@ -545,9 +541,9 @@ mod tests {
         let header = FrameHeader::new(payload.len() as u32, 4, 0, 0);
 
         let raw = raw_frame_from_parts(header, payload);
-        let frame: Option<SettingsFrame> = Frame::from_raw(&raw);
+        let frame = SettingsFrame::from_raw(&raw);
 
-        assert!(frame.is_none());
+        assert!(frame.is_err());
     }
 
     /// Tests that a `SettingsFrame` gets correctly serialized when it contains
