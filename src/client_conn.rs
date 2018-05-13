@@ -44,6 +44,7 @@ use client_tls::*;
 use socket::*;
 
 use rc_mut::*;
+use solicit::connection::HttpFrameType;
 
 
 struct ClientTypes;
@@ -88,7 +89,7 @@ impl ConnInner for ClientInner {
     fn process_headers(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ClientTypes>>>
     {
-        if let Some(mut stream) = self.get_stream_or_send_rst_goaway(stream_id)? {
+        if let Some(mut stream) = self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)? {
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
                 // TODO: reset stream on error
                 drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {

@@ -49,6 +49,10 @@ impl<T : Types> StreamMap<T> {
         }
     }
 
+    pub fn get_stream_state(&self, id: StreamId) -> Option<StreamState> {
+        self.map.get(&id).map(|s| s.state)
+    }
+
     /// Remove locally initiated streams with id > given.
     pub fn remove_local_streams_with_id_gt(&mut self, id: StreamId)
         -> Vec<(StreamId, HttpStreamCommon<T>)>

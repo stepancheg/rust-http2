@@ -30,7 +30,9 @@ use solicit::DEFAULT_SETTINGS;
 use solicit::connection::EndStream;
 use solicit::connection::HttpConnection;
 use solicit::connection::HttpFrame;
+use solicit::connection::HttpFrameType;
 use solicit::frame::settings::HttpSettings;
+use solicit::session::StreamState;
 use solicit::session::StreamStateIdleOrClosed;
 
 use solicit_misc::*;
@@ -440,7 +442,7 @@ impl<T : Types> ConnData<T>
     {
         self.out_window_increased(Some(frame.stream_id))?;
 
-        match self.get_stream_or_send_goaway(frame.stream_id)? {
+        match self.get_stream_maybe_send_error(frame.stream_id, HttpFrameType::WindowUpdate)? {
             Some(mut stream) => {
                 // TODO: stream error, not conn error
                 let old_window_size = stream.stream().out_window_size.0;
@@ -487,7 +489,8 @@ impl<T : Types> ConnData<T>
     fn process_rst_stream_frame(&mut self, frame: RstStreamFrame)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
-        if let Some(stream) = self.get_stream_or_send_goaway(frame.get_stream_id())? {
+        let stream_id = frame.get_stream_id();
+        if let Some(stream) = self.get_stream_maybe_send_error(stream_id, HttpFrameType::RstStream)? {
             stream.rst_remove(frame.error_code());
         }
 
@@ -525,53 +528,76 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    pub fn get_stream_or_send_rst_goaway(&mut self, stream_id: StreamId)
-        -> result::Result<Option<HttpStreamRef<T>>>
-    {
-        // Another day in endless bitter war against borrow checker
-        if self.streams.get_mut(stream_id).is_some() {
-            return Ok(Some(self.streams.get_mut(stream_id).unwrap()));
+    fn stream_state(&self, stream_id: StreamId) -> StreamState {
+        match self.streams.get_stream_state(stream_id) {
+            Some(state) => state,
+            None => self.stream_state_idle_or_closed(stream_id).into(),
         }
-
-        let stream_state = self.stream_state_idle_or_closed(stream_id);
-
-        match stream_state {
-            StreamStateIdleOrClosed::Closed => {
-                debug!("stream is closed: {}, sending RST_STREAM", stream_id);
-                self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
-            }
-            StreamStateIdleOrClosed::Idle => {
-                debug!("stream is idle: {}, sending GOAWAY", stream_id);
-                self.send_goaway(ErrorCode::StreamClosed)?;
-            }
-        }
-
-        Ok(None)
     }
 
-    /// Get stream reference or send GOAWAY and close connection
-    /// if stream is in idle state.
-    pub fn get_stream_or_send_goaway(&mut self, stream_id: StreamId)
+    pub fn get_stream_maybe_send_error(&mut self, stream_id: StreamId, frame_type: HttpFrameType)
         -> result::Result<Option<HttpStreamRef<T>>>
     {
-        // Another day in endless bitter war against borrow checker
-        if self.streams.get_mut(stream_id).is_some() {
-            return Ok(Some(self.streams.get_mut(stream_id).unwrap()));
-        }
-
-        let stream_state = self.stream_state_idle_or_closed(stream_id);
+        let stream_state = self.stream_state(stream_id);
 
         match stream_state {
-            StreamStateIdleOrClosed::Closed => {
-                debug!("stream is closed: {}, ignoring", stream_id);
+            StreamState::Idle => {
+                let send_connection_error = match frame_type {
+                    HttpFrameType::Headers |
+                    HttpFrameType::Priority |
+                    HttpFrameType::PushPromise => false,
+                    _ => true,
+                };
+
+                if send_connection_error {
+                    debug!("stream is idle: {}, sending GOAWAY", stream_id);
+                    self.send_goaway(ErrorCode::StreamClosed)?;
+                }
             }
-            StreamStateIdleOrClosed::Idle => {
-                debug!("stream is idle: {}, sending GOAWAY", stream_id);
-                self.send_goaway(ErrorCode::StreamClosed)?;
+            StreamState::Open | StreamState::HalfClosedLocal => {}
+            // TODO
+            StreamState::ReservedLocal | StreamState::ReservedRemote => {}
+            StreamState::HalfClosedRemote => {
+                // If an endpoint receives additional frames, other than
+                // WINDOW_UPDATE, PRIORITY, or RST_STREAM, for a stream that is in
+                // this state, it MUST respond with a stream error (Section 5.4.2) of
+                // type STREAM_CLOSED.
+                let send_rst = match frame_type {
+                    HttpFrameType::WindowUpdate |
+                    HttpFrameType::Priority |
+                    HttpFrameType::RstStream => false,
+                    _ => true,
+                };
+                
+                if send_rst {
+                    debug!("stream is half-closed remote: {}, sending RST_STREAM", stream_id);
+                    self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
+                }
+            }
+            StreamState::Closed => {
+                // An endpoint MUST NOT send frames other than PRIORITY on a closed
+                // stream.  An endpoint that receives any frame other than PRIORITY
+                // after receiving a RST_STREAM MUST treat that as a stream error
+                // (Section 5.4.2) of type STREAM_CLOSED.  Similarly, an endpoint
+                // that receives any frames after receiving a frame with the
+                // END_STREAM flag set MUST treat that as a connection error
+                // (Section 5.4.1) of type STREAM_CLOSED, unless the frame is
+                // permitted as described below.
+
+                let send_stream_closed = match frame_type {
+                    HttpFrameType::RstStream |
+                    HttpFrameType::Priority => false,
+                    _ => true,
+                };
+
+                if send_stream_closed {
+                    debug!("stream is closed: {}, sending RST_STREAM", stream_id);
+                    self.send_goaway(ErrorCode::StreamClosed)?;
+                }
             }
         }
 
-        Ok(None)
+        Ok(self.streams.get_mut(stream_id))
     }
 
     fn process_data_frame(&mut self, frame: DataFrame)
@@ -597,7 +623,7 @@ impl<T : Types> ConnData<T>
             // If a DATA frame is received whose stream is not in "open" or
             // "half-closed (local)" state, the recipient MUST respond with
             // a stream error (Section 5.4.2) of type STREAM_CLOSED.
-            let mut stream = match self.get_stream_or_send_rst_goaway(frame.get_stream_id())? {
+            let mut stream = match self.get_stream_maybe_send_error(frame.get_stream_id(), HttpFrameType::Data)? {
                 Some(stream) => stream,
                 None => {
                     return Ok(None);

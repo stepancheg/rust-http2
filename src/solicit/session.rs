@@ -47,3 +47,12 @@ pub enum StreamStateIdleOrClosed {
     Idle,
     Closed,
 }
+
+impl From<StreamStateIdleOrClosed> for StreamState {
+    fn from(s: StreamStateIdleOrClosed) -> Self {
+        match s {
+            StreamStateIdleOrClosed::Idle => StreamState::Idle,
+            StreamStateIdleOrClosed::Closed => StreamState::Closed,
+        }
+    }
+}
