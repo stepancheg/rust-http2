@@ -707,7 +707,8 @@ impl<T : Types> ConnData<T>
                     Err(error::Error::Other("PING ACK opaque data mismatch"))
                 }
             } else {
-                Err(error::Error::Other("PING ACK without PING"))
+                warn!("PING ACK without PING");
+                Ok(())
             }
         } else {
             let ping = PingFrame::new_ack(frame.opaque_data());
