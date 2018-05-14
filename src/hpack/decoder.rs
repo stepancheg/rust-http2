@@ -160,6 +160,7 @@ fn decode_string<'a>(buf: &'a [u8]) -> Result<(Cow<'a, [u8]>, usize), DecoderErr
 
 /// Different variants of how a particular header field can be represented in
 /// an HPACK encoding.
+#[derive(Eq, PartialEq)]
 enum FieldRepresentation {
     Indexed,
     LiteralWithIncrementalIndexing,
@@ -307,7 +308,7 @@ impl<'a> Decoder<'a> {
             where F: FnMut(Cow<[u8]>, Cow<[u8]>) {
         let mut current_octet_index = 0;
 
-        let mut first_field = true;
+        let mut current_size_update = true;
 
         while current_octet_index < buf.len() {
             // At this point we are always at the beginning of the next block
@@ -364,7 +365,7 @@ impl<'a> Decoder<'a> {
                     consumed
                 },
                 FieldRepresentation::SizeUpdate => {
-                    if !first_field {
+                    if !current_size_update {
                         return Err(DecoderError::SizeUpdateMustBeFirstField);
                     }
 
@@ -374,7 +375,11 @@ impl<'a> Decoder<'a> {
             };
 
             current_octet_index += consumed;
-            first_field = false;
+
+            match FieldRepresentation::new(initial_octet) {
+                FieldRepresentation::SizeUpdate => {}
+                _ => current_size_update = false,
+            }
         }
 
         Ok(())
