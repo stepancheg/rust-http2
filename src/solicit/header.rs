@@ -196,11 +196,15 @@ impl Header {
         format!("{}: {}", String::from_utf8_lossy(&self.name), String::from_utf8_lossy(&self.value))
     }
 
+    pub fn is_preudo_header(&self) -> bool {
+        self.name.len() != 0 && self.name[0] == b':'
+    }
+
     pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {
         if self.name.len() == 0 {
             return false;
         }
-        if self.name[0] == b':' {
+        if self.is_preudo_header() {
             let valid_named = match request_or_response {
                 RequestOrResponse::Request => {
                     static REQ_HEADERS: &[&[u8]] = &[
@@ -280,6 +284,10 @@ impl Headers {
 
     pub fn internal_error_500() -> Headers {
         Headers::from_status(500)
+    }
+
+    pub fn contains_preudo_headers(&self) -> bool {
+        self.0.iter().any(|h| h.is_preudo_header())
     }
 
     pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {

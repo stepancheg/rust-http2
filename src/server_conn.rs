@@ -46,6 +46,7 @@ use socket::StreamItem;
 use misc::any_to_string;
 use rc_mut::*;
 use req_resp::RequestOrResponse;
+use ErrorCode;
 
 
 struct ServerTypes;
@@ -158,19 +159,6 @@ impl ServerInner {
 
         Ok(self.streams.get_mut(stream_id).expect("get stream"))
     }
-
-    fn get_or_create_stream(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers, last: bool)
-        -> result::Result<HttpStreamRef<ServerTypes>>
-    {
-        if self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some() {
-            // https://github.com/rust-lang/rust/issues/36403
-            let mut stream = self.streams.get_mut(stream_id).unwrap();
-            stream.stream().set_headers(headers, last);
-            Ok(stream)
-        } else {
-            self.new_stream_from_client(self_rc, stream_id, headers)
-        }
-    }
 }
 
 impl ConnInner for ServerInner {
@@ -179,13 +167,22 @@ impl ConnInner for ServerInner {
     fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ServerTypes>>>
     {
-        let stream = self.get_or_create_stream(
-            self_rc,
-            stream_id,
-            headers,
-            end_stream == EndStream::Yes)?;
+        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
 
-        Ok(Some(stream))
+        if existing_stream {
+            if headers.contains_preudo_headers() {
+                warn!("preudo headers in non-first headers, stream: {}, headers: {:?}",
+                    stream_id, headers);
+                self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                return Ok(None);
+            }
+
+            let mut stream = self.streams.get_mut(stream_id).unwrap();
+            stream.stream().set_headers(headers, end_stream == EndStream::Yes);
+            Ok(Some(stream))
+        } else {
+            self.new_stream_from_client(self_rc, stream_id, headers).map(Some)
+        }
     }
 
     fn goaway_received(&mut self, _stream_id: StreamId, _raw_error_code: u32) {
