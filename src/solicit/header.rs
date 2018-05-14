@@ -200,10 +200,19 @@ impl Header {
         self.name.len() != 0 && self.name[0] == b':'
     }
 
+    fn validate_header_name_char(b: u8) -> bool {
+        // TODO: restrict more
+        if b >= b'A' && b <= b'Z' {
+            return false
+        }
+        true
+    }
+
     pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {
         if self.name.len() == 0 {
             return false;
         }
+
         if self.is_preudo_header() {
             let valid_named = match request_or_response {
                 RequestOrResponse::Request => {
@@ -226,6 +235,13 @@ impl Header {
                 return false;
             }
         }
+
+        for c in &self.name {
+            if !Header::validate_header_name_char(c) {
+                return false;
+            }
+        }
+
         return true;
     }
 }
