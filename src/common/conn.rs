@@ -800,7 +800,7 @@ impl<T : Types> ConnData<T>
             HttpFrameStream::Headers(headers) => self.process_headers_frame(self_rc, headers)?,
             HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
             HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
-            HttpFrameStream::PushPromise(_f) => unimplemented!(),
+            HttpFrameStream::PushPromise(_f) => return Err(error::Error::NotImplemented("PUSH_PROMISE")),
             HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update)?,
             HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),
         };
