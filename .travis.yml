@@ -8,10 +8,16 @@ rust:
   - beta
   - nightly
 
-script:
+install:
   - rustc --version
-  - RUST_BACKTRACE=1 cargo test -- --test-threads=1
-  - RUST_BACKTRACE=1 cargo test --benches
+  - ci/install-h2spec.sh
+  - export PATH="$PATH:$(pwd)"
+  - export RUST_BACKTRACE=1
+
+script:
+  - cargo test -- --test-threads=1
+  - cargo test --benches
+  - cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test
 
 notifications:
   email:
