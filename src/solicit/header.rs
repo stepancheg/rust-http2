@@ -6,6 +6,7 @@ use std::iter::FromIterator;
 use std::collections::HashSet;
 
 use req_resp::RequestOrResponse;
+use headers_place::HeadersPlace;
 
 use result::Result;
 use error::Error;
@@ -205,7 +206,7 @@ pub enum HeaderError {
     EmptyValue(PseudoHeaderName),
     IncorrectCharInName,
     UnexpectedPseudoHeader(PseudoHeaderName),
-    PseudoHeadersNotInFirstHeaders,
+    PseudoHeadersInTrailers,
     PseudoHeadersAfterRegularHeaders,
     MoreThanOnePseudoHeader(PseudoHeaderName),
     MissingPseudoHeader(PseudoHeaderName),
@@ -374,7 +375,7 @@ impl Headers {
         self.0.iter().any(|h| h.is_preudo_header())
     }
 
-    pub fn validate(&self, req_or_resp: RequestOrResponse, first: bool)
+    pub fn validate(&self, req_or_resp: RequestOrResponse, headers_place: HeadersPlace)
         -> HeaderResult<()>
     {
         let mut saw_regular_header = false;
@@ -391,8 +392,8 @@ impl Headers {
             // pseudo-header field that appears in a header block after a regular
             // header field MUST be treated as malformed (Section 8.1.2.6).
             if let Some(header_name) = header.pseudo_header_name()? {
-                if !first {
-                    return Err(HeaderError::PseudoHeadersNotInFirstHeaders);
+                if headers_place == HeadersPlace::Trailing {
+                    return Err(HeaderError::PseudoHeadersInTrailers);
                 }
 
                 if saw_regular_header {
@@ -413,7 +414,7 @@ impl Headers {
             }
         }
 
-        if first {
+        if headers_place == HeadersPlace::Initial {
             match req_or_resp {
                 // All HTTP/2 requests MUST include exactly one valid value for the
                 // ":method", ":scheme", and ":path" pseudo-header fields, unless it is

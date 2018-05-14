@@ -51,6 +51,7 @@ pub mod message;
 pub mod futures_misc;
 
 mod req_resp;
+mod headers_place;
 
 pub mod assert_types;
 

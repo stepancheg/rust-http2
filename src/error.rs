@@ -132,6 +132,7 @@ pub enum Error {
     Shutdown,
     HandlerPanicked(String),
     ParseFrameError(ParseFrameError),
+    InternalError(String),
     NotImplemented(&'static str),
     Other(&'static str),
 }
@@ -190,6 +191,7 @@ impl StdError for Error {
             Error::HandlerPanicked(_) => "Handler panicked",
             Error::ParseFrameError(_) => "Failed to parse frame",
             Error::NotImplemented(_) => "Not implemented",
+            Error::InternalError(_) => "Internal error",
             Error::Other(_) => "An unknown error",
         }
     }
