@@ -1,6 +1,7 @@
 use solicit::StreamId;
 
 use super::*;
+use req_resp::RequestOrResponse;
 
 /// Client or server type names for connection and stream
 pub trait Types : 'static {
@@ -9,6 +10,12 @@ pub trait Types : 'static {
     type ConnDataSpecific : ConnDataSpecific;
     // Message sent to write loop
     type ToWriteMessage : From<CommonToWriteMessage> + Send;
+
+    fn out_request_or_response() -> RequestOrResponse;
+
+    fn in_request_or_response() -> RequestOrResponse {
+        Self::out_request_or_response().invert()
+    }
 
     /// First stream id used by either client or server
     fn first_id() -> StreamId;

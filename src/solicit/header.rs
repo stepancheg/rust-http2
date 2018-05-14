@@ -195,6 +195,35 @@ impl Header {
     pub fn format(&self) -> String {
         format!("{}: {}", String::from_utf8_lossy(&self.name), String::from_utf8_lossy(&self.value))
     }
+
+    pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {
+        if self.name.len() == 0 {
+            return false;
+        }
+        if self.name[0] == b':' {
+            let valid_named = match request_or_response {
+                RequestOrResponse::Request => {
+                    static REQ_HEADERS: &[&[u8]] = &[
+                        b":method" as &[u8],
+                        b":scheme",
+                        b":authority",
+                        b":path",
+                    ];
+                    REQ_HEADERS
+                }
+                RequestOrResponse::Response => {
+                    static RESP_HEADERS: &[&[u8]] = &[
+                        b":status" as &[u8],
+                    ];
+                    RESP_HEADERS
+                }
+            };
+            if !valid_named.contains(&self.name.as_ref()) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 impl<N: Into<HeaderPart>, V: Into<HeaderPart>> From<(N, V)> for Header {
@@ -251,6 +280,15 @@ impl Headers {
 
     pub fn internal_error_500() -> Headers {
         Headers::from_status(500)
+    }
+
+    pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {
+        for header in &self.0 {
+            if !header.validate(request_or_response) {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn get_opt<'a>(&'a self, name: &str) -> Option<&'a str> {

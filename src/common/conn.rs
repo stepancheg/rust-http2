@@ -367,6 +367,12 @@ impl<T : Types> ConnData<T>
             .map_err(error::Error::CompressionError)?;
         let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
 
+        if !headers.validate(T::in_request_or_response()) {
+            warn!("invalid headers: {:?}", headers);
+            self.send_rst_stream(frame.stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
 
         self.process_headers(self_rc, frame.stream_id, end_stream, headers)

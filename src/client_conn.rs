@@ -44,6 +44,7 @@ use client_tls::*;
 use socket::*;
 
 use rc_mut::*;
+use req_resp::RequestOrResponse;
 
 
 struct ClientTypes;
@@ -56,6 +57,10 @@ impl Types for ClientTypes {
 
     fn first_id() -> StreamId {
         1
+    }
+
+    fn out_request_or_response() -> RequestOrResponse {
+        RequestOrResponse::Request
     }
 }
 

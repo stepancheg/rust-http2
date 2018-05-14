@@ -45,6 +45,7 @@ use socket::StreamItem;
 
 use misc::any_to_string;
 use rc_mut::*;
+use req_resp::RequestOrResponse;
 
 
 struct ServerTypes;
@@ -57,6 +58,10 @@ impl Types for ServerTypes {
 
     fn first_id() -> StreamId {
         2
+    }
+
+    fn out_request_or_response() -> RequestOrResponse {
+        RequestOrResponse::Response
     }
 }
 
