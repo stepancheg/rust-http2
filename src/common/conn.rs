@@ -362,9 +362,15 @@ impl<T : Types> ConnData<T>
     }
 
     fn process_headers_frame(&mut self, self_rc: RcMut<Self>, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
-        let headers = self.conn.decoder
-            .decode(&frame.header_fragment())
-            .map_err(error::Error::CompressionError)?;
+        let headers = match self.conn.decoder.decode(&frame.header_fragment()) {
+            Err(e) => {
+                warn!("failed to decode headers: {:?}", e);
+                self.send_goaway(ErrorCode::CompressionError)?;
+                return Ok(None);
+            }
+            Ok(headers) => headers,
+        };
+
         let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
 
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };

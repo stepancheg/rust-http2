@@ -239,7 +239,7 @@ pub enum DecoderError {
     /// The size of the dynamic table can never be allowed to exceed the max
     /// size mandated to the decoder by the protocol. (by perfroming changes
     /// made by SizeUpdate blocks).
-    InvalidMaxDynamicSize,
+    InvalidMaxDynamicSize(u32, u32),
     SizeUpdateMustBeFirstField,
 }
 
@@ -254,6 +254,8 @@ pub type DecoderResult = Result<Vec<(Vec<u8>, Vec<u8>)>, DecoderError>;
 pub struct Decoder<'a> {
     // The dynamic table will own its own copy of headers
     header_table: HeaderTable<'a>,
+    // Max configured size
+    max_size: u32,
 }
 
 /// Represents a decoder of HPACK encoded headers. Maintains the state
@@ -275,12 +277,14 @@ impl<'a> Decoder<'a> {
     ///       the one defined in the HPACK spec.
     fn with_static_table(static_table: StaticTable<'a>) -> Decoder<'a> {
         Decoder {
-            header_table: HeaderTable::with_static_table(static_table)
+            header_table: HeaderTable::with_static_table(static_table),
+            max_size: 4096,
         }
     }
 
     /// Sets a new maximum dynamic table size for the decoder.
     pub fn set_max_table_size(&mut self, new_max_size: usize) {
+        self.max_size = new_max_size as u32;
         self.header_table.dynamic_table.set_max_table_size(new_max_size);
     }
 
@@ -365,7 +369,7 @@ impl<'a> Decoder<'a> {
                     }
 
                     // Handle the dynamic table size update...
-                    self.update_max_dynamic_size(buffer_leftover)
+                    self.update_max_dynamic_size(buffer_leftover)?
                 }
             };
 
@@ -456,15 +460,20 @@ impl<'a> Decoder<'a> {
     /// octet in the `SizeUpdate` block.
     ///
     /// Returns the number of octets consumed from the given buffer.
-    fn update_max_dynamic_size(&mut self, buf: &[u8]) -> usize {
+    fn update_max_dynamic_size(&mut self, buf: &[u8]) -> Result<usize, DecoderError> {
         let (new_size, consumed) = decode_integer(buf, 5).ok().unwrap();
+
+        if new_size > self.max_size as usize {
+            return Err(DecoderError::InvalidMaxDynamicSize(new_size as u32, self.max_size));
+        }
+
         self.header_table.dynamic_table.set_max_table_size(new_size);
 
         info!("Decoder changed max table size from {} to {}",
               self.header_table.dynamic_table.get_size(),
               new_size);
 
-        consumed
+        Ok(consumed)
     }
 }
 
