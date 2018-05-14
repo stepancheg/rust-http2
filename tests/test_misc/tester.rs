@@ -132,6 +132,7 @@ impl HttpConnectionTester {
         let mut headers = Headers::new();
         headers.add(":method", "GET");
         headers.add(":path", path);
+        headers.add(":scheme", "http");
         self.send_headers(stream_id, headers, true);
     }
 

@@ -45,6 +45,7 @@ use socket::*;
 
 use rc_mut::*;
 use req_resp::RequestOrResponse;
+use ErrorCode;
 
 
 struct ClientTypes;
@@ -67,6 +68,7 @@ impl Types for ClientTypes {
 
 
 pub struct ClientStreamData {
+    headers_recvd: bool,
 }
 
 impl HttpStreamDataSpecific for ClientStreamData {
@@ -93,25 +95,38 @@ impl ConnInner for ClientInner {
     fn process_headers(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ClientTypes>>>
     {
-        if let Some(mut stream) = self.get_stream_for_headers_maybe_send_error(stream_id)? {
-            if let Some(in_rem_content_length) = headers.content_length() {
-                stream.stream().in_rem_content_length = Some(in_rem_content_length);
-            }
-
-            if let Some(ref mut response_handler) = stream.stream().peer_tx {
-                // TODO: reset stream on error
-                drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
-                    content: HttpStreamPartContent::Headers(headers),
-                    last: end_stream == EndStream::Yes,
-                })));
-            } else {
-                // TODO: reset stream
-            }
-
-            Ok(Some(stream))
-        } else {
-            Ok(None)
+        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
+        if !existing_stream {
+            return Ok(None);
         }
+
+        let headers_recvd =
+            self.streams.get_mut(stream_id).unwrap().stream().specific.headers_recvd;
+
+        if let Err(e) = headers.validate(RequestOrResponse::Response, !headers_recvd) {
+            warn!("invalid headers: {:?} {:?}", e, headers);
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
+        let mut stream = self.streams.get_mut(stream_id).unwrap();
+        if let Some(in_rem_content_length) = headers.content_length() {
+            stream.stream().in_rem_content_length = Some(in_rem_content_length);
+        }
+
+        stream.stream().specific.headers_recvd = true;
+
+        if let Some(ref mut response_handler) = stream.stream().peer_tx {
+            // TODO: reset stream on error
+            drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
+                content: HttpStreamPartContent::Headers(headers),
+                last: end_stream == EndStream::Yes,
+            })));
+        } else {
+            // TODO: reset stream
+        }
+
+        Ok(Some(stream))
     }
 }
 
@@ -157,7 +172,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                 let (mut http_stream, resp_stream, out_window) = inner.new_stream_data(
                     stream_id,
                     None,
-                    ClientStreamData { });
+                    ClientStreamData { headers_recvd: false });
 
                 if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
                     warn!("caller died");

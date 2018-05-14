@@ -70,6 +70,7 @@ fn simple_new() {
     let mut headers = Headers::new();
     headers.add(":method", "GET");
     headers.add(":path", "/aabb");
+    headers.add(":scheme", "http");
     tester.send_headers(1, headers, false);
 
     tester.send_data(1, b"abcd", true);

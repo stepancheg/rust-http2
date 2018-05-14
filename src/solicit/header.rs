@@ -1,7 +1,9 @@
+use std::result;
 use std::str;
 use std::str::FromStr;
 use std::fmt;
 use std::iter::FromIterator;
+use std::collections::HashSet;
 
 use req_resp::RequestOrResponse;
 
@@ -13,7 +15,7 @@ use assert_types::*;
 use bytes::Bytes;
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum PseudoHeaderName {
     // 8.1.2.3 Request Pseudo-Header Fields
     Method,
@@ -75,6 +77,17 @@ impl PseudoHeaderName {
             RequestOrResponse::Request => REQUEST_HEADERS,
             RequestOrResponse::Response => RESPONSE_HEADERS,
         }
+    }
+
+    pub fn all_names() -> &'static [PseudoHeaderName] {
+        static ALL_HEADERS: &[PseudoHeaderName] = &[
+            PseudoHeaderName::Method,
+            PseudoHeaderName::Scheme,
+            PseudoHeaderName::Authority,
+            PseudoHeaderName::Path,
+            PseudoHeaderName::Status,
+        ];
+        ALL_HEADERS
     }
 }
 
@@ -185,6 +198,20 @@ fn _assert_header_sync_send() {
     assert_send::<Header>();
 }
 
+#[derive(Debug)]
+pub enum HeaderError {
+    UnknownPseudoHeader,
+    EmptyName,
+    IncorrectCharInName,
+    UnexpectedPseudoHeader(PseudoHeaderName),
+    PseudoHeadersNotInFirstHeaders,
+    PseudoHeadersAfterRegularHeaders,
+    MoreThanOnePseudoHeader(PseudoHeaderName),
+    MissingPseudoHeader(PseudoHeaderName),
+}
+
+pub type HeaderResult<T> = result::Result<T, HeaderError>;
+
 impl Header {
     /// Creates a new `Header` with the given name and value.
     ///
@@ -216,33 +243,43 @@ impl Header {
         self.name.len() != 0 && self.name[0] == b':'
     }
 
-    fn validate_header_name_char(b: u8) -> bool {
-        // TODO: restrict more
-        if b >= b'A' && b <= b'Z' {
-            return false
+    pub fn pseudo_header_name(&self) -> HeaderResult<Option<PseudoHeaderName>> {
+        if self.is_preudo_header() {
+            for &h in PseudoHeaderName::all_names() {
+                if self.name.as_ref() == h.name().as_bytes() {
+                    return Ok(Some(h));
+                }
+            }
+            Err(HeaderError::UnknownPseudoHeader)
+        } else {
+            Ok(None)
         }
-        true
     }
 
-    pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {
+    fn validate_header_name_char(b: u8) -> HeaderResult<()> {
+        // TODO: restrict more
+        if b >= b'A' && b <= b'Z' {
+            return Err(HeaderError::IncorrectCharInName);
+        }
+        Ok(())
+    }
+
+    pub fn validate(&self, req_or_resp: RequestOrResponse) -> HeaderResult<()> {
         if self.name.len() == 0 {
-            return false;
+            return Err(HeaderError::EmptyName);
         }
 
-        if self.is_preudo_header() {
-            let valid_names = PseudoHeaderName::names(request_or_response);
-            if !valid_names.iter().any(|n| n.name().as_bytes() == self.name.as_ref()) {
-                return false;
+        if let Some(h) = self.pseudo_header_name()? {
+            if h.req_or_resp() != req_or_resp {
+                return Err(HeaderError::UnexpectedPseudoHeader(h));
             }
         }
 
         for c in &self.name {
-            if !Header::validate_header_name_char(c) {
-                return false;
-            }
+            Header::validate_header_name_char(c)?;
         }
 
-        return true;
+        Ok(())
     }
 }
 
@@ -306,28 +343,71 @@ impl Headers {
         self.0.iter().any(|h| h.is_preudo_header())
     }
 
-    pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {
+    pub fn validate(&self, req_or_resp: RequestOrResponse, first: bool)
+        -> HeaderResult<()>
+    {
         let mut saw_regular_header = false;
 
+        // TODO: array is enough
+        let mut pseudo_headers_met = HashSet::new();
+
         for header in &self.0 {
-            if !header.validate(request_or_response) {
-                return false;
-            }
+            header.validate(req_or_resp)?;
 
             // 8.1.2.1.  Pseudo-Header Fields
             // All pseudo-header fields MUST appear in the header block before
             // regular header fields.  Any request or response that contains a
             // pseudo-header field that appears in a header block after a regular
             // header field MUST be treated as malformed (Section 8.1.2.6).
-            if header.is_preudo_header() {
+            if let Some(header_name) = header.pseudo_header_name()? {
+                if !first {
+                    return Err(HeaderError::PseudoHeadersNotInFirstHeaders);
+                }
+
                 if saw_regular_header {
-                    return false;
+                    return Err(HeaderError::PseudoHeadersAfterRegularHeaders);
+                }
+
+                if !pseudo_headers_met.insert(header_name) {
+                    return Err(HeaderError::MoreThanOnePseudoHeader(header_name));
                 }
             } else {
                 saw_regular_header = true;
             }
         }
-        true
+
+        if first {
+            match req_or_resp {
+                // All HTTP/2 requests MUST include exactly one valid value for the
+                // ":method", ":scheme", and ":path" pseudo-header fields, unless it is
+                // a CONNECT request (Section 8.3).  An HTTP request that omits
+                // mandatory pseudo-header fields is malformed (Section 8.1.2.6).
+                RequestOrResponse::Request => {
+                    let required_headers = [
+                        PseudoHeaderName::Method,
+                        PseudoHeaderName::Scheme,
+                        PseudoHeaderName::Path,
+                    ];
+                    for required in &required_headers {
+                        if pseudo_headers_met.get(required).is_none() {
+                            return Err(HeaderError::MissingPseudoHeader(*required));
+                        }
+                    }
+                }
+                // For HTTP/2 responses, a single ":status" pseudo-header field is
+                // defined that carries the HTTP status code field (see [RFC7231],
+                // Section 6).  This pseudo-header field MUST be included in all
+                // responses; otherwise, the response is malformed (Section 8.1.2.6).
+                RequestOrResponse::Response => {
+                    let required = PseudoHeaderName::Status;
+                    if pseudo_headers_met.get(&required).is_none() {
+                        return Err(HeaderError::MissingPseudoHeader(required));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn get_opt<'a>(&'a self, name: &str) -> Option<&'a str> {

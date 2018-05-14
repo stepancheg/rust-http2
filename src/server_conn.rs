@@ -169,6 +169,12 @@ impl ConnInner for ServerInner {
     {
         let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
 
+        if let Err(e) = headers.validate(RequestOrResponse::Request, !existing_stream) {
+            warn!("invalid headers: {:?} {:?}", e, headers);
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
         if existing_stream {
             if headers.contains_preudo_headers() {
                 warn!("preudo headers in non-first headers, stream: {}, headers: {:?}",
