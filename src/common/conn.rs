@@ -40,6 +40,7 @@ use solicit_async::*;
 
 use super::stream::*;
 use super::stream_map::*;
+use super::closed_streams::*;
 use super::types::*;
 use super::conf::*;
 use super::pump_stream_to_write_loop::PumpStreamToWriteLoop;
@@ -104,6 +105,8 @@ pub struct ConnData<T : Types> {
     pub conn: HttpConnection,
     /// Known streams
     pub streams: StreamMap<T>,
+    /// Last streams known to be closed by peer
+    pub peer_closed_streams: ClosedStreams,
 
     /// Window size from pumper point of view
     pub pump_out_window_size: window_size::ConnOutWindowSender,
@@ -166,6 +169,7 @@ impl<T : Types> ConnData<T>
             goaway_received: None,
             ping_sent: None,
             pump_out_window_size: pump_window_size,
+            peer_closed_streams: ClosedStreams::new(),
         }
     }
 
@@ -547,6 +551,8 @@ impl<T : Types> ConnData<T>
             stream.rst_received_remove(frame.error_code());
         }
 
+        self.peer_closed_streams.add(stream_id);
+
         Ok(None)
     }
 
@@ -663,9 +669,14 @@ impl<T : Types> ConnData<T>
                 // TODO: http2 spec requires sending stream or connection error
                 // depending on how stream was closed
                 if send_stream_closed {
-                    debug!("stream is closed: {}, sending GOAWAY", stream_id);
-                    //self.send_goaway(ErrorCode::StreamClosed)?;
-                    self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
+
+                    if self.peer_closed_streams.contains(stream_id) {
+                        debug!("stream is closed by peer: {}, sending GOAWAY", stream_id);
+                        self.send_goaway(ErrorCode::StreamClosed)?;
+                    } else {
+                        debug!("stream is closed by us: {}, sending RST_STREAM", stream_id);
+                        self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
+                    }
                 }
             }
         }
@@ -806,21 +817,27 @@ impl<T : Types> ConnData<T>
             }
         }
 
-        let stream = match frame {
-            HttpFrameStream::Data(data) => self.process_data_frame(data)?,
-            HttpFrameStream::Headers(headers) => self.process_headers_frame(self_rc, headers)?,
-            HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
-            HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
-            HttpFrameStream::PushPromise(_f) => return Err(error::Error::NotImplemented("PUSH_PROMISE")),
-            HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update)?,
-            HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),
-        };
+        {
+            let stream = match frame {
+                HttpFrameStream::Data(data) => self.process_data_frame(data)?,
+                HttpFrameStream::Headers(headers) => self.process_headers_frame(self_rc, headers)?,
+                HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
+                HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
+                HttpFrameStream::PushPromise(_f) => return Err(error::Error::NotImplemented("PUSH_PROMISE")),
+                HttpFrameStream::WindowUpdate(window_update) => self.process_stream_window_update_frame(window_update)?,
+                HttpFrameStream::Continuation(_continuation) => unreachable!("must be joined with HEADERS before that"),
+            };
 
-        if let Some(mut stream) = stream {
-            if end_of_stream {
-                stream.stream().close_remote();
+            if let Some(mut stream) = stream {
+                if end_of_stream {
+                    stream.stream().close_remote();
+                }
+                stream.remove_if_closed();
             }
-            stream.remove_if_closed();
+        }
+
+        if end_of_stream {
+            self.peer_closed_streams.add(stream_id);
         }
 
         Ok(())

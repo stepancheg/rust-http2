@@ -3,6 +3,7 @@
 mod conn;
 mod stream;
 mod stream_map;
+mod closed_streams;
 mod types;
 mod conf;
 mod pump_stream_to_write_loop;
@@ -16,6 +17,7 @@ pub mod waiters;
 pub use self::conn::*;
 pub use self::stream::*;
 pub use self::stream_map::*;
+pub use self::closed_streams::*;
 pub use self::types::*;
 pub use self::conf::*;
 pub use self::pump_stream_to_write_loop::*;
