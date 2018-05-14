@@ -57,6 +57,16 @@ impl Frame for WindowUpdateFrame {
         // Clear the reserved most-significant bit
         let increment = num & !0x80000000;
 
+        // 6.9.  WINDOW_UPDATE
+        // The payload of a WINDOW_UPDATE frame is one reserved bit plus an
+        // unsigned 31-bit integer indicating the number of octets that the
+        // sender can transmit in addition to the existing flow-control window.
+        // The legal range for the increment to the flow-control window is 1 to
+        // 2^31-1 (2,147,483,647) octets.
+        if increment < 1 || increment > 0x7fffffff {
+            return Err(ParseFrameError::WindowUpdateIncrementInvalid(increment));
+        }
+
         Ok(WindowUpdateFrame {
             stream_id,
             increment,
@@ -118,16 +128,6 @@ mod tests {
         let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 1]);
         let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
         assert_eq!(frame.increment, 1);
-        assert_eq!(frame.get_stream_id(), 1);
-    }
-
-    /// The frame leaves it up to the higher levels to indicate the appropriate error if the
-    /// increment is invalid.
-    #[test]
-    fn test_parse_increment_zero() {
-        let raw = raw_frame_from_parts(FrameHeader::new(4, 0x8, 0, 1), vec![0, 0, 0, 0]);
-        let frame = WindowUpdateFrame::from_raw(&raw).expect("expected valid WINDOW_UPDATE");
-        assert_eq!(frame.increment, 0);
         assert_eq!(frame.get_stream_id(), 1);
     }
 
