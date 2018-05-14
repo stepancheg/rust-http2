@@ -209,6 +209,7 @@ pub enum HeaderError {
     PseudoHeadersAfterRegularHeaders,
     MoreThanOnePseudoHeader(PseudoHeaderName),
     MissingPseudoHeader(PseudoHeaderName),
+    ConnectionSpecificHeader(&'static str),
 }
 
 pub type HeaderResult<T> = result::Result<T, HeaderError>;
@@ -278,6 +279,25 @@ impl Header {
 
         for c in &self.name {
             Header::validate_header_name_char(c)?;
+        }
+
+        // HTTP/2 does not use the Connection header field to indicate
+        // connection-specific header fields; in this protocol, connection-
+        // specific metadata is conveyed by other means.  An endpoint MUST NOT
+        // generate an HTTP/2 message containing connection-specific header
+        // fields; any message containing connection-specific header fields MUST
+        // be treated as malformed (Section 8.1.2.6).
+        let connection_specific_headers = [
+            "connection",
+            "keep-alive",
+            "proxy-connection",
+            "transfer-encoding",
+            "upgrade",
+        ];
+        for s in &connection_specific_headers {
+            if self.name == s.as_bytes() {
+                return Err(HeaderError::ConnectionSpecificHeader(s));
+            }
         }
 
         Ok(())
