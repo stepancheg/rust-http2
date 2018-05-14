@@ -359,8 +359,9 @@ impl ServerConnection {
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
         let (tx, rx) = oneshot::channel();
 
-        self.command_tx.clone().unbounded_send(ServerCommandMessage::DumpState(tx))
-            .expect("send request to dump state");
+        if let Err(_) = self.command_tx.clone().unbounded_send(ServerCommandMessage::DumpState(tx)) {
+            return Box::new(future::err(error::Error::Other("failed to send req to dump state")));
+        }
 
         let rx = rx.map_err(|_| error::Error::Other("oneshot canceled"));
 
