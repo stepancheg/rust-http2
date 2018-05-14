@@ -54,6 +54,7 @@ use stream_part::*;
 pub use resp::Response;
 
 use rc_mut::*;
+use solicit::MAX_WINDOW_SIZE;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -393,6 +394,15 @@ impl<T : Types> ConnData<T>
 
         for setting in frame.settings {
             if let HttpSetting::InitialWindowSize(new_size) = setting {
+                // 6.5.2
+                // Values above the maximum flow-control window size of 2^31-1 MUST
+                // be treated as a connection error (Section 5.4.1) of type
+                // FLOW_CONTROL_ERROR.
+                if new_size > MAX_WINDOW_SIZE {
+                    self.send_flow_control_error()?;
+                    return Ok(());
+                }
+
                 let old_size = self.conn.peer_settings.initial_window_size;
                 let delta = (new_size as i32) - (old_size as i32);
 
@@ -442,23 +452,10 @@ impl<T : Types> ConnData<T>
     {
         self.out_window_increased(Some(frame.stream_id))?;
 
+
+
         match self.get_stream_maybe_send_error(frame.stream_id, HttpFrameType::WindowUpdate)? {
-            Some(mut stream) => {
-                // TODO: stream error, not conn error
-                let old_window_size = stream.stream().out_window_size.0;
-
-                stream.stream().out_window_size.try_increase(frame.increment)
-                    .map_err(|()| error::Error::Other("failed to increment stream window"))?;
-
-                let new_window_size = stream.stream().out_window_size.0;
-
-                debug!("stream {} out window size change: {} -> {}",
-                    frame.stream_id, old_window_size, new_window_size);
-
-                stream.stream().pump_out_window.increase(frame.increment as i32);
-
-                Ok(Some(stream))
-            }
+            Some(..) => {}
             None => {
                 // 6.9
                 // WINDOW_UPDATE can be sent by a peer that has sent a frame bearing the
@@ -466,9 +463,41 @@ impl<T : Types> ConnData<T>
                 // WINDOW_UPDATE frame on a "half-closed (remote)" or "closed" stream.
                 // A receiver MUST NOT treat this as an error (see Section 5.1).
                 debug!("WINDOW_UPDATE of unknown stream: {}", frame.get_stream_id());
-                Ok(None)
+                return Ok(None);
             }
         }
+
+        // Work arout lexical lifetimes
+
+        let old_window_size = self.streams.get_mut(frame.stream_id).unwrap()
+            .stream().out_window_size.0;
+
+        // 6.9.1
+        // A sender MUST NOT allow a flow-control window to exceed 2^31-1
+        // octets.  If a sender receives a WINDOW_UPDATE that causes a flow-
+        // control window to exceed this maximum, it MUST terminate either the
+        // stream or the connection, as appropriate.  For streams, the sender
+        // sends a RST_STREAM with an error code of FLOW_CONTROL_ERROR; for the
+        // connection, a GOAWAY frame with an error code of FLOW_CONTROL_ERROR
+        // is sent.
+        if let Err(..) = self.streams.get_mut(frame.stream_id).unwrap()
+            .stream().out_window_size.try_increase(frame.increment)
+        {
+            info!("failed to increment stream window: {}", frame.stream_id);
+            self.send_rst_stream(frame.stream_id, ErrorCode::FlowControlError)?;
+            return Ok(None);
+        }
+
+        let mut stream = self.streams.get_mut(frame.stream_id).unwrap();
+
+        let new_window_size = stream.stream().out_window_size.0;
+
+        debug!("stream {} out window size change: {} -> {}",
+            frame.stream_id, old_window_size, new_window_size);
+
+        stream.stream().pump_out_window.increase(frame.increment as i32);
+
+        Ok(Some(stream))
     }
 
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
@@ -476,8 +505,19 @@ impl<T : Types> ConnData<T>
 
         let old_window_size = self.conn.out_window_size.0;
 
-        self.conn.out_window_size.try_increase(frame.increment)
-            .map_err(|()| error::Error::Other("failed to increment conn window"))?;
+        // 6.9.1
+        // A sender MUST NOT allow a flow-control window to exceed 2^31-1
+        // octets.  If a sender receives a WINDOW_UPDATE that causes a flow-
+        // control window to exceed this maximum, it MUST terminate either the
+        // stream or the connection, as appropriate.  For streams, the sender
+        // sends a RST_STREAM with an error code of FLOW_CONTROL_ERROR; for the
+        // connection, a GOAWAY frame with an error code of FLOW_CONTROL_ERROR
+        // is sent.
+        if let Err(_) = self.conn.out_window_size.try_increase(frame.increment) {
+            info!("attempted to increase window size too far");
+            self.send_flow_control_error()?;
+            return Ok(());
+        }
 
         debug!("conn out window size change: {} -> {}", old_window_size, self.conn.out_window_size);
 
@@ -491,7 +531,7 @@ impl<T : Types> ConnData<T>
     {
         let stream_id = frame.get_stream_id();
         if let Some(stream) = self.get_stream_maybe_send_error(stream_id, HttpFrameType::RstStream)? {
-            stream.rst_remove(frame.error_code());
+            stream.rst_received_remove(frame.error_code());
         }
 
         Ok(None)
@@ -500,6 +540,9 @@ impl<T : Types> ConnData<T>
     pub fn send_rst_stream(&mut self, stream_id: StreamId, error_code: ErrorCode)
         -> result::Result<()>
     {
+        // TODO: probably notify handlers
+        self.streams.remove_stream(stream_id);
+
         let rst_stream = RstStreamFrame::new(stream_id, error_code);
         self.send_directly_to_network(DirectlyToNetworkFrame::RstStream(rst_stream))
     }
@@ -511,6 +554,10 @@ impl<T : Types> ConnData<T>
         self.send_directly_to_network(DirectlyToNetworkFrame::GoAway(goaway))?;
         self.send_common(CommonToWriteMessage::CloseConn)?;
         Ok(())
+    }
+
+    fn send_flow_control_error(&mut self) -> result::Result<()> {
+        self.send_goaway(ErrorCode::FlowControlError)
     }
 
     fn stream_state_idle_or_closed(&self, stream_id: StreamId) -> StreamStateIdleOrClosed {
@@ -872,7 +919,7 @@ impl<I, T> ReadLoopData<I, T>
         HttpStreamCommon<T> : HttpStream<Types=T>,
 {
     /// Recv a frame from the network
-    fn recv_http_frame(self) -> HttpFuture<(Self, HttpFrame)> {
+    fn recv_http_frame(self) -> impl Future<Item=(Self, HttpFrame), Error=error::Error> {
         let ReadLoopData { read, inner } = self;
 
         let max_frame_size = inner.with(|inner| {

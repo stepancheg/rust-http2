@@ -5,6 +5,7 @@ use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
+use solicit::MAX_WINDOW_SIZE;
 
 pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
 
@@ -41,7 +42,16 @@ impl HttpSetting {
                 HttpSetting::EnablePush(b)
             },
             3 => HttpSetting::MaxConcurrentStreams(val),
-            4 => HttpSetting::InitialWindowSize(val),
+            4 => {
+                if val > MAX_WINDOW_SIZE {
+                    // 6.5.2
+                    // Values above the maximum flow-control window size of 2^31-1 MUST
+                    // be treated as a connection error (Section 5.4.1) of type
+                    // FLOW_CONTROL_ERROR.
+                    // We handle it in `process_settings_req`
+                }
+                HttpSetting::InitialWindowSize(val)
+            },
             5 => HttpSetting::MaxFrameSize(val),
             6 => HttpSetting::MaxHeaderListSize(val),
             _ => return Ok(None),

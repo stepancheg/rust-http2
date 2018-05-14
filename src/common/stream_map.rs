@@ -49,6 +49,12 @@ impl<T : Types> StreamMap<T> {
         }
     }
 
+    pub fn remove_stream(&mut self, id: StreamId) {
+        if let Some(r) = self.get_mut(id) {
+            r.remove();
+        }
+    }
+
     pub fn get_stream_state(&self, id: StreamId) -> Option<StreamState> {
         self.map.get(&id).map(|s| s.state)
     }
@@ -95,12 +101,12 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
     }
 
     fn remove(self) {
+        debug!("removing stream {}", self.id());
         self.entry.remove();
     }
 
     pub fn remove_if_closed(mut self) {
         if self.stream().state == StreamState::Closed {
-            debug!("removing stream {}, because it's closed", self.id());
             self.remove();
         }
     }
@@ -120,9 +126,8 @@ impl <'m, T : Types + 'm> HttpStreamRef<'m, T> {
     }
 
     // Reset stream and remove it
-    pub fn rst_remove(mut self, error_code: ErrorCode) {
-        self.stream().rst(error_code);
-        self.stream().state = StreamState::Closed;
-        self.remove_if_closed();
+    pub fn rst_received_remove(mut self, error_code: ErrorCode) {
+        self.stream().rst_recvd(error_code);
+        self.remove();
     }
 }

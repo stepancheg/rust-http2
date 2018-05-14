@@ -205,7 +205,7 @@ impl<T : Types> HttpStreamCommon<T> {
         }
     }
 
-    pub fn rst(&mut self, error_code: ErrorCode) {
+    pub fn rst_recvd(&mut self, error_code: ErrorCode) {
         if let Some(ref mut response_handler) = self.peer_tx.take() {
             drop(response_handler.send(ResultOrEof::Error(error::Error::CodeError(error_code))));
         }
