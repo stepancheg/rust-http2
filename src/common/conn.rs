@@ -395,38 +395,43 @@ impl<T : Types> ConnData<T>
         let mut out_window_increased = false;
 
         for setting in frame.settings {
-            if let HttpSetting::InitialWindowSize(new_size) = setting {
-                // 6.5.2
-                // Values above the maximum flow-control window size of 2^31-1 MUST
-                // be treated as a connection error (Section 5.4.1) of type
-                // FLOW_CONTROL_ERROR.
-                if new_size > MAX_WINDOW_SIZE {
-                    self.send_flow_control_error()?;
-                    return Ok(());
-                }
-
-                let old_size = self.conn.peer_settings.initial_window_size;
-                let delta = (new_size as i32) - (old_size as i32);
-
-                if delta != 0 {
-                    for (_, s) in &mut self.streams.map {
-                        // In addition to changing the flow-control window for streams
-                        // that are not yet active, a SETTINGS frame can alter the initial
-                        // flow-control window size for streams with active flow-control windows
-                        // (that is, streams in the "open" or "half-closed (remote)" state).
-                        // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
-                        // a receiver MUST adjust the size of all stream flow-control windows
-                        // that it maintains by the difference between the new value
-                        // and the old value.
-                        // TODO: check for overflow
-                        s.out_window_size.0 += delta;
-                        s.pump_out_window.increase(delta);
+            match setting {
+                HttpSetting::InitialWindowSize(new_size) => {
+                    // 6.5.2
+                    // Values above the maximum flow-control window size of 2^31-1 MUST
+                    // be treated as a connection error (Section 5.4.1) of type
+                    // FLOW_CONTROL_ERROR.
+                    if new_size > MAX_WINDOW_SIZE {
+                        self.send_flow_control_error()?;
+                        return Ok(());
                     }
 
-                    if !self.streams.map.is_empty() && delta > 0 {
-                        out_window_increased = true;
+                    let old_size = self.conn.peer_settings.initial_window_size;
+                    let delta = (new_size as i32) - (old_size as i32);
+
+                    if delta != 0 {
+                        for (_, s) in &mut self.streams.map {
+                            // In addition to changing the flow-control window for streams
+                            // that are not yet active, a SETTINGS frame can alter the initial
+                            // flow-control window size for streams with active flow-control windows
+                            // (that is, streams in the "open" or "half-closed (remote)" state).
+                            // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
+                            // a receiver MUST adjust the size of all stream flow-control windows
+                            // that it maintains by the difference between the new value
+                            // and the old value.
+                            // TODO: check for overflow
+                            s.out_window_size.0 += delta;
+                            s.pump_out_window.increase(delta);
+                        }
+
+                        if !self.streams.map.is_empty() && delta > 0 {
+                            out_window_increased = true;
+                        }
                     }
                 }
+                HttpSetting::HeaderTableSize(_new_size) => {
+                }
+                _ => {}
             }
 
             self.conn.peer_settings.apply(setting);
