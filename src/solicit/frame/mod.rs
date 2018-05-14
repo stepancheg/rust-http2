@@ -182,6 +182,7 @@ pub enum ParseFrameError {
     IncorrectFrameLength(u32),
     IncorrectFlags(u8),
     IncorrectSettingsPushValue(u32),
+    IncorrectSettingsMaxFrameSize(u32),
     WindowSizeTooLarge(u32),
     WindowUpdateIncrementInvalid(u32),
     ProtocolError, // generic error

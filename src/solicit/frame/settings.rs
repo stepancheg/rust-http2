@@ -44,7 +44,7 @@ impl HttpSetting {
             3 => HttpSetting::MaxConcurrentStreams(val),
             4 => {
                 if val > MAX_WINDOW_SIZE {
-                    // 6.5.2
+                    // 6.5.2.  Defined SETTINGS Parameters
                     // Values above the maximum flow-control window size of 2^31-1 MUST
                     // be treated as a connection error (Section 5.4.1) of type
                     // FLOW_CONTROL_ERROR.
@@ -52,7 +52,18 @@ impl HttpSetting {
                 }
                 HttpSetting::InitialWindowSize(val)
             },
-            5 => HttpSetting::MaxFrameSize(val),
+            5 => {
+                if val < 0x4000 || val >= 0x100_0000 {
+                    // 6.5.2.  Defined SETTINGS Parameters
+                    // The initial value is 2^14 (16,384) octets.  The value advertised
+                    // by an endpoint MUST be between this initial value and the maximum
+                    // allowed frame size (2^24-1 or 16,777,215 octets), inclusive.
+                    // Values outside this range MUST be treated as a connection error
+                    // (Section 5.4.1) of type PROTOCOL_ERROR.
+                    return Err(ParseFrameError::IncorrectSettingsMaxFrameSize(val));
+                }
+                HttpSetting::MaxFrameSize(val)
+            },
             6 => HttpSetting::MaxHeaderListSize(val),
             _ => return Ok(None),
         }))
@@ -645,13 +656,6 @@ mod tests {
             let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
 
             assert_eq!(setting, HttpSetting::InitialWindowSize(1));
-        }
-        {
-            let buf = [0, 5, 0, 0, 0, 255];
-
-            let setting = HttpSetting::parse_setting(&buf).unwrap().unwrap();
-
-            assert_eq!(setting, HttpSetting::MaxFrameSize((1 << 8) - 1));
         }
         {
             let buf = [0, 6, 0, 0, 0, 255];
