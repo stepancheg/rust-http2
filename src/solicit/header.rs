@@ -60,6 +60,22 @@ impl PseudoHeaderName {
     pub fn name_bytes(&self) -> Bytes {
         Bytes::from_static(self.name().as_bytes())
     }
+
+    pub fn names(request_or_response: RequestOrResponse) -> &'static [PseudoHeaderName] {
+        static REQUEST_HEADERS: &[PseudoHeaderName] = &[
+            PseudoHeaderName::Method,
+            PseudoHeaderName::Scheme,
+            PseudoHeaderName::Authority,
+            PseudoHeaderName::Path,
+        ];
+        static RESPONSE_HEADERS: &[PseudoHeaderName] = &[
+            PseudoHeaderName::Status,
+        ];
+        match request_or_response {
+            RequestOrResponse::Request => REQUEST_HEADERS,
+            RequestOrResponse::Response => RESPONSE_HEADERS,
+        }
+    }
 }
 
 
@@ -214,24 +230,8 @@ impl Header {
         }
 
         if self.is_preudo_header() {
-            let valid_named = match request_or_response {
-                RequestOrResponse::Request => {
-                    static REQ_HEADERS: &[&[u8]] = &[
-                        b":method" as &[u8],
-                        b":scheme",
-                        b":authority",
-                        b":path",
-                    ];
-                    REQ_HEADERS
-                }
-                RequestOrResponse::Response => {
-                    static RESP_HEADERS: &[&[u8]] = &[
-                        b":status" as &[u8],
-                    ];
-                    RESP_HEADERS
-                }
-            };
-            if !valid_named.contains(&self.name.as_ref()) {
+            let valid_names = PseudoHeaderName::names(request_or_response);
+            if !valid_names.iter().any(|n| n.name().as_bytes() == self.name.as_ref()) {
                 return false;
             }
         }
