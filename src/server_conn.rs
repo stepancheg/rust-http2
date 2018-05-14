@@ -114,6 +114,7 @@ impl ServerInner {
 
         let (_, req_stream, out_window) = self.new_stream_data(
             stream_id,
+            headers.content_length(),
             ServerStreamData {});
 
         let req_stream = HttpPartStream::new(req_stream);

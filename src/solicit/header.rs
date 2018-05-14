@@ -280,6 +280,13 @@ impl Headers {
         self.get(":method")
     }
 
+    pub fn content_length(&self) -> Option<u64> {
+        match self.get_opt("content-length") {
+            Some(v) => v.parse().ok(),
+            None => None,
+        }
+    }
+
     pub fn add(&mut self, name: &str, value: &str) {
         self.0.push(Header::new(name, value));
     }
@@ -287,7 +294,6 @@ impl Headers {
     pub fn extend(&mut self, headers: Headers) {
         self.0.extend(headers.0);
     }
-
 }
 
 impl FromIterator<Header> for Headers {

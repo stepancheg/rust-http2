@@ -183,6 +183,7 @@ impl<T : Types> ConnData<T>
     pub fn new_stream_data(
         &mut self,
         stream_id: StreamId,
+        in_rem_content_length: Option<u64>,
         specific: T::HttpStreamSpecific)
         -> (HttpStreamRef<T>, StreamFromNetwork<T>, window_size::StreamOutWindowReceiver)
     {
@@ -203,6 +204,7 @@ impl<T : Types> ConnData<T>
             self.conn.peer_settings.initial_window_size,
             inc_tx,
             out_window_sender,
+            in_rem_content_length,
             specific);
 
         let stream = self.streams.insert(stream_id, stream);
@@ -672,7 +674,9 @@ impl<T : Types> ConnData<T>
                 None
             };
 
-        {
+        let mut error = None;
+
+        loop {
             // If a DATA frame is received whose stream is not in "open" or
             // "half-closed (local)" state, the recipient MUST respond with
             // a stream error (Section 5.4.2) of type STREAM_CLOSED.
@@ -683,16 +687,33 @@ impl<T : Types> ConnData<T>
                 }
             };
 
+            if let Some(in_rem_content_length) = stream.stream().in_rem_content_length {
+                if in_rem_content_length < frame.data.len() as u64 {
+                    warn!("stream data underflow content-length");
+                    error = Some(ErrorCode::ProtocolError);
+                    break;
+                }
+
+                let in_rem_content_length = in_rem_content_length - frame.data.len() as u64;
+                stream.stream().in_rem_content_length = Some(in_rem_content_length);
+            }
+
             stream.stream().in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
 
             let end_of_stream = frame.is_end_of_stream();
             stream.stream().new_data_chunk(frame.data, end_of_stream);
+            break;
         };
 
         if let Some(increment_conn) = increment_conn {
             let window_update = WindowUpdateFrame::for_connection(increment_conn);
             self.send_directly_to_network(DirectlyToNetworkFrame::WindowUpdate(window_update))?;
+        }
+
+        if let Some(error) = error {
+            self.send_rst_stream(stream_id, error)?;
+            return Ok(None);
         }
 
         Ok(Some(self.streams.get_mut(stream_id).expect("stream must be found")))

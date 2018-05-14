@@ -89,6 +89,10 @@ impl ConnInner for ClientInner {
         -> result::Result<Option<HttpStreamRef<ClientTypes>>>
     {
         if let Some(mut stream) = self.get_stream_for_headers_maybe_send_error(stream_id)? {
+            if let Some(in_rem_content_length) = headers.content_length() {
+                stream.stream().in_rem_content_length = Some(in_rem_content_length);
+            }
+
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
                 // TODO: reset stream on error
                 drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
@@ -151,6 +155,7 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
             let out_window = {
                 let (mut http_stream, resp_stream, out_window) = inner.new_stream_data(
                     stream_id,
+                    None,
                     ClientStreamData { });
 
                 if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {

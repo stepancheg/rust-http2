@@ -64,6 +64,8 @@ pub struct HttpStreamCommon<T : Types> {
     pub peer_tx: Option<StreamQueueSyncSender>,
     // task waiting for window increase
     pub pump_out_window: window_size::StreamOutWindowSender,
+    // Incoming remaining content-length
+    pub in_rem_content_length: Option<u64>,
 }
 
 impl<T : Types> HttpStreamCommon<T> {
@@ -72,17 +74,19 @@ impl<T : Types> HttpStreamCommon<T> {
         out_window_size: u32,
         incoming: StreamQueueSyncSender,
         pump_out_window: window_size::StreamOutWindowSender,
+        in_rem_content_length: Option<u64>,
         specific: T::HttpStreamSpecific)
             -> HttpStreamCommon<T>
     {
         HttpStreamCommon {
-            specific: specific,
+            specific,
             state: StreamState::Open,
             in_window_size: WindowSize::new(in_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
             peer_tx: Some(incoming),
-            pump_out_window: pump_out_window,
+            pump_out_window,
+            in_rem_content_length,
         }
     }
 
