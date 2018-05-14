@@ -184,10 +184,6 @@ impl ConnInner for ServerInner {
             self.new_stream_from_client(self_rc, stream_id, headers).map(Some)
         }
     }
-
-    fn goaway_received(&mut self, _stream_id: StreamId, _raw_error_code: u32) {
-        // ignore
-    }
 }
 
 type ServerReadLoop<I> = ReadLoopData<I, ServerTypes>;

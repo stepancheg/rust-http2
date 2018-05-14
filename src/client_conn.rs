@@ -113,10 +113,6 @@ impl ConnInner for ClientInner {
             Ok(None)
         }
     }
-
-    fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32) {
-        self.specific.callbacks.goaway(stream_id, raw_error_code);
-    }
 }
 
 pub struct ClientConnection {

@@ -915,8 +915,6 @@ pub trait ConnInner : Sized + 'static {
 
     fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<Self::Types>>>;
-
-    fn goaway_received(&mut self, stream_id: StreamId, raw_error_code: u32);
 }
 
 
