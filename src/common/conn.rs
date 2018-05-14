@@ -188,6 +188,7 @@ impl<T : Types> ConnData<T>
         &mut self,
         stream_id: StreamId,
         in_rem_content_length: Option<u64>,
+        in_message_stage: InMessageStage,
         specific: T::HttpStreamSpecific)
         -> (HttpStreamRef<T>, StreamFromNetwork<T>, window_size::StreamOutWindowReceiver)
     {
@@ -209,6 +210,7 @@ impl<T : Types> ConnData<T>
             inc_tx,
             out_window_sender,
             in_rem_content_length,
+            in_message_stage,
             specific);
 
         let stream = self.streams.insert(stream_id, stream);
@@ -734,7 +736,7 @@ impl<T : Types> ConnData<T>
                 stream.stream().in_rem_content_length = Some(in_rem_content_length);
             }
 
-            stream.stream().saw_data = true;
+            assert_eq!(InMessageStage::AfterInitialHeaders, stream.stream().in_message_stage);
 
             stream.stream().in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;

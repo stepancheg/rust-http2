@@ -55,6 +55,14 @@ pub struct HttpStreamStateSnapshot {
 }
 
 
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub enum InMessageStage {
+    Initial,
+    AfterInitialHeaders,
+    AfterTrailingHeaders,
+}
+
+
 pub struct HttpStreamCommon<T : Types> {
     pub specific: T::HttpStreamSpecific,
     pub state: StreamState,
@@ -66,7 +74,7 @@ pub struct HttpStreamCommon<T : Types> {
     pub pump_out_window: window_size::StreamOutWindowSender,
     // Incoming remaining content-length
     pub in_rem_content_length: Option<u64>,
-    pub saw_data: bool,
+    pub in_message_stage: InMessageStage,
 }
 
 impl<T : Types> HttpStreamCommon<T> {
@@ -76,7 +84,9 @@ impl<T : Types> HttpStreamCommon<T> {
         incoming: StreamQueueSyncSender,
         pump_out_window: window_size::StreamOutWindowSender,
         in_rem_content_length: Option<u64>,
-        specific: T::HttpStreamSpecific)
+        in_message_stage: InMessageStage,
+        specific: T::HttpStreamSpecific,
+    )
             -> HttpStreamCommon<T>
     {
         HttpStreamCommon {
@@ -88,7 +98,7 @@ impl<T : Types> HttpStreamCommon<T> {
             peer_tx: Some(incoming),
             pump_out_window,
             in_rem_content_length,
-            saw_data: false,
+            in_message_stage,
         }
     }
 

@@ -45,6 +45,7 @@ use socket::*;
 
 use rc_mut::*;
 use req_resp::RequestOrResponse;
+use headers_place::HeadersPlace;
 use ErrorCode;
 
 
@@ -68,7 +69,6 @@ impl Types for ClientTypes {
 
 
 pub struct ClientStreamData {
-    headers_recvd: bool,
 }
 
 impl HttpStreamDataSpecific for ClientStreamData {
@@ -100,21 +100,25 @@ impl ConnInner for ClientInner {
             return Ok(None);
         }
 
-        let (headers_recvd, saw_data) = {
-            let mut stream = self.streams.get_mut(stream_id).unwrap();
-            (
-                stream.stream().specific.headers_recvd,
-                stream.stream().saw_data,
-            )
+        let in_message_stage = self.streams.get_mut(stream_id).unwrap()
+            .stream().in_message_stage;
+
+        let headers_place = match in_message_stage {
+            InMessageStage::Initial => HeadersPlace::Initial,
+            InMessageStage::AfterInitialHeaders => HeadersPlace::Trailing,
+            InMessageStage::AfterTrailingHeaders => {
+                return Err(error::Error::InternalError(
+                    format!("closed stream must be handled before")));
+            },
         };
 
-        if let Err(e) = headers.validate(RequestOrResponse::Response, !headers_recvd) {
+        if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
             warn!("invalid headers: {:?} {:?}", e, headers);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 
-        if saw_data && end_stream == EndStream::No {
+        if headers_place == HeadersPlace::Trailing && end_stream == EndStream::No {
             warn!("headers without end stream after data: {}", stream_id);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
@@ -125,7 +129,11 @@ impl ConnInner for ClientInner {
             stream.stream().in_rem_content_length = Some(in_rem_content_length);
         }
 
-        stream.stream().specific.headers_recvd = true;
+        // TODO: support 1xx headers
+        stream.stream().in_message_stage = match headers_place {
+            HeadersPlace::Initial => InMessageStage::AfterInitialHeaders,
+            HeadersPlace::Trailing => InMessageStage::AfterTrailingHeaders,
+        };
 
         if let Some(ref mut response_handler) = stream.stream().peer_tx {
             // TODO: reset stream on error
@@ -183,7 +191,8 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                 let (mut http_stream, resp_stream, out_window) = inner.new_stream_data(
                     stream_id,
                     None,
-                    ClientStreamData { headers_recvd: false });
+                    InMessageStage::Initial,
+                    ClientStreamData {});
 
                 if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
                     warn!("caller died");

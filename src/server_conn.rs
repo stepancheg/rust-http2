@@ -46,6 +46,7 @@ use socket::StreamItem;
 use misc::any_to_string;
 use rc_mut::*;
 use req_resp::RequestOrResponse;
+use headers_place::HeadersPlace;
 use ErrorCode;
 
 
@@ -121,6 +122,7 @@ impl ServerInner {
         let (_, req_stream, out_window) = self.new_stream_data(
             stream_id,
             headers.content_length(),
+            InMessageStage::AfterInitialHeaders,
             ServerStreamData {});
 
         let req_stream = HttpPartStream::new(req_stream);
@@ -169,7 +171,12 @@ impl ConnInner for ServerInner {
     {
         let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
 
-        if let Err(e) = headers.validate(RequestOrResponse::Request, !existing_stream) {
+        let headers_place = match existing_stream {
+            true => HeadersPlace::Trailing,
+            false => HeadersPlace::Initial,
+        };
+
+        if let Err(e) = headers.validate(RequestOrResponse::Request, headers_place) {
             warn!("invalid headers: {:?} {:?}", e, headers);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
