@@ -202,6 +202,7 @@ fn _assert_header_sync_send() {
 pub enum HeaderError {
     UnknownPseudoHeader,
     EmptyName,
+    EmptyValue(PseudoHeaderName),
     IncorrectCharInName,
     UnexpectedPseudoHeader(PseudoHeaderName),
     PseudoHeadersNotInFirstHeaders,
@@ -370,6 +371,12 @@ impl Headers {
 
                 if !pseudo_headers_met.insert(header_name) {
                     return Err(HeaderError::MoreThanOnePseudoHeader(header_name));
+                }
+
+                if header_name == PseudoHeaderName::Path {
+                    if header.value.is_empty() {
+                        return Err(HeaderError::EmptyValue(header_name));
+                    }
                 }
             } else {
                 saw_regular_header = true;
