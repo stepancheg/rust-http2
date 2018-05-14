@@ -662,7 +662,8 @@ impl<T : Types> ConnData<T>
 
                 let send_stream_closed = match frame_type {
                     HttpFrameType::RstStream |
-                    HttpFrameType::Priority => false,
+                    HttpFrameType::Priority |
+                    HttpFrameType::WindowUpdate => false,
                     _ => true,
                 };
 
