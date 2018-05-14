@@ -210,6 +210,7 @@ pub enum HeaderError {
     MoreThanOnePseudoHeader(PseudoHeaderName),
     MissingPseudoHeader(PseudoHeaderName),
     ConnectionSpecificHeader(&'static str),
+    TeCanOnlyContainTrailer,
 }
 
 pub type HeaderResult<T> = result::Result<T, HeaderError>;
@@ -297,6 +298,15 @@ impl Header {
         for s in &connection_specific_headers {
             if self.name == s.as_bytes() {
                 return Err(HeaderError::ConnectionSpecificHeader(s));
+            }
+        }
+
+        if self.name.as_ref() == b"te" {
+            // The only exception to this is the TE header field, which MAY be
+            // present in an HTTP/2 request; when it is, it MUST NOT contain any
+            // value other than "trailers".
+            if self.value.as_ref() != b"trailers" {
+                return Err(HeaderError::TeCanOnlyContainTrailer);
             }
         }
 
