@@ -638,6 +638,16 @@ impl<T : Types> ConnData<T>
                 // END_STREAM flag set MUST treat that as a connection error
                 // (Section 5.4.1) of type STREAM_CLOSED, unless the frame is
                 // permitted as described below.
+                //
+                // WINDOW_UPDATE or RST_STREAM frames can be received in this state
+                // for a short period after a DATA or HEADERS frame containing an
+                // END_STREAM flag is sent.  Until the remote peer receives and
+                // processes RST_STREAM or the frame bearing the END_STREAM flag, it
+                // might send frames of these types.  Endpoints MUST ignore
+                // WINDOW_UPDATE or RST_STREAM frames received in this state, though
+                // endpoints MAY choose to treat frames that arrive a significant
+                // time after sending END_STREAM as a connection error
+                // (Section 5.4.1) of type PROTOCOL_ERROR.
 
                 let send_stream_closed = match frame_type {
                     HttpFrameType::RstStream |
@@ -645,9 +655,12 @@ impl<T : Types> ConnData<T>
                     _ => true,
                 };
 
+                // TODO: http2 spec requires sending stream or connection error
+                // depending on how stream was closed
                 if send_stream_closed {
                     debug!("stream is closed: {}, sending GOAWAY", stream_id);
-                    self.send_goaway(ErrorCode::StreamClosed)?;
+                    //self.send_goaway(ErrorCode::StreamClosed)?;
+                    self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
                 }
             }
         }
