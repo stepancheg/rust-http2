@@ -291,9 +291,24 @@ impl Headers {
     }
 
     pub fn validate(&self, request_or_response: RequestOrResponse) -> bool {
+        let mut saw_regular_header = false;
+
         for header in &self.0 {
             if !header.validate(request_or_response) {
                 return false;
+            }
+
+            // 8.1.2.1.  Pseudo-Header Fields
+            // All pseudo-header fields MUST appear in the header block before
+            // regular header fields.  Any request or response that contains a
+            // pseudo-header field that appears in a header block after a regular
+            // header field MUST be treated as malformed (Section 8.1.2.6).
+            if header.is_preudo_header() {
+                if saw_regular_header {
+                    return false;
+                }
+            } else {
+                saw_regular_header = true;
             }
         }
         true
