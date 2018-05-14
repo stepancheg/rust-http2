@@ -175,20 +175,19 @@ impl ConnInner for ServerInner {
             return Ok(None);
         }
 
-        if existing_stream {
-            if headers.contains_preudo_headers() {
-                warn!("preudo headers in non-first headers, stream: {}, headers: {:?}",
-                    stream_id, headers);
-                self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-                return Ok(None);
-            }
-
-            let mut stream = self.streams.get_mut(stream_id).unwrap();
-            stream.stream().set_headers(headers, end_stream == EndStream::Yes);
-            Ok(Some(stream))
-        } else {
-            self.new_stream_from_client(self_rc, stream_id, headers).map(Some)
+        if !existing_stream {
+            return self.new_stream_from_client(self_rc, stream_id, headers).map(Some);
         }
+
+        if end_stream == EndStream::No {
+            warn!("more headers without end stream flag");
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
+        let mut stream = self.streams.get_mut(stream_id).unwrap();
+        stream.stream().set_headers(headers, end_stream == EndStream::Yes);
+        Ok(Some(stream))
     }
 }
 

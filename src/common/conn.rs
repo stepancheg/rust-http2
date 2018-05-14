@@ -711,6 +711,8 @@ impl<T : Types> ConnData<T>
                 stream.stream().in_rem_content_length = Some(in_rem_content_length);
             }
 
+            stream.stream().saw_data = true;
+
             stream.stream().in_window_size.try_decrease_to_positive(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
 

@@ -66,6 +66,7 @@ pub struct HttpStreamCommon<T : Types> {
     pub pump_out_window: window_size::StreamOutWindowSender,
     // Incoming remaining content-length
     pub in_rem_content_length: Option<u64>,
+    pub saw_data: bool,
 }
 
 impl<T : Types> HttpStreamCommon<T> {
@@ -87,6 +88,7 @@ impl<T : Types> HttpStreamCommon<T> {
             peer_tx: Some(incoming),
             pump_out_window,
             in_rem_content_length,
+            saw_data: false,
         }
     }
 

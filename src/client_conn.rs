@@ -100,11 +100,22 @@ impl ConnInner for ClientInner {
             return Ok(None);
         }
 
-        let headers_recvd =
-            self.streams.get_mut(stream_id).unwrap().stream().specific.headers_recvd;
+        let (headers_recvd, saw_data) = {
+            let mut stream = self.streams.get_mut(stream_id).unwrap();
+            (
+                stream.stream().specific.headers_recvd,
+                stream.stream().saw_data,
+            )
+        };
 
         if let Err(e) = headers.validate(RequestOrResponse::Response, !headers_recvd) {
             warn!("invalid headers: {:?} {:?}", e, headers);
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
+        if saw_data && end_stream == EndStream::No {
+            warn!("headers without end stream after data: {}", stream_id);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
