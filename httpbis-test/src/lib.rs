@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate log;
+extern crate env_logger;
 
 extern crate regex;
 
@@ -10,6 +11,8 @@ extern crate futures;
 extern crate tokio_core;
 
 extern crate httpbis;
+
+use std::sync::Once;
 
 
 mod server_one_conn;
@@ -22,3 +25,11 @@ pub use self::tester::*;
 
 // Bind on IPv4 because IPv6 is broken on travis
 pub const BIND_HOST: &str = "127.0.0.1";
+
+
+pub fn init_logger() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        env_logger::init();
+    });
+}

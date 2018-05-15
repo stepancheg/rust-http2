@@ -49,10 +49,6 @@ extern crate tempdir;
 use unix_socket::UnixStream;
 
 
-fn init_logger() {
-    env_logger::try_init().ok();
-}
-
 #[test]
 fn simple_new() {
     init_logger();

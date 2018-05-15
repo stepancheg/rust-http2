@@ -29,10 +29,6 @@ use httpbis::*;
 use httpbis::for_test::*;
 use httpbis::solicit::DEFAULT_SETTINGS;
 
-fn init_logger() {
-    env_logger::try_init().ok();
-}
-
 #[test]
 fn stream_count() {
     init_logger();

@@ -52,6 +52,8 @@ fn test_tls_connector() -> TlsConnector {
 
 #[test]
 fn tls() {
+    init_logger();
+
     struct ServiceImpl {
     }
 

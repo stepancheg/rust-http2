@@ -28,9 +28,6 @@ use httpbis::Response;
 use httpbis::Headers;
 use httpbis::HttpPartStream;
 
-fn init_logger() {
-    env_logger::try_init().ok();
-}
 
 #[test]
 fn smoke() {
