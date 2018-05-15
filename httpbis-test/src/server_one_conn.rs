@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::net::ToSocketAddrs;
 use std::thread;
 use std::io;

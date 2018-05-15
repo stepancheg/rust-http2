@@ -9,9 +9,11 @@ extern crate bytes;
 extern crate httpbis;
 extern crate futures;
 extern crate tokio_core;
-#[macro_use]
 extern crate log;
 extern crate env_logger;
+
+extern crate httpbis_test;
+use httpbis_test::*;
 
 use bytes::Bytes;
 
@@ -21,15 +23,11 @@ use futures::sync::oneshot;
 
 use tokio_core::reactor;
 
-mod test_misc;
-
 use httpbis::error::Error;
 use httpbis::error::ErrorCode;
 use httpbis::*;
 use httpbis::for_test::*;
 use httpbis::solicit::DEFAULT_SETTINGS;
-
-use test_misc::*;
 
 fn init_logger() {
     env_logger::try_init().ok();

@@ -1,3 +1,17 @@
+#[macro_use]
+extern crate log;
+
+extern crate regex;
+
+extern crate bytes;
+
+extern crate futures;
+
+extern crate tokio_core;
+
+extern crate httpbis;
+
+
 mod server_one_conn;
 mod server_test;
 mod tester;

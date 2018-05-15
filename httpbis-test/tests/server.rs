@@ -6,9 +6,11 @@ extern crate futures;
 extern crate tokio_core;
 extern crate tokio_tls_api;
 extern crate httpbis;
-#[macro_use]
 extern crate log;
 extern crate env_logger;
+
+extern crate httpbis_test;
+use httpbis_test::*;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -17,8 +19,6 @@ use std::sync::atomic::Ordering;
 use bytes::Bytes;
 
 use tokio_core::reactor;
-
-mod test_misc;
 
 use std::io::Write as _Write;
 use std::io::Read as _Read;
@@ -47,8 +47,6 @@ extern crate unix_socket;
 extern crate tempdir;
 #[cfg(unix)]
 use unix_socket::UnixStream;
-
-use test_misc::*;
 
 
 fn init_logger() {

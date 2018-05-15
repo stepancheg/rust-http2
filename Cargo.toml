@@ -31,15 +31,8 @@ unix_socket     = "0.5"
 
 [dev-dependencies]
 
-env_logger         = "0.5"
-regex              = "0.2"
-tls-api-native-tls = "0.1"
-tls-api-openssl    = "0.1"
-url                = "1"
-
-[target.'cfg(unix)'.dev-dependencies]
-
-tempdir         = "0.3"
+tls-api-openssl = "0.1"
+url             = "1"
 
 [workspace]
-members = ["interop/with-rust", "h2spec-test"]
+members = ["interop/with-rust", "h2spec-test", "httpbis-test"]

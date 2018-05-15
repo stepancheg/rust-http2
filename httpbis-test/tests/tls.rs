@@ -7,10 +7,11 @@ extern crate tls_api_native_tls;
 extern crate tokio_core;
 extern crate tokio_tls_api;
 extern crate httpbis;
-#[macro_use]
-extern crate log;
 extern crate env_logger;
 extern crate regex;
+
+extern crate httpbis_test;
+use httpbis_test::*;
 
 use bytes::Bytes;
 
@@ -31,10 +32,6 @@ use tls_api_native_tls::TlsConnector;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
-
-mod test_misc;
-
-use test_misc::BIND_HOST;
 
 
 fn test_tls_acceptor() -> TlsAcceptor {

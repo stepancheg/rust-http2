@@ -3,16 +3,16 @@ extern crate regex;
 extern crate futures;
 extern crate httpbis;
 extern crate tokio_core;
-#[macro_use]
 extern crate log;
 extern crate env_logger;
 #[cfg(unix)]
 extern crate tempdir;
 
+extern crate httpbis_test;
+use httpbis_test::*;
+
 use std::sync::Arc;
 use std::sync::Mutex;
-
-mod test_misc;
 
 use bytes::Bytes;
 
@@ -27,8 +27,6 @@ use httpbis::Service;
 use httpbis::Response;
 use httpbis::Headers;
 use httpbis::HttpPartStream;
-
-use test_misc::*;
 
 fn init_logger() {
     env_logger::try_init().ok();
