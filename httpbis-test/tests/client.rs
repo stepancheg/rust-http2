@@ -35,9 +35,7 @@ fn stream_count() {
 
     let (server, client) = HttpServerTester::new_with_client();
 
-    let mut server_tester = server.accept();
-    server_tester.recv_preface();
-    server_tester.settings_xchg();
+    let mut server_tester = server.accept_xchg();
 
     let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len());
@@ -70,9 +68,7 @@ fn rst_is_error() {
 
     let (server, client) = HttpServerTester::new_with_client();
 
-    let mut server_tester = server.accept();
-    server_tester.recv_preface();
-    server_tester.settings_xchg();
+    let mut server_tester = server.accept_xchg();
 
     let req = client.start_get("/fgfg", "localhost").collect();
 
@@ -98,9 +94,7 @@ fn client_call_dropped() {
 
     let (server, client) = HttpServerTester::new_with_client();
 
-    let mut server_tester = server.accept();
-    server_tester.recv_preface();
-    server_tester.settings_xchg();
+    let mut server_tester = server.accept_xchg();
 
     {
         let req = client.start_get("/fgfg", "localhost");
@@ -130,9 +124,7 @@ fn reconnect_on_disconnect() {
 
     let (server, client) = HttpServerTester::new_with_client();
 
-    let mut server_tester = server.accept();
-    server_tester.recv_preface();
-    server_tester.settings_xchg();
+    let mut server_tester = server.accept_xchg();
 
     {
         let req = client.start_get("/111", "localhost").collect();
@@ -171,9 +163,7 @@ fn reconnect_on_goaway() {
     let (server, client) = HttpServerTester::new_with_client();
 
     {
-        let mut server_tester = server.accept();
-        server_tester.recv_preface();
-        server_tester.settings_xchg();
+        let mut server_tester = server.accept_xchg();
 
         let req = client.start_get("/111", "localhost").collect();
         server_tester.recv_message(1);
@@ -189,9 +179,7 @@ fn reconnect_on_goaway() {
     {
         let connect = client.wait_for_connect();
 
-        let mut server_tester = server.accept();
-        server_tester.recv_preface();
-        server_tester.settings_xchg();
+        let mut server_tester = server.accept_xchg();
 
         connect.wait().expect("connect");
 
@@ -210,9 +198,7 @@ pub fn issue_89() {
 
     let (server, client) = HttpServerTester::new_with_client();
 
-    let mut server_tester = server.accept();
-    server_tester.recv_preface();
-    server_tester.settings_xchg();
+    let mut server_tester = server.accept_xchg();
 
     let r1 = client.start_get("/r1", "localhost");
 

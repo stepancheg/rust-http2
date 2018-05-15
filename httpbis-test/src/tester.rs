@@ -72,6 +72,13 @@ impl HttpServerTester {
         debug!("accept connection.");
         r
     }
+
+    pub fn accept_xchg(&self) -> HttpConnectionTester {
+        let mut tester = self.accept();
+        tester.recv_preface();
+        tester.settings_xchg();
+        tester
+    }
 }
 
 static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
