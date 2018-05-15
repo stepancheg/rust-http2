@@ -29,6 +29,7 @@ use httpbis::solicit::frame::RawFrame;
 use httpbis::solicit::frame::rst_stream::RstStreamFrame;
 use httpbis::solicit::connection::HttpFrame;
 use httpbis::solicit::connection::HttpConnection;
+use httpbis::client::Client;
 
 use super::BIND_HOST;
 
@@ -47,6 +48,15 @@ impl HttpServerTester {
 
     pub fn new() -> HttpServerTester {
         HttpServerTester::on_port(0)
+    }
+
+    pub fn new_with_client() -> (HttpServerTester, Client) {
+        let server = HttpServerTester::new();
+
+        let client = Client::new_plain(BIND_HOST, server.port(), Default::default())
+            .expect("client");
+
+        (server, client)
     }
 
     pub fn port(&self) -> u16 {

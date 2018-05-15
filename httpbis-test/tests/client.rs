@@ -33,10 +33,7 @@ use httpbis::solicit::DEFAULT_SETTINGS;
 fn stream_count() {
     init_logger();
 
-    let server = HttpServerTester::new();
-
-    let client: Client =
-        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
+    let (server, client) = HttpServerTester::new_with_client();
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -71,10 +68,7 @@ fn stream_count() {
 fn rst_is_error() {
     init_logger();
 
-    let server = HttpServerTester::new();
-
-    let client: Client =
-        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
+    let (server, client) = HttpServerTester::new_with_client();
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -102,10 +96,7 @@ fn rst_is_error() {
 fn client_call_dropped() {
     init_logger();
 
-    let server = HttpServerTester::new();
-
-    let client: Client =
-        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
+    let (server, client) = HttpServerTester::new_with_client();
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -137,10 +128,7 @@ fn client_call_dropped() {
 fn reconnect_on_disconnect() {
     init_logger();
 
-    let server = HttpServerTester::new();
-
-    let client: Client =
-        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
+    let (server, client) = HttpServerTester::new_with_client();
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
@@ -180,10 +168,7 @@ fn reconnect_on_disconnect() {
 fn reconnect_on_goaway() {
     init_logger();
 
-    let server = HttpServerTester::new();
-
-    let client: Client =
-        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
+    let (server, client) = HttpServerTester::new_with_client();
 
     {
         let mut server_tester = server.accept();
@@ -223,10 +208,7 @@ fn reconnect_on_goaway() {
 pub fn issue_89() {
     init_logger();
 
-    let server = HttpServerTester::new();
-
-    let client: Client =
-        Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
+    let (server, client) = HttpServerTester::new_with_client();
 
     let mut server_tester = server.accept();
     server_tester.recv_preface();
