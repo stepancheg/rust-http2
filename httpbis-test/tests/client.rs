@@ -33,9 +33,7 @@ use httpbis::solicit::DEFAULT_SETTINGS;
 fn stream_count() {
     init_logger();
 
-    let (server, client) = HttpServerTester::new_with_client();
-
-    let mut server_tester = server.accept_xchg();
+    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
 
     let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len());
@@ -66,9 +64,7 @@ fn stream_count() {
 fn rst_is_error() {
     init_logger();
 
-    let (server, client) = HttpServerTester::new_with_client();
-
-    let mut server_tester = server.accept_xchg();
+    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
 
     let req = client.start_get("/fgfg", "localhost").collect();
 
@@ -92,9 +88,7 @@ fn rst_is_error() {
 fn client_call_dropped() {
     init_logger();
 
-    let (server, client) = HttpServerTester::new_with_client();
-
-    let mut server_tester = server.accept_xchg();
+    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
 
     {
         let req = client.start_get("/fgfg", "localhost");
@@ -196,9 +190,7 @@ fn reconnect_on_goaway() {
 pub fn issue_89() {
     init_logger();
 
-    let (server, client) = HttpServerTester::new_with_client();
-
-    let mut server_tester = server.accept_xchg();
+    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
 
     let r1 = client.start_get("/r1", "localhost");
 

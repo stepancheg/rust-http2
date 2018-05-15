@@ -89,6 +89,19 @@ pub struct HttpConnectionTester {
 }
 
 impl HttpConnectionTester {
+    pub fn new_server_with_client() -> (HttpConnectionTester, Client) {
+        let (server, client) = HttpServerTester::new_with_client();
+        let tester = server.accept();
+        (tester, client)
+    }
+
+    pub fn new_server_with_client_xchg() -> (HttpConnectionTester, Client) {
+        let (mut tester, client) = HttpConnectionTester::new_server_with_client();
+        tester.recv_preface();
+        tester.settings_xchg();
+        (tester, client)
+    }
+
     pub fn connect(port: u16) -> HttpConnectionTester {
         HttpConnectionTester {
             tcp: net::TcpStream::connect((BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap())
