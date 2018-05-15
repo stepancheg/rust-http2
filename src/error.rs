@@ -1,6 +1,7 @@
 use std::fmt;
 use std::io;
 use std::error::Error as StdError;
+use std::sync::Arc;
 
 use assert_types::*;
 
@@ -135,6 +136,8 @@ pub enum Error {
     InternalError(String),
     NotImplemented(&'static str),
     Other(&'static str),
+    ClientDied(Option<Arc<Error>>),
+    ClientPanicked(String),
 }
 
 fn _assert_error_sync_send() {
@@ -192,6 +195,8 @@ impl StdError for Error {
             Error::ParseFrameError(_) => "Failed to parse frame",
             Error::NotImplemented(_) => "Not implemented",
             Error::InternalError(_) => "Internal error",
+            Error::ClientDied(_) => "Client died",
+            Error::ClientPanicked(_) => "Client panicked",
             Error::Other(_) => "An unknown error",
         }
     }

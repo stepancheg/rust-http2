@@ -44,6 +44,7 @@ pub mod socket_unix;
 mod ascii;
 
 mod common;
+mod client_died_error_holder;
 
 pub mod stream_part;
 pub mod message;
