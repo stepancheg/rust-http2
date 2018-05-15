@@ -34,6 +34,8 @@ use solicit_async::*;
 use client_conn::*;
 use client_conf::*;
 use common::*;
+use client_died_error_holder::*;
+
 use stream_part::*;
 use service::Service;
 use socket::ToClientStream;
@@ -118,6 +120,9 @@ impl<C : TlsConnector> ClientBuilder<C> {
 
         let (done_tx, done_rx) = oneshot::channel();
 
+        let client_died_error_holder = ClientDiedErrorHolder::new();
+        let client_died_error_holder_copy = client_died_error_holder.clone();
+
         let join = if let Some(remote) = self.event_loop {
             let tls = self.tls;
             let conf = self.conf;
@@ -131,7 +136,8 @@ impl<C : TlsConnector> ClientBuilder<C> {
                     conf,
                     done_tx,
                     controller_tx,
-                    controller_rx);
+                    controller_rx,
+                    client_died_error_holder_copy);
                 future::finished(())
             });
             Completion::Rx(done_rx)
@@ -156,7 +162,8 @@ impl<C : TlsConnector> ClientBuilder<C> {
                         conf,
                         done_tx,
                         controller_tx,
-                        controller_rx);
+                        controller_rx,
+                        client_died_error_holder_copy);
 
                     lp.run(done_rx).expect("run");
                 })
@@ -166,9 +173,10 @@ impl<C : TlsConnector> ClientBuilder<C> {
 
         Ok(Client {
             join: Some(join),
-            controller_tx: controller_tx,
-            http_scheme: http_scheme,
+            controller_tx,
+            http_scheme,
             shutdown: shutdown_signal,
+            client_died_error_holder,
         })
     }
 }
@@ -185,6 +193,7 @@ pub struct Client {
     http_scheme: HttpScheme,
     // used only once to send shutdown signal
     shutdown: ShutdownSignal,
+    client_died_error_holder: ClientDiedErrorHolder,
 }
 
 impl Client {
@@ -305,7 +314,10 @@ impl Service for Client {
             return Response::err(error::Error::Other("client controller died"));
         }
 
-        let resp_rx = resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
+        let client_error = self.client_died_error_holder.clone();
+        let resp_rx = resp_rx.map_err(move |oneshot::Canceled| {
+            client_error.error()
+        });
 
         let resp_rx = resp_rx.map(|r| r.into_stream_flag());
 
@@ -412,14 +424,18 @@ fn spawn_client_event_loop<T : ToClientStream + Send + Clone + 'static, C : TlsC
     conf: ClientConf,
     done_tx: oneshot::Sender<()>,
     controller_tx: UnboundedSender<ControllerCommand>,
-    controller_rx: UnboundedReceiver<ControllerCommand>)
+    controller_rx: UnboundedReceiver<ControllerCommand>,
+    client_died_error_holder: ClientDiedErrorHolder)
 {
     let (http_conn, conn_future) =
         ClientConnection::new(handle.clone(), Box::new(socket_addr.clone()), tls.clone(), conf.clone(), CallbacksImpl {
             tx: controller_tx.clone(),
         });
 
-    handle.spawn(conn_future.map_err(|e| { warn!("client error: {:?}", e); () }));
+    // TODO: Why don't we join before spawn?
+    let conn_future = client_died_error_holder.wrap_future(conn_future);
+
+    handle.spawn(conn_future);
 
     let init = ControllerState {
         handle: handle.clone(),
@@ -449,6 +465,8 @@ fn spawn_client_event_loop<T : ToClientStream + Send + Clone + 'static, C : TlsC
         info!("client stopped");
         Ok(())
     });
+
+    let done = client_died_error_holder.wrap_future(done);
 
     handle.spawn(done);
 }
