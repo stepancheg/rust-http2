@@ -113,36 +113,55 @@ impl ConnInner for ClientInner {
         };
 
         if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
-            warn!("invalid headers: {:?} {:?}", e, headers);
+            warn!("invalid headers: {:?}: {:?}", e, headers);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 
-        if headers_place == HeadersPlace::Trailing && end_stream == EndStream::No {
-            warn!("headers without end stream after data: {}", stream_id);
-            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-            return Ok(None);
-        }
+        let status_1xx = match headers_place {
+            HeadersPlace::Initial => {
+                let status = headers.status();
+
+                let status_1xx = status >= 100 && status <= 199;
+                if status_1xx && end_stream == EndStream::Yes {
+                    warn!("1xx headers and end stream: {}", stream_id);
+                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                    return Ok(None);
+                }
+                status_1xx
+            }
+            HeadersPlace::Trailing => {
+                if end_stream == EndStream::No {
+                    warn!("headers without end stream after data: {}", stream_id);
+                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                    return Ok(None);
+                }
+                false
+            }
+        };
 
         let mut stream = self.streams.get_mut(stream_id).unwrap();
         if let Some(in_rem_content_length) = headers.content_length() {
             stream.stream().in_rem_content_length = Some(in_rem_content_length);
         }
 
-        // TODO: support 1xx headers
-        stream.stream().in_message_stage = match headers_place {
-            HeadersPlace::Initial => InMessageStage::AfterInitialHeaders,
-            HeadersPlace::Trailing => InMessageStage::AfterTrailingHeaders,
+        stream.stream().in_message_stage = match (headers_place, status_1xx) {
+            (HeadersPlace::Initial, false) => InMessageStage::AfterInitialHeaders,
+            (HeadersPlace::Initial, true) => InMessageStage::Initial,
+            (HeadersPlace::Trailing, _) => InMessageStage::AfterTrailingHeaders,
         };
 
-        if let Some(ref mut response_handler) = stream.stream().peer_tx {
-            // TODO: reset stream on error
-            drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
-                content: HttpStreamPartContent::Headers(headers),
-                last: end_stream == EndStream::Yes,
-            })));
-        } else {
-            // TODO: reset stream
+        // Ignore 1xx headers
+        if !status_1xx {
+            if let Some(ref mut response_handler) = stream.stream().peer_tx {
+                // TODO: reset stream on error
+                drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
+                    content: HttpStreamPartContent::Headers(headers),
+                    last: end_stream == EndStream::Yes,
+                })));
+            } else {
+                // TODO: reset stream
+            }
         }
 
         Ok(Some(stream))
@@ -241,11 +260,11 @@ pub trait ClientConnectionCallbacks : 'static {
 
 
 impl ClientConnection {
-    fn connected<I, C>(
+    fn spawn_connected<I, C>(
         lh: reactor::Handle, connect: HttpFutureSend<I>,
         conf: ClientConf,
         callbacks: C)
-            -> (Self, HttpFuture<()>)
+            -> Self
         where
             I : AsyncWrite + AsyncRead + Send + 'static,
             C : ClientConnectionCallbacks,
@@ -267,19 +286,23 @@ impl ClientConnection {
 
         let handshake = connect.and_then(|conn| client_handshake(conn, settings_frame));
 
+        let conn_data = ConnData::new(
+            lh.clone(),
+            CpuPoolOption::SingleThread,
+            ClientConnData {
+                callbacks: Box::new(callbacks),
+            },
+            conf.common,
+            settings,
+            to_write_tx.clone());
+
+        let conn_data_error_holder = conn_data.conn_died_error_holder.clone();
+
         let future = handshake.and_then(move |conn| {
             debug!("handshake done");
             let (read, write) = conn.split();
 
-            let inner = RcMut::new(ConnData::new(
-                lh,
-                CpuPoolOption::SingleThread,
-                ClientConnData {
-                    callbacks: Box::new(callbacks),
-                },
-                conf.common,
-                settings,
-                to_write_tx.clone()));
+            let inner = RcMut::new(conn_data);
 
             let run_write = ClientWriteLoop { write: write, inner: inner.clone() }.run(to_write_rx);
             let run_read = ClientReadLoop { read: read, inner: inner.clone() }.run();
@@ -288,32 +311,35 @@ impl ClientConnection {
             run_write.join(run_read).join(run_command).map(|_| ())
         });
 
-        (c, Box::new(future))
+        let future = conn_data_error_holder.wrap_future(future);
+
+        lh.spawn(future);
+
+        c
     }
 
-    pub fn new<H, C>(
+    pub fn spawn<H, C>(
         lh: reactor::Handle,
         addr: Box<ToClientStream>,
         tls: ClientTlsOption<C>,
         conf: ClientConf,
-        callbacks: H)
-            -> (Self, HttpFuture<()>)
+        callbacks: H) -> Self
         where H : ClientConnectionCallbacks, C : TlsConnector + Sync
     {
         match tls {
             ClientTlsOption::Plain =>
-                ClientConnection::new_plain(lh, addr, conf, callbacks),
+                ClientConnection::spawn_plain(lh.clone(), addr, conf, callbacks),
             ClientTlsOption::Tls(domain, connector) =>
-                ClientConnection::new_tls(lh, &domain, connector, addr, conf, callbacks),
+                ClientConnection::spawn_tls(lh.clone(), &domain, connector, addr, conf, callbacks),
         }
     }
 
-    pub fn new_plain<C>(
+    pub fn spawn_plain<C>(
         lh: reactor::Handle,
         addr: Box<ToClientStream>,
         conf: ClientConf,
         callbacks: C)
-            -> (Self, HttpFuture<()>)
+            -> Self
         where C : ClientConnectionCallbacks
     {
         let no_delay = conf.no_delay.unwrap_or(true);
@@ -335,17 +361,17 @@ impl ClientConnection {
             Box::new(connect.map(map_callback))
         };
 
-        ClientConnection::connected(lh, connect, conf, callbacks)
+        ClientConnection::spawn_connected(lh, connect, conf, callbacks)
     }
 
-    pub fn new_tls<H, C>(
+    pub fn spawn_tls<H, C>(
         lh: reactor::Handle,
         domain: &str,
         connector: Arc<C>,
         addr: Box<ToClientStream>,
         conf: ClientConf,
         callbacks: H)
-            -> (Self, HttpFuture<()>)
+            -> Self
         where H : ClientConnectionCallbacks, C : TlsConnector + Sync
     {
         let domain = domain.to_owned();
@@ -362,7 +388,7 @@ impl ClientConnection {
 
         let tls_conn = tls_conn.map_err(Error::from);
 
-        ClientConnection::connected(lh, Box::new(tls_conn), conf, callbacks)
+        ClientConnection::spawn_connected(lh, Box::new(tls_conn), conf, callbacks)
     }
 
     pub fn start_request_with_resp_sender(

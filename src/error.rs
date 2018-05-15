@@ -138,6 +138,7 @@ pub enum Error {
     Other(&'static str),
     ClientDied(Option<Arc<Error>>),
     ClientPanicked(String),
+    ClientCompletedWithoutError,
 }
 
 fn _assert_error_sync_send() {
@@ -197,6 +198,7 @@ impl StdError for Error {
             Error::InternalError(_) => "Internal error",
             Error::ClientDied(_) => "Client died",
             Error::ClientPanicked(_) => "Client panicked",
+            Error::ClientCompletedWithoutError => "Client completed without error",
             Error::Other(_) => "An unknown error",
         }
     }

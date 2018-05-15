@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::marker;
 
 use futures::future::Future;
 
@@ -7,13 +8,36 @@ use error;
 use std::panic::AssertUnwindSafe;
 use misc::any_to_string;
 
-#[derive(Default, Clone)]
-pub struct ClientDiedErrorHolder {
-    error: Arc<Mutex<Option<Arc<error::Error>>>>,
+pub trait DiedType : Default + Clone {
+    fn what() -> &'static str;
 }
 
-impl ClientDiedErrorHolder {
-    pub fn new() -> ClientDiedErrorHolder {
+#[derive(Copy, Clone, Default)]
+pub struct ClientDiedType;
+#[derive(Copy, Clone, Default)]
+pub struct ClientConnDiedType;
+
+impl DiedType for ClientDiedType {
+    fn what() -> &'static str {
+        "client"
+    }
+}
+
+impl DiedType for ClientConnDiedType {
+    fn what() -> &'static str {
+        "client connection"
+    }
+}
+
+
+#[derive(Default, Clone)]
+pub struct ClientDiedErrorHolder<D : DiedType> {
+    error: Arc<Mutex<Option<Arc<error::Error>>>>,
+    _marker: marker::PhantomData<D>,
+}
+
+impl<D : DiedType> ClientDiedErrorHolder<D> {
+    pub fn new() -> Self {
         Default::default()
     }
 
@@ -34,17 +58,25 @@ impl ClientDiedErrorHolder {
     {
 
         let holder = self.clone();
-        let future = future.map_err(move |e| {
-            warn!("client completed with error: {:?}", e);
-            holder.set_once(e);
-            ()
+        let future = future.then(move |r| {
+            match r {
+                Ok(()) => {
+                    info!("{} completed without errors", D::what());
+                    holder.set_once(error::Error::ClientCompletedWithoutError);
+                }
+                Err(e) => {
+                    warn!("{} completed with error: {:?}", D::what(), e);
+                    holder.set_once(e);
+                }
+            }
+            Ok::<(), ()>(())
         });
 
         let holder = self.clone();
         let future = AssertUnwindSafe(future).catch_unwind().then(move |r| {
             if let Err(e) = r {
                 let message = any_to_string(e);
-                warn!("client panicked: {}", message);
+                warn!("{} panicked: {}", D::what(), message);
                 holder.set_once(error::Error::ClientPanicked(message));
             }
             Ok(())

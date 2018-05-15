@@ -56,6 +56,8 @@ pub use resp::Response;
 
 use rc_mut::*;
 use solicit::MAX_WINDOW_SIZE;
+use client_died_error_holder::ClientDiedErrorHolder;
+use client_died_error_holder::ClientConnDiedType;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -93,6 +95,8 @@ pub trait ConnDataSpecific : 'static {
 
 
 pub struct ConnData<T : Types> {
+    pub conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
+
     /// Client or server specific data
     pub specific: T::ConnDataSpecific,
     /// Messages to be sent to write loop
@@ -157,6 +161,7 @@ impl<T : Types> ConnData<T>
         let pump_window_size = window_size::ConnOutWindowSender::new(conn.out_window_size.0 as u32);
 
         ConnData {
+            conn_died_error_holder: ClientDiedErrorHolder::new(),
             specific: specific,
             to_write_tx: to_write_tx,
             conn: conn,
@@ -192,7 +197,7 @@ impl<T : Types> ConnData<T>
         specific: T::HttpStreamSpecific)
         -> (HttpStreamRef<T>, StreamFromNetwork<T>, window_size::StreamOutWindowReceiver)
     {
-        let (inc_tx, inc_rx) = stream_queue_sync();
+        let (inc_tx, inc_rx) = stream_queue_sync(self.conn_died_error_holder.clone());
 
         let in_window_size = self.conn.our_settings_sent().initial_window_size;
 

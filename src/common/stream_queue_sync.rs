@@ -16,6 +16,7 @@ use futures_misc::ResultOrEof;
 use error;
 
 use stream_part::*;
+use client_died_error_holder::*;
 
 
 struct Shared {
@@ -28,6 +29,7 @@ pub struct StreamQueueSyncSender {
 }
 
 pub struct StreamQueueSyncReceiver {
+    conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
     shared: Arc<Shared>,
     receiver: UnboundedReceiver<ResultOrEof<HttpStreamPart, error::Error>>,
 }
@@ -70,7 +72,7 @@ impl Stream for StreamQueueSyncReceiver {
         let part = match self.receiver.poll() {
             Err(()) => unreachable!(),
             Ok(Async::NotReady) => return Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => return Err(error::Error::Other("unexpected EOF; conn likely died")),
+            Ok(Async::Ready(None)) => return Err(self.conn_died_error_holder.error()),
             Ok(Async::Ready(Some(ResultOrEof::Error(e)))) => return Err(e),
             Ok(Async::Ready(Some(ResultOrEof::Eof))) => return Ok(Async::Ready(None)),
             Ok(Async::Ready(Some(ResultOrEof::Item(part)))) => part,
@@ -85,7 +87,9 @@ impl Stream for StreamQueueSyncReceiver {
     }
 }
 
-pub fn stream_queue_sync() -> (StreamQueueSyncSender, StreamQueueSyncReceiver) {
+pub fn stream_queue_sync(conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>)
+    -> (StreamQueueSyncSender, StreamQueueSyncReceiver)
+{
     let shared = Arc::new(Shared {
         data_size: AtomicUsize::new(0)
     });
@@ -97,7 +101,8 @@ pub fn stream_queue_sync() -> (StreamQueueSyncSender, StreamQueueSyncReceiver) {
         sender: utx,
     };
     let rx = StreamQueueSyncReceiver {
-        shared: shared,
+        conn_died_error_holder,
+        shared,
         receiver: urx,
     };
 

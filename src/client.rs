@@ -193,7 +193,7 @@ pub struct Client {
     http_scheme: HttpScheme,
     // used only once to send shutdown signal
     shutdown: ShutdownSignal,
-    client_died_error_holder: ClientDiedErrorHolder,
+    client_died_error_holder: ClientDiedErrorHolder<ClientDiedType>,
 }
 
 impl Client {
@@ -345,7 +345,7 @@ struct ControllerState<T : ToClientStream, C : TlsConnector> {
 
 impl<T : ToClientStream + 'static + Clone, C : TlsConnector> ControllerState<T, C> {
     fn init_conn(&mut self) {
-        let (conn, future) = ClientConnection::new(
+        let conn = ClientConnection::spawn(
             self.handle.clone(),
             Box::new(self.socket_addr.clone()),
             self.tls.clone(),
@@ -353,8 +353,6 @@ impl<T : ToClientStream + 'static + Clone, C : TlsConnector> ControllerState<T, 
             CallbacksImpl {
                 tx: self.tx.clone(),
             });
-
-        self.handle.spawn(future.map_err(|e| { warn!("client error: {:?}", e); () }));
 
         self.conn = Arc::new(conn);
     }
@@ -425,17 +423,12 @@ fn spawn_client_event_loop<T : ToClientStream + Send + Clone + 'static, C : TlsC
     done_tx: oneshot::Sender<()>,
     controller_tx: UnboundedSender<ControllerCommand>,
     controller_rx: UnboundedReceiver<ControllerCommand>,
-    client_died_error_holder: ClientDiedErrorHolder)
+    client_died_error_holder: ClientDiedErrorHolder<ClientDiedType>)
 {
-    let (http_conn, conn_future) =
-        ClientConnection::new(handle.clone(), Box::new(socket_addr.clone()), tls.clone(), conf.clone(), CallbacksImpl {
+    let http_conn =
+        ClientConnection::spawn(handle.clone(), Box::new(socket_addr.clone()), tls.clone(), conf.clone(), CallbacksImpl {
             tx: controller_tx.clone(),
         });
-
-    // TODO: Why don't we join before spawn?
-    let conn_future = client_died_error_holder.wrap_future(conn_future);
-
-    handle.spawn(conn_future);
 
     let init = ControllerState {
         handle: handle.clone(),
@@ -462,7 +455,6 @@ fn spawn_client_event_loop<T : ToClientStream + Send + Clone + 'static, C : TlsC
     let done = done.then(|_| {
         // OK to ignore error, because rx might be already dead
         drop(done_tx.send(()));
-        info!("client stopped");
         Ok(())
     });
 

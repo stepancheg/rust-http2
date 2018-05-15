@@ -85,6 +85,30 @@ fn rst_is_error() {
 }
 
 #[test]
+fn handle_1xx_headers() {
+    init_logger();
+
+    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
+
+    let req = client.start_get("/fgfg", "localhost").collect();
+
+    let get = server_tester.recv_message(1);
+    assert_eq!("GET", get.headers.method());
+
+    server_tester.send_headers(1, Headers::from_status(100), false);
+    server_tester.send_headers(1, Headers::from_status(100), false);
+
+    server_tester.send_headers(1, Headers::ok_200(), false);
+
+    server_tester.send_data(1, b"hello", true);
+
+    req.wait().expect("Should be OK");
+
+    let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
+    assert_eq!(0, state.streams.len(), "{:?}", state);
+}
+
+#[test]
 fn client_call_dropped() {
     init_logger();
 
