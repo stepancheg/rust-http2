@@ -24,7 +24,7 @@ use test::Bencher;
 struct Megabyte;
 
 impl Service for Megabyte {
-    fn start_request(&self, _headers: Headers, _req: HttpPartStream) -> Response {
+    fn start_request(&self, _headers: Headers, _req: HttpPartStreamAfterHeaders) -> Response {
         Response::headers_and_bytes_stream(
             Headers::ok_200(),
             stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))))
@@ -49,8 +49,11 @@ fn bench(b: &mut Bencher) {
         assert_eq!(200, header.status());
 
         let mut s = 0;
-        for p in body.check_only_data().wait() {
-            s += p.expect("body").len();
+        for p in body.wait() {
+            match p.expect("part") {
+                HttpStreamPartAfterHeaders::Data(d, ..) => s += d.len(),
+                _ => panic!("unexpected headers"),
+            }
         }
 
         assert_eq!(1024 * 1024, s);

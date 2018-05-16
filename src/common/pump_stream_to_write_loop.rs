@@ -9,7 +9,7 @@ use void::Void;
 use solicit::StreamId;
 
 use stream_part::HttpPartStream;
-use stream_part::HttpStreamPartContent;
+use data_or_headers::DataOrHeaders;
 
 use error::ErrorCode;
 
@@ -59,10 +59,10 @@ impl<T : Types> Future for PumpStreamToWriteLoop<T> {
             match part_opt {
                 Some(part) => {
                     match &part.content {
-                        &HttpStreamPartContent::Data(ref d) => {
+                        &DataOrHeaders::Data(ref d) => {
                             self.out_window.decrease(d.len());
                         }
-                        &HttpStreamPartContent::Headers(_) => {
+                        &DataOrHeaders::Headers(_) => {
                         }
                     }
 

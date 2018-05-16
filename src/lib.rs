@@ -47,6 +47,7 @@ mod common;
 mod client_died_error_holder;
 
 pub mod stream_part;
+mod data_or_headers;
 pub mod message;
 
 pub mod futures_misc;
@@ -88,7 +89,8 @@ pub use server_conf::ServerAlpn;
 pub use server_tls::ServerTlsOption;
 
 pub use resp::Response;
-pub use stream_part::HttpPartStream;
+pub use stream_part::HttpPartStreamAfterHeaders;
+pub use stream_part::HttpStreamPartAfterHeaders;
 
 pub use error::Error;
 pub use error::ErrorCode;

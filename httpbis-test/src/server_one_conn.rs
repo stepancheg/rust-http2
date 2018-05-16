@@ -34,14 +34,14 @@ struct FromLoop {
 
 impl ServerOneConn {
     pub fn new_fn<S>(port: u16, service: S) -> Self
-        where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + Sync + 'static
+        where S : Fn(Headers, httpbis::HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static
     {
         ServerOneConn::new_fn_impl(port, service)
     }
 
     #[allow(dead_code)]
     fn new_fn_impl<S>(port: u16, service: S) -> Self
-        where S : Fn(Headers, httpbis::HttpPartStream) -> Response + Send + Sync + 'static
+        where S : Fn(Headers, httpbis::HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static
     {
         let (from_loop_tx, from_loop_rx) = oneshot::channel();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

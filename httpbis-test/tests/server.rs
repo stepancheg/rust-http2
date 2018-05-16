@@ -32,7 +32,7 @@ use futures::stream;
 use futures::sync::oneshot;
 
 use httpbis::*;
-use httpbis::stream_part::HttpStreamPart;
+use httpbis::stream_part::DataOrHeadersWithFlag;
 use httpbis::solicit::frame::settings::*;
 use httpbis::solicit::frame::headers::*;
 use httpbis::solicit::DEFAULT_SETTINGS;
@@ -121,7 +121,7 @@ fn panic_in_stream() {
         if headers.path() == "/panic" {
             Response::from_stream(stream::iter_ok((0..2).map(|i| {
                 match i {
-                    0 => HttpStreamPart::intermediate_headers(Headers::ok_200()),
+                    0 => DataOrHeadersWithFlag::intermediate_headers(Headers::ok_200()),
                     _ => panic!("should reset stream"),
                 }
             })))

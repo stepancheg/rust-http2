@@ -15,6 +15,7 @@ use error;
 use super::conn::CommonToWriteMessage;
 use super::types::Types;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
+use data_or_headers::DataOrHeaders;
 
 
 /// Stream that provides data from network.
@@ -27,10 +28,10 @@ pub struct StreamFromNetwork<T : Types> {
 }
 
 impl<T : Types> Stream for StreamFromNetwork<T> {
-    type Item = HttpStreamPart;
+    type Item = DataOrHeadersWithFlag;
     type Error = error::Error;
 
-    fn poll(&mut self) -> Poll<Option<HttpStreamPart>, error::Error> {
+    fn poll(&mut self) -> Poll<Option<DataOrHeadersWithFlag>, error::Error> {
         let part = match self.rx.poll() {
             Ok(Async::NotReady) => return Ok(Async::NotReady),
             Err(e) => return Err(e),
@@ -38,7 +39,7 @@ impl<T : Types> Stream for StreamFromNetwork<T> {
             Ok(Async::Ready(Some(part))) => part,
         };
 
-        if let HttpStreamPart { content: HttpStreamPartContent::Data(ref b), .. } = part {
+        if let DataOrHeadersWithFlag { content: DataOrHeaders::Data(ref b), .. } = part {
             self.in_window_size -= b.len() as u32;
 
             // TODO: use different

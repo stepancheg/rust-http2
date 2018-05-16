@@ -4,7 +4,7 @@ use std::collections::hash_map;
 
 use service::Service;
 use solicit::header::Headers;
-use stream_part::HttpPartStream;
+use stream_part::HttpPartStreamAfterHeaders;
 use resp::Response;
 
 
@@ -112,10 +112,10 @@ impl ServicePaths {
     }
 
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
-        where F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static
+        where F : Fn(Headers, HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static
     {
-        impl<F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static> Service for F {
-            fn start_request(&self, headers: Headers, req: HttpPartStream) -> Response {
+        impl<F : Fn(Headers, HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static> Service for F {
+            fn start_request(&self, headers: Headers, req: HttpPartStreamAfterHeaders) -> Response {
                 self(headers, req)
             }
         }
@@ -134,7 +134,7 @@ impl ServicePaths {
 }
 
 impl Service for ServicePaths {
-    fn start_request(&self, headers: Headers, req: HttpPartStream) -> Response {
+    fn start_request(&self, headers: Headers, req: HttpPartStreamAfterHeaders) -> Response {
         if let Some(service) = self.find_service(headers.path()) {
             service.start_request(headers, req)
         } else {

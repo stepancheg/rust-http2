@@ -1,15 +1,15 @@
 use std::collections::VecDeque;
 
-use stream_part::HttpStreamPart;
-use stream_part::HttpStreamPartContent;
+use stream_part::DataOrHeadersWithFlag;
+use data_or_headers::DataOrHeaders;
 
 use error::ErrorCode;
 
 
-pub fn data_size(content: &HttpStreamPartContent) -> usize {
+pub fn data_size(content: &DataOrHeaders) -> usize {
     match *content {
-        HttpStreamPartContent::Headers(_) => 0,
-        HttpStreamPartContent::Data(ref d) => d.len(),
+        DataOrHeaders::Headers(_) => 0,
+        DataOrHeaders::Data(ref d) => d.len(),
     }
 }
 
@@ -17,7 +17,7 @@ pub fn data_size(content: &HttpStreamPartContent) -> usize {
 // Outgoing frames queue
 pub struct StreamQueue {
     // items, newest in back
-    queue: VecDeque<HttpStreamPartContent>,
+    queue: VecDeque<DataOrHeaders>,
     // nothing will be added to `outgoing`
     // None means data is maybe available
     // Some(NoError) means data is successfully generated
@@ -42,7 +42,7 @@ impl StreamQueue {
         self.data_size
     }
 
-    pub fn push_back(&mut self, part: HttpStreamPartContent) {
+    pub fn push_back(&mut self, part: DataOrHeaders) {
         if let Some(_) = self.end {
             return;
         }
@@ -50,19 +50,19 @@ impl StreamQueue {
         self.queue.push_back(part);
     }
 
-    pub fn push_back_part(&mut self, part: HttpStreamPart) {
+    pub fn push_back_part(&mut self, part: DataOrHeadersWithFlag) {
         self.push_back(part.content);
         if part.last {
             self.close(ErrorCode::NoError);
         }
     }
 
-    pub fn push_front(&mut self, part: HttpStreamPartContent) {
+    pub fn push_front(&mut self, part: DataOrHeaders) {
         self.data_size += data_size(&part);
         self.queue.push_front(part);
     }
 
-    pub fn pop_front(&mut self) -> Option<HttpStreamPartContent> {
+    pub fn pop_front(&mut self) -> Option<DataOrHeaders> {
         if let Some(part) = self.queue.pop_front() {
             self.data_size -= data_size(&part);
             Some(part)
@@ -71,7 +71,7 @@ impl StreamQueue {
         }
     }
 
-    pub fn front(&self) -> Option<&HttpStreamPartContent> {
+    pub fn front(&self) -> Option<&DataOrHeaders> {
         self.queue.front()
     }
 

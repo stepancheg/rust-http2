@@ -20,6 +20,7 @@ use super::types::Types;
 use super::stream_queue::StreamQueue;
 use super::stream_queue_sync::StreamQueueSyncSender;
 use super::window_size;
+use data_or_headers::DataOrHeaders;
 
 
 pub enum HttpStreamCommand {
@@ -29,16 +30,16 @@ pub enum HttpStreamCommand {
 }
 
 impl HttpStreamCommand {
-    pub fn from(part: HttpStreamPart) -> HttpStreamCommand {
+    pub fn from(part: DataOrHeadersWithFlag) -> HttpStreamCommand {
         let end_stream = match part.last {
             true => EndStream::Yes,
             false => EndStream::No,
         };
         match part.content {
-            HttpStreamPartContent::Data(data) => {
+            DataOrHeaders::Data(data) => {
                 HttpStreamCommand::Data(data, end_stream)
             },
-            HttpStreamPartContent::Headers(headers) => {
+            DataOrHeaders::Headers(headers) => {
                 HttpStreamCommand::Headers(headers, end_stream)
             },
         }
@@ -151,7 +152,7 @@ impl<T : Types> HttpStreamCommon<T> {
         }
 
         let pop_headers =
-            if let &HttpStreamPartContent::Headers(..) = self.outgoing.front().unwrap() {
+            if let &DataOrHeaders::Headers(..) = self.outgoing.front().unwrap() {
                 true
             } else {
                 false
@@ -162,7 +163,7 @@ impl<T : Types> HttpStreamCommon<T> {
             if last {
                 self.close_local();
             }
-            return Some(HttpStreamCommand::from(HttpStreamPart {
+            return Some(HttpStreamCommand::from(DataOrHeadersWithFlag {
                 content: r,
                 last: last,
             }))
@@ -173,7 +174,7 @@ impl<T : Types> HttpStreamCommon<T> {
         }
 
         let mut data =
-            if let Some(HttpStreamPartContent::Data(data)) = self.outgoing.pop_front() {
+            if let Some(DataOrHeaders::Data(data)) = self.outgoing.pop_front() {
                 data
             } else {
                 unreachable!()
@@ -186,7 +187,7 @@ impl<T : Types> HttpStreamCommon<T> {
             trace!("truncating data of len {} to {}", data.len(), max_window);
             let size = max_window as usize;
             let rem = data.split_off(size);
-            self.outgoing.push_front(HttpStreamPartContent::Data(rem));
+            self.outgoing.push_front(DataOrHeaders::Data(rem));
         };
 
         self.out_window_size.try_decrease_to_positive(data.len() as i32).unwrap();
@@ -197,8 +198,8 @@ impl<T : Types> HttpStreamCommon<T> {
             self.close_local();
         }
 
-        Some(HttpStreamCommand::from(HttpStreamPart {
-            content: HttpStreamPartContent::Data(data),
+        Some(HttpStreamCommand::from(DataOrHeadersWithFlag {
+            content: DataOrHeaders::Data(data),
             last: last,
         }))
     }
@@ -214,8 +215,8 @@ impl<T : Types> HttpStreamCommon<T> {
     pub fn new_data_chunk(&mut self, data: Bytes, last: bool) {
         if let Some(ref mut response_handler) = self.peer_tx {
             // TODO: reset stream if rx is dead
-            drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
-                content: HttpStreamPartContent::Data(data),
+            drop(response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
+                content: DataOrHeaders::Data(data),
                 last: last,
             })));
         }

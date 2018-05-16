@@ -47,6 +47,7 @@ use rc_mut::*;
 use req_resp::RequestOrResponse;
 use headers_place::HeadersPlace;
 use ErrorCode;
+use data_or_headers::DataOrHeaders;
 
 
 struct ClientTypes;
@@ -155,8 +156,8 @@ impl ConnInner for ClientInner {
         if !status_1xx {
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
                 // TODO: reset stream on error
-                drop(response_handler.send(ResultOrEof::Item(HttpStreamPart {
-                    content: HttpStreamPartContent::Headers(headers),
+                drop(response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
+                    content: DataOrHeaders::Headers(headers),
                     last: end_stream == EndStream::Yes,
                 })));
             } else {
@@ -177,7 +178,7 @@ unsafe impl Sync for ClientConnection {}
 
 pub struct StartRequestMessage {
     pub headers: Headers,
-    pub body: HttpPartStream,
+    pub body: HttpPartStreamAfterHeaders,
     pub resp_tx: oneshot::Sender<Response>,
 }
 
@@ -217,12 +218,12 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
                     warn!("caller died");
                 }
 
-                http_stream.stream().outgoing.push_back(HttpStreamPartContent::Headers(headers));
+                http_stream.stream().outgoing.push_back(DataOrHeaders::Headers(headers));
 
                 out_window
             };
 
-            inner.pump_stream_to_write_loop(stream_id, body, out_window);
+            inner.pump_stream_to_write_loop(stream_id, body.into_part_stream(), out_window);
 
             stream_id
         });
@@ -439,7 +440,7 @@ impl Service for ClientConnection {
     fn start_request(
         &self,
         headers: Headers,
-        body: HttpPartStream)
+        body: HttpPartStreamAfterHeaders)
             -> Response
     {
         let (resp_tx, resp_rx) = oneshot::channel();

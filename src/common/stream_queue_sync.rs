@@ -17,6 +17,7 @@ use error;
 
 use stream_part::*;
 use client_died_error_holder::*;
+use data_or_headers::DataOrHeaders;
 
 
 struct Shared {
@@ -25,19 +26,19 @@ struct Shared {
 
 pub struct StreamQueueSyncSender {
     shared: Arc<Shared>,
-    sender: UnboundedSender<ResultOrEof<HttpStreamPart, error::Error>>,
+    sender: UnboundedSender<ResultOrEof<DataOrHeadersWithFlag, error::Error>>,
 }
 
 pub struct StreamQueueSyncReceiver {
     conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
     shared: Arc<Shared>,
-    receiver: UnboundedReceiver<ResultOrEof<HttpStreamPart, error::Error>>,
+    receiver: UnboundedReceiver<ResultOrEof<DataOrHeadersWithFlag, error::Error>>,
 }
 
 impl StreamQueueSyncSender {
-    pub fn send(&self, item: ResultOrEof<HttpStreamPart, error::Error>) -> Result<(), ()> {
+    pub fn send(&self, item: ResultOrEof<DataOrHeadersWithFlag, error::Error>) -> Result<(), ()> {
         if let ResultOrEof::Item(ref part) = item {
-            if let &HttpStreamPart { content: HttpStreamPartContent::Data(ref b), .. } = part {
+            if let &DataOrHeadersWithFlag { content: DataOrHeaders::Data(ref b), .. } = part {
                 self.shared.data_size.fetch_add(b.len(), Ordering::SeqCst);
             }
         }
@@ -45,7 +46,7 @@ impl StreamQueueSyncSender {
         self.sender.unbounded_send(item).map_err(|_| ())
     }
 
-    pub fn send_part(&self, part: HttpStreamPart) -> Result<(), ()> {
+    pub fn send_part(&self, part: DataOrHeadersWithFlag) -> Result<(), ()> {
         self.send(ResultOrEof::Item(part))
     }
 
@@ -65,10 +66,10 @@ impl StreamQueueSyncReceiver {
 }
 
 impl Stream for StreamQueueSyncReceiver {
-    type Item = HttpStreamPart;
+    type Item = DataOrHeadersWithFlag;
     type Error = error::Error;
 
-    fn poll(&mut self) -> Poll<Option<HttpStreamPart>, error::Error> {
+    fn poll(&mut self) -> Poll<Option<DataOrHeadersWithFlag>, error::Error> {
         let part = match self.receiver.poll() {
             Err(()) => unreachable!(),
             Ok(Async::NotReady) => return Ok(Async::NotReady),
@@ -79,7 +80,7 @@ impl Stream for StreamQueueSyncReceiver {
         };
 
 
-        if let HttpStreamPart { content: HttpStreamPartContent::Data(ref b) , .. } = part {
+        if let DataOrHeadersWithFlag { content: DataOrHeaders::Data(ref b) , .. } = part {
             self.shared.data_size.fetch_sub(b.len(), Ordering::SeqCst);
         }
 

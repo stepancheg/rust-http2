@@ -12,21 +12,22 @@ use message::SimpleHttpMessage;
 use error::Error;
 
 use stream_part::*;
+use data_or_headers::DataOrHeaders;
 
 
 /// Convenient wrapper around async HTTP response future/stream
-pub struct Response(pub HttpFutureSend<(Headers, HttpPartStream)>);
+pub struct Response(pub HttpFutureSend<(Headers, HttpPartStreamAfterHeaders)>);
 
 impl Response {
     // constructors
 
     pub fn new<F>(future: F) -> Response
-        where F : Future<Item=(Headers, HttpPartStream), Error=Error> + Send + 'static
+        where F : Future<Item=(Headers, HttpPartStreamAfterHeaders), Error=Error> + Send + 'static
     {
         Response(Box::new(future))
     }
 
-    pub fn headers_and_stream(headers: Headers, stream: HttpPartStream) -> Response
+    pub fn headers_and_stream(headers: Headers, stream: HttpPartStreamAfterHeaders) -> Response
     {
         Response::new(future::ok((headers, stream)))
     }
@@ -34,7 +35,7 @@ impl Response {
     pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> Response
         where S : Stream<Item=Bytes, Error=Error> + Send + 'static
     {
-        Response::headers_and_stream(headers, HttpPartStream::bytes(content))
+        Response::headers_and_stream(headers, HttpPartStreamAfterHeaders::bytes(content))
     }
 
     /// Create a response with only headers
@@ -62,17 +63,17 @@ impl Response {
     }
 
     pub fn from_stream<S>(stream: S) -> Response
-        where S : Stream<Item=HttpStreamPart, Error=Error> + Send + 'static
+        where S : Stream<Item=DataOrHeadersWithFlag, Error=Error> + Send + 'static
     {
         // Check that first frame is HEADERS
         Response::new(stream.into_future().map_err(|(p, _s)| p).and_then(|(first, rem)| {
             match first {
                 Some(part) => {
                     match part.content {
-                        HttpStreamPartContent::Headers(headers) => {
-                            Ok((headers, HttpPartStream::new(rem)))
+                        DataOrHeaders::Headers(headers) => {
+                            Ok((headers, HttpPartStreamAfterHeaders::from_parts(rem)))
                         },
-                        HttpStreamPartContent::Data(..) => {
+                        DataOrHeaders::Data(..) => {
                             Err(Error::InvalidFrame("data before headers".to_owned()))
                         }
                     }
@@ -90,14 +91,16 @@ impl Response {
 
     // getters
 
-    pub fn into_stream_flag(self) -> HttpFutureStreamSend<HttpStreamPart> {
+    pub fn into_stream_flag(self) -> HttpFutureStreamSend<DataOrHeadersWithFlag> {
         Box::new(self.0.map(|(headers, rem)| {
             // NOTE: flag may be wrong for first item
-            stream::once(Ok(HttpStreamPart::intermediate_headers(headers))).chain(rem)
+            let header = stream::once(Ok(DataOrHeadersWithFlag::intermediate_headers(headers)));
+            let rem = rem.into_flag_stream();
+            header.chain(rem)
         }).flatten_stream())
     }
 
-    pub fn into_stream(self) -> HttpFutureStreamSend<HttpStreamPartContent> {
+    pub fn into_stream(self) -> HttpFutureStreamSend<DataOrHeaders> {
         Box::new(self.into_stream_flag().map(|c| c.content))
     }
 

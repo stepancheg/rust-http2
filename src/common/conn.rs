@@ -85,7 +85,7 @@ pub enum CommonToWriteMessage {
     TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
     IncreaseInWindow(StreamId, u32),
     Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
-    StreamEnqueue(StreamId, HttpStreamPart),
+    StreamEnqueue(StreamId, DataOrHeadersWithFlag),
     StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
     CloseConn,
 }
@@ -1089,7 +1089,7 @@ impl<I, T> WriteLoopData<I, T>
         }
     }
 
-    fn process_stream_enqueue(self, stream_id: StreamId, part: HttpStreamPart) -> HttpFuture<Self> {
+    fn process_stream_enqueue(self, stream_id: StreamId, part: DataOrHeadersWithFlag) -> HttpFuture<Self> {
         let stream_id = self.inner.with(move |inner| {
             let stream = inner.streams.get_mut(stream_id);
             if let Some(mut stream) = stream {

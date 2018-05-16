@@ -3,6 +3,7 @@ use bytes::Bytes;
 use solicit::header::*;
 
 use stream_part::*;
+use data_or_headers::DataOrHeaders;
 
 #[derive(Default)]
 pub struct SimpleHttpMessage {
@@ -21,13 +22,13 @@ impl SimpleHttpMessage {
     }
 
     pub fn from_parts<I>(iter: I) -> SimpleHttpMessage
-        where I : IntoIterator<Item=HttpStreamPart>
+        where I : IntoIterator<Item=DataOrHeadersWithFlag>
     {
         SimpleHttpMessage::from_part_content(iter.into_iter().map(|c| c.content))
     }
 
     pub fn from_part_content<I>(iter: I) -> SimpleHttpMessage
-        where I : IntoIterator<Item=HttpStreamPartContent>
+        where I : IntoIterator<Item=DataOrHeaders>
     {
         let mut r: SimpleHttpMessage = Default::default();
         for c in iter {
@@ -50,12 +51,12 @@ impl SimpleHttpMessage {
         }
     }
 
-    pub fn add(&mut self, part: HttpStreamPartContent) {
+    pub fn add(&mut self, part: DataOrHeaders) {
         match part {
-            HttpStreamPartContent::Headers(headers) => {
+            DataOrHeaders::Headers(headers) => {
                 self.headers.extend(headers);
             }
-            HttpStreamPartContent::Data(data) => {
+            DataOrHeaders::Data(data) => {
                 self.body.extend_from_slice(&data);
             }
         }

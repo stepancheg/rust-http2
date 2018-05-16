@@ -48,6 +48,7 @@ use rc_mut::*;
 use req_resp::RequestOrResponse;
 use headers_place::HeadersPlace;
 use ErrorCode;
+use data_or_headers::DataOrHeaders;
 
 
 struct ServerTypes;
@@ -79,9 +80,9 @@ type ServerStream = HttpStreamCommon<ServerTypes>;
 impl ServerStream {
     fn set_headers(&mut self, headers: Headers, last: bool) {
         if let Some(ref mut sender) = self.peer_tx {
-            let part = HttpStreamPart {
-                content: HttpStreamPartContent::Headers(headers),
-                last: last,
+            let part = DataOrHeadersWithFlag {
+                content: DataOrHeaders::Headers(headers),
+                last,
             };
             // TODO: reset on error
             sender.send(ResultOrEof::Item(part)).ok();
@@ -125,7 +126,7 @@ impl ServerInner {
             InMessageStage::AfterInitialHeaders,
             ServerStreamData {});
 
-        let req_stream = HttpPartStream::new(req_stream);
+        let req_stream = HttpPartStreamAfterHeaders::from_parts(req_stream);
 
         let factory = self.specific.factory.clone();
 
@@ -143,8 +144,8 @@ impl ServerInner {
 
                 let headers = Headers::internal_error_500();
                 Response::from_stream(stream::iter_ok(vec![
-                    HttpStreamPart::intermediate_headers(headers),
-                    HttpStreamPart::last_data(Bytes::from(format!("handler panicked: {}", e))),
+                    DataOrHeadersWithFlag::intermediate_headers(headers),
+                    DataOrHeadersWithFlag::last_data(Bytes::from(format!("handler panicked: {}", e))),
                 ]))
             });
 
@@ -351,14 +352,14 @@ impl ServerConnection {
     pub fn new_plain_single_thread_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
         -> (ServerConnection, HttpFuture<()>)
         where
-            F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static,
+            F : Fn(Headers, HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static,
     {
         struct HttpServiceFn<F>(F);
 
         impl<F> Service for HttpServiceFn<F>
-            where F : Fn(Headers, HttpPartStream) -> Response + Send + Sync + 'static
+            where F : Fn(Headers, HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static
         {
-            fn start_request(&self, headers: Headers, req: HttpPartStream) -> Response {
+            fn start_request(&self, headers: Headers, req: HttpPartStreamAfterHeaders) -> Response {
                 (self.0)(headers, req)
             }
         }
