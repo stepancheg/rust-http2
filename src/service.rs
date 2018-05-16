@@ -1,5 +1,5 @@
 use solicit::header::Headers;
-use stream_part::HttpPartStreamAfterHeaders;
+use stream_part::HttpStreamAfterHeaders;
 use resp::Response;
 
 
@@ -7,5 +7,5 @@ use resp::Response;
 ///
 /// Implemented by `Client` and it is callback provided by user.
 pub trait Service : Send + Sync + 'static {
-    fn start_request(&self, headers: Headers, req: HttpPartStreamAfterHeaders) -> Response;
+    fn start_request(&self, headers: Headers, req: HttpStreamAfterHeaders) -> Response;
 }

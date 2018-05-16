@@ -18,18 +18,18 @@ use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 
 
 /// Convenient wrapper around async HTTP response future/stream
-pub struct Response(pub HttpFutureSend<(Headers, HttpPartStreamAfterHeaders)>);
+pub struct Response(pub HttpFutureSend<(Headers, HttpStreamAfterHeaders)>);
 
 impl Response {
     // constructors
 
     pub fn new<F>(future: F) -> Response
-        where F : Future<Item=(Headers, HttpPartStreamAfterHeaders), Error=Error> + Send + 'static
+        where F : Future<Item=(Headers, HttpStreamAfterHeaders), Error=Error> + Send + 'static
     {
         Response(Box::new(future))
     }
 
-    pub fn headers_and_stream(headers: Headers, stream: HttpPartStreamAfterHeaders) -> Response
+    pub fn headers_and_stream(headers: Headers, stream: HttpStreamAfterHeaders) -> Response
     {
         Response::new(future::ok((headers, stream)))
     }
@@ -37,7 +37,7 @@ impl Response {
     pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> Response
         where S : Stream<Item=Bytes, Error=Error> + Send + 'static
     {
-        Response::headers_and_stream(headers, HttpPartStreamAfterHeaders::bytes(content))
+        Response::headers_and_stream(headers, HttpStreamAfterHeaders::bytes(content))
     }
 
     /// Create a response with only headers
@@ -73,7 +73,7 @@ impl Response {
                 Some(part) => {
                     match part.content {
                         DataOrHeaders::Headers(headers) => {
-                            Ok((headers, HttpPartStreamAfterHeaders::from_parts(rem)))
+                            Ok((headers, HttpStreamAfterHeaders::from_parts(rem)))
                         },
                         DataOrHeaders::Data(..) => {
                             Err(Error::InvalidFrame("data before headers".to_owned()))

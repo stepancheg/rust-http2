@@ -91,7 +91,7 @@ pub use server_conf::ServerAlpn;
 pub use server_tls::ServerTlsOption;
 
 pub use resp::Response;
-pub use stream_part::HttpPartStreamAfterHeaders;
+pub use stream_part::HttpStreamAfterHeaders;
 pub use stream_part::HttpStreamPartAfterHeaders;
 
 pub use error::Error;

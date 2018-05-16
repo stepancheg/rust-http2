@@ -245,7 +245,7 @@ impl Client {
     {
         self.start_request(
             headers,
-            HttpPartStreamAfterHeaders::once_bytes(body))
+            HttpStreamAfterHeaders::once_bytes(body))
     }
 
     pub fn start_get(
@@ -299,7 +299,7 @@ impl Service for Client {
     fn start_request(
         &self,
         headers: Headers,
-        body: HttpPartStreamAfterHeaders)
+        body: HttpStreamAfterHeaders)
             -> Response
     {
         let (resp_tx, resp_rx) = oneshot::channel();

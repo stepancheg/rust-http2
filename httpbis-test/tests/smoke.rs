@@ -26,7 +26,7 @@ use httpbis::ServerBuilder;
 use httpbis::Service;
 use httpbis::Response;
 use httpbis::Headers;
-use httpbis::HttpPartStreamAfterHeaders;
+use httpbis::HttpStreamAfterHeaders;
 
 
 #[test]
@@ -130,7 +130,7 @@ fn seq_slow() {
     }
 
     impl Service for Handler {
-        fn start_request(&self, _headers: Headers, _req: HttpPartStreamAfterHeaders) -> Response {
+        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
             let rx = self.rx.lock().unwrap().take().expect("can be called only once");
             Response::headers_and_bytes_stream(
                 Headers::ok_200(),

@@ -127,7 +127,7 @@ impl ServerInner {
             InMessageStage::AfterInitialHeaders,
             ServerStreamData {});
 
-        let req_stream = HttpPartStreamAfterHeaders::from_parts(req_stream);
+        let req_stream = HttpStreamAfterHeaders::from_parts(req_stream);
 
         let factory = self.specific.factory.clone();
 
@@ -353,14 +353,14 @@ impl ServerConnection {
     pub fn new_plain_single_thread_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
         -> (ServerConnection, HttpFuture<()>)
         where
-            F : Fn(Headers, HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static,
+            F : Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
     {
         struct HttpServiceFn<F>(F);
 
         impl<F> Service for HttpServiceFn<F>
-            where F : Fn(Headers, HttpPartStreamAfterHeaders) -> Response + Send + Sync + 'static
+            where F : Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static
         {
-            fn start_request(&self, headers: Headers, req: HttpPartStreamAfterHeaders) -> Response {
+            fn start_request(&self, headers: Headers, req: HttpStreamAfterHeaders) -> Response {
                 (self.0)(headers, req)
             }
         }

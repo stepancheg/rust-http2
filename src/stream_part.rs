@@ -52,36 +52,36 @@ impl HttpStreamPartAfterHeaders {
 
 
 /// Stream of DATA of HEADER frames after initial HEADER
-pub struct HttpPartStreamAfterHeaders(
+pub struct HttpStreamAfterHeaders(
     pub HttpFutureStreamSend<HttpStreamPartAfterHeaders>
 );
 
-impl HttpPartStreamAfterHeaders {
+impl HttpStreamAfterHeaders {
     // constructors
 
-    pub fn new<S>(s: S) -> HttpPartStreamAfterHeaders
+    pub fn new<S>(s: S) -> HttpStreamAfterHeaders
         where S : Stream<Item=HttpStreamPartAfterHeaders, Error=error::Error> + Send + 'static
     {
-        HttpPartStreamAfterHeaders(Box::new(s))
+        HttpStreamAfterHeaders(Box::new(s))
     }
 
-    pub fn from_parts<S>(s: S) -> HttpPartStreamAfterHeaders
+    pub fn from_parts<S>(s: S) -> HttpStreamAfterHeaders
         where S : Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send + 'static
     {
-        HttpPartStreamAfterHeaders::new(s.map(DataOrHeadersWithFlag::into_after_headers))
+        HttpStreamAfterHeaders::new(s.map(DataOrHeadersWithFlag::into_after_headers))
     }
 
-    pub fn empty() -> HttpPartStreamAfterHeaders {
-        HttpPartStreamAfterHeaders::new(stream::empty())
+    pub fn empty() -> HttpStreamAfterHeaders {
+        HttpStreamAfterHeaders::new(stream::empty())
     }
 
-    pub fn bytes<S>(bytes: S) -> HttpPartStreamAfterHeaders
+    pub fn bytes<S>(bytes: S) -> HttpStreamAfterHeaders
         where S : Stream<Item=Bytes, Error=error::Error> + Send + 'static
     {
-        HttpPartStreamAfterHeaders::new(bytes.map(HttpStreamPartAfterHeaders::intermediate_data))
+        HttpStreamAfterHeaders::new(bytes.map(HttpStreamPartAfterHeaders::intermediate_data))
     }
 
-    pub fn once(part: DataOrHeaders) -> HttpPartStreamAfterHeaders {
+    pub fn once(part: DataOrHeaders) -> HttpStreamAfterHeaders {
         let part = match part {
             DataOrHeaders::Data(data) => {
                 HttpStreamPartAfterHeaders::Data(data, EndStream::Yes)
@@ -90,13 +90,13 @@ impl HttpPartStreamAfterHeaders {
                 HttpStreamPartAfterHeaders::Trailers(header)
             },
         };
-        HttpPartStreamAfterHeaders::new(stream::once(Ok(part)))
+        HttpStreamAfterHeaders::new(stream::once(Ok(part)))
     }
 
-    pub fn once_bytes<B>(bytes: B) -> HttpPartStreamAfterHeaders
+    pub fn once_bytes<B>(bytes: B) -> HttpStreamAfterHeaders
         where B : Into<Bytes>
     {
-        HttpPartStreamAfterHeaders::once(DataOrHeaders::Data(bytes.into()))
+        HttpStreamAfterHeaders::once(DataOrHeaders::Data(bytes.into()))
     }
 
     // getters
@@ -121,8 +121,8 @@ impl HttpPartStreamAfterHeaders {
 
     /// Wrap a stream with `catch_unwind` combinator.
     /// Transform panic into `error::Error`
-    pub fn catch_unwind(self) -> HttpPartStreamAfterHeaders {
-        HttpPartStreamAfterHeaders::new(panic::AssertUnwindSafe(self.0).catch_unwind().then(|r| {
+    pub fn catch_unwind(self) -> HttpStreamAfterHeaders {
+        HttpStreamAfterHeaders::new(panic::AssertUnwindSafe(self.0).catch_unwind().then(|r| {
             match r {
                 Ok(r) => r,
                 Err(e) => {
@@ -136,7 +136,7 @@ impl HttpPartStreamAfterHeaders {
     }
 }
 
-impl Stream for HttpPartStreamAfterHeaders {
+impl Stream for HttpStreamAfterHeaders {
     type Item = HttpStreamPartAfterHeaders;
     type Error = error::Error;
 

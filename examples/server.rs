@@ -23,7 +23,7 @@ impl ServiceImpl {
 }
 
 impl httpbis::Service for ServiceImpl {
-    fn start_request(&self, req_headers: httpbis::Headers, _req: httpbis::HttpPartStreamAfterHeaders)
+    fn start_request(&self, req_headers: httpbis::Headers, _req: httpbis::HttpStreamAfterHeaders)
         -> httpbis::Response
     {
         println!("starting request: {:?}", req_headers);

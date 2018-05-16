@@ -7,7 +7,7 @@ use futures::stream;
 use bytes::Bytes;
 
 use httpbis::Headers;
-use httpbis::HttpPartStreamAfterHeaders;
+use httpbis::HttpStreamAfterHeaders;
 use httpbis::Response;
 use httpbis::Server;
 use httpbis::ServerBuilder;
@@ -25,7 +25,7 @@ pub struct ServerTest {
 struct Blocks {}
 
 impl Service for Blocks {
-    fn start_request(&self, headers: Headers, _req: HttpPartStreamAfterHeaders) -> Response {
+    fn start_request(&self, headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
 
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
@@ -45,7 +45,7 @@ impl Service for Blocks {
 struct Echo {}
 
 impl Service for Echo {
-    fn start_request(&self, _headers: Headers, req: HttpPartStreamAfterHeaders) -> Response {
+    fn start_request(&self, _headers: Headers, req: HttpStreamAfterHeaders) -> Response {
         Response::headers_and_stream(Headers::ok_200(), req)
     }
 }

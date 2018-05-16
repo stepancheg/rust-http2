@@ -58,7 +58,7 @@ fn tls() {
     }
 
     impl Service for ServiceImpl {
-        fn start_request(&self, _headers: Headers, _req: HttpPartStreamAfterHeaders) -> Response {
+        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
             Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hello"))
         }
     }

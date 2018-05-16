@@ -179,7 +179,7 @@ unsafe impl Sync for ClientConnection {}
 
 pub struct StartRequestMessage {
     pub headers: Headers,
-    pub body: HttpPartStreamAfterHeaders,
+    pub body: HttpStreamAfterHeaders,
     pub resp_tx: oneshot::Sender<Response>,
 }
 
@@ -441,7 +441,7 @@ impl Service for ClientConnection {
     fn start_request(
         &self,
         headers: Headers,
-        body: HttpPartStreamAfterHeaders)
+        body: HttpStreamAfterHeaders)
             -> Response
     {
         let (resp_tx, resp_rx) = oneshot::channel();

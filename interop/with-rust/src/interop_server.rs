@@ -27,13 +27,13 @@ use httpbis::Headers;
 use httpbis::Response;
 use httpbis::Service;
 use httpbis::ServerBuilder;
-use httpbis::HttpPartStreamAfterHeaders;
+use httpbis::HttpStreamAfterHeaders;
 use httpbis_interop::PORT;
 
 struct Found200 {}
 
 impl Service for Found200 {
-    fn start_request(&self, _headers: Headers, _req: HttpPartStreamAfterHeaders) -> Response {
+    fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
         Response::message(SimpleHttpMessage::found_200_plain_text("200 200 200"))
     }
 }
@@ -41,7 +41,7 @@ impl Service for Found200 {
 struct Blocks {}
 
 impl Service for Blocks {
-    fn start_request(&self, headers: Headers, _req: HttpPartStreamAfterHeaders) -> Response {
+    fn start_request(&self, headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
         if let Some(captures) = blocks_re.captures(headers.path()) {
