@@ -19,11 +19,11 @@ use std::sync::Arc;
 
 use futures::future::Future;
 
-use httpbis::solicit::header::Headers;
+use httpbis::Headers;
 use httpbis::*;
 use httpbis::message::SimpleHttpMessage;
 
-use httpbis::socket::AnySocketAddr;
+use httpbis::AnySocketAddr;
 
 use tls_api::Certificate;
 use tls_api_native_tls::TlsAcceptor;

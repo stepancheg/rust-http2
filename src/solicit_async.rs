@@ -211,46 +211,6 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R, max_frame_size
     }))
 }
 
-pub fn recv_settings_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
-    -> Box<Future<Item=(R, SettingsFrame), Error=Error> + 'r>
-{
-    Box::new(recv_http_frame(read, max_frame_size)
-        .and_then(|(read, http_frame)| {
-            match http_frame {
-                HttpFrame::Settings(f) => {
-                    Ok((read, f))
-                }
-                f => {
-                    Err(Error::InvalidFrame(format!("unexpected frame, expected SETTINGS, got {:?}", f.frame_type())))
-                }
-            }
-        }))
-}
-
-pub fn recv_settings_frame_ack<R : AsyncRead + Send + 'static>(read: R, max_frame_size: u32)
-    -> HttpFuture<(R, SettingsFrame)>
-{
-    Box::new(recv_settings_frame(read, max_frame_size).and_then(|(read, frame)| {
-        if frame.is_ack() {
-            Ok((read, frame))
-        } else {
-            Err(Error::InvalidFrame("expecting SETTINGS with ack, got without ack".to_owned()))
-        }
-    }))
-}
-
-pub fn recv_settings_frame_set<R : AsyncRead + Send + 'static>(read: R, max_frame_size: u32)
-    -> HttpFuture<(R, SettingsFrame)>
-{
-    Box::new(recv_settings_frame(read, max_frame_size).and_then(|(read, frame)| {
-        if !frame.is_ack() {
-            Ok((read, frame))
-        } else {
-            Err(Error::InvalidFrame("expecting SETTINGS without ack, got with ack".to_owned()))
-        }
-    }))
-}
-
 #[allow(dead_code)]
 pub fn send_raw_frame<W : AsyncWrite + Send + 'static>(write: W, frame: RawFrame) -> HttpFuture<W> {
     let bytes = frame.serialize();

@@ -23,11 +23,10 @@ use futures::sync::oneshot;
 
 use tokio_core::reactor;
 
-use httpbis::error::Error;
-use httpbis::error::ErrorCode;
+use httpbis::ErrorCode;
 use httpbis::*;
 use httpbis::for_test::*;
-use httpbis::solicit::DEFAULT_SETTINGS;
+use httpbis::for_test::solicit::DEFAULT_SETTINGS;
 
 #[test]
 fn stream_count() {

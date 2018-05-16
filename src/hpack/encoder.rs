@@ -124,6 +124,7 @@ pub fn encode_integer_into<W: io::Write>(
 /// Returns a newly allocated `Vec` containing the encoded bytes.
 /// Only `prefix_size` lowest-order bits of the first byte in the
 /// array are guaranteed to be used.
+#[cfg(test)]
 pub fn encode_integer(value: usize, prefix_size: u8) -> Vec<u8> {
     let mut res = Vec::new();
     encode_integer_into(value, prefix_size, 0, &mut res).unwrap();

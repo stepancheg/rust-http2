@@ -20,27 +20,27 @@ use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 
 
 /// Stream frame content after initial headers
-pub enum HttpStreamPartAfterHeaders {
+pub enum DataOrTrailers {
     /// DATA frame
     Data(Bytes, EndStream),
     /// HEADERS frame with END_STREAM flag
     Trailers(Headers),
 }
 
-impl HttpStreamPartAfterHeaders {
+impl DataOrTrailers {
     pub fn intermediate_data(data: Bytes) -> Self {
-        HttpStreamPartAfterHeaders::Data(data, EndStream::No)
+        DataOrTrailers::Data(data, EndStream::No)
     }
 
     pub fn into_part(self) -> DataOrHeadersWithFlag {
         match self {
-            HttpStreamPartAfterHeaders::Data(data, end_stream) => {
+            DataOrTrailers::Data(data, end_stream) => {
                 DataOrHeadersWithFlag {
                     content: DataOrHeaders::Data(data),
                     last: end_stream == EndStream::Yes,
                 }
             }
-            HttpStreamPartAfterHeaders::Trailers(headers) => {
+            DataOrTrailers::Trailers(headers) => {
                 DataOrHeadersWithFlag {
                     content: DataOrHeaders::Headers(headers),
                     last: true,
@@ -53,14 +53,14 @@ impl HttpStreamPartAfterHeaders {
 
 /// Stream of DATA of HEADER frames after initial HEADER
 pub struct HttpStreamAfterHeaders(
-    pub HttpFutureStreamSend<HttpStreamPartAfterHeaders>
+    pub HttpFutureStreamSend<DataOrTrailers>
 );
 
 impl HttpStreamAfterHeaders {
     // constructors
 
     pub fn new<S>(s: S) -> HttpStreamAfterHeaders
-        where S : Stream<Item=HttpStreamPartAfterHeaders, Error=error::Error> + Send + 'static
+        where S : Stream<Item=DataOrTrailers, Error=error::Error> + Send + 'static
     {
         HttpStreamAfterHeaders(Box::new(s))
     }
@@ -78,16 +78,16 @@ impl HttpStreamAfterHeaders {
     pub fn bytes<S>(bytes: S) -> HttpStreamAfterHeaders
         where S : Stream<Item=Bytes, Error=error::Error> + Send + 'static
     {
-        HttpStreamAfterHeaders::new(bytes.map(HttpStreamPartAfterHeaders::intermediate_data))
+        HttpStreamAfterHeaders::new(bytes.map(DataOrTrailers::intermediate_data))
     }
 
     pub fn once(part: DataOrHeaders) -> HttpStreamAfterHeaders {
         let part = match part {
             DataOrHeaders::Data(data) => {
-                HttpStreamPartAfterHeaders::Data(data, EndStream::Yes)
+                DataOrTrailers::Data(data, EndStream::Yes)
             },
             DataOrHeaders::Headers(header) => {
-                HttpStreamPartAfterHeaders::Trailers(header)
+                DataOrTrailers::Trailers(header)
             },
         };
         HttpStreamAfterHeaders::new(stream::once(Ok(part)))
@@ -105,14 +105,14 @@ impl HttpStreamAfterHeaders {
     pub fn filter_data(self) -> impl Stream<Item=Bytes, Error=error::Error> + Send {
         self.filter_map(|p| {
             match p {
-                HttpStreamPartAfterHeaders::Data(data, ..) => Some(data),
-                HttpStreamPartAfterHeaders::Trailers(..) => None,
+                DataOrTrailers::Data(data, ..) => Some(data),
+                DataOrTrailers::Trailers(..) => None,
             }
         })
     }
 
     pub fn into_flag_stream(self) -> impl Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send {
-        self.0.map(HttpStreamPartAfterHeaders::into_part)
+        self.0.map(DataOrTrailers::into_part)
     }
 
     pub fn into_part_stream(self) -> DataOrHeadersWithFlagStream {
@@ -137,7 +137,7 @@ impl HttpStreamAfterHeaders {
 }
 
 impl Stream for HttpStreamAfterHeaders {
-    type Item = HttpStreamPartAfterHeaders;
+    type Item = DataOrTrailers;
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {

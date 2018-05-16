@@ -38,7 +38,7 @@ use futures_misc::*;
 use solicit_async::*;
 
 use common::*;
-use stream_part::*;
+use data_or_trailers::*;
 use client_conf::*;
 use client_tls::*;
 use socket::*;
@@ -413,7 +413,8 @@ impl ClientConnection {
     }
 
     /// For tests
-    pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
+    #[doc(hidden)]
+    pub fn _dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
         let (tx, rx) = oneshot::channel();
 
         self.dump_state_with_resp_sender(tx);

@@ -10,26 +10,26 @@ use std::net::ToSocketAddrs;
 
 use bytes::Bytes;
 
-use httpbis;
+use httpbis::for_test;
 use httpbis::message::SimpleHttpMessage;
-use httpbis::solicit::StreamId;
-use httpbis::error::ErrorCode;
-use httpbis::solicit::header::*;
-use httpbis::solicit::frame::FrameIR;
-use httpbis::solicit::frame::settings::SettingsFrame;
-use httpbis::solicit::frame::headers::HeadersFrame;
-use httpbis::solicit::frame::headers::HeadersFlag;
-use httpbis::solicit::frame::continuation::ContinuationFrame;
-use httpbis::solicit::frame::continuation::ContinuationFlag;
-use httpbis::solicit::frame::data::DataFrame;
-use httpbis::solicit::frame::data::DataFlag;
-use httpbis::solicit::frame::goaway::GoawayFrame;
-use httpbis::solicit::frame::window_update::WindowUpdateFrame;
-use httpbis::solicit::frame::RawFrame;
-use httpbis::solicit::frame::rst_stream::RstStreamFrame;
-use httpbis::solicit::connection::HttpFrame;
-use httpbis::solicit::connection::HttpConnection;
-use httpbis::client::Client;
+use httpbis::for_test::solicit::StreamId;
+use httpbis::ErrorCode;
+use httpbis::for_test::solicit::header::*;
+use httpbis::for_test::solicit::frame::FrameIR;
+use httpbis::for_test::solicit::frame::settings::SettingsFrame;
+use httpbis::for_test::solicit::frame::headers::HeadersFrame;
+use httpbis::for_test::solicit::frame::headers::HeadersFlag;
+use httpbis::for_test::solicit::frame::continuation::ContinuationFrame;
+use httpbis::for_test::solicit::frame::continuation::ContinuationFlag;
+use httpbis::for_test::solicit::frame::data::DataFrame;
+use httpbis::for_test::solicit::frame::data::DataFlag;
+use httpbis::for_test::solicit::frame::goaway::GoawayFrame;
+use httpbis::for_test::solicit::frame::window_update::WindowUpdateFrame;
+use httpbis::for_test::solicit::frame::RawFrame;
+use httpbis::for_test::solicit::frame::rst_stream::RstStreamFrame;
+use httpbis::for_test::solicit::connection::HttpFrame;
+use httpbis::for_test::solicit::connection::HttpConnection;
+use httpbis::Client;
 
 use super::BIND_HOST;
 
@@ -181,7 +181,7 @@ impl HttpConnectionTester {
     }
 
     pub fn recv_raw_frame(&mut self) -> RawFrame {
-        httpbis::solicit_async::recv_raw_frame_sync(
+        for_test::recv_raw_frame_sync(
             &mut self.tcp,
             self.conn.our_settings_ack.max_frame_size)
                 .expect("recv_raw_frame")

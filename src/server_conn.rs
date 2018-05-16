@@ -36,7 +36,7 @@ use futures_misc::*;
 
 use solicit_async::*;
 use service::Service;
-use stream_part::*;
+use data_or_trailers::*;
 use common::*;
 
 use server_tls::*;

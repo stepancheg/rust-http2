@@ -7,7 +7,7 @@ use data_or_headers::DataOrHeaders;
 use solicit::header::Headers;
 use solicit::connection::EndStream;
 use solicit_async::HttpFutureStreamSend;
-use stream_part::HttpStreamPartAfterHeaders;
+use data_or_trailers::DataOrTrailers;
 use error;
 use std::panic::AssertUnwindSafe;
 use misc::any_to_string;
@@ -50,15 +50,15 @@ impl DataOrHeadersWithFlag {
         }
     }
 
-    pub fn into_after_headers(self) -> HttpStreamPartAfterHeaders {
+    pub fn into_after_headers(self) -> DataOrTrailers {
         let DataOrHeadersWithFlag { content, last } = self;
         match (content, last) {
             (DataOrHeaders::Data(data), last) => {
                 let end_stream = if last { EndStream::Yes } else { EndStream::No };
-                HttpStreamPartAfterHeaders::Data(data, end_stream)
+                DataOrTrailers::Data(data, end_stream)
             }
             (DataOrHeaders::Headers(headers), _) => {
-                HttpStreamPartAfterHeaders::Trailers(headers)
+                DataOrTrailers::Trailers(headers)
             }
         }
     }

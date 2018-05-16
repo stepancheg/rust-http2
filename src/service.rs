@@ -1,5 +1,5 @@
 use solicit::header::Headers;
-use stream_part::HttpStreamAfterHeaders;
+use data_or_trailers::HttpStreamAfterHeaders;
 use resp::Response;
 
 

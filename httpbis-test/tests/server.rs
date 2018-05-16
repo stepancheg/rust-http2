@@ -33,9 +33,10 @@ use futures::sync::oneshot;
 
 use httpbis::*;
 use httpbis::data_or_headers_with_flag::DataOrHeadersWithFlag;
-use httpbis::solicit::frame::settings::*;
-use httpbis::solicit::frame::headers::*;
-use httpbis::solicit::DEFAULT_SETTINGS;
+use httpbis::for_test::solicit::frame::headers::*;
+use httpbis::for_test::solicit::frame::settings::SettingsFrame;
+use httpbis::for_test::solicit::frame::settings::HttpSetting;
+use httpbis::for_test::solicit::DEFAULT_SETTINGS;
 
 use std::iter::FromIterator;
 use std::net::TcpStream;

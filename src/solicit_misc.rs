@@ -109,7 +109,7 @@ impl HttpFrameClassified {
         }
     }
 
-    pub fn from_raw(raw_frame: &RawFrame) -> Result<HttpFrameClassified> {
+    pub fn _from_raw(raw_frame: &RawFrame) -> Result<HttpFrameClassified> {
         Ok(HttpFrameClassified::from(HttpFrame::from_raw(raw_frame)?))
     }
 }

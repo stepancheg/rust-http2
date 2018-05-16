@@ -36,7 +36,7 @@ use client_conf::*;
 use common::*;
 use client_died_error_holder::*;
 
-use stream_part::*;
+use data_or_trailers::*;
 use service::Service;
 use socket::ToClientStream;
 use socket::AnySocketAddr;

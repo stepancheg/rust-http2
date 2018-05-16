@@ -17,36 +17,35 @@ extern crate void;
 extern crate net2;
 extern crate bytes;
 
-pub mod solicit;
+mod solicit;
 
-pub mod error;
-
+mod error;
 mod result;
 
-pub mod client_conf;
-pub mod client_conn;
+mod client_conf;
+mod client_conn;
 mod client_tls;
 mod service;
 mod service_paths;
-pub mod client;
-pub mod server_conf;
-pub mod server_conn;
+mod client;
+mod server_conf;
+mod server_conn;
 mod server_tls;
-pub mod socket;
-pub mod socket_tcp;
-pub mod server;
+mod socket;
+mod socket_tcp;
+mod server;
 
 #[cfg(unix)]
 extern crate tokio_uds;
 #[cfg(unix)]
-pub mod socket_unix;
+mod socket_unix;
 
 mod ascii;
 
 mod common;
 mod client_died_error_holder;
 
-pub mod stream_part;
+mod data_or_trailers;
 mod data_or_headers;
 // TODO: used in tests; make private
 pub mod data_or_headers_with_flag;
@@ -57,11 +56,11 @@ pub mod futures_misc;
 mod req_resp;
 mod headers_place;
 
-pub mod assert_types;
+mod assert_types;
 
-pub mod hpack;
-pub mod solicit_async; // TODO: make private
-pub mod solicit_misc;
+mod hpack;
+mod solicit_async;
+mod solicit_misc;
 
 pub mod misc;
 mod rc_mut;
@@ -69,6 +68,8 @@ mod rc_mut;
 mod resp;
 
 mod exec;
+
+pub use socket::AnySocketAddr;
 
 pub use solicit::HttpScheme;
 pub use solicit::header::Header;
@@ -90,15 +91,21 @@ pub use server_conf::ServerConf;
 pub use server_conf::ServerAlpn;
 pub use server_tls::ServerTlsOption;
 
+pub use data_or_trailers::DataOrTrailers;
+pub use data_or_trailers::HttpStreamAfterHeaders;
 pub use resp::Response;
-pub use stream_part::HttpStreamAfterHeaders;
-pub use stream_part::HttpStreamPartAfterHeaders;
 
 pub use error::Error;
 pub use error::ErrorCode;
 pub use result::Result;
 
+/// Functions used in tests
+#[doc(hidden)]
 pub mod for_test {
     pub use common::ConnectionStateSnapshot;
     pub use server_conn::ServerConnection;
+    pub use solicit_async::recv_raw_frame_sync;
+    pub mod solicit {
+        pub use ::solicit::*;
+    }
 }

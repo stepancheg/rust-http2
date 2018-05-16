@@ -4,7 +4,7 @@ use std::collections::hash_map;
 
 use service::Service;
 use solicit::header::Headers;
-use stream_part::HttpStreamAfterHeaders;
+use data_or_trailers::HttpStreamAfterHeaders;
 use resp::Response;
 
 

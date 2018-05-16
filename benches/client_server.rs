@@ -51,7 +51,7 @@ fn bench(b: &mut Bencher) {
         let mut s = 0;
         for p in body.wait() {
             match p.expect("part") {
-                HttpStreamPartAfterHeaders::Data(d, ..) => s += d.len(),
+                DataOrTrailers::Data(d, ..) => s += d.len(),
                 _ => panic!("unexpected headers"),
             }
         }

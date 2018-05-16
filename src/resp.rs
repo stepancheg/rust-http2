@@ -11,7 +11,7 @@ use message::SimpleHttpMessage;
 
 use error::Error;
 
-use stream_part::*;
+use data_or_trailers::*;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
