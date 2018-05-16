@@ -54,7 +54,7 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 struct ClientTypes;
 
 impl Types for ClientTypes {
-    type HttpStream = ClientStream;
+    type HttpStreamData = ClientStream;
     type HttpStreamSpecific = ClientStreamData;
     type ConnDataSpecific = ClientConnData;
     type ToWriteMessage = ClientToWriteMessage;
@@ -78,7 +78,7 @@ impl HttpStreamDataSpecific for ClientStreamData {
 
 type ClientStream = HttpStreamCommon<ClientTypes>;
 
-impl HttpStream for ClientStream {
+impl HttpStreamData for ClientStream {
     type Types = ClientTypes;
 }
 

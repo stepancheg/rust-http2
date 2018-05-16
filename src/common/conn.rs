@@ -144,7 +144,7 @@ impl ConnectionStateSnapshot {
 impl<T : Types> ConnData<T>
     where
         Self : ConnInner<Types=T>,
-        HttpStreamCommon<T> : HttpStream,
+        HttpStreamCommon<T> : HttpStreamData,
 {
     pub fn new(
         loop_handle: reactor::Handle,
@@ -955,7 +955,7 @@ pub struct ReadLoopData<I, T>
         I : AsyncRead + 'static,
         T : Types,
         ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStream,
+        HttpStreamCommon<T> : HttpStreamData,
 {
     pub read: ReadHalf<I>,
     pub inner: RcMut<ConnData<T>>,
@@ -966,7 +966,7 @@ pub struct WriteLoopData<I, T>
         I : AsyncWrite + 'static,
         T : Types,
         ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStream,
+        HttpStreamCommon<T> : HttpStreamData,
 {
     pub write: WriteHalf<I>,
     pub inner: RcMut<ConnData<T>>,
@@ -976,7 +976,7 @@ pub struct CommandLoopData<T>
     where
         T : Types,
         ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStream,
+        HttpStreamCommon<T> : HttpStreamData,
 {
     pub inner: RcMut<ConnData<T>>,
 }
@@ -987,7 +987,7 @@ impl<I, T> ReadLoopData<I, T>
         I : AsyncRead + Send + 'static,
         T : Types,
         ConnData<T> : ConnInner<Types=T>,
-        HttpStreamCommon<T> : HttpStream<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     /// Recv a frame from the network
     fn recv_http_frame(self) -> impl Future<Item=(Self, HttpFrame), Error=error::Error> {
@@ -1034,7 +1034,7 @@ impl<I, T> WriteLoopData<I, T>
         I : AsyncWrite + Send + 'static,
         T : Types,
         ConnData<T> : ConnInner<Types=T>,
-        HttpStreamCommon<T> : HttpStream<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     fn write_all(self, buf: Vec<u8>) -> HttpFuture<Self> {
         let WriteLoopData { write, inner } = self;
@@ -1144,6 +1144,6 @@ impl<T> CommandLoopData<T>
     where
         T : Types,
         ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStream,
+        HttpStreamCommon<T> : HttpStreamData,
 {
 }

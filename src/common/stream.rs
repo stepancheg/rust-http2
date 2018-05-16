@@ -239,7 +239,7 @@ impl<T : Types> HttpStreamCommon<T> {
 pub trait HttpStreamDataSpecific {
 }
 
-pub trait HttpStream {
+pub trait HttpStreamData {
     type Types : Types;
 }
 

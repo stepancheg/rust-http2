@@ -5,7 +5,7 @@ use req_resp::RequestOrResponse;
 
 /// Client or server type names for connection and stream
 pub trait Types : 'static {
-    type HttpStream : HttpStream;
+    type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific : HttpStreamDataSpecific;
     type ConnDataSpecific : ConnDataSpecific;
     // Message sent to write loop

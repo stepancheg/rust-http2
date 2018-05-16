@@ -55,7 +55,7 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 struct ServerTypes;
 
 impl Types for ServerTypes {
-    type HttpStream = ServerStream;
+    type HttpStreamData = ServerStream;
     type HttpStreamSpecific = ServerStreamData;
     type ConnDataSpecific = ServerConnData;
     type ToWriteMessage = ServerToWriteMessage;
@@ -91,7 +91,7 @@ impl ServerStream {
     }
 }
 
-impl HttpStream for ServerStream {
+impl HttpStreamData for ServerStream {
     type Types = ServerTypes;
 }
 
