@@ -1,3 +1,7 @@
+//! Asynchnous HTTP/2 client and server implementation.
+//!
+//! Based on futures/tokio.
+
 #[macro_use]
 extern crate log;
 #[macro_use]

@@ -54,6 +54,10 @@ impl Response {
         Response::headers_and_bytes(message.headers, message.body)
     }
 
+    pub fn found_200_plain_text(body: &str) -> Response {
+        Response::message(SimpleHttpMessage::found_200_plain_text(body))
+    }
+
     pub fn not_found_404() -> Response {
         Response::headers(Headers::not_found_404())
     }

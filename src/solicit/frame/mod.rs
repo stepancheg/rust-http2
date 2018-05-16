@@ -249,35 +249,6 @@ impl RawFrame {
     /// (due to there not being enough bytes in the buffer). If the `RawFrame` is successfully
     /// parsed it returns the frame, borrowing a part of the original buffer. Therefore, this
     /// method makes no copies, nor does it perform any extra allocations.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use httpbis::solicit::frame::RawFrame;
-    ///
-    /// let buf = b"123";
-    /// // Not enough bytes for even the header of the frame
-    /// assert!(RawFrame::parse(&buf[..]).is_none());
-    /// ```
-    ///
-    /// ```rust
-    /// use httpbis::solicit::frame::RawFrame;
-    ///
-    /// let buf = vec![0, 0, 1, 0, 0, 0, 0, 0, 0];
-    /// // Full header, but not enough bytes for the payload
-    /// assert!(RawFrame::parse(&buf[..]).is_none());
-    /// ```
-    ///
-    /// ```rust
-    /// use httpbis::solicit::frame::RawFrame;
-    ///
-    /// let buf = vec![0, 0, 1, 0, 0, 0, 0, 0, 0, 1];
-    /// // A full frame is extracted, even if in this case the frame itself is not valid (a DATA
-    /// // frame associated to stream 0 is not valid in HTTP/2!). This, however, is not the
-    /// // responsibility of the RawFrame.
-    /// let frame = RawFrame::parse(&buf[..]).unwrap();
-    /// assert_eq!(frame.as_ref(), &buf[..]);
-    /// ```
     pub fn parse<B : Into<Bytes>>(into_buf: B) -> ParseFrameResult<RawFrame> {
         // TODO(mlalic): This might allow an extra parameter that specifies the maximum frame
         //               payload length?

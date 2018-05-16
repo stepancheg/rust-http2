@@ -3,47 +3,6 @@
 //!
 //! Clients should use the `Encoder` struct as the API for performing HPACK
 //! encoding.
-//!
-//! # Examples
-//!
-//! Encodes a header using a literal encoding.
-//!
-//! ```rust
-//! use httpbis::hpack::Encoder;
-//!
-//! let mut encoder = Encoder::new();
-//!
-//! let headers = vec![
-//!     (&b"custom-key"[..], &b"custom-value"[..]),
-//! ];
-//! // First encoding...
-//! let result = encoder.encode(headers);
-//! // The result is a literal encoding of the header name and value, with an
-//! // initial byte representing the type of the encoding
-//! // (incremental indexing).
-//! assert_eq!(
-//!     vec![0x40,
-//!          10, b'c', b'u', b's', b't', b'o', b'm', b'-', b'k', b'e', b'y',
-//!          12, b'c', b'u', b's', b't', b'o', b'm', b'-', b'v', b'a', b'l',
-//!          b'u', b'e'],
-//!     result);
-//! ```
-//!
-//! Encodes some pseudo-headers that are already found in the static table.
-//!
-//! ```rust
-//! use httpbis::hpack::Encoder;
-//!
-//! let mut encoder = Encoder::new();
-//! let headers = vec![
-//!     (&b":method"[..], &b"GET"[..]),
-//!     (&b":path"[..], &b"/"[..]),
-//! ];
-//!
-//! // The headers are encoded by providing their index (with a bit flag
-//! // indicating that the indexed representation is used).
-//! assert_eq!(encoder.encode(headers), vec![2 | 0x80, 4 | 0x80]);
-//! ```
 use std::io;
 use std::num::Wrapping;
 
@@ -56,39 +15,6 @@ use super::HeaderTable;
 /// and overwritten by the integer's representation (in other words, only the first
 /// `8 - prefix_size` bits from the `leading_bits` octet are reflected in the first octet
 /// emitted by the function.
-///
-/// # Example
-///
-/// ```rust
-/// use httpbis::hpack::encoder::encode_integer_into;
-///
-/// {
-///     // No bits specified in the 3 most significant bits of the first octet
-///     let mut vec = Vec::new();
-///     encode_integer_into(10, 5, 0, &mut vec);
-///     assert_eq!(vec, vec![10]);
-/// }
-/// {
-///     // The most significant bit should be set; i.e. the 3 most significant
-///     // bits are 100.
-///     let mut vec = Vec::new();
-///     encode_integer_into(10, 5, 0x80, &mut vec);
-///     assert_eq!(vec, vec![0x8A]);
-/// }
-/// {
-///     // The most leading bits number has a bit set within the last prefix-size
-///     // bits -- they are ignored by the function
-///     // bits are 100.
-///     let mut vec = Vec::new();
-///     encode_integer_into(10, 5, 0x10, &mut vec);
-///     assert_eq!(vec, vec![0x0A]);
-/// }
-/// {
-///     let mut vec = Vec::new();
-///     encode_integer_into(1337, 5, 0, &mut vec);
-///     assert_eq!(vec, vec![31, 154, 10]);
-/// }
-/// ```
 pub fn encode_integer_into<W: io::Write>(
         mut value: usize,
         prefix_size: u8,
@@ -136,38 +62,6 @@ pub fn encode_integer(value: usize, prefix_size: u8) -> Vec<u8> {
 /// will use the context built by previous encode calls.
 ///
 /// This is the main API for performing HPACK encoding of headers.
-///
-/// # Examples
-///
-/// Encoding a header two times in a row produces two different
-/// representations, due to the utilization of HPACK compression.
-///
-/// ```rust
-/// use httpbis::hpack::Encoder;
-///
-/// let mut encoder = Encoder::new();
-///
-/// let headers = vec![
-///     (b"custom-key".to_vec(), b"custom-value".to_vec()),
-/// ];
-/// // First encoding...
-/// let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
-/// // The result is a literal encoding of the header name and value, with an
-/// // initial byte representing the type of the encoding
-/// // (incremental indexing).
-/// assert_eq!(
-///     vec![0x40,
-///          10, b'c', b'u', b's', b't', b'o', b'm', b'-', b'k', b'e', b'y',
-///          12, b'c', b'u', b's', b't', b'o', b'm', b'-', b'v', b'a', b'l',
-///          b'u', b'e'],
-///     result);
-///
-/// // Encode the same headers again!
-/// let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
-/// // The result is simply the index of the header in the header table (62),
-/// // with a flag representing that the decoder should use the index.
-/// assert_eq!(vec![0x80 | 62], result);
-/// ```
 pub struct Encoder<'a> {
     /// The header table represents the encoder's context
     header_table: HeaderTable<'a>,

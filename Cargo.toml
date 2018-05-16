@@ -7,9 +7,6 @@ description = "Rust implementation of HTTP/2 protocol"
 repository = "https://github.com/stepancheg/rust-http2"
 keywords = ["http2"]
 
-[lib]
-doctest = false
-
 [dependencies]
 
 log             = "0.4"

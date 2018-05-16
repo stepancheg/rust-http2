@@ -56,21 +56,6 @@ impl WindowSize {
     /// Tries to increase the window size by the given delta. If the WindowSize would overflow the
     /// maximum allowed value (2^31 - 1), returns an error case. If the increase succeeds, returns
     /// `Ok`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use httpbis::solicit::WindowSize;
-    ///
-    /// let mut window_size = WindowSize::new(65_535);
-    /// assert_eq!(window_size.size(), 65_535);
-    /// // An increase within the bounds...
-    /// assert!(window_size.try_increase(100).is_ok());
-    /// assert_eq!(window_size.size(), 65_635);
-    /// // An increase that would overflow
-    /// assert!(window_size.try_increase(0x7fffffff).is_err());
-    /// assert_eq!(window_size.size(), 65_635);
-    /// ```
     pub fn try_increase(&mut self, delta: u32) -> Result<(), ()> {
         // Someone's provided a delta that would definitely overflow the window size.
         if delta > MAX_WINDOW_SIZE_INC || delta == 0 {
@@ -97,24 +82,6 @@ impl WindowSize {
     /// There are situations where the window size should legitimately be allowed to become
     /// negative, so the only situation where the result is an error is if the window size would
     /// underflow, as this would definitely cause the peers to lose sync.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use httpbis::solicit::WindowSize;
-    ///
-    /// let mut window_size = WindowSize::new(65_535);
-    /// assert_eq!(window_size.size(), 65_535);
-    /// // A decrease...
-    /// assert!(window_size.try_decrease(100).is_ok());
-    /// assert_eq!(window_size.size(), 65_435);
-    /// // A decrease that does not underflow
-    /// assert!(window_size.try_decrease(0x7fffffff).is_ok());
-    /// assert_eq!(window_size.size(), -2147418212);
-    /// // A decrease that *would* underflow
-    /// assert!(window_size.try_decrease(0x7fffffff).is_err());
-    /// assert_eq!(window_size.size(), -2147418212);
-    /// ```
     pub fn try_decrease(&mut self, delta: i32) -> Result<(), ()> {
         match self.0.checked_sub(delta) {
             Some(new) => {

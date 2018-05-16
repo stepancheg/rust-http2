@@ -4,47 +4,6 @@
 //! The decoder only follows HPACK rules, without performing any additional
 //! (semantic) checks on the header name/value pairs, i.e. it considers the
 //! headers as opaque octets.
-//!
-//! # Example
-//!
-//! A simple example of using the decoder that demonstrates its API:
-//!
-//! ```rust
-//! use httpbis::hpack::Decoder;
-//! let mut decoder = Decoder::new();
-//!
-//! let header_list = decoder.decode(&[0x82, 0x84]).unwrap();
-//!
-//! assert_eq!(header_list, [
-//!     (b":method".to_vec(), b"GET".to_vec()),
-//!     (b":path".to_vec(), b"/".to_vec()),
-//! ]);
-//! ```
-//!
-//! A more complex example where the callback API is used, providing the client a
-//! borrowed representation of each header, rather than an owned representation.
-//!
-//! ```rust
-//! use httpbis::hpack::Decoder;
-//! let mut decoder = Decoder::new();
-//!
-//! let mut count = 0;
-//! let header_list = decoder.decode_with_cb(&[0x82, 0x84], |name, value| {
-//!     count += 1;
-//!     match count {
-//!         1 => {
-//!             assert_eq!(&name[..], &b":method"[..]);
-//!             assert_eq!(&value[..], &b"GET"[..]);
-//!         },
-//!         2 => {
-//!             assert_eq!(&name[..], &b":path"[..]);
-//!             assert_eq!(&value[..], &b"/"[..]);
-//!         },
-//!         _ => panic!("Did not expect more than two headers!"),
-//!     };
-//! });
-//! ```
-
 use std::num::Wrapping;
 use std::borrow::Cow;
 

@@ -96,16 +96,45 @@ fn test_split_path() {
 }
 
 
+/// Convient implementation of `Service` which allows delegation to
+/// multiple `Service` implementations provided by user.
 #[derive(Default)]
 pub struct ServicePaths {
     root: Node,
 }
 
 impl ServicePaths {
+    /// Create a new `Service` implementation which returns `404`
+    /// on all requests by default.
     pub fn new() -> ServicePaths {
         Default::default()
     }
 
+    /// Register a service for given path.
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// use httpbis::*;
+    ///
+    /// struct Root {}
+    /// struct Files {}
+    ///
+    /// impl Service for Root {
+    ///     fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
+    ///         Response::found_200_plain_text("This is root page")
+    ///     }
+    /// }
+    ///
+    /// impl Service for Files {
+    ///     fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
+    ///         Response::found_200_plain_text("This is files")
+    ///     }
+    /// }
+    ///
+    /// let mut server = ServerBuilder::new_plain();
+    /// server.service.set_service("/", Arc::new(Root{}));
+    /// server.service.set_service("/files", Arc::new(Files{}));
+    /// ```
     pub fn set_service(&mut self, path: &str, service: Arc<Service>) {
         assert!(path.starts_with("/"));
         self.root.add_service(path, service);

@@ -51,7 +51,13 @@ impl DataOrTrailers {
 }
 
 
-/// Stream of DATA or HEADERS frames after initial HEADERS
+/// Stream of DATA or HEADERS frames after initial HEADERS.
+///
+/// Technically this class is just a simple wrapper over boxed `Stream`
+/// of `DataOrTrailers` objects.
+///
+/// Most users won't need anything except data, so this type provides
+/// convenient constructors and accessors.
 pub struct HttpStreamAfterHeaders(
     pub HttpFutureStreamSend<DataOrTrailers>
 );
@@ -59,22 +65,25 @@ pub struct HttpStreamAfterHeaders(
 impl HttpStreamAfterHeaders {
     // constructors
 
+    /// Box and wraper futures stream of `DataOrTrailers`.
     pub fn new<S>(s: S) -> HttpStreamAfterHeaders
         where S : Stream<Item=DataOrTrailers, Error=error::Error> + Send + 'static
     {
         HttpStreamAfterHeaders(Box::new(s))
     }
 
-    pub fn from_parts<S>(s: S) -> HttpStreamAfterHeaders
+    pub(crate) fn from_parts<S>(s: S) -> HttpStreamAfterHeaders
         where S : Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send + 'static
     {
         HttpStreamAfterHeaders::new(s.map(DataOrHeadersWithFlag::into_after_headers))
     }
 
+    /// Create an empty response stream (no body, no trailers).
     pub fn empty() -> HttpStreamAfterHeaders {
         HttpStreamAfterHeaders::new(stream::empty())
     }
 
+    /// Create a response from a stream of bytes.
     pub fn bytes<S>(bytes: S) -> HttpStreamAfterHeaders
         where S : Stream<Item=Bytes, Error=error::Error> + Send + 'static
     {
@@ -93,6 +102,11 @@ impl HttpStreamAfterHeaders {
         HttpStreamAfterHeaders::new(stream::once(Ok(part)))
     }
 
+    /// Create simple response stream from bytes.
+    ///
+    /// Useful when bytes are available and length is small.
+    ///
+    /// If bytes object is large, it will be split into multiple frames.
     pub fn once_bytes<B>(bytes: B) -> HttpStreamAfterHeaders
         where B : Into<Bytes>
     {
@@ -111,11 +125,11 @@ impl HttpStreamAfterHeaders {
         })
     }
 
-    pub fn into_flag_stream(self) -> impl Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send {
+    pub(crate) fn into_flag_stream(self) -> impl Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send {
         self.0.map(DataOrTrailers::into_part)
     }
 
-    pub fn into_part_stream(self) -> DataOrHeadersWithFlagStream {
+    pub(crate) fn into_part_stream(self) -> DataOrHeadersWithFlagStream {
         DataOrHeadersWithFlagStream::new(self.into_flag_stream())
     }
 

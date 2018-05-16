@@ -44,8 +44,11 @@ use socket::AnySocketAddr;
 pub use client_tls::ClientTlsOption;
 
 
-pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector>
-{
+/// Builder for HTTP/2 client.
+///
+/// Client parameters can be specified only during construction,
+/// and later client cannot be reconfigured.
+pub struct ClientBuilder<C : TlsConnector = tls_api_stub::TlsConnector> {
     pub event_loop: Option<reactor::Remote>,
     pub addr: Option<AnySocketAddr>,
     pub tls: ClientTlsOption<C>,
@@ -187,6 +190,11 @@ enum Completion {
     Rx(oneshot::Receiver<()>),
 }
 
+/// Asynchronous HTTP/2 client.
+///
+/// Client connects to the single server address (which must be specified
+/// in `ClientBuilder`). When connection fails (because of network error
+/// or protocol error) client is reconnected.
 pub struct Client {
     controller_tx: UnboundedSender<ControllerCommand>,
     join: Option<Completion>,
@@ -198,6 +206,7 @@ pub struct Client {
 
 impl Client {
 
+    /// Create a new client connected to the specified host and port without using TLS.
     pub fn new_plain(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
         let mut client = ClientBuilder::new_plain();
         client.conf = conf;
@@ -205,6 +214,7 @@ impl Client {
         client.build()
     }
 
+    /// Create a new client connected to the specified host and port using TLS.
     pub fn new_tls<C : TlsConnector>(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
         let mut client = ClientBuilder::<C>::new();
         client.conf = conf;
@@ -213,6 +223,7 @@ impl Client {
         client.build()
     }
 
+    /// Create a new client connected to the specified localhost Unix addr.
     #[cfg(unix)]
     pub fn new_plain_unix(addr: &str, conf: ClientConf) -> Result<Client> {
         let mut client = ClientBuilder::new_plain();
@@ -221,6 +232,7 @@ impl Client {
         client.build()
     }
 
+    /// Create a new client connected to the specified localhost Unix addr using TLS.
     #[cfg(unix)]
     pub fn new_tls_unix<C: TlsConnector>(addr: &str, conf: ClientConf) -> Result<Client> {
         let mut client = ClientBuilder::<C>::new();
@@ -229,7 +241,10 @@ impl Client {
         client.build()
     }
 
-    pub fn new_expl<C : TlsConnector>(addr: &SocketAddr, tls: ClientTlsOption<C>, conf: ClientConf) -> Result<Client> {
+    /// Connect to server using plain or TLS protocol depending on `tls` parameter.
+    pub fn new_expl<C : TlsConnector>(addr: &SocketAddr, tls: ClientTlsOption<C>, conf: ClientConf)
+        -> Result<Client>
+    {
         let mut client = ClientBuilder::new();
         client.addr = Some(AnySocketAddr::Inet(addr.clone()));
         client.tls = tls;
@@ -237,6 +252,7 @@ impl Client {
         client.build()
     }
 
+    /// Start HTTP/2 request.
     pub fn start_request_simple(
         &self,
         headers: Headers,
@@ -248,6 +264,7 @@ impl Client {
             HttpStreamAfterHeaders::once_bytes(body))
     }
 
+    /// Start HTTP/2 `GET` request.
     pub fn start_get(
         &self,
         path: &str,
@@ -263,6 +280,7 @@ impl Client {
         self.start_request_simple(headers, Bytes::new())
     }
 
+    /// Start HTTP/2 `POST` request.
     pub fn start_post(
         &self,
         path: &str,
@@ -279,17 +297,21 @@ impl Client {
         self.start_request_simple(headers, body)
     }
 
+    /// For tests
+    #[doc(hidden)]
     pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
         let (tx, rx) = oneshot::channel();
         // ignore error
-        drop(self.controller_tx.unbounded_send(ControllerCommand::DumpState(tx)));
+        drop(self.controller_tx.unbounded_send(ControllerCommand::_DumpState(tx)));
         Box::new(rx.map_err(|_| error::Error::Other("conn died")))
     }
 
+    /// Create a future which waits for successful connection.
     pub fn wait_for_connect(&self) -> HttpFutureSend<()> {
         let (tx, rx) = oneshot::channel();
         // ignore error
         drop(self.controller_tx.unbounded_send(ControllerCommand::WaitForConnect(tx)));
+        // TODO: return client death reason
         Box::new(rx.map_err(|_| error::Error::Other("conn died")).and_then(|r| r))
     }
 }
@@ -330,7 +352,7 @@ enum ControllerCommand {
     GoAway,
     StartRequest(StartRequestMessage),
     WaitForConnect(oneshot::Sender<Result<()>>),
-    DumpState(oneshot::Sender<ConnectionStateSnapshot>),
+    _DumpState(oneshot::Sender<ConnectionStateSnapshot>),
 }
 
 struct ControllerState<T : ToClientStream, C : TlsConnector> {
@@ -384,7 +406,7 @@ impl<T : ToClientStream + 'static + Clone, C : TlsConnector> ControllerState<T, 
                     }
                 }
             }
-            ControllerCommand::DumpState(tx) => {
+            ControllerCommand::_DumpState(tx) => {
                 self.conn.dump_state_with_resp_sender(tx);
             }
         }
