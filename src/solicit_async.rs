@@ -59,7 +59,7 @@ impl<T> AsMut<[T]> for VecWithPos<T> {
 }
 
 pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
-    -> Box<Future<Item=(R, RawFrame), Error=error::Error> + 'r>
+    -> impl Future<Item=(R, RawFrame), Error=error::Error> + 'r
 {
     let header = read_exact(read, [0; FRAME_HEADER_LEN]).map_err(error::Error::from);
     let frame_buf = header.and_then(move |(read, raw_header)| -> Box<Future<Item=_, Error=_> + 'r> {
@@ -83,10 +83,9 @@ pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
 
         Box::new(read_exact(read, full_frame).map_err(error::Error::from))
     });
-    let frame = frame_buf.map(|(read, frame_buf)| {
+    frame_buf.map(|(read, frame_buf)| {
         (read, RawFrame::from(frame_buf.vec))
-    });
-    Box::new(frame)
+    })
 }
 
 struct SyncRead<'r, R : Read + ?Sized + 'r>(&'r mut R);
@@ -107,16 +106,16 @@ pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFr
 
 /// Recieve HTTP frame from reader.
 pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
-    -> Box<Future<Item=(R, HttpFrame), Error=Error> + 'r>
+    -> impl Future<Item=(R, HttpFrame), Error=Error> + 'r
 {
-    Box::new(recv_raw_frame(read, max_frame_size).and_then(|(read, raw_frame)| {
+    recv_raw_frame(read, max_frame_size).and_then(|(read, raw_frame)| {
         Ok((read, HttpFrame::from_raw(&raw_frame)?))
-    }))
+    })
 }
 
 /// Recieve HTTP frame, joining CONTINUATION frame with preceding HEADER frames.
 pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
-    -> Box<Future<Item=(R, HttpFrame), Error=Error> + 'r>
+    -> impl Future<Item=(R, HttpFrame), Error=Error> + 'r
 {
     enum ContinuableFrame {
         Headers(HeadersFrame),
@@ -156,7 +155,7 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R, max_frame_size
         }
     }
 
-    Box::new(loop_fn::<(R, Option<ContinuableFrame>), _, _, _>((read, None), move |(read, header_opt)| {
+    loop_fn::<(R, Option<ContinuableFrame>), _, _, _>((read, None), move |(read, header_opt)| {
         recv_http_frame(read, max_frame_size).and_then(move |(read, frame)| {
             match frame {
                 HttpFrame::Headers(h) => {
@@ -208,7 +207,7 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R, max_frame_size
                 },
             }
         })
-    }))
+    })
 }
 
 #[allow(dead_code)]
@@ -219,12 +218,14 @@ pub fn send_raw_frame<W : AsyncWrite + Send + 'static>(write: W, frame: RawFrame
         .map_err(|e| e.into()))
 }
 
-pub fn send_frame<W : AsyncWrite + Send + 'static, F : FrameIR>(write: W, frame: F) -> HttpFuture<W> {
+pub fn send_frame<W : AsyncWrite + Send + 'static, F : FrameIR>(write: W, frame: F)
+    -> impl Future<Item=W, Error=error::Error>
+{
     let buf = frame.serialize_into_vec();
     debug!("send frame {}", RawFrameRef { raw_content: &buf }.frame_type());
-    Box::new(write_all(write, buf)
+    write_all(write, buf)
         .map(|(w, _)| w)
-        .map_err(|e| e.into()))
+        .map_err(|e| e.into())
 }
 
 static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";

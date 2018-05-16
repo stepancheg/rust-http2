@@ -229,10 +229,12 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         });
 
         // Also opens latch if necessary
-        self.send_outg_stream(stream_id)
+        Box::new(self.send_outg_stream(stream_id))
     }
 
-    fn process_message(self, message: ClientToWriteMessage) -> HttpFuture<Self> {
+    fn process_message(self, message: ClientToWriteMessage)
+        -> impl Future<Item=Self, Error=error::Error>
+    {
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
             ClientToWriteMessage::Common(common) => self.process_common(common),

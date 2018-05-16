@@ -997,13 +997,13 @@ impl<I, T> ReadLoopData<I, T>
             inner.conn.our_settings_ack.max_frame_size
         });
 
-        Box::new(recv_http_frame_join_cont(read, max_frame_size)
-            .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame)))
+        recv_http_frame_join_cont(read, max_frame_size)
+            .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame))
     }
 
-    fn read_process_frame(self) -> HttpFuture<Self> {
-        Box::new(self.recv_http_frame()
-            .and_then(move |(lp, frame)| lp.process_http_frame(frame)))
+    fn read_process_frame(self) -> impl Future<Item=Self, Error=error::Error> {
+        self.recv_http_frame()
+            .and_then(move |(lp, frame)| lp.process_http_frame(frame))
     }
 
     fn loop_iter(self) -> HttpFuture<Loop<(), Self>> {
@@ -1036,15 +1036,15 @@ impl<I, T> WriteLoopData<I, T>
         ConnData<T> : ConnInner<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
-    fn write_all(self, buf: Vec<u8>) -> HttpFuture<Self> {
+    fn write_all(self, buf: Vec<u8>) -> impl Future<Item=Self, Error=error::Error> {
         let WriteLoopData { write, inner } = self;
 
-        Box::new(tokio_io::write_all(write, buf)
+        tokio_io::write_all(write, buf)
             .map(move |(write, _)| WriteLoopData { write: write, inner: inner })
-            .map_err(error::Error::from))
+            .map_err(error::Error::from)
     }
 
-    fn write_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
+    fn write_frame(self, frame: HttpFrame) -> impl Future<Item=Self, Error=error::Error> {
         debug!("send {:?}", frame);
 
         self.write_all(frame.serialize_into_vec())
@@ -1056,7 +1056,9 @@ impl<I, T> WriteLoopData<I, T>
         self.inner.with(f)
     }
 
-    pub fn send_outg_stream(self, stream_id: StreamId) -> HttpFuture<Self> {
+    pub fn send_outg_stream(self, stream_id: StreamId)
+        -> impl Future<Item=Self, Error=error::Error>
+    {
         let bytes = self.with_inner(|inner| {
             inner.pop_outg_all_for_stream_bytes(stream_id)
         });
@@ -1064,7 +1066,7 @@ impl<I, T> WriteLoopData<I, T>
         self.write_all(bytes)
     }
 
-    fn send_outg_conn(self) -> HttpFuture<Self> {
+    fn send_outg_conn(self) -> impl Future<Item=Self, Error=error::Error> {
         let bytes = self.with_inner(|inner| {
             inner.pop_outg_all_for_conn_bytes()
         });
@@ -1083,7 +1085,7 @@ impl<I, T> WriteLoopData<I, T>
             }
         });
         if let Some(stream_id) = stream_id {
-            self.send_outg_stream(stream_id)
+            Box::new(self.send_outg_stream(stream_id))
         } else {
             Box::new(future::finished(self))
         }
@@ -1100,29 +1102,31 @@ impl<I, T> WriteLoopData<I, T>
             }
         });
         if let Some(stream_id) = stream_id {
-            self.send_outg_stream(stream_id)
+            Box::new(self.send_outg_stream(stream_id))
         } else {
             Box::new(future::finished(self))
         }
     }
 
-    fn increase_in_window(self, stream_id: StreamId, increase: u32) -> HttpFuture<Self> {
+    fn increase_in_window(self, stream_id: StreamId, increase: u32)
+        -> impl Future<Item=Self, Error=error::Error>
+    {
         let r = self.inner.with(move |inner| {
             inner.increase_in_window(stream_id, increase)
         });
-        Box::new(future::result(r.map(|()| self)))
+        future::result(r.map(|()| self))
     }
 
     pub fn process_common(self, common: CommonToWriteMessage) -> HttpFuture<Self> {
         match common {
             CommonToWriteMessage::TryFlushStream(None) => {
-                self.send_outg_conn()
+                Box::new(self.send_outg_conn())
             },
             CommonToWriteMessage::TryFlushStream(Some(stream_id)) => {
-                self.send_outg_stream(stream_id)
+                Box::new(self.send_outg_stream(stream_id))
             },
             CommonToWriteMessage::Frame(frame) => {
-                self.write_frame(frame.into_http_frame())
+                Box::new(self.write_frame(frame.into_http_frame()))
             },
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)
@@ -1131,7 +1135,7 @@ impl<I, T> WriteLoopData<I, T>
                 self.process_stream_enqueue(stream_id, part)
             },
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
-                self.increase_in_window(stream_id, increase)
+                Box::new(self.increase_in_window(stream_id, increase))
             },
             CommonToWriteMessage::CloseConn => {
                 Box::new(future::err(error::Error::Other("close connection")))
