@@ -51,7 +51,7 @@ impl DataOrTrailers {
 }
 
 
-/// Stream of DATA of HEADER frames after initial HEADER
+/// Stream of DATA or HEADERS frames after initial HEADERS
 pub struct HttpStreamAfterHeaders(
     pub HttpFutureStreamSend<DataOrTrailers>
 );

@@ -21,6 +21,7 @@ mod solicit;
 
 mod error;
 mod result;
+mod result_or_eof;
 
 mod client_conf;
 mod client_conn;
@@ -50,7 +51,7 @@ mod data_or_headers;
 mod data_or_headers_with_flag;
 pub mod message;
 
-pub mod futures_misc;
+mod futures_misc;
 
 mod req_resp;
 mod headers_place;

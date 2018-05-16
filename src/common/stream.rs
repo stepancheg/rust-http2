@@ -9,7 +9,7 @@ use solicit::WindowSize;
 use solicit::header::Headers;
 use solicit::connection::EndStream;
 
-use futures_misc::ResultOrEof;
+use result_or_eof::ResultOrEof;
 
 use error::ErrorCode;
 

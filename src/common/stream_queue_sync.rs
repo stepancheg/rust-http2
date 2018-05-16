@@ -11,7 +11,7 @@ use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
 use futures::sync::mpsc::UnboundedReceiver;
 
-use futures_misc::ResultOrEof;
+use result_or_eof::ResultOrEof;
 
 use error;
 

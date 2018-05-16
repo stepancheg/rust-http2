@@ -32,8 +32,6 @@ use tokio_tls_api;
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
-use futures_misc::*;
-
 use solicit_async::*;
 use service::Service;
 use data_or_trailers::*;
@@ -50,6 +48,7 @@ use headers_place::HeadersPlace;
 use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use result_or_eof::ResultOrEof;
 
 
 struct ServerTypes;

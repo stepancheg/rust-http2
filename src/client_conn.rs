@@ -33,8 +33,6 @@ use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
 use tokio_tls_api;
 
-use futures_misc::*;
-
 use solicit_async::*;
 
 use common::*;
@@ -49,6 +47,7 @@ use headers_place::HeadersPlace;
 use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use result_or_eof::ResultOrEof;
 
 
 struct ClientTypes;
