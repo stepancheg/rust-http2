@@ -21,19 +21,19 @@ use bytes::Bytes;
 use test::Bencher;
 
 
-struct Megabyte;
-
-impl Service for Megabyte {
-    fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-        Response::headers_and_bytes_stream(
-            Headers::ok_200(),
-            stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))))
-    }
-}
-
 #[bench]
-fn bench(b: &mut Bencher) {
+fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
     b.iter(|| {
+        struct Megabyte;
+
+        impl Service for Megabyte {
+            fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
+                Response::headers_and_bytes_stream(
+                    Headers::ok_200(),
+                    stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))))
+            }
+        }
+
         let mut server = ServerBuilder::new_plain();
         server.set_port(0);
         server.service.set_service("/", Arc::new(Megabyte));
@@ -57,5 +57,38 @@ fn bench(b: &mut Bencher) {
         }
 
         assert_eq!(1024 * 1024, s);
+    })
+}
+
+#[bench]
+fn thousand_small_requests(b: &mut Bencher) {
+    b.iter(|| {
+        struct My;
+
+        impl Service for My {
+            fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
+                Response::found_200_plain_text("hello there")
+            }
+        }
+
+        let mut server = ServerBuilder::new_plain();
+        server.set_port(0);
+        server.service.set_service("/", Arc::new(My));
+        let server = server.build().expect("server");
+
+        let client = Client::new_plain(
+            "127.0.0.1",
+            server.local_addr().port().unwrap(),
+            Default::default())
+            .expect("client");
+
+        for _i in 0..1000 {
+            let (header, body) = client.start_get("/any", "localhost").0.wait().expect("headers");
+            assert_eq!(200, header.status());
+
+            // TODO: check content
+            body.collect().wait().expect("body");
+        }
+
     })
 }
