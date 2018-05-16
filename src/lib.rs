@@ -47,8 +47,7 @@ mod client_died_error_holder;
 
 mod data_or_trailers;
 mod data_or_headers;
-// TODO: used in tests; make private
-pub mod data_or_headers_with_flag;
+mod data_or_headers_with_flag;
 pub mod message;
 
 pub mod futures_misc;

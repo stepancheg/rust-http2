@@ -32,7 +32,6 @@ use futures::stream;
 use futures::sync::oneshot;
 
 use httpbis::*;
-use httpbis::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use httpbis::for_test::solicit::frame::headers::*;
 use httpbis::for_test::solicit::frame::settings::SettingsFrame;
 use httpbis::for_test::solicit::frame::settings::HttpSetting;
@@ -120,12 +119,10 @@ fn panic_in_stream() {
 
     let server = ServerOneConn::new_fn(0, |headers, _req| {
         if headers.path() == "/panic" {
-            Response::from_stream(stream::iter_ok((0..2).map(|i| {
-                match i {
-                    0 => DataOrHeadersWithFlag::intermediate_headers(Headers::ok_200()),
-                    _ => panic!("should reset stream"),
-                }
-            })))
+            let stream = HttpStreamAfterHeaders::new(stream::iter_ok((0..2).map(|_| {
+                panic!("should reset stream");
+            })));
+            Response::headers_and_stream(Headers::ok_200(), stream)
         } else {
             Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hi there"))
         }
