@@ -49,7 +49,7 @@ mod client_died_error_holder;
 mod data_or_trailers;
 mod data_or_headers;
 mod data_or_headers_with_flag;
-pub mod message;
+mod message;
 
 mod futures_misc;
 
@@ -62,7 +62,7 @@ mod hpack;
 mod solicit_async;
 mod solicit_misc;
 
-pub mod misc;
+mod misc;
 mod rc_mut;
 
 mod resp;
@@ -94,6 +94,8 @@ pub use server_tls::ServerTlsOption;
 pub use data_or_trailers::DataOrTrailers;
 pub use data_or_trailers::HttpStreamAfterHeaders;
 pub use resp::Response;
+
+pub use message::SimpleHttpMessage;
 
 pub use error::Error;
 pub use error::ErrorCode;

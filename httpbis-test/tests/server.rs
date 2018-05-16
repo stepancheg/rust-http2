@@ -391,7 +391,7 @@ pub fn http_1_1() {
 
     let mut read = Vec::new();
     tcp_stream.read_to_end(&mut read).expect("read");
-    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", httpbis::misc::BsDebug(&read));
+    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", BsDebug(&read));
 }
 
 #[cfg(unix)]
@@ -409,7 +409,7 @@ pub fn http_1_1_unix() {
 
     let mut read = Vec::new();
     unix_stream.read_to_end(&mut read).expect("read");
-    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", httpbis::misc::BsDebug(&read));
+    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", BsDebug(&read));
 }
 
 #[test]

@@ -22,7 +22,7 @@ use tls_api_openssl::TlsAcceptor;
 use tls_api_openssl::TlsAcceptorBuilder;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
-use httpbis::message::SimpleHttpMessage;
+use httpbis::SimpleHttpMessage;
 use httpbis::Headers;
 use httpbis::Response;
 use httpbis::Service;

@@ -21,7 +21,7 @@ use futures::future::Future;
 
 use httpbis::Headers;
 use httpbis::*;
-use httpbis::message::SimpleHttpMessage;
+use httpbis::SimpleHttpMessage;
 
 use httpbis::AnySocketAddr;
 

@@ -18,10 +18,13 @@ use std::sync::Once;
 mod server_one_conn;
 mod server_test;
 mod tester;
+#[path = "../../src/misc.rs"]
+mod misc;
 
 pub use self::server_one_conn::*;
 pub use self::server_test::*;
 pub use self::tester::*;
+pub use misc::*;
 
 // Bind on IPv4 because IPv6 is broken on travis
 pub const BIND_HOST: &str = "127.0.0.1";

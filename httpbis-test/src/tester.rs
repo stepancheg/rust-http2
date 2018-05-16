@@ -11,7 +11,7 @@ use std::net::ToSocketAddrs;
 use bytes::Bytes;
 
 use httpbis::for_test;
-use httpbis::message::SimpleHttpMessage;
+use httpbis::SimpleHttpMessage;
 use httpbis::for_test::solicit::StreamId;
 use httpbis::ErrorCode;
 use httpbis::for_test::solicit::header::*;
