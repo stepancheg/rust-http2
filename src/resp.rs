@@ -13,6 +13,8 @@ use error::Error;
 
 use stream_part::*;
 use data_or_headers::DataOrHeaders;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 
 
 /// Convenient wrapper around async HTTP response future/stream
@@ -104,8 +106,8 @@ impl Response {
         Box::new(self.into_stream_flag().map(|c| c.content))
     }
 
-    pub fn into_part_stream(self) -> HttpPartStream {
-        HttpPartStream::new(self.into_stream_flag())
+    pub fn into_part_stream(self) -> DataOrHeadersWithFlagStream {
+        DataOrHeadersWithFlagStream::new(self.into_stream_flag())
     }
 
     pub fn collect(self) -> HttpFutureSend<SimpleHttpMessage> {

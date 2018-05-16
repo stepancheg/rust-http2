@@ -48,6 +48,8 @@ mod client_died_error_holder;
 
 pub mod stream_part;
 mod data_or_headers;
+// TODO: used in tests; make private
+pub mod data_or_headers_with_flag;
 pub mod message;
 
 pub mod futures_misc;

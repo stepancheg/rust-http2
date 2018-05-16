@@ -2,8 +2,8 @@ use bytes::Bytes;
 
 use solicit::header::*;
 
-use stream_part::*;
 use data_or_headers::DataOrHeaders;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 #[derive(Default)]
 pub struct SimpleHttpMessage {

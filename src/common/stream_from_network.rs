@@ -5,8 +5,6 @@ use futures::Poll;
 use futures::stream::Stream;
 use futures::sync::mpsc::UnboundedSender;
 
-use stream_part::*;
-
 use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
@@ -16,6 +14,7 @@ use super::conn::CommonToWriteMessage;
 use super::types::Types;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use data_or_headers::DataOrHeaders;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 
 /// Stream that provides data from network.

@@ -32,7 +32,7 @@ use futures::stream;
 use futures::sync::oneshot;
 
 use httpbis::*;
-use httpbis::stream_part::DataOrHeadersWithFlag;
+use httpbis::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use httpbis::solicit::frame::settings::*;
 use httpbis::solicit::frame::headers::*;
 use httpbis::solicit::DEFAULT_SETTINGS;

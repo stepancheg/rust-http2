@@ -8,7 +8,7 @@ use void::Void;
 
 use solicit::StreamId;
 
-use stream_part::HttpPartStream;
+use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use data_or_headers::DataOrHeaders;
 
 use error::ErrorCode;
@@ -21,7 +21,7 @@ pub struct PumpStreamToWriteLoop<T : Types> {
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     pub stream_id: StreamId,
     pub out_window: window_size::StreamOutWindowReceiver,
-    pub stream: HttpPartStream,
+    pub stream: DataOrHeadersWithFlagStream,
 }
 
 impl<T : Types> Future for PumpStreamToWriteLoop<T> {

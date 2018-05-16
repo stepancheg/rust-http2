@@ -50,14 +50,14 @@ use super::window_size;
 use super::stream_queue_sync::stream_queue_sync;
 
 
-use stream_part::*;
-
 pub use resp::Response;
 
 use rc_mut::*;
 use solicit::MAX_WINDOW_SIZE;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -899,7 +899,7 @@ impl<T : Types> ConnData<T>
     pub fn new_pump_stream_to_write_loop(
         &self,
         stream_id: StreamId,
-        stream: HttpPartStream,
+        stream: DataOrHeadersWithFlagStream,
         out_window: window_size::StreamOutWindowReceiver)
         -> PumpStreamToWriteLoop<T>
     {
@@ -915,7 +915,7 @@ impl<T : Types> ConnData<T>
     pub fn pump_stream_to_write_loop(
         &self,
         stream_id: StreamId,
-        stream: HttpPartStream,
+        stream: DataOrHeadersWithFlagStream,
         out_window: window_size::StreamOutWindowReceiver)
     {
         let stream = stream.catch_unwind();

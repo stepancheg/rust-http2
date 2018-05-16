@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 
-use stream_part::DataOrHeadersWithFlag;
 use data_or_headers::DataOrHeaders;
 
 use error::ErrorCode;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 
 pub fn data_size(content: &DataOrHeaders) -> usize {

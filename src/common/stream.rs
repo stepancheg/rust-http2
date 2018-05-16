@@ -11,8 +11,6 @@ use solicit::connection::EndStream;
 
 use futures_misc::ResultOrEof;
 
-use stream_part::*;
-
 use error::ErrorCode;
 
 use super::types::Types;
@@ -21,6 +19,7 @@ use super::stream_queue::StreamQueue;
 use super::stream_queue_sync::StreamQueueSyncSender;
 use super::window_size;
 use data_or_headers::DataOrHeaders;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 
 pub enum HttpStreamCommand {

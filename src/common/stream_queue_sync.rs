@@ -15,9 +15,9 @@ use futures_misc::ResultOrEof;
 
 use error;
 
-use stream_part::*;
 use client_died_error_holder::*;
 use data_or_headers::DataOrHeaders;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 
 struct Shared {
