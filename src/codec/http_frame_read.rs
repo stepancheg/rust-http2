@@ -4,7 +4,6 @@ use bytes::BytesMut;
 use tokio_io::AsyncRead;
 use error;
 use futures::Async;
-use futures::future::Future;
 use solicit::frame::unpack_header_from_slice;
 use solicit::frame::headers::HeadersFlag;
 use solicit::frame::push_promise::PushPromiseFlag;
@@ -143,7 +142,7 @@ impl<R : AsyncRead> HttpFrameJoinContinuationRead<R> {
         }
     }
 
-    fn poll_http_frame(&mut self, max_frame_size: u32) -> Result<Async<HttpFrame>, error::Error> {
+    pub fn poll_http_frame(&mut self, max_frame_size: u32) -> Result<Async<HttpFrame>, error::Error> {
         loop {
             let frame = match self.framed_read.poll_http_frame(max_frame_size)? {
                 Async::NotReady => return Ok(Async::NotReady),
@@ -203,36 +202,5 @@ impl<R : AsyncRead> HttpFrameJoinContinuationRead<R> {
                 },
             };
         }
-    }
-
-
-    pub fn recv_http_frame(self, max_frame_size: u32)
-        -> impl Future<Item=(Self, HttpFrame), Error=error::Error>
-    {
-        HttpFrameJoinContinuationReadFuture {
-            framed_read: Some(self),
-            max_frame_size,
-        }
-    }
-}
-
-
-struct HttpFrameJoinContinuationReadFuture<R : AsyncRead> {
-    framed_read: Option<HttpFrameJoinContinuationRead<R>>,
-    max_frame_size: u32,
-}
-
-impl<R : AsyncRead> Future for HttpFrameJoinContinuationReadFuture<R> {
-    type Item = (HttpFrameJoinContinuationRead<R>, HttpFrame);
-    type Error = error::Error;
-
-    fn poll(&mut self) -> Result<Async<(HttpFrameJoinContinuationRead<R>, HttpFrame)>, error::Error> {
-        let frame = match self.framed_read.as_mut().unwrap().poll_http_frame(self.max_frame_size)? {
-            Async::NotReady => return Ok(Async::NotReady),
-            Async::Ready(frame) => frame,
-        };
-
-        let framed_read = self.framed_read.take().unwrap();
-        Ok(Async::Ready((framed_read, frame)))
     }
 }
