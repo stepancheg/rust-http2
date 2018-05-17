@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use bytes::BytesMut;
 
 use tokio_io::AsyncRead;
@@ -5,9 +6,14 @@ use error;
 use futures::Async;
 use futures::future::Future;
 use solicit::frame::unpack_header_from_slice;
+use solicit::frame::headers::HeadersFlag;
+use solicit::frame::push_promise::PushPromiseFlag;
 use ErrorCode;
 use solicit::frame::RawFrame;
 use solicit::connection::HttpFrame;
+use solicit::frame::HeadersFrame;
+use solicit::frame::PushPromiseFrame;
+use solicit::StreamId;
 
 
 /// Buffered read for reading HTTP/2 frames.
@@ -83,25 +89,144 @@ impl<R : AsyncRead> HttpFrameRead<R> {
             Async::NotReady => Async::NotReady,
         })
     }
+}
 
-    pub fn recv_http_frame(self, max_frame_size: u32) -> impl Future<Item=(Self, HttpFrame), Error=error::Error> {
-        HttpFrameReadFuture {
+enum Continuable {
+    Headers(HeadersFrame),
+    PushPromise(PushPromiseFrame),
+}
+
+impl Continuable {
+    fn into_frame(self) -> HttpFrame {
+        match self {
+            Continuable::Headers(headers) => HttpFrame::Headers(headers),
+            Continuable::PushPromise(push_promise) => HttpFrame::PushPromise(push_promise),
+        }
+    }
+
+    fn extend_header_fragment(&mut self, bytes: Bytes) {
+        let header_fragment = match self {
+            &mut Continuable::Headers(ref mut headers) => &mut headers.header_fragment,
+            &mut Continuable::PushPromise(ref mut push_promise) => &mut push_promise.header_fragment,
+        };
+        header_fragment.extend_from_slice(&bytes);
+    }
+
+    fn set_end_headers(&mut self) {
+        match self {
+            &mut Continuable::Headers(ref mut headers) =>
+                headers.flags.set(HeadersFlag::EndHeaders),
+            &mut Continuable::PushPromise(ref mut push_promise) =>
+                push_promise.flags.set(PushPromiseFlag::EndHeaders),
+        }
+    }
+
+    fn get_stream_id(&self) -> StreamId {
+        match self {
+            &Continuable::Headers(ref headers) => headers.stream_id,
+            &Continuable::PushPromise(ref push_promise) => push_promise.stream_id,
+        }
+    }
+}
+
+pub struct HttpFrameJoinContinuationRead<R : AsyncRead> {
+    framed_read: HttpFrameRead<R>,
+    // TODO: check total size is not exceeded some limit
+    header_opt: Option<Continuable>,
+}
+
+impl<R : AsyncRead> HttpFrameJoinContinuationRead<R> {
+    pub fn new(read: R) -> Self {
+        HttpFrameJoinContinuationRead {
+            framed_read: HttpFrameRead::new(read),
+            header_opt: None,
+        }
+    }
+
+    fn poll_http_frame(&mut self, max_frame_size: u32) -> Result<Async<HttpFrame>, error::Error> {
+        loop {
+            let frame = match self.framed_read.poll_http_frame(max_frame_size)? {
+                Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(frame) => frame,
+            };
+
+            match frame {
+                HttpFrame::Headers(h) => {
+                    if let Some(_) = self.header_opt {
+                        return Err(error::Error::Other("expecting CONTINUATION frame, got HEADERS"))
+                    } else {
+                        if h.flags.is_set(HeadersFlag::EndHeaders) {
+                            return Ok(Async::Ready(HttpFrame::Headers(h)));
+                        } else {
+                            self.header_opt = Some(Continuable::Headers(h));
+                            continue;
+                        }
+                    }
+                }
+                HttpFrame::PushPromise(p) => {
+                    if let Some(_) = self.header_opt {
+                        return Err(error::Error::Other("expecting CONTINUATION frame, got PUSH_PROMISE"))
+                    } else {
+                        if p.flags.is_set(PushPromiseFlag::EndHeaders) {
+                            return Ok(Async::Ready(HttpFrame::PushPromise(p)));
+                        } else {
+                            self.header_opt = Some(Continuable::PushPromise(p));
+                            continue;
+                        }
+                    }
+                }
+                HttpFrame::Continuation(c) => {
+                    if let Some(mut h) = self.header_opt.take() {
+                        if h.get_stream_id() != c.stream_id {
+                            return Err(error::Error::Other("CONTINUATION frame with different stream id"))
+                        } else {
+                            let header_end = c.is_headers_end();
+                            h.extend_header_fragment(c.header_fragment);
+                            if header_end {
+                                h.set_end_headers();
+                                return Ok(Async::Ready(h.into_frame()));
+                            } else {
+                                self.header_opt = Some(h);
+                                continue;
+                            }
+                        }
+                    } else {
+                        return Err(error::Error::Other("CONTINUATION frame without headers"));
+                    }
+                }
+                f => {
+                    if let Some(_) = self.header_opt {
+                        return Err(error::Error::Other("expecting CONTINUATION frame"));
+                    } else {
+                        return Ok(Async::Ready(f));
+                    }
+                },
+            };
+        }
+    }
+
+
+    pub fn recv_http_frame(self, max_frame_size: u32)
+        -> impl Future<Item=(Self, HttpFrame), Error=error::Error>
+    {
+        HttpFrameJoinContinuationReadFuture {
             framed_read: Some(self),
             max_frame_size,
         }
     }
 }
 
-struct HttpFrameReadFuture<R : AsyncRead> {
-    framed_read: Option<HttpFrameRead<R>>,
+
+struct HttpFrameJoinContinuationReadFuture<R : AsyncRead> {
+    framed_read: Option<HttpFrameJoinContinuationRead<R>>,
     max_frame_size: u32,
 }
 
-impl<R : AsyncRead> Future for HttpFrameReadFuture<R> {
-    type Item = (HttpFrameRead<R>, HttpFrame);
+impl<R : AsyncRead> Future for HttpFrameJoinContinuationReadFuture<R> {
+    type Item = (HttpFrameJoinContinuationRead<R>, HttpFrame);
     type Error = error::Error;
 
-    fn poll(&mut self) -> Result<Async<(HttpFrameRead<R>, HttpFrame)>, error::Error> {
+    fn poll(&mut self) -> Result<Async<(HttpFrameJoinContinuationRead<R>, HttpFrame)>, error::Error> {
         let frame = match self.framed_read.as_mut().unwrap().poll_http_frame(self.max_frame_size)? {
             Async::NotReady => return Ok(Async::NotReady),
             Async::Ready(frame) => frame,

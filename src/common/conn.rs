@@ -58,7 +58,7 @@ use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-use codec::http_frame_read::HttpFrameRead;
+use codec::http_frame_read::HttpFrameJoinContinuationRead;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -958,7 +958,7 @@ pub struct ReadLoopData<I, T>
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
 {
-    pub framed_read: HttpFrameRead<ReadHalf<I>>,
+    pub framed_read: HttpFrameJoinContinuationRead<ReadHalf<I>>,
     pub inner: RcMut<ConnData<T>>,
 }
 
@@ -998,7 +998,7 @@ impl<I, T> ReadLoopData<I, T>
             inner.conn.our_settings_ack.max_frame_size
         });
 
-        recv_http_frame_join_cont(framed_read, max_frame_size)
+        framed_read.recv_http_frame(max_frame_size)
             .map(|(framed_read, frame)| (ReadLoopData { framed_read, inner }, frame))
     }
 

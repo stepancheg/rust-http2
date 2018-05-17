@@ -7,8 +7,6 @@ use futures::Async;
 use futures::Poll;
 
 use futures::future;
-use futures::future::Loop;
-use futures::future::loop_fn;
 use futures::future::Future;
 use futures::stream::Stream;
 
@@ -20,21 +18,14 @@ use error;
 use error::Error;
 use result::Result;
 
-use solicit::StreamId;
 use solicit::frame::FRAME_HEADER_LEN;
 use solicit::frame::RawFrame;
 use solicit::frame::RawFrameRef;
 use solicit::frame::FrameIR;
-use solicit::frame::headers::HeadersFlag;
-use solicit::frame::headers::HeadersFrame;
-use solicit::frame::push_promise::PushPromiseFrame;
-use solicit::frame::push_promise::PushPromiseFlag;
 use solicit::frame::unpack_header;
 use solicit::frame::settings::SettingsFrame;
-use solicit::connection::HttpFrame;
 
 use misc::BsDebug;
-use codec::http_frame_read::HttpFrameRead;
 
 
 pub type HttpFuture<T> = Box<Future<Item=T, Error=Error>>;
@@ -61,104 +52,6 @@ pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFr
     read.read_exact(&mut raw_frame[FRAME_HEADER_LEN..])?;
     Ok(RawFrame {
         raw_content: Bytes::from(raw_frame),
-    })
-}
-
-/// Recieve HTTP frame, joining CONTINUATION frame with preceding HEADER frames.
-// TODO: move to `framed_read`
-pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: HttpFrameRead<R>, max_frame_size: u32)
-    -> impl Future<Item=(HttpFrameRead<R>, HttpFrame), Error=Error> + 'r
-{
-    enum ContinuableFrame {
-        Headers(HeadersFrame),
-        PushPromise(PushPromiseFrame),
-    }
-
-    impl ContinuableFrame {
-        fn into_frame(self) -> HttpFrame {
-            match self {
-                ContinuableFrame::Headers(headers) => HttpFrame::Headers(headers),
-                ContinuableFrame::PushPromise(push_promise) => HttpFrame::PushPromise(push_promise),
-            }
-        }
-
-        fn extend_header_fragment(&mut self, bytes: Bytes) {
-            let header_fragment = match self {
-                &mut ContinuableFrame::Headers(ref mut headers) => &mut headers.header_fragment,
-                &mut ContinuableFrame::PushPromise(ref mut push_promise) => &mut push_promise.header_fragment,
-            };
-            header_fragment.extend_from_slice(&bytes);
-        }
-
-        fn set_end_headers(&mut self) {
-            match self {
-                &mut ContinuableFrame::Headers(ref mut headers) =>
-                    headers.flags.set(HeadersFlag::EndHeaders),
-                &mut ContinuableFrame::PushPromise(ref mut push_promise) =>
-                    push_promise.flags.set(PushPromiseFlag::EndHeaders),
-            }
-        }
-
-        fn get_stream_id(&self) -> StreamId {
-            match self {
-                &ContinuableFrame::Headers(ref headers) => headers.stream_id,
-                &ContinuableFrame::PushPromise(ref push_promise) => push_promise.stream_id,
-            }
-        }
-    }
-
-    loop_fn::<(HttpFrameRead<R>, Option<ContinuableFrame>), _, _, _>((read, None), move |(read, header_opt)| {
-        read.recv_http_frame(max_frame_size).and_then(move |(read, frame)| {
-            match frame {
-                HttpFrame::Headers(h) => {
-                    if let Some(_) = header_opt {
-                        Err(Error::Other("expecting CONTINUATION frame, got HEADERS"))
-                    } else {
-                        if h.flags.is_set(HeadersFlag::EndHeaders) {
-                            Ok(Loop::Break((read, HttpFrame::Headers(h))))
-                        } else {
-                            Ok(Loop::Continue((read, Some(ContinuableFrame::Headers(h)))))
-                        }
-                    }
-                }
-                HttpFrame::PushPromise(p) => {
-                    if let Some(_) = header_opt {
-                        Err(Error::Other("expecting CONTINUATION frame, got PUSH_PROMISE"))
-                    } else {
-                        if p.flags.is_set(PushPromiseFlag::EndHeaders) {
-                            Ok(Loop::Break((read, HttpFrame::PushPromise(p))))
-                        } else {
-                            Ok(Loop::Continue((read, Some(ContinuableFrame::PushPromise(p)))))
-                        }
-                    }
-                }
-                HttpFrame::Continuation(c) => {
-                    if let Some(mut h) = header_opt {
-                        if h.get_stream_id() != c.stream_id {
-                            Err(Error::Other("CONTINUATION frame with different stream id"))
-                        } else {
-                            let header_end = c.is_headers_end();
-                            h.extend_header_fragment(c.header_fragment);
-                            if header_end {
-                                h.set_end_headers();
-                                Ok(Loop::Break((read, h.into_frame())))
-                            } else {
-                                Ok(Loop::Continue((read, Some(h))))
-                            }
-                        }
-                    } else {
-                        Err(Error::Other("CONTINUATION frame without headers"))
-                    }
-                }
-                f => {
-                    if let Some(_) = header_opt {
-                        Err(Error::Other("expecting CONTINUATION frame"))
-                    } else {
-                        Ok(Loop::Break((read, f)))
-                    }
-                },
-            }
-        })
     })
 }
 

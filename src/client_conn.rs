@@ -48,7 +48,7 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
-use codec::http_frame_read::HttpFrameRead;
+use codec::http_frame_read::HttpFrameJoinContinuationRead;
 
 
 struct ClientTypes;
@@ -308,7 +308,7 @@ impl ClientConnection {
 
             let inner = RcMut::new(conn_data);
 
-            let framed_read = HttpFrameRead::new(read);
+            let framed_read = HttpFrameJoinContinuationRead::new(read);
 
             let run_write = ClientWriteLoop { write, inner: inner.clone() }.run(to_write_rx);
             let run_read = ClientReadLoop { framed_read, inner: inner.clone() }.run();
