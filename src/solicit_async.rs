@@ -12,14 +12,12 @@ use futures::future::loop_fn;
 use futures::future::Future;
 use futures::stream::Stream;
 
-use tokio_io::io::read_exact;
 use tokio_io::io::write_all;
 use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
 
 use error;
 use error::Error;
-use error::ErrorCode;
 use result::Result;
 
 use solicit::StreamId;
@@ -36,6 +34,7 @@ use solicit::frame::settings::SettingsFrame;
 use solicit::connection::HttpFrame;
 
 use misc::BsDebug;
+use codec::http_frame_read::HttpFrameRead;
 
 
 pub type HttpFuture<T> = Box<Future<Item=T, Error=Error>>;
@@ -47,75 +46,28 @@ pub type HttpFutureSend<T> = Box<Future<Item=T, Error=Error> + Send>;
 pub type HttpFutureStreamSend<T> = Box<Stream<Item=T, Error=Error> + Send>;
 
 
-struct VecWithPos<T> {
-    vec: Vec<T>,
-    pos: usize,
-}
-
-impl<T> AsMut<[T]> for VecWithPos<T> {
-    fn as_mut(&mut self) -> &mut [T] {
-        &mut self.vec[self.pos..]
-    }
-}
-
-pub fn recv_raw_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
-    -> impl Future<Item=(R, RawFrame), Error=error::Error> + 'r
-{
-    let header = read_exact(read, [0; FRAME_HEADER_LEN]).map_err(error::Error::from);
-    let frame_buf = header.and_then(move |(read, raw_header)| -> Box<Future<Item=_, Error=_> + 'r> {
-        let header = unpack_header(&raw_header);
-
-        if header.length > max_frame_size {
-            warn!("closing conn because peer sent frame with size: {}, max_frame_size: {}",
-                header.length, max_frame_size);
-            return Box::new(future::err(error::Error::CodeError(ErrorCode::FrameSizeError)));
-        }
-
-        let total_len = FRAME_HEADER_LEN + header.length as usize;
-        let mut full_frame = VecWithPos {
-            vec: Vec::with_capacity(total_len),
-            pos: 0,
-        };
-
-        full_frame.vec.extend(&raw_header);
-        full_frame.vec.resize(total_len, 0);
-        full_frame.pos = FRAME_HEADER_LEN;
-
-        Box::new(read_exact(read, full_frame).map_err(error::Error::from))
-    });
-    frame_buf.map(|(read, frame_buf)| {
-        (read, RawFrame::from(frame_buf.vec))
-    })
-}
-
-struct SyncRead<'r, R : Read + ?Sized + 'r>(&'r mut R);
-
-impl<'r, R : Read + ?Sized + 'r> Read for SyncRead<'r, R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.read(buf)
-    }
-}
-
-impl<'r, R : Read + ?Sized + 'r> AsyncRead for SyncRead<'r, R> {
-}
-
-
+/// Inefficient, but OK because used only in tests
 pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFrame> {
-    Ok(recv_raw_frame(SyncRead(read), max_frame_size).wait()?.1)
-}
-
-/// Recieve HTTP frame from reader.
-pub fn recv_http_frame<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
-    -> impl Future<Item=(R, HttpFrame), Error=Error> + 'r
-{
-    recv_raw_frame(read, max_frame_size).and_then(|(read, raw_frame)| {
-        Ok((read, HttpFrame::from_raw(&raw_frame)?))
+    let mut header_buf = [0; FRAME_HEADER_LEN];
+    read.read_exact(&mut header_buf)?;
+    let header = unpack_header(&header_buf);
+    if header.length > max_frame_size {
+        return Err(error::Error::Other("too large"));
+    }
+    let total_length = FRAME_HEADER_LEN + header.length as usize;
+    let mut raw_frame = Vec::with_capacity(total_length);
+    raw_frame.extend(&header_buf);
+    raw_frame.resize(total_length, 0);
+    read.read_exact(&mut raw_frame[FRAME_HEADER_LEN..])?;
+    Ok(RawFrame {
+        raw_content: Bytes::from(raw_frame),
     })
 }
 
 /// Recieve HTTP frame, joining CONTINUATION frame with preceding HEADER frames.
-pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R, max_frame_size: u32)
-    -> impl Future<Item=(R, HttpFrame), Error=Error> + 'r
+// TODO: move to `framed_read`
+pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: HttpFrameRead<R>, max_frame_size: u32)
+    -> impl Future<Item=(HttpFrameRead<R>, HttpFrame), Error=Error> + 'r
 {
     enum ContinuableFrame {
         Headers(HeadersFrame),
@@ -155,8 +107,8 @@ pub fn recv_http_frame_join_cont<'r, R : AsyncRead + 'r>(read: R, max_frame_size
         }
     }
 
-    loop_fn::<(R, Option<ContinuableFrame>), _, _, _>((read, None), move |(read, header_opt)| {
-        recv_http_frame(read, max_frame_size).and_then(move |(read, frame)| {
+    loop_fn::<(HttpFrameRead<R>, Option<ContinuableFrame>), _, _, _>((read, None), move |(read, header_opt)| {
+        read.recv_http_frame(max_frame_size).and_then(move |(read, frame)| {
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = header_opt {

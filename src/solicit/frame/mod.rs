@@ -91,19 +91,26 @@ impl FrameHeader {
     }
 }
 
+#[inline]
+pub fn unpack_header_from_slice(header: &[u8]) -> FrameHeader {
+    assert_eq!(FRAME_HEADER_LEN, header.len());
+
+    let length: u32 = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) |
+        (header[2] as u32);
+    let frame_type = header[3];
+    let flags = header[4];
+    let stream_id = parse_stream_id(&header[5..]);
+
+    FrameHeader { length, frame_type, flags, stream_id }
+}
+
 /// Deconstructs a `FrameHeader` into its corresponding 4 components,
 /// represented as a 4-tuple: `(length, frame_type, flags, stream_id)`.
 ///
 /// The frame `type` and `flags` components are returned as their original
 /// octet representation, rather than reinterpreted.
 pub fn unpack_header(header: &FrameHeaderBuffer) -> FrameHeader {
-    let length: u32 = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) |
-                       (header[2] as u32);
-    let frame_type = header[3];
-    let flags = header[4];
-    let stream_id = parse_stream_id(&header[5..]);
-
-    FrameHeader { length, frame_type, flags, stream_id }
+    unpack_header_from_slice(header)
 }
 
 /// Constructs a buffer of 9 bytes that represents the given `FrameHeader`.

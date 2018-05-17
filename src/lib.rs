@@ -27,6 +27,7 @@ mod error;
 mod result;
 mod result_or_eof;
 
+mod codec;
 mod client_conf;
 mod client_conn;
 mod client_tls;

@@ -58,6 +58,7 @@ use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
+use codec::http_frame_read::HttpFrameRead;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -957,7 +958,7 @@ pub struct ReadLoopData<I, T>
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
 {
-    pub read: ReadHalf<I>,
+    pub framed_read: HttpFrameRead<ReadHalf<I>>,
     pub inner: RcMut<ConnData<T>>,
 }
 
@@ -991,14 +992,14 @@ impl<I, T> ReadLoopData<I, T>
 {
     /// Recv a frame from the network
     fn recv_http_frame(self) -> impl Future<Item=(Self, HttpFrame), Error=error::Error> {
-        let ReadLoopData { read, inner } = self;
+        let ReadLoopData { framed_read, inner } = self;
 
         let max_frame_size = inner.with(|inner| {
             inner.conn.our_settings_ack.max_frame_size
         });
 
-        recv_http_frame_join_cont(read, max_frame_size)
-            .map(|(read, frame)| (ReadLoopData { read: read, inner: inner }, frame))
+        recv_http_frame_join_cont(framed_read, max_frame_size)
+            .map(|(framed_read, frame)| (ReadLoopData { framed_read, inner }, frame))
     }
 
     fn read_process_frame(self) -> impl Future<Item=Self, Error=error::Error> {

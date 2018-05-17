@@ -49,6 +49,7 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
+use codec::http_frame_read::HttpFrameRead;
 
 
 struct ServerTypes;
@@ -304,8 +305,10 @@ impl ServerConnection {
                 settings,
                 to_write_tx.clone()));
 
-            let run_write = ServerWriteLoop { write: write, inner: inner.clone() }.run(Box::new(to_write_rx));
-            let run_read = ServerReadLoop { read: read, inner: inner.clone() }.run();
+            let framed_read = HttpFrameRead::new(read);
+
+            let run_write = ServerWriteLoop { write, inner: inner.clone() }.run(Box::new(to_write_rx));
+            let run_read = ServerReadLoop { framed_read, inner: inner.clone() }.run();
             let run_command = ServerCommandLoop { inner: inner.clone() }.run(command_rx);
 
             run_write.join(run_read).join(run_command).map(|_| ())
