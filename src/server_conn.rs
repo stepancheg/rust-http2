@@ -200,9 +200,9 @@ impl ConnInner for ServerInner {
     }
 }
 
-type ServerReadLoop<I> = ReadLoopData<I, ServerTypes>;
-type ServerWriteLoop<I> = WriteLoopData<I, ServerTypes>;
-type ServerCommandLoop = CommandLoopData<ServerTypes>;
+type ServerReadLoop<I> = ReadLoop<I, ServerTypes>;
+type ServerWriteLoop<I> = WriteLoop<I, ServerTypes>;
+type ServerCommandLoop = CommandLoop<ServerTypes>;
 
 
 enum ServerToWriteMessage {

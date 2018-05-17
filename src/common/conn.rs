@@ -1,19 +1,9 @@
 use std::collections::HashMap;
 use std::cmp;
 
-use futures::future;
-use futures::future::Future;
-use futures::future::Loop;
-use futures::future::loop_fn;
 use futures::sync::mpsc::UnboundedSender;
 
 use tokio_core::reactor;
-
-use tokio_io::io::ReadHalf;
-use tokio_io::io::WriteHalf;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
-use tokio_io::io as tokio_io;
 
 use exec::Executor;
 use exec::CpuPoolOption;
@@ -36,7 +26,6 @@ use solicit::session::StreamState;
 use solicit::session::StreamStateIdleOrClosed;
 
 use solicit_misc::*;
-use solicit_async::*;
 
 use super::stream::*;
 use super::stream_map::*;
@@ -48,6 +37,7 @@ use super::stream_from_network::StreamFromNetwork;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::window_size;
 use super::stream_queue_sync::stream_queue_sync;
+use super::conn_write_loop::DirectlyToNetworkFrame;
 
 
 pub use resp::Response;
@@ -56,40 +46,9 @@ use rc_mut::*;
 use solicit::MAX_WINDOW_SIZE;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-use codec::http_frame_read::HttpFrameJoinContinuationRead;
+use common::conn_write_loop::CommonToWriteMessage;
 
-
-pub enum DirectlyToNetworkFrame {
-    RstStream(RstStreamFrame),
-    GoAway(GoawayFrame),
-    WindowUpdate(WindowUpdateFrame),
-    Ping(PingFrame),
-    Settings(SettingsFrame),
-}
-
-impl DirectlyToNetworkFrame {
-    fn into_http_frame(self) -> HttpFrame {
-        match self {
-            DirectlyToNetworkFrame::RstStream(f) => f.into(),
-            DirectlyToNetworkFrame::GoAway(f) => f.into(),
-            DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
-            DirectlyToNetworkFrame::Ping(f) => f.into(),
-            DirectlyToNetworkFrame::Settings(f) => f.into(),
-        }
-    }
-}
-
-
-pub enum CommonToWriteMessage {
-    TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
-    IncreaseInWindow(StreamId, u32),
-    Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
-    StreamEnqueue(StreamId, DataOrHeadersWithFlag),
-    StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
-    CloseConn,
-}
 
 pub trait ConnDataSpecific : 'static {
 }
@@ -852,7 +811,7 @@ impl<T : Types> ConnData<T>
         Ok(())
     }
 
-    fn process_http_frame(&mut self, self_rc: RcMut<Self>, frame: HttpFrame) -> result::Result<()> {
+    pub fn process_http_frame(&mut self, self_rc: RcMut<Self>, frame: HttpFrame) -> result::Result<()> {
         // TODO: decode headers
         debug!("received frame: {:?}", frame);
         match HttpFrameClassified::from(frame) {
@@ -926,7 +885,7 @@ impl<T : Types> ConnData<T>
             out_window)));
     }
 
-    fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
+    pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
         if let Some(mut stream) = self.streams.get_mut(stream_id) {
             if let Err(_) = stream.stream().in_window_size.try_increase(increase) {
                 return Err(error::Error::Other("in window overflow"));
@@ -948,207 +907,4 @@ pub trait ConnInner : Sized + 'static {
 
     fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<Self::Types>>>;
-}
-
-
-pub struct ReadLoopData<I, T>
-    where
-        I : AsyncRead + 'static,
-        T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
-{
-    pub framed_read: HttpFrameJoinContinuationRead<ReadHalf<I>>,
-    pub inner: RcMut<ConnData<T>>,
-}
-
-pub struct WriteLoopData<I, T>
-    where
-        I : AsyncWrite + 'static,
-        T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
-{
-    pub write: WriteHalf<I>,
-    pub inner: RcMut<ConnData<T>>,
-}
-
-pub struct CommandLoopData<T>
-    where
-        T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
-{
-    pub inner: RcMut<ConnData<T>>,
-}
-
-
-impl<I, T> ReadLoopData<I, T>
-    where
-        I : AsyncRead + Send + 'static,
-        T : Types,
-        ConnData<T> : ConnInner<Types=T>,
-        HttpStreamCommon<T> : HttpStreamData<Types=T>,
-{
-    /// Recv a frame from the network
-    fn recv_http_frame(self) -> impl Future<Item=(Self, HttpFrame), Error=error::Error> {
-        let ReadLoopData { framed_read, inner } = self;
-
-        let max_frame_size = inner.with(|inner| {
-            inner.conn.our_settings_ack.max_frame_size
-        });
-
-        framed_read.recv_http_frame(max_frame_size)
-            .map(|(framed_read, frame)| (ReadLoopData { framed_read, inner }, frame))
-    }
-
-    fn read_process_frame(self) -> impl Future<Item=Self, Error=error::Error> {
-        self.recv_http_frame()
-            .and_then(move |(lp, frame)| lp.process_http_frame(frame))
-    }
-
-    fn loop_iter(self) -> HttpFuture<Loop<(), Self>> {
-        if self.inner.with(|inner| inner.end_loop()) {
-            return Box::new(future::err(error::Error::Other("GOAWAY")));
-            //return Box::new(future::ok(Loop::Break(())));
-        }
-
-        Box::new(self.read_process_frame().map(Loop::Continue))
-    }
-
-    pub fn run(self) -> HttpFuture<()> {
-        Box::new(loop_fn(self, Self::loop_iter))
-    }
-
-    fn process_http_frame(self, frame: HttpFrame) -> HttpFuture<Self> {
-        let inner_rc = self.inner.clone();
-
-        Box::new(future::result(self.inner.with(move |inner| {
-            inner.process_http_frame(inner_rc, frame)
-        }).map(|()| self)))
-    }
-
-}
-
-impl<I, T> WriteLoopData<I, T>
-    where
-        I : AsyncWrite + Send + 'static,
-        T : Types,
-        ConnData<T> : ConnInner<Types=T>,
-        HttpStreamCommon<T> : HttpStreamData<Types=T>,
-{
-    fn write_all(self, buf: Vec<u8>) -> impl Future<Item=Self, Error=error::Error> {
-        let WriteLoopData { write, inner } = self;
-
-        tokio_io::write_all(write, buf)
-            .map(move |(write, _)| WriteLoopData { write: write, inner: inner })
-            .map_err(error::Error::from)
-    }
-
-    fn write_frame(self, frame: HttpFrame) -> impl Future<Item=Self, Error=error::Error> {
-        debug!("send {:?}", frame);
-
-        self.write_all(frame.serialize_into_vec())
-    }
-
-    fn with_inner<G, R>(&self, f: G) -> R
-        where G : FnOnce(&mut ConnData<T>) -> R
-    {
-        self.inner.with(f)
-    }
-
-    pub fn send_outg_stream(self, stream_id: StreamId)
-        -> impl Future<Item=Self, Error=error::Error>
-    {
-        let bytes = self.with_inner(|inner| {
-            inner.pop_outg_all_for_stream_bytes(stream_id)
-        });
-
-        self.write_all(bytes)
-    }
-
-    fn send_outg_conn(self) -> impl Future<Item=Self, Error=error::Error> {
-        let bytes = self.with_inner(|inner| {
-            inner.pop_outg_all_for_conn_bytes()
-        });
-
-        self.write_all(bytes)
-    }
-
-    fn process_stream_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
-        let stream_id = self.inner.with(move |inner| {
-            let stream = inner.streams.get_mut(stream_id);
-            if let Some(mut stream) = stream {
-                stream.stream().outgoing.close(error_code);
-                Some(stream_id)
-            } else {
-                None
-            }
-        });
-        if let Some(stream_id) = stream_id {
-            Box::new(self.send_outg_stream(stream_id))
-        } else {
-            Box::new(future::finished(self))
-        }
-    }
-
-    fn process_stream_enqueue(self, stream_id: StreamId, part: DataOrHeadersWithFlag) -> HttpFuture<Self> {
-        let stream_id = self.inner.with(move |inner| {
-            let stream = inner.streams.get_mut(stream_id);
-            if let Some(mut stream) = stream {
-                stream.stream().outgoing.push_back_part(part);
-                Some(stream_id)
-            } else {
-                None
-            }
-        });
-        if let Some(stream_id) = stream_id {
-            Box::new(self.send_outg_stream(stream_id))
-        } else {
-            Box::new(future::finished(self))
-        }
-    }
-
-    fn increase_in_window(self, stream_id: StreamId, increase: u32)
-        -> impl Future<Item=Self, Error=error::Error>
-    {
-        let r = self.inner.with(move |inner| {
-            inner.increase_in_window(stream_id, increase)
-        });
-        future::result(r.map(|()| self))
-    }
-
-    pub fn process_common(self, common: CommonToWriteMessage) -> HttpFuture<Self> {
-        match common {
-            CommonToWriteMessage::TryFlushStream(None) => {
-                Box::new(self.send_outg_conn())
-            },
-            CommonToWriteMessage::TryFlushStream(Some(stream_id)) => {
-                Box::new(self.send_outg_stream(stream_id))
-            },
-            CommonToWriteMessage::Frame(frame) => {
-                Box::new(self.write_frame(frame.into_http_frame()))
-            },
-            CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
-                self.process_stream_end(stream_id, error_code)
-            },
-            CommonToWriteMessage::StreamEnqueue(stream_id, part) => {
-                self.process_stream_enqueue(stream_id, part)
-            },
-            CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
-                Box::new(self.increase_in_window(stream_id, increase))
-            },
-            CommonToWriteMessage::CloseConn => {
-                Box::new(future::err(error::Error::Other("close connection")))
-            }
-        }
-    }
-}
-
-impl<T> CommandLoopData<T>
-    where
-        T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
-{
 }

@@ -252,9 +252,9 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     }
 }
 
-type ClientReadLoop<I> = ReadLoopData<I, ClientTypes>;
-type ClientWriteLoop<I> = WriteLoopData<I, ClientTypes>;
-type ClientCommandLoop = CommandLoopData<ClientTypes>;
+type ClientReadLoop<I> = ReadLoop<I, ClientTypes>;
+type ClientWriteLoop<I> = WriteLoop<I, ClientTypes>;
+type ClientCommandLoop = CommandLoop<ClientTypes>;
 
 
 pub trait ClientConnectionCallbacks : 'static {
