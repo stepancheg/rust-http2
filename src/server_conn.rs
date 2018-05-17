@@ -49,7 +49,8 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
-use codec::http_frame_read::HttpFrameJoinContinuationRead;
+use codec::http_framed_read::HttpFramedJoinContinuationRead;
+use codec::http_framed_write::HttpFramedWrite;
 
 
 struct ServerTypes;
@@ -305,9 +306,10 @@ impl ServerConnection {
                 settings,
                 to_write_tx.clone()));
 
-            let framed_read = HttpFrameJoinContinuationRead::new(read);
+            let framed_read = HttpFramedJoinContinuationRead::new(read);
+            let framed_write = HttpFramedWrite::new(write);
 
-            let run_write = ServerWriteLoop { write, inner: inner.clone() }.run(Box::new(to_write_rx));
+            let run_write = ServerWriteLoop { framed_write, inner: inner.clone() }.run(Box::new(to_write_rx));
             let run_read = ServerReadLoop { framed_read, inner: inner.clone() }.run();
             let run_command = ServerCommandLoop { inner: inner.clone() }.run(command_rx);
 

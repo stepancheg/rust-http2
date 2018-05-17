@@ -1,1 +1,2 @@
-pub mod http_frame_read;
+pub mod http_framed_read;
+pub mod http_framed_write;

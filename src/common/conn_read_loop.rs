@@ -9,7 +9,7 @@ use common::conn::ConnData;
 use common::conn::ConnInner;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
-use codec::http_frame_read::HttpFrameJoinContinuationRead;
+use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use rc_mut::RcMut;
 use solicit::connection::HttpFrame;
 use error;
@@ -24,7 +24,7 @@ pub struct ReadLoop<I, T>
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
 {
-    pub framed_read: HttpFrameJoinContinuationRead<ReadHalf<I>>,
+    pub framed_read: HttpFramedJoinContinuationRead<ReadHalf<I>>,
     pub inner: RcMut<ConnData<T>>,
 }
 

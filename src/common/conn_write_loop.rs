@@ -2,7 +2,6 @@ use futures::future::Future;
 use futures::future;
 
 use tokio_io::AsyncWrite;
-use tokio_io::io::write_all;
 use tokio_io::io::WriteHalf;
 
 use common::types::Types;
@@ -14,7 +13,6 @@ use rc_mut::RcMut;
 use solicit::connection::HttpFrame;
 use solicit::StreamId;
 use solicit_async::HttpFuture;
-use solicit::frame::FrameIR;
 
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
@@ -25,6 +23,7 @@ use solicit::frame::GoawayFrame;
 use solicit::frame::WindowUpdateFrame;
 use solicit::frame::PingFrame;
 use solicit::frame::SettingsFrame;
+use codec::http_framed_write::HttpFramedWrite;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -55,7 +54,7 @@ pub struct WriteLoop<I, T>
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
 {
-    pub write: WriteHalf<I>,
+    pub framed_write: HttpFramedWrite<WriteHalf<I>>,
     pub inner: RcMut<ConnData<T>>,
 }
 
@@ -67,17 +66,17 @@ impl<I, T> WriteLoop<I, T>
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     fn write_all(self, buf: Vec<u8>) -> impl Future<Item=Self, Error=error::Error> {
-        let WriteLoop { write, inner } = self;
+        let WriteLoop { framed_write, inner } = self;
 
-        write_all(write, buf)
-            .map(move |(write, _)| WriteLoop { write: write, inner: inner })
-            .map_err(error::Error::from)
+        framed_write.write_all(buf)
+            .map(move |framed_write| WriteLoop { framed_write, inner })
     }
 
     fn write_frame(self, frame: HttpFrame) -> impl Future<Item=Self, Error=error::Error> {
-        debug!("send {:?}", frame);
+        let WriteLoop { framed_write, inner } = self;
 
-        self.write_all(frame.serialize_into_vec())
+        framed_write.write_frame(frame)
+            .map(move |framed_write| WriteLoop { framed_write, inner })
     }
 
     fn with_inner<G, R>(&self, f: G) -> R

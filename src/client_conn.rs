@@ -48,7 +48,8 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
-use codec::http_frame_read::HttpFrameJoinContinuationRead;
+use codec::http_framed_read::HttpFramedJoinContinuationRead;
+use codec::http_framed_write::HttpFramedWrite;
 
 
 struct ClientTypes;
@@ -59,12 +60,12 @@ impl Types for ClientTypes {
     type ConnDataSpecific = ClientConnData;
     type ToWriteMessage = ClientToWriteMessage;
 
-    fn first_id() -> StreamId {
-        1
-    }
-
     fn out_request_or_response() -> RequestOrResponse {
         RequestOrResponse::Request
+    }
+
+    fn first_id() -> StreamId {
+        1
     }
 }
 
@@ -308,9 +309,10 @@ impl ClientConnection {
 
             let inner = RcMut::new(conn_data);
 
-            let framed_read = HttpFrameJoinContinuationRead::new(read);
+            let framed_read = HttpFramedJoinContinuationRead::new(read);
+            let framed_write = HttpFramedWrite::new(write);
 
-            let run_write = ClientWriteLoop { write, inner: inner.clone() }.run(to_write_rx);
+            let run_write = ClientWriteLoop { framed_write, inner: inner.clone() }.run(to_write_rx);
             let run_read = ClientReadLoop { framed_read, inner: inner.clone() }.run();
             let run_command = ClientCommandLoop { inner: inner.clone() }.run(command_rx);
 

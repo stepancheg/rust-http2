@@ -16,7 +16,7 @@ use solicit::StreamId;
 
 
 /// Buffered read for reading HTTP/2 frames.
-pub struct HttpFrameRead<R : AsyncRead> {
+pub struct HttpFramedRead<R : AsyncRead> {
     read: R,
     buf: BytesMut,
 }
@@ -25,10 +25,10 @@ pub struct HttpFrameRead<R : AsyncRead> {
 pub const FRAME_HEADER_LEN: usize = 9;
 
 
-impl<R : AsyncRead> HttpFrameRead<R> {
+impl<R : AsyncRead> HttpFramedRead<R> {
 
-    pub fn new(read: R) -> HttpFrameRead<R> {
-        HttpFrameRead {
+    pub fn new(read: R) -> HttpFramedRead<R> {
+        HttpFramedRead {
             read,
             buf: BytesMut::new(),
         }
@@ -128,16 +128,16 @@ impl Continuable {
     }
 }
 
-pub struct HttpFrameJoinContinuationRead<R : AsyncRead> {
-    framed_read: HttpFrameRead<R>,
+pub struct HttpFramedJoinContinuationRead<R : AsyncRead> {
+    framed_read: HttpFramedRead<R>,
     // TODO: check total size is not exceeded some limit
     header_opt: Option<Continuable>,
 }
 
-impl<R : AsyncRead> HttpFrameJoinContinuationRead<R> {
+impl<R : AsyncRead> HttpFramedJoinContinuationRead<R> {
     pub fn new(read: R) -> Self {
-        HttpFrameJoinContinuationRead {
-            framed_read: HttpFrameRead::new(read),
+        HttpFramedJoinContinuationRead {
+            framed_read: HttpFramedRead::new(read),
             header_opt: None,
         }
     }
