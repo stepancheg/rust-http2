@@ -65,18 +65,17 @@ impl<I, T> WriteLoop<I, T>
         ConnData<T> : ConnInner<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
-    fn write_all(self, buf: Vec<u8>) -> impl Future<Item=Self, Error=error::Error> {
+    fn flush_all(self) -> impl Future<Item=Self, Error=error::Error> {
         let WriteLoop { framed_write, inner } = self;
 
-        framed_write.write_all(buf)
+        framed_write.flush_all()
             .map(move |framed_write| WriteLoop { framed_write, inner })
     }
 
-    fn write_frame(self, frame: HttpFrame) -> impl Future<Item=Self, Error=error::Error> {
-        let WriteLoop { framed_write, inner } = self;
+    fn write_frame(mut self, frame: HttpFrame) -> impl Future<Item=Self, Error=error::Error> {
+        self.framed_write.buffer_frame(frame);
 
-        framed_write.write_frame(frame)
-            .map(move |framed_write| WriteLoop { framed_write, inner })
+        self.flush_all()
     }
 
     fn with_inner<G, R>(&self, f: G) -> R
@@ -85,22 +84,34 @@ impl<I, T> WriteLoop<I, T>
         self.inner.with(f)
     }
 
-    pub fn send_outg_stream(self, stream_id: StreamId)
-        -> impl Future<Item=Self, Error=error::Error>
-    {
+    fn buffer_outg_stream(&mut self, stream_id: StreamId) {
         let bytes = self.with_inner(|inner| {
             inner.pop_outg_all_for_stream_bytes(stream_id)
         });
 
-        self.write_all(bytes)
+        self.framed_write.buffer(bytes.into());
     }
 
-    fn send_outg_conn(self) -> impl Future<Item=Self, Error=error::Error> {
+    fn buffer_outg_conn(&mut self) {
         let bytes = self.with_inner(|inner| {
             inner.pop_outg_all_for_conn_bytes()
         });
 
-        self.write_all(bytes)
+        self.framed_write.buffer(bytes.into());
+    }
+
+    pub fn send_outg_stream(mut self, stream_id: StreamId)
+        -> impl Future<Item=Self, Error=error::Error>
+    {
+        self.buffer_outg_stream(stream_id);
+        self.flush_all()
+    }
+
+    fn send_outg_conn(mut self)
+        -> impl Future<Item=Self, Error=error::Error>
+    {
+        self.buffer_outg_conn();
+        self.flush_all()
     }
 
     fn process_stream_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
