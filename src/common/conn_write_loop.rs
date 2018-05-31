@@ -24,6 +24,7 @@ use solicit::frame::WindowUpdateFrame;
 use solicit::frame::PingFrame;
 use solicit::frame::SettingsFrame;
 use codec::http_framed_write::HttpFramedWrite;
+use result;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -72,12 +73,6 @@ impl<I, T> WriteLoop<I, T>
             .map(move |framed_write| WriteLoop { framed_write, inner })
     }
 
-    fn write_frame(mut self, frame: HttpFrame) -> impl Future<Item=Self, Error=error::Error> {
-        self.framed_write.buffer_frame(frame);
-
-        self.flush_all()
-    }
-
     fn with_inner<G, R>(&self, f: G) -> R
         where G : FnOnce(&mut ConnData<T>) -> R
     {
@@ -107,14 +102,7 @@ impl<I, T> WriteLoop<I, T>
         self.flush_all()
     }
 
-    fn send_outg_conn(mut self)
-        -> impl Future<Item=Self, Error=error::Error>
-    {
-        self.buffer_outg_conn();
-        self.flush_all()
-    }
-
-    fn process_stream_end(self, stream_id: StreamId, error_code: ErrorCode) -> HttpFuture<Self> {
+    fn process_stream_end(&mut self, stream_id: StreamId, error_code: ErrorCode) -> result::Result<()> {
         let stream_id = self.inner.with(move |inner| {
             let stream = inner.streams.get_mut(stream_id);
             if let Some(mut stream) = stream {
@@ -125,13 +113,12 @@ impl<I, T> WriteLoop<I, T>
             }
         });
         if let Some(stream_id) = stream_id {
-            Box::new(self.send_outg_stream(stream_id))
-        } else {
-            Box::new(future::finished(self))
+            self.buffer_outg_stream(stream_id);
         }
+        Ok(())
     }
 
-    fn process_stream_enqueue(self, stream_id: StreamId, part: DataOrHeadersWithFlag) -> HttpFuture<Self> {
+    fn process_stream_enqueue(&mut self, stream_id: StreamId, part: DataOrHeadersWithFlag) -> result::Result<()> {
         let stream_id = self.inner.with(move |inner| {
             let stream = inner.streams.get_mut(stream_id);
             if let Some(mut stream) = stream {
@@ -142,45 +129,51 @@ impl<I, T> WriteLoop<I, T>
             }
         });
         if let Some(stream_id) = stream_id {
-            Box::new(self.send_outg_stream(stream_id))
-        } else {
-            Box::new(future::finished(self))
+            self.buffer_outg_stream(stream_id);
         }
+        Ok(())
     }
 
-    fn increase_in_window(self, stream_id: StreamId, increase: u32)
-        -> impl Future<Item=Self, Error=error::Error>
+    fn increase_in_window(&mut self, stream_id: StreamId, increase: u32)
+        -> result::Result<()>
     {
-        let r = self.inner.with(move |inner| {
+        self.inner.with(move |inner| {
             inner.increase_in_window(stream_id, increase)
-        });
-        future::result(r.map(|()| self))
+        })
     }
 
-    pub fn process_common(self, common: CommonToWriteMessage) -> HttpFuture<Self> {
+    fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
         match common {
             CommonToWriteMessage::TryFlushStream(None) => {
-                Box::new(self.send_outg_conn())
+                self.buffer_outg_conn();
             },
             CommonToWriteMessage::TryFlushStream(Some(stream_id)) => {
-                Box::new(self.send_outg_stream(stream_id))
+                self.buffer_outg_stream(stream_id);
             },
             CommonToWriteMessage::Frame(frame) => {
-                Box::new(self.write_frame(frame.into_http_frame()))
+                self.framed_write.buffer_frame(frame.into_http_frame());
             },
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
-                self.process_stream_end(stream_id, error_code)
+                self.process_stream_end(stream_id, error_code)?;
             },
             CommonToWriteMessage::StreamEnqueue(stream_id, part) => {
-                self.process_stream_enqueue(stream_id, part)
+                self.process_stream_enqueue(stream_id, part)?;
             },
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
-                Box::new(self.increase_in_window(stream_id, increase))
+                self.increase_in_window(stream_id, increase)?;
             },
             CommonToWriteMessage::CloseConn => {
-                Box::new(future::err(error::Error::Other("close connection")))
+                return Err(error::Error::Other("close connection"));
             }
         }
+        Ok(())
+    }
+
+    pub fn process_common(mut self, common: CommonToWriteMessage) -> HttpFuture<Self> {
+        if let Err(e) = self.process_common_message(common) {
+            return Box::new(future::err(e));
+        }
+        Box::new(self.flush_all())
     }
 }
 
