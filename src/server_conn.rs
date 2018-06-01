@@ -49,8 +49,6 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
-use futures::Async;
-use futures::Poll;
 
 
 struct ServerTypes;
@@ -225,10 +223,8 @@ enum ServerCommandMessage {
 }
 
 
-impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
-    fn _loop_handle(&self) -> reactor::Handle {
-        self.inner.with(move |inner: &mut ServerInner| inner.loop_handle.clone())
-    }
+impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ServerWriteLoop<I> {
+    type Types = ServerTypes;
 
     fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
         match message {
@@ -237,29 +233,25 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
             },
         }
     }
+}
 
-    fn poll_write(&mut self)
-        -> Poll<(), error::Error>
-    {
-        loop {
-            if let Async::NotReady = self.poll_flush()? {
-                return Ok(Async::NotReady);
-            }
-
-            let message = match self.requests.poll()? {
-                Async::NotReady => return Ok(Async::NotReady),
-                Async::Ready(Some(message)) => message,
-                Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
-            };
-
-            self.process_message(message)?;
-        }
+impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
+    fn _loop_handle(&self) -> reactor::Handle {
+        self.inner.with(move |inner: &mut ServerInner| inner.loop_handle.clone())
     }
+}
 
-    pub fn run_write(mut self)
-        -> impl Future<Item=(), Error=error::Error>
-    {
-        future::poll_fn(move || self.poll_write())
+impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ServerReadLoop<I> {
+    type Types = ServerTypes;
+}
+
+impl CommandLoopCustom for ServerCommandLoop {
+    type Types = ServerTypes;
+
+    fn process_command_message(&mut self, message: ServerCommandMessage) -> result::Result<()> {
+        match message {
+            ServerCommandMessage::DumpState(sender) => self.process_dump_state(sender),
+        }
     }
 }
 
@@ -270,32 +262,6 @@ impl ServerCommandLoop {
         // ignore send error, client might be already dead
         drop(sender.send(self.inner.with(|inner| inner.dump_state())));
         Ok(())
-    }
-
-    fn process_command_message(&mut self, message: ServerCommandMessage) -> result::Result<()> {
-        match message {
-            ServerCommandMessage::DumpState(sender) => self.process_dump_state(sender),
-        }
-    }
-
-    fn poll_command(&mut self)
-        -> Poll<(), error::Error>
-    {
-        loop {
-            let message = match self.requests.poll()? {
-                Async::NotReady => return Ok(Async::NotReady),
-                Async::Ready(Some(message)) => message,
-                Async::Ready(None) => return Ok(Async::Ready(())),
-            };
-
-            self.process_command_message(message)?;
-        }
-    }
-
-    pub fn run_command(mut self)
-        -> Box<Future<Item=(), Error=error::Error>>
-    {
-        Box::new(future::poll_fn(move || self.poll_command()))
     }
 }
 

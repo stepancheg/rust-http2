@@ -18,7 +18,6 @@ use solicit::DEFAULT_SETTINGS;
 
 use service::Service;
 
-use futures::future;
 use futures::future::Future;
 use futures::stream::Stream;
 use futures::sync::oneshot;
@@ -48,8 +47,6 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
-use futures::Poll;
-use futures::Async;
 
 
 struct ClientTypes;
@@ -202,6 +199,17 @@ enum ClientCommandMessage {
 }
 
 
+impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ClientWriteLoop<I> {
+    type Types = ClientTypes;
+
+    fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
+        match message {
+            ClientToWriteMessage::Start(start) => self.process_start(start),
+            ClientToWriteMessage::Common(common) => self.process_common_message(common),
+        }
+    }
+}
+
 impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     fn process_start(&mut self, start: StartRequestMessage)
         -> result::Result<()>
@@ -236,35 +244,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         // Also opens latch if necessary
         self.buffer_outg_stream(stream_id);
         Ok(())
-    }
-
-    fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
-        match message {
-            ClientToWriteMessage::Start(start) => self.process_start(start),
-            ClientToWriteMessage::Common(common) => self.process_common_message(common),
-        }
-    }
-
-    fn poll_write(&mut self) -> Poll<(), error::Error> {
-        loop {
-            if let Async::NotReady = self.poll_flush()? {
-                return Ok(Async::NotReady);
-            }
-
-            let message = match self.requests.poll()? {
-                Async::NotReady => return Ok(Async::NotReady),
-                Async::Ready(Some(message)) => message,
-                Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
-            };
-
-            self.process_message(message)?;
-        }
-    }
-
-    pub fn run_write(mut self)
-        -> impl Future<Item=(), Error=error::Error>
-    {
-        future::poll_fn(move || self.poll_write())
     }
 }
 
@@ -489,14 +468,12 @@ impl Service for ClientConnection {
     }
 }
 
-impl ClientCommandLoop {
-    fn process_dump_state(&mut self, sender: oneshot::Sender<ConnectionStateSnapshot>)
-        -> result::Result<()>
-    {
-        // ignore send error, client might be already dead
-        drop(sender.send(self.inner.with(|inner| inner.dump_state())));
-        Ok(())
-    }
+impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ClientReadLoop<I> {
+    type Types = ClientTypes;
+}
+
+impl CommandLoopCustom for ClientCommandLoop {
+    type Types = ClientTypes;
 
     fn process_command_message(&mut self, message: ClientCommandMessage) -> result::Result<()> {
         match message {
@@ -508,24 +485,15 @@ impl ClientCommandLoop {
             },
         }
     }
+}
 
-    fn poll_command(&mut self)
-        -> Poll<(), error::Error>
+
+impl ClientCommandLoop {
+    fn process_dump_state(&mut self, sender: oneshot::Sender<ConnectionStateSnapshot>)
+        -> result::Result<()>
     {
-        loop {
-            let message = match self.requests.poll()? {
-                Async::NotReady => return Ok(Async::NotReady),
-                Async::Ready(Some(message)) => message,
-                Async::Ready(None) => return Ok(Async::Ready(())),
-            };
-
-            self.process_command_message(message)?;
-        }
-    }
-
-    fn run_command(mut self)
-        -> Box<Future<Item=(), Error=error::Error>>
-    {
-        Box::new(future::poll_fn(move || self.poll_command()))
+        // ignore send error, client might be already dead
+        drop(sender.send(self.inner.with(|inner| inner.dump_state())));
+        Ok(())
     }
 }

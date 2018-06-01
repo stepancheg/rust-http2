@@ -28,10 +28,15 @@ pub struct ReadLoop<I, T>
     pub inner: RcMut<ConnData<T>>,
 }
 
+pub trait ReadLoopCustom {
+    type Types : Types;
+}
+
 impl<I, T> ReadLoop<I, T>
     where
         I : AsyncRead + Send + 'static,
         T : Types,
+        Self : ReadLoopCustom<Types=T>,
         ConnData<T> : ConnInner<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {

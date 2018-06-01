@@ -23,6 +23,9 @@ use codec::http_framed_write::HttpFramedWrite;
 use result;
 use futures::Poll;
 use solicit_async::HttpFutureStreamSend;
+use futures::Async;
+use futures::Future;
+use futures::future;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -58,10 +61,17 @@ pub struct WriteLoop<I, T>
     pub requests: HttpFutureStreamSend<T::ToWriteMessage>,
 }
 
+pub trait WriteLoopCustom {
+    type Types : Types;
+
+    fn process_message(&mut self, message: <Self::Types as Types>::ToWriteMessage) -> result::Result<()>;
+}
+
 impl<I, T> WriteLoop<I, T>
     where
         I : AsyncWrite + Send + 'static,
         T : Types,
+        Self : WriteLoopCustom<Types=T>,
         ConnData<T> : ConnInner<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
@@ -156,6 +166,28 @@ impl<I, T> WriteLoop<I, T>
             }
         }
         Ok(())
+    }
+
+    fn poll_write(&mut self) -> Poll<(), error::Error> {
+        loop {
+            if let Async::NotReady = self.poll_flush()? {
+                return Ok(Async::NotReady);
+            }
+
+            let message = match self.requests.poll()? {
+                Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(Some(message)) => message,
+                Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
+            };
+
+            self.process_message(message)?;
+        }
+    }
+
+    pub fn run_write(mut self)
+        -> impl Future<Item=(), Error=error::Error>
+    {
+        future::poll_fn(move || self.poll_write())
     }
 }
 
