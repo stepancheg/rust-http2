@@ -22,6 +22,7 @@ use solicit::frame::SettingsFrame;
 use codec::http_framed_write::HttpFramedWrite;
 use result;
 use futures::Poll;
+use solicit_async::HttpFutureStreamSend;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -54,6 +55,7 @@ pub struct WriteLoop<I, T>
 {
     pub framed_write: HttpFramedWrite<WriteHalf<I>>,
     pub inner: RcMut<ConnData<T>>,
+    pub requests: HttpFutureStreamSend<T::ToWriteMessage>
 }
 
 impl<I, T> WriteLoop<I, T>

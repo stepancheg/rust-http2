@@ -237,7 +237,7 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
         }
     }
 
-    fn poll_write(&mut self, requests: &mut HttpFutureStreamSend<ServerToWriteMessage>)
+    fn poll_write(&mut self)
         -> Poll<(), error::Error>
     {
         loop {
@@ -245,7 +245,7 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
                 return Ok(Async::NotReady);
             }
 
-            let message = match requests.poll()? {
+            let message = match self.requests.poll()? {
                 Async::NotReady => return Ok(Async::NotReady),
                 Async::Ready(Some(message)) => message,
                 Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
@@ -255,10 +255,10 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
         }
     }
 
-    pub fn run_write(mut self, mut requests: HttpFutureStreamSend<ServerToWriteMessage>)
+    pub fn run_write(mut self)
         -> impl Future<Item=(), Error=error::Error>
     {
-        future::poll_fn(move || self.poll_write(&mut requests))
+        future::poll_fn(move || self.poll_write())
     }
 }
 
@@ -315,7 +315,7 @@ impl ServerConnection {
         let (to_write_tx, to_write_rx) = unbounded::<ServerToWriteMessage>();
         let (command_tx, command_rx) = unbounded::<ServerCommandMessage>();
 
-        let to_write_rx = to_write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write")));
+        let to_write_rx = Box::new(to_write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
         let command_rx = Box::new(command_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
 
         let settings_frame = SettingsFrame::from_settings(vec![ HttpSetting::EnablePush(false) ]);
@@ -340,7 +340,7 @@ impl ServerConnection {
             let framed_read = HttpFramedJoinContinuationRead::new(read);
             let framed_write = HttpFramedWrite::new(write);
 
-            let run_write = ServerWriteLoop { framed_write, inner: inner.clone() }.run_write(Box::new(to_write_rx));
+            let run_write = ServerWriteLoop { framed_write, inner: inner.clone(), requests: to_write_rx }.run_write();
             let run_read = ServerReadLoop { framed_read, inner: inner.clone() }.run_read();
             let run_command = ServerCommandLoop { inner: inner.clone(), requests: command_rx }.run_command();
 

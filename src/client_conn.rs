@@ -247,13 +247,13 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         }
     }
 
-    fn poll_write(&mut self, requests: &mut HttpFutureStreamSend<ClientToWriteMessage>) -> Poll<(), error::Error> {
+    fn poll_write(&mut self) -> Poll<(), error::Error> {
         loop {
             if let Async::NotReady = self.poll_flush()? {
                 return Ok(Async::NotReady);
             }
 
-            let message = match requests.poll()? {
+            let message = match self.requests.poll()? {
                 Async::NotReady => return Ok(Async::NotReady),
                 Async::Ready(Some(message)) => message,
                 Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
@@ -263,10 +263,10 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         }
     }
 
-    pub fn run_write(mut self, mut requests: HttpFutureStreamSend<ClientToWriteMessage>)
+    pub fn run_write(mut self)
         -> impl Future<Item=(), Error=error::Error>
     {
-        future::poll_fn(move || self.poll_write(&mut requests))
+        future::poll_fn(move || self.poll_write())
     }
 }
 
@@ -329,7 +329,7 @@ impl ClientConnection {
             let framed_read = HttpFramedJoinContinuationRead::new(read);
             let framed_write = HttpFramedWrite::new(write);
 
-            let run_write = ClientWriteLoop { framed_write, inner: inner.clone() }.run_write(to_write_rx);
+            let run_write = ClientWriteLoop { framed_write, inner: inner.clone(), requests: to_write_rx }.run_write();
             let run_read = ClientReadLoop { framed_read, inner: inner.clone() }.run_read();
             let run_command = ClientCommandLoop { inner: inner.clone(), requests: command_rx }.run_command();
 
