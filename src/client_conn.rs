@@ -50,6 +50,8 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use codec::http_framed_write::HttpFramedWrite;
+use futures::Poll;
+use futures::Async;
 
 
 struct ClientTypes;
@@ -202,7 +204,9 @@ enum ClientCommandMessage {
 
 
 impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
-    fn process_start(self, start: StartRequestMessage) -> HttpFuture<Self> {
+    fn process_start(&mut self, start: StartRequestMessage)
+        -> result::Result<()>
+    {
         let StartRequestMessage { headers, body, resp_tx } = start;
 
         let stream_id = self.inner.with(move |inner: &mut ClientInner| {
@@ -231,25 +235,37 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
         });
 
         // Also opens latch if necessary
-        Box::new(self.send_outg_stream(stream_id))
+        self.buffer_outg_stream(stream_id);
+        Ok(())
     }
 
-    fn process_message(self, message: ClientToWriteMessage)
-        -> impl Future<Item=Self, Error=error::Error>
-    {
+    fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
-            ClientToWriteMessage::Common(common) => self.process_common(common),
+            ClientToWriteMessage::Common(common) => self.process_common_message(common),
         }
     }
 
-    pub fn run(self, requests: HttpFutureStreamSend<ClientToWriteMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(Error::from);
-        Box::new(requests
-            .fold(self, move |wl, message: ClientToWriteMessage| {
-                wl.process_message(message)
-            })
-            .map(|_| ()))
+    fn poll_run(&mut self, requests: &mut HttpFutureStreamSend<ClientToWriteMessage>) -> Poll<(), error::Error> {
+        loop {
+            if let Async::NotReady = self.poll_flush()? {
+                return Ok(Async::NotReady);
+            }
+
+            let message = match requests.poll()? {
+                Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(Some(message)) => message,
+                Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
+            };
+
+            self.process_message(message)?;
+        }
+    }
+
+    pub fn run(mut self, mut requests: HttpFutureStreamSend<ClientToWriteMessage>)
+        -> impl Future<Item=(), Error=error::Error>
+    {
+        future::poll_fn(move || self.poll_run(&mut requests))
     }
 }
 

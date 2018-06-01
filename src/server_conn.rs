@@ -51,6 +51,8 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use codec::http_framed_write::HttpFramedWrite;
+use futures::Async;
+use futures::Poll;
 
 
 struct ServerTypes;
@@ -226,21 +228,34 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
         self.inner.with(move |inner: &mut ServerInner| inner.loop_handle.clone())
     }
 
-    fn process_message(self, message: ServerToWriteMessage) -> HttpFuture<Self> {
+    fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
         match message {
             ServerToWriteMessage::Common(common) => {
-                self.process_common(common)
+                self.process_common_message(common)
             },
         }
     }
 
-    fn run(self, requests: HttpFutureStream<ServerToWriteMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(error::Error::from);
-        Box::new(requests
-            .fold(self, move |wl, message: ServerToWriteMessage| {
-                wl.process_message(message)
-            })
-            .map(|_| ()))
+    fn poll_run(&mut self, requests: &mut HttpFutureStreamSend<ServerToWriteMessage>) -> Poll<(), error::Error> {
+        loop {
+            if let Async::NotReady = self.poll_flush()? {
+                return Ok(Async::NotReady);
+            }
+
+            let message = match requests.poll()? {
+                Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(Some(message)) => message,
+                Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
+            };
+
+            self.process_message(message)?;
+        }
+    }
+
+    pub fn run(mut self, mut requests: HttpFutureStreamSend<ServerToWriteMessage>)
+        -> impl Future<Item=(), Error=error::Error>
+    {
+        future::poll_fn(move || self.poll_run(&mut requests))
     }
 }
 

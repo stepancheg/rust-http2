@@ -1,4 +1,3 @@
-use futures::future::Future;
 use tokio_io::AsyncWrite;
 use error;
 
@@ -6,8 +5,8 @@ use solicit::connection::HttpFrame;
 use solicit::frame::FrameIR;
 use bytes::Bytes;
 use futures::Poll;
-use futures::Async;
 use bytes::Buf;
+use futures::Async;
 
 
 // TODO: some tests
@@ -73,29 +72,12 @@ impl<W : AsyncWrite> HttpFramedWrite<W> {
     }
 
     pub fn poll_flush(&mut self) -> Poll<(), error::Error> {
-        Ok(self.write.write_buf(&mut self.buf)?.map(|_: usize| ()))
-    }
-
-    pub fn flush_all(self) -> impl Future<Item=Self, Error=error::Error> {
-        FlushAllFuture { write: Some(self) }
-    }
-}
-
-struct FlushAllFuture<W : AsyncWrite> {
-    write: Option<HttpFramedWrite<W>>,
-}
-
-impl<W : AsyncWrite> Future for FlushAllFuture<W> {
-    type Item = HttpFramedWrite<W>;
-    type Error = error::Error;
-
-    fn poll(&mut self) -> Poll<HttpFramedWrite<W>, error::Error> {
         loop {
-            if self.write.as_mut().unwrap().buf.remaining() == 0 {
-                return Ok(Async::Ready(self.write.take().unwrap()));
+            if self.buf.remaining() == 0 {
+                return Ok(Async::Ready(()));
             }
 
-            if let Async::NotReady = self.write.as_mut().unwrap().poll_flush()? {
+            if let Async::NotReady = self.write.write_buf(&mut self.buf)? {
                 return Ok(Async::NotReady);
             }
         }

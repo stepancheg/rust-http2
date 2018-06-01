@@ -1,6 +1,3 @@
-use futures::future::Future;
-use futures::future;
-
 use tokio_io::AsyncWrite;
 use tokio_io::io::WriteHalf;
 
@@ -12,7 +9,6 @@ use common::stream::HttpStreamData;
 use rc_mut::RcMut;
 use solicit::connection::HttpFrame;
 use solicit::StreamId;
-use solicit_async::HttpFuture;
 
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
@@ -25,6 +21,7 @@ use solicit::frame::PingFrame;
 use solicit::frame::SettingsFrame;
 use codec::http_framed_write::HttpFramedWrite;
 use result;
+use futures::Poll;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -66,11 +63,8 @@ impl<I, T> WriteLoop<I, T>
         ConnData<T> : ConnInner<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
-    fn flush_all(self) -> impl Future<Item=Self, Error=error::Error> {
-        let WriteLoop { framed_write, inner } = self;
-
-        framed_write.flush_all()
-            .map(move |framed_write| WriteLoop { framed_write, inner })
+    pub fn poll_flush(&mut self) -> Poll<(), error::Error> {
+        self.framed_write.poll_flush()
     }
 
     fn with_inner<G, R>(&self, f: G) -> R
@@ -79,7 +73,7 @@ impl<I, T> WriteLoop<I, T>
         self.inner.with(f)
     }
 
-    fn buffer_outg_stream(&mut self, stream_id: StreamId) {
+    pub fn buffer_outg_stream(&mut self, stream_id: StreamId) {
         let bytes = self.with_inner(|inner| {
             inner.pop_outg_all_for_stream_bytes(stream_id)
         });
@@ -93,13 +87,6 @@ impl<I, T> WriteLoop<I, T>
         });
 
         self.framed_write.buffer(bytes.into());
-    }
-
-    pub fn send_outg_stream(mut self, stream_id: StreamId)
-        -> impl Future<Item=Self, Error=error::Error>
-    {
-        self.buffer_outg_stream(stream_id);
-        self.flush_all()
     }
 
     fn process_stream_end(&mut self, stream_id: StreamId, error_code: ErrorCode) -> result::Result<()> {
@@ -142,7 +129,7 @@ impl<I, T> WriteLoop<I, T>
         })
     }
 
-    fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
+    pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
         match common {
             CommonToWriteMessage::TryFlushStream(None) => {
                 self.buffer_outg_conn();
@@ -167,13 +154,6 @@ impl<I, T> WriteLoop<I, T>
             }
         }
         Ok(())
-    }
-
-    pub fn process_common(mut self, common: CommonToWriteMessage) -> HttpFuture<Self> {
-        if let Err(e) = self.process_common_message(common) {
-            return Box::new(future::err(e));
-        }
-        Box::new(self.flush_all())
     }
 }
 

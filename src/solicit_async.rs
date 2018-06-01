@@ -29,9 +29,6 @@ use misc::BsDebug;
 
 
 pub type HttpFuture<T> = Box<Future<Item=T, Error=Error>>;
-// Type is called `HttpFutureStream`, not just `HttpStream`
-// to avoid confusion with streams from HTTP/2 spec
-pub type HttpFutureStream<T> = Box<Stream<Item=T, Error=Error>>;
 
 pub type HttpFutureSend<T> = Box<Future<Item=T, Error=Error> + Send>;
 pub type HttpFutureStreamSend<T> = Box<Stream<Item=T, Error=Error> + Send>;
