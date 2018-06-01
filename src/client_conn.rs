@@ -48,8 +48,6 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
-use codec::http_framed_read::HttpFramedJoinContinuationRead;
-use codec::http_framed_write::HttpFramedWrite;
 use futures::Poll;
 use futures::Async;
 
@@ -270,8 +268,11 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
     }
 }
 
+#[allow(dead_code)]
 type ClientReadLoop<I> = ReadLoop<I, ClientTypes>;
+#[allow(dead_code)]
 type ClientWriteLoop<I> = WriteLoop<I, ClientTypes>;
+#[allow(dead_code)]
 type ClientCommandLoop = CommandLoop<ClientTypes>;
 
 
@@ -324,14 +325,12 @@ impl ClientConnection {
             debug!("handshake done");
             let (read, write) = conn.split();
 
-            let inner = RcMut::new(conn_data);
+            let (write_loop, read_loop, command_loop) = create_loops::<ClientTypes, _, _>(
+                conn_data, write, read, to_write_rx, command_rx);
 
-            let framed_read = HttpFramedJoinContinuationRead::new(read);
-            let framed_write = HttpFramedWrite::new(write);
-
-            let run_write = ClientWriteLoop { framed_write, inner: inner.clone(), requests: to_write_rx }.run_write();
-            let run_read = ClientReadLoop { framed_read, inner: inner.clone() }.run_read();
-            let run_command = ClientCommandLoop { inner: inner.clone(), requests: command_rx }.run_command();
+            let run_write = write_loop.run_write();
+            let run_read = read_loop.run_read();
+            let run_command = command_loop.run_command();
 
             run_write.join(run_read).join(run_command).map(|_| ())
         });

@@ -49,8 +49,6 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
-use codec::http_framed_read::HttpFramedJoinContinuationRead;
-use codec::http_framed_write::HttpFramedWrite;
 use futures::Async;
 use futures::Poll;
 
@@ -204,8 +202,11 @@ impl ConnInner for ServerInner {
     }
 }
 
+#[allow(dead_code)]
 type ServerReadLoop<I> = ReadLoop<I, ServerTypes>;
+#[allow(dead_code)]
 type ServerWriteLoop<I> = WriteLoop<I, ServerTypes>;
+#[allow(dead_code)]
 type ServerCommandLoop = CommandLoop<ServerTypes>;
 
 
@@ -327,7 +328,7 @@ impl ServerConnection {
         let run = handshake.and_then(move |socket| {
             let (read, write) = socket.split();
 
-            let inner = RcMut::new(ConnData::new(
+            let inner = ConnData::new(
                 lh,
                 cpu_pool,
                 ServerConnData {
@@ -335,14 +336,14 @@ impl ServerConnection {
                 },
                 conf.common,
                 settings,
-                to_write_tx.clone()));
+                to_write_tx.clone());
 
-            let framed_read = HttpFramedJoinContinuationRead::new(read);
-            let framed_write = HttpFramedWrite::new(write);
+            let (write_loop, read_loop, command_loop) = create_loops::<ServerTypes, _, _>(
+                inner, write, read, to_write_rx, command_rx);
 
-            let run_write = ServerWriteLoop { framed_write, inner: inner.clone(), requests: to_write_rx }.run_write();
-            let run_read = ServerReadLoop { framed_read, inner: inner.clone() }.run_read();
-            let run_command = ServerCommandLoop { inner: inner.clone(), requests: command_rx }.run_command();
+            let run_write = write_loop.run_write();
+            let run_read = read_loop.run_read();
+            let run_command = command_loop.run_command();
 
             run_write.join(run_read).join(run_command).map(|_| ())
         });

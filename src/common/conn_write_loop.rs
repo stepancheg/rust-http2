@@ -55,7 +55,7 @@ pub struct WriteLoop<I, T>
 {
     pub framed_write: HttpFramedWrite<WriteHalf<I>>,
     pub inner: RcMut<ConnData<T>>,
-    pub requests: HttpFutureStreamSend<T::ToWriteMessage>
+    pub requests: HttpFutureStreamSend<T::ToWriteMessage>,
 }
 
 impl<I, T> WriteLoop<I, T>

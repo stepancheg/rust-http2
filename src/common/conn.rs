@@ -48,6 +48,16 @@ use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use common::conn_write_loop::CommonToWriteMessage;
+use common::conn_write_loop::WriteLoop;
+use common::conn_read_loop::ReadLoop;
+use common::conn_command_loop::CommandLoop;
+use tokio_io::AsyncWrite;
+use tokio_io::AsyncRead;
+use codec::http_framed_read::HttpFramedJoinContinuationRead;
+use codec::http_framed_write::HttpFramedWrite;
+use solicit_async::HttpFutureStreamSend;
+use tokio_io::io::WriteHalf;
+use tokio_io::io::ReadHalf;
 
 
 pub trait ConnDataSpecific : 'static {
@@ -907,4 +917,41 @@ pub trait ConnInner : Sized + 'static {
 
     fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<Self::Types>>>;
+}
+
+
+pub fn create_loops<T, W, R>(
+    conn_data: ConnData<T>,
+    write: WriteHalf<W>,
+    read: ReadHalf<R>,
+    write_requests: HttpFutureStreamSend<T::ToWriteMessage>,
+    command_requests: HttpFutureStreamSend<T::CommandMessage>,
+)
+    -> (WriteLoop<W, T>, ReadLoop<R, T>, CommandLoop<T>)
+    where
+        T : Types,
+        ConnData<T> : ConnInner,
+        HttpStreamCommon<T> : HttpStreamData,
+        W : AsyncWrite,
+        R : AsyncRead,
+{
+    let conn_data = RcMut::new(conn_data);
+
+    let framed_read = HttpFramedJoinContinuationRead::new(read);
+    let framed_write = HttpFramedWrite::new(write);
+
+    let write_loop = WriteLoop {
+        framed_write,
+        inner: conn_data.clone(),
+        requests: write_requests,
+    };
+    let read_loop = ReadLoop {
+        framed_read,
+        inner: conn_data.clone(),
+    };
+    let command_loop = CommandLoop {
+        inner: conn_data.clone(),
+        requests: command_requests,
+    };
+    (write_loop, read_loop, command_loop)
 }
