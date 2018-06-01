@@ -1,4 +1,3 @@
-use tokio_io::AsyncRead;
 use tokio_io::io::ReadHalf;
 
 use common::types::Types;
@@ -14,14 +13,13 @@ use futures::Poll;
 use futures::Async;
 
 
-pub struct ReadLoop<I, T>
+pub struct ReadLoop<T>
     where
-        I : AsyncRead + 'static,
         T : Types,
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
 {
-    pub framed_read: HttpFramedJoinContinuationRead<ReadHalf<I>>,
+    pub framed_read: HttpFramedJoinContinuationRead<ReadHalf<T::Io>>,
     pub inner: RcMut<ConnData<T>>,
 }
 
@@ -29,9 +27,8 @@ pub trait ReadLoopCustom {
     type Types : Types;
 }
 
-impl<I, T> ReadLoop<I, T>
+impl<T> ReadLoop<T>
     where
-        I : AsyncRead + Send + 'static,
         T : Types,
         Self : ReadLoopCustom<Types=T>,
         ConnData<T> : ConnInner<Types=T>,

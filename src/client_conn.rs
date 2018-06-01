@@ -47,12 +47,16 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
+use std::marker;
 
 
-struct ClientTypes;
+struct ClientTypes<I>(marker::PhantomData<I>);
 
-impl Types for ClientTypes {
-    type HttpStreamData = ClientStream;
+impl<I> Types for ClientTypes<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Io = I;
+    type HttpStreamData = ClientStream<I>;
     type HttpStreamSpecific = ClientStreamData;
     type ConnDataSpecific = ClientConnData;
     type ToWriteMessage = ClientToWriteMessage;
@@ -75,10 +79,12 @@ pub struct ClientStreamData {
 impl HttpStreamDataSpecific for ClientStreamData {
 }
 
-type ClientStream = HttpStreamCommon<ClientTypes>;
+type ClientStream<I> = HttpStreamCommon<ClientTypes<I>>;
 
-impl HttpStreamData for ClientStream {
-    type Types = ClientTypes;
+impl<I> HttpStreamData for ClientStream<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ClientTypes<I>;
 }
 
 pub struct ClientConnData {
@@ -88,13 +94,15 @@ pub struct ClientConnData {
 impl ConnDataSpecific for ClientConnData {
 }
 
-type ClientInner = ConnData<ClientTypes>;
+type ClientInner<I> = ConnData<ClientTypes<I>>;
 
-impl ConnInner for ClientInner {
-    type Types = ClientTypes;
+impl<I> ConnInner for ClientInner<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ClientTypes<I>;
 
     fn process_headers(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<Option<HttpStreamRef<ClientTypes>>>
+        -> result::Result<Option<HttpStreamRef<ClientTypes<I>>>>
     {
         let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
         if !existing_stream {
@@ -199,8 +207,10 @@ enum ClientCommandMessage {
 }
 
 
-impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ClientWriteLoop<I> {
-    type Types = ClientTypes;
+impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ClientWriteLoop<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ClientTypes<I>;
 
     fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
         match message {
@@ -210,13 +220,15 @@ impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ClientWriteLoop<I> {
     }
 }
 
-impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
+impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
     fn process_start(&mut self, start: StartRequestMessage)
         -> result::Result<()>
     {
         let StartRequestMessage { headers, body, resp_tx } = start;
 
-        let stream_id = self.inner.with(move |inner: &mut ClientInner| {
+        let stream_id = self.inner.with(move |inner: &mut ClientInner<I>| {
 
             let stream_id = inner.next_local_stream_id();
 
@@ -248,9 +260,9 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 }
 
 #[allow(dead_code)]
-type ClientReadLoop<I> = ReadLoop<I, ClientTypes>;
+type ClientReadLoop<I> = ReadLoop<ClientTypes<I>>;
 #[allow(dead_code)]
-type ClientWriteLoop<I> = WriteLoop<I, ClientTypes>;
+type ClientWriteLoop<I> = WriteLoop<ClientTypes<I>>;
 
 
 pub trait ClientConnectionCallbacks : 'static {
@@ -301,9 +313,8 @@ impl ClientConnection {
 
         let future = handshake.and_then(move |conn| {
             debug!("handshake done");
-            let (read, write) = conn.split();
 
-            create_loops::<ClientTypes, _, _>(conn_data, write, read, to_write_rx)
+            create_loops::<ClientTypes<_>>(conn_data, conn, to_write_rx)
         });
 
         let future = conn_data_error_holder.wrap_future(future);
@@ -460,12 +471,16 @@ impl Service for ClientConnection {
     }
 }
 
-impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ClientReadLoop<I> {
-    type Types = ClientTypes;
+impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ClientReadLoop<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ClientTypes<I>;
 }
 
-impl CommandLoopCustom for ClientInner {
-    type Types = ClientTypes;
+impl<I> CommandLoopCustom for ClientInner<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ClientTypes<I>;
 
     fn process_command_message(&mut self, message: ClientCommandMessage) -> result::Result<()> {
         match message {

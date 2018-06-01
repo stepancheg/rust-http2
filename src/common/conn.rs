@@ -50,13 +50,10 @@ use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use common::conn_write_loop::CommonToWriteMessage;
 use common::conn_write_loop::WriteLoop;
 use common::conn_read_loop::ReadLoop;
-use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use codec::http_framed_write::HttpFramedWrite;
 use solicit_async::HttpFutureStreamSend;
-use tokio_io::io::WriteHalf;
-use tokio_io::io::ReadHalf;
 use common::conn_write_loop::WriteLoopCustom;
 use common::conn_read_loop::ReadLoopCustom;
 use common::conn_command_loop::CommandLoopCustom;
@@ -939,10 +936,9 @@ pub trait ConnInner : Sized + 'static {
 }
 
 
-pub fn create_loops<T, W, R>(
+pub fn create_loops<T>(
     conn_data: ConnData<T>,
-    write: WriteHalf<W>,
-    read: ReadHalf<R>,
+    conn: T::Io,
     write_requests: HttpFutureStreamSend<T::ToWriteMessage>,
 )
 -> impl Future<Item=(), Error=error::Error>
@@ -950,15 +946,15 @@ pub fn create_loops<T, W, R>(
         T : Types,
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
-        W : AsyncWrite + Send + 'static,
-        R : AsyncRead + Send + 'static,
         ConnData<T> : ConnInner<Types=T>,
         ConnData<T> : CommandLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
-        WriteLoop<W, T> : WriteLoopCustom<Types=T>,
-        ReadLoop<R, T> : ReadLoopCustom<Types=T>,
+        WriteLoop<T> : WriteLoopCustom<Types=T>,
+        ReadLoop<T> : ReadLoopCustom<Types=T>,
 {
     let conn_data = RcMut::new(conn_data);
+
+    let (read, write) = conn.split();
 
     let framed_read = HttpFramedJoinContinuationRead::new(read);
     let framed_write = HttpFramedWrite::new(write);
@@ -981,35 +977,31 @@ pub fn create_loops<T, W, R>(
     future::poll_fn(move || all_loops.poll())
 }
 
-struct AllLoops<T, W, R>
+struct AllLoops<T>
     where
         T : Types,
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
-        W : AsyncWrite + Send + 'static,
-        R : AsyncRead + Send + 'static,
         ConnData<T> : ConnInner<Types=T>,
         ConnData<T> : CommandLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
-        WriteLoop<W, T> : WriteLoopCustom<Types=T>,
-        ReadLoop<R, T> : ReadLoopCustom<Types=T>,
+        WriteLoop<T> : WriteLoopCustom<Types=T>,
+        ReadLoop<T> : ReadLoopCustom<Types=T>,
 {
-    write_loop: WriteLoop<W, T>,
-    read_loop: ReadLoop<R, T>,
+    write_loop: WriteLoop<T>,
+    read_loop: ReadLoop<T>,
 }
 
-impl<T, W, R> AllLoops<T, W, R>
+impl<T> AllLoops<T>
     where
         T : Types,
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
-        W : AsyncWrite + Send + 'static,
-        R : AsyncRead + Send + 'static,
         ConnData<T> : ConnInner<Types=T>,
         ConnData<T> : CommandLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
-        WriteLoop<W, T> : WriteLoopCustom<Types=T>,
-        ReadLoop<R, T> : ReadLoopCustom<Types=T>,
+        WriteLoop<T> : WriteLoopCustom<Types=T>,
+        ReadLoop<T> : ReadLoopCustom<Types=T>,
 {
     fn poll(&mut self) -> Poll<(), error::Error> {
         let write_ready = self.write_loop.poll_write()? != Async::NotReady;

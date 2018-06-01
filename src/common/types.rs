@@ -2,9 +2,12 @@ use solicit::StreamId;
 
 use super::*;
 use req_resp::RequestOrResponse;
+use tokio_io::AsyncWrite;
+use tokio_io::AsyncRead;
 
 /// Client or server type names for connection and stream
 pub trait Types : 'static {
+    type Io : AsyncWrite + AsyncRead + Send + 'static;
     type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific : HttpStreamDataSpecific;
     type ConnDataSpecific : ConnDataSpecific;

@@ -1,4 +1,3 @@
-use tokio_io::AsyncWrite;
 use tokio_io::io::WriteHalf;
 
 use common::types::Types;
@@ -47,14 +46,13 @@ impl DirectlyToNetworkFrame {
 }
 
 
-pub struct WriteLoop<I, T>
+pub struct WriteLoop<T>
     where
-        I : AsyncWrite + 'static,
         T : Types,
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
 {
-    pub framed_write: HttpFramedWrite<WriteHalf<I>>,
+    pub framed_write: HttpFramedWrite<WriteHalf<T::Io>>,
     pub inner: RcMut<ConnData<T>>,
     pub requests: HttpFutureStreamSend<T::ToWriteMessage>,
 }
@@ -65,9 +63,8 @@ pub trait WriteLoopCustom {
     fn process_message(&mut self, message: <Self::Types as Types>::ToWriteMessage) -> result::Result<()>;
 }
 
-impl<I, T> WriteLoop<I, T>
+impl<T> WriteLoop<T>
     where
-        I : AsyncWrite + Send + 'static,
         T : Types,
         Self : WriteLoopCustom<Types=T>,
         ConnData<T> : ConnInner<Types=T>,

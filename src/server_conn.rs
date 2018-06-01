@@ -49,12 +49,17 @@ use ErrorCode;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
+use std::marker;
 
 
-struct ServerTypes;
+struct ServerTypes<I>(marker::PhantomData<I>)
+    where I : AsyncWrite + AsyncRead + Send + 'static;
 
-impl Types for ServerTypes {
-    type HttpStreamData = ServerStream;
+impl<I> Types for ServerTypes<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Io = I;
+    type HttpStreamData = ServerStream<I>;
     type HttpStreamSpecific = ServerStreamData;
     type ConnDataSpecific = ServerConnData;
     type ToWriteMessage = ServerToWriteMessage;
@@ -76,9 +81,11 @@ pub struct ServerStreamData {
 impl HttpStreamDataSpecific for ServerStreamData {
 }
 
-type ServerStream = HttpStreamCommon<ServerTypes>;
+type ServerStream<I> = HttpStreamCommon<ServerTypes<I>>;
 
-impl ServerStream {
+impl<I> ServerStream<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
     fn set_headers(&mut self, headers: Headers, last: bool) {
         if let Some(ref mut sender) = self.peer_tx {
             let part = DataOrHeadersWithFlag {
@@ -91,8 +98,10 @@ impl ServerStream {
     }
 }
 
-impl HttpStreamData for ServerStream {
-    type Types = ServerTypes;
+impl<I> HttpStreamData for ServerStream<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ServerTypes<I>;
 }
 
 struct ServerConnData {
@@ -103,13 +112,15 @@ impl ConnDataSpecific for ServerConnData {
 }
 
 #[allow(dead_code)] // https://github.com/rust-lang/rust/issues/42303
-type ServerInner = ConnData<ServerTypes>;
+type ServerInner<I> = ConnData<ServerTypes<I>>;
 
-impl ServerInner {
+impl<I> ServerInner<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
     fn new_stream_from_client(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
-        -> result::Result<HttpStreamRef<ServerTypes>>
+        -> result::Result<HttpStreamRef<ServerTypes<I>>>
     {
-        if ServerTypes::is_init_locally(stream_id) {
+        if ServerTypes::<I>::is_init_locally(stream_id) {
             return Err(error::Error::Other("initiated stream with server id from client"));
         }
 
@@ -153,10 +164,10 @@ impl ServerInner {
             let response = response.into_part_stream();
             let response = response.catch_unwind();
 
-            PumpStreamToWriteLoop::<ServerTypes> {
-                to_write_tx: to_write_tx,
-                stream_id: stream_id,
-                out_window: out_window,
+            PumpStreamToWriteLoop::<ServerTypes<I>> {
+                to_write_tx,
+                stream_id,
+                out_window,
                 stream: response,
             }
         })));
@@ -165,11 +176,13 @@ impl ServerInner {
     }
 }
 
-impl ConnInner for ServerInner {
-    type Types = ServerTypes;
+impl<I> ConnInner for ServerInner<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ServerTypes<I>;
 
     fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<Option<HttpStreamRef<ServerTypes>>>
+        -> result::Result<Option<HttpStreamRef<ServerTypes<I>>>>
     {
         let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
 
@@ -201,9 +214,9 @@ impl ConnInner for ServerInner {
 }
 
 #[allow(dead_code)]
-type ServerReadLoop<I> = ReadLoop<I, ServerTypes>;
+type ServerReadLoop<I> = ReadLoop<ServerTypes<I>>;
 #[allow(dead_code)]
-type ServerWriteLoop<I> = WriteLoop<I, ServerTypes>;
+type ServerWriteLoop<I> = WriteLoop<ServerTypes<I>>;
 
 
 enum ServerToWriteMessage {
@@ -221,8 +234,10 @@ enum ServerCommandMessage {
 }
 
 
-impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ServerWriteLoop<I> {
-    type Types = ServerTypes;
+impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ServerWriteLoop<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ServerTypes<I>;
 
     fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
         match message {
@@ -233,18 +248,24 @@ impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ServerWriteLoop<I> {
     }
 }
 
-impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
+impl<I> ServerWriteLoop<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
     fn _loop_handle(&self) -> reactor::Handle {
-        self.inner.with(move |inner: &mut ServerInner| inner.loop_handle.clone())
+        self.inner.with(move |inner: &mut ServerInner<_>| inner.loop_handle.clone())
     }
 }
 
-impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ServerReadLoop<I> {
-    type Types = ServerTypes;
+impl<I> ReadLoopCustom for ServerReadLoop<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ServerTypes<I>;
 }
 
-impl CommandLoopCustom for ServerInner {
-    type Types = ServerTypes;
+impl<I> CommandLoopCustom for ServerInner<I>
+    where I : AsyncWrite + AsyncRead + Send + 'static
+{
+    type Types = ServerTypes<I>;
 
     fn process_command_message(&mut self, message: ServerCommandMessage) -> result::Result<()> {
         match message {
@@ -278,9 +299,7 @@ impl ServerConnection {
 
         let handshake = socket.and_then(|conn| server_handshake(conn, settings_frame));
 
-        let run = handshake.and_then(move |socket| {
-            let (read, write) = socket.split();
-
+        let run = handshake.and_then(move |conn| {
             let inner = ConnData::new(
                 lh,
                 cpu_pool,
@@ -292,7 +311,7 @@ impl ServerConnection {
                 to_write_tx.clone(),
                 command_rx);
 
-            create_loops::<ServerTypes, _, _>(inner, write, read, to_write_rx)
+            create_loops::<ServerTypes<_>>(inner, conn, to_write_rx)
         });
 
         let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));
