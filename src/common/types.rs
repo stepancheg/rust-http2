@@ -10,6 +10,7 @@ pub trait Types : 'static {
     type ConnDataSpecific : ConnDataSpecific;
     // Message sent to write loop
     type ToWriteMessage : From<CommonToWriteMessage> + Send;
+    type CommandMessage;
 
     fn out_request_or_response() -> RequestOrResponse;
 

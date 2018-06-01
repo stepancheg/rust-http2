@@ -4,6 +4,7 @@ use common::conn::ConnInner;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use rc_mut::RcMut;
+use solicit_async::HttpFutureStreamSend;
 
 
 pub struct CommandLoop<T>
@@ -13,6 +14,7 @@ pub struct CommandLoop<T>
         HttpStreamCommon<T> : HttpStreamData,
 {
     pub inner: RcMut<ConnData<T>>,
+    pub requests: HttpFutureStreamSend<T::CommandMessage>,
 }
 
 impl<T> CommandLoop<T>

@@ -62,13 +62,14 @@ impl Types for ServerTypes {
     type HttpStreamSpecific = ServerStreamData;
     type ConnDataSpecific = ServerConnData;
     type ToWriteMessage = ServerToWriteMessage;
-
-    fn first_id() -> StreamId {
-        2
-    }
+    type CommandMessage = ServerCommandMessage;
 
     fn out_request_or_response() -> RequestOrResponse {
         RequestOrResponse::Response
+    }
+
+    fn first_id() -> StreamId {
+        2
     }
 }
 
@@ -236,7 +237,9 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
         }
     }
 
-    fn poll_run(&mut self, requests: &mut HttpFutureStreamSend<ServerToWriteMessage>) -> Poll<(), error::Error> {
+    fn poll_run(&mut self, requests: &mut HttpFutureStreamSend<ServerToWriteMessage>)
+        -> Poll<(), error::Error>
+    {
         loop {
             if let Async::NotReady = self.poll_flush()? {
                 return Ok(Async::NotReady);
@@ -260,27 +263,40 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
 }
 
 impl ServerCommandLoop {
-    fn process_dump_state(self, sender: oneshot::Sender<ConnectionStateSnapshot>) -> HttpFuture<Self> {
+    fn process_dump_state(&mut self, sender: oneshot::Sender<ConnectionStateSnapshot>)
+        -> result::Result<()>
+    {
         // ignore send error, client might be already dead
         drop(sender.send(self.inner.with(|inner| inner.dump_state())));
-        Box::new(future::finished(self))
+        Ok(())
     }
 
-    fn process_message(self, message: ServerCommandMessage) -> HttpFuture<Self> {
+    fn process_command_message(&mut self, message: ServerCommandMessage) -> result::Result<()> {
         match message {
             ServerCommandMessage::DumpState(sender) => self.process_dump_state(sender),
         }
     }
 
-    pub fn run(self, requests: HttpFutureStreamSend<ServerCommandMessage>) -> HttpFuture<()> {
-        let requests = requests.map_err(error::Error::from);
-        Box::new(requests
-            .fold(self, move |l, message: ServerCommandMessage| {
-                l.process_message(message)
-            })
-            .map(|_| ()))
-    }}
+    fn poll_command(&mut self)
+        -> Poll<(), error::Error>
+    {
+        loop {
+            let message = match self.requests.poll()? {
+                Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(Some(message)) => message,
+                Async::Ready(None) => return Ok(Async::Ready(())),
+            };
 
+            self.process_command_message(message)?;
+        }
+    }
+
+    pub fn run_command(mut self)
+        -> Box<Future<Item=(), Error=error::Error>>
+    {
+        Box::new(future::poll_fn(move || self.poll_command()))
+    }
+}
 
 
 pub struct ServerConnection {
@@ -326,7 +342,7 @@ impl ServerConnection {
 
             let run_write = ServerWriteLoop { framed_write, inner: inner.clone() }.run(Box::new(to_write_rx));
             let run_read = ServerReadLoop { framed_read, inner: inner.clone() }.run();
-            let run_command = ServerCommandLoop { inner: inner.clone() }.run(command_rx);
+            let run_command = ServerCommandLoop { inner: inner.clone(), requests: command_rx }.run_command();
 
             run_write.join(run_read).join(run_command).map(|_| ())
         });
