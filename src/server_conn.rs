@@ -42,7 +42,6 @@ use server_conf::*;
 use socket::StreamItem;
 
 use misc::any_to_string;
-use rc_mut::*;
 use req_resp::RequestOrResponse;
 use headers_place::HeadersPlace;
 use ErrorCode;
@@ -50,6 +49,7 @@ use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
 use std::marker;
+use client_died_error_holder::ClientDiedErrorHolder;
 
 
 struct ServerTypes<I>(marker::PhantomData<I>)
@@ -117,7 +117,7 @@ type ServerInner<I> = ConnData<ServerTypes<I>>;
 impl<I> ServerInner<I>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
-    fn new_stream_from_client(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, headers: Headers)
+    fn new_stream_from_client(&mut self, stream_id: StreamId, headers: Headers)
         -> result::Result<HttpStreamRef<ServerTypes<I>>>
     {
         if ServerTypes::<I>::is_init_locally(stream_id) {
@@ -181,7 +181,7 @@ impl<I> ConnInner for ServerInner<I>
 {
     type Types = ServerTypes<I>;
 
-    fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ServerTypes<I>>>>
     {
         let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
@@ -198,7 +198,7 @@ impl<I> ConnInner for ServerInner<I>
         }
 
         if !existing_stream {
-            return self.new_stream_from_client(self_rc, stream_id, headers).map(Some);
+            return self.new_stream_from_client(stream_id, headers).map(Some);
         }
 
         if end_stream == EndStream::No {
@@ -213,8 +213,6 @@ impl<I> ConnInner for ServerInner<I>
     }
 }
 
-#[allow(dead_code)]
-type ServerReadLoop<I> = ReadLoop<ServerTypes<I>>;
 #[allow(dead_code)]
 type ServerWriteLoop<I> = WriteLoop<ServerTypes<I>>;
 
@@ -256,7 +254,7 @@ impl<I> ServerWriteLoop<I>
     }
 }
 
-impl<I> ReadLoopCustom for ServerReadLoop<I>
+impl<I> ReadLoopCustom for ConnData<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;
@@ -300,6 +298,10 @@ impl ServerConnection {
         let handshake = socket.and_then(|conn| server_handshake(conn, settings_frame));
 
         let run = handshake.and_then(move |conn| {
+            let conn_died_error_holder = ClientDiedErrorHolder::new();
+
+            let (read, write) = conn.split();
+
             let inner = ConnData::new(
                 lh,
                 cpu_pool,
@@ -309,9 +311,11 @@ impl ServerConnection {
                 conf.common,
                 settings,
                 to_write_tx.clone(),
-                command_rx);
+                command_rx,
+                read,
+                conn_died_error_holder);
 
-            create_loops::<ServerTypes<_>>(inner, conn, to_write_rx)
+            create_loops::<ServerTypes<_>>(inner, write, to_write_rx)
         });
 
         let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));

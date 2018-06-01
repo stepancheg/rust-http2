@@ -49,8 +49,6 @@ use client_died_error_holder::ClientConnDiedType;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use common::conn_write_loop::CommonToWriteMessage;
 use common::conn_write_loop::WriteLoop;
-use common::conn_read_loop::ReadLoop;
-use tokio_io::AsyncRead;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use codec::http_framed_write::HttpFramedWrite;
 use solicit_async::HttpFutureStreamSend;
@@ -62,6 +60,8 @@ use futures::Future;
 use futures::Poll;
 use futures::Async;
 use futures::sync::oneshot;
+use tokio_io::io::ReadHalf;
+use tokio_io::io::WriteHalf;
 
 
 pub trait ConnDataSpecific : 'static {
@@ -96,6 +96,8 @@ pub struct ConnData<T : Types> {
     pub ping_sent: Option<u64>,
 
     pub command_rx: HttpFutureStreamSend<T::CommandMessage>,
+
+    pub framed_read: HttpFramedJoinContinuationRead<ReadHalf<T::Io>>,
 }
 
 
@@ -129,7 +131,9 @@ impl<T : Types> ConnData<T>
         _conf: CommonConf,
         sent_settings: HttpSettings,
         to_write_tx: UnboundedSender<T::ToWriteMessage>,
-        command_rx: HttpFutureStreamSend<T::CommandMessage>)
+        command_rx: HttpFutureStreamSend<T::CommandMessage>,
+        read: ReadHalf<T::Io>,
+        conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>)
             -> ConnData<T>
     {
         let mut conn = HttpConnection::new();
@@ -137,22 +141,25 @@ impl<T : Types> ConnData<T>
 
         let pump_window_size = window_size::ConnOutWindowSender::new(conn.out_window_size.0 as u32);
 
+        let framed_read = HttpFramedJoinContinuationRead::new(read);
+
         ConnData {
-            conn_died_error_holder: ClientDiedErrorHolder::new(),
-            specific: specific,
-            to_write_tx: to_write_tx,
-            conn: conn,
+            conn_died_error_holder,
+            specific,
+            to_write_tx,
+            conn,
             streams: StreamMap::new(),
             last_local_stream_id: 0,
             last_peer_stream_id: 0,
             exec: exec.make_executor(&loop_handle),
-            loop_handle: loop_handle,
+            loop_handle,
             goaway_sent: None,
             goaway_received: None,
             ping_sent: None,
             pump_out_window_size: pump_window_size,
             peer_closed_streams: ClosedStreams::new(),
             command_rx,
+            framed_read,
         }
     }
 
@@ -358,7 +365,7 @@ impl<T : Types> ConnData<T>
         Ok(())
     }
 
-    fn process_headers_frame(&mut self, self_rc: RcMut<Self>, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
+    fn process_headers_frame(&mut self, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
         let headers = match self.conn.decoder.decode(&frame.header_fragment()) {
             Err(e) => {
                 warn!("failed to decode headers: {:?}", e);
@@ -372,7 +379,7 @@ impl<T : Types> ConnData<T>
 
         let end_stream = if frame.is_end_of_stream() { EndStream::Yes } else { EndStream::No };
 
-        self.process_headers(self_rc, frame.stream_id, end_stream, headers)
+        self.process_headers(frame.stream_id, end_stream, headers)
     }
 
     fn process_priority_frame(&mut self, frame: PriorityFrame)
@@ -796,7 +803,7 @@ impl<T : Types> ConnData<T>
         }
     }
 
-    fn process_stream_frame(&mut self, self_rc: RcMut<Self>, frame: HttpFrameStream) -> result::Result<()> {
+    fn process_stream_frame(&mut self, frame: HttpFrameStream) -> result::Result<()> {
         let stream_id = frame.get_stream_id();
         let end_of_stream = frame.is_end_of_stream();
 
@@ -814,7 +821,7 @@ impl<T : Types> ConnData<T>
         {
             let stream = match frame {
                 HttpFrameStream::Data(data) => self.process_data_frame(data)?,
-                HttpFrameStream::Headers(headers) => self.process_headers_frame(self_rc, headers)?,
+                HttpFrameStream::Headers(headers) => self.process_headers_frame(headers)?,
                 HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
                 HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
                 HttpFrameStream::PushPromise(_f) => return Err(error::Error::NotImplemented("PUSH_PROMISE")),
@@ -837,12 +844,12 @@ impl<T : Types> ConnData<T>
         Ok(())
     }
 
-    pub fn process_http_frame(&mut self, self_rc: RcMut<Self>, frame: HttpFrame) -> result::Result<()> {
+    pub fn process_http_frame(&mut self, frame: HttpFrame) -> result::Result<()> {
         // TODO: decode headers
         debug!("received frame: {:?}", frame);
         match HttpFrameClassified::from(frame) {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
-            HttpFrameClassified::Stream(f) => self.process_stream_frame(self_rc, f),
+            HttpFrameClassified::Stream(f) => self.process_stream_frame(f),
             HttpFrameClassified::Unknown(_f) => {
                 // 4.1
                 // Implementations MUST ignore and discard any frame that has a type that is unknown.
@@ -931,32 +938,29 @@ impl<T : Types> ConnData<T>
 pub trait ConnInner : Sized + 'static {
     type Types : Types;
 
-    fn process_headers(&mut self, self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<Self::Types>>>;
 }
 
 
 pub fn create_loops<T>(
     conn_data: ConnData<T>,
-    conn: T::Io,
+    write: WriteHalf<T::Io>,
     write_requests: HttpFutureStreamSend<T::ToWriteMessage>,
 )
 -> impl Future<Item=(), Error=error::Error>
     where
         T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
         ConnData<T> : ConnInner<Types=T>,
         ConnData<T> : CommandLoopCustom<Types=T>,
+        ConnData<T> : ReadLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
         WriteLoop<T> : WriteLoopCustom<Types=T>,
-        ReadLoop<T> : ReadLoopCustom<Types=T>,
 {
     let conn_data = RcMut::new(conn_data);
 
-    let (read, write) = conn.split();
-
-    let framed_read = HttpFramedJoinContinuationRead::new(read);
     let framed_write = HttpFramedWrite::new(write);
 
     let write_loop = WriteLoop {
@@ -964,14 +968,9 @@ pub fn create_loops<T>(
         inner: conn_data.clone(),
         requests: write_requests,
     };
-    let read_loop = ReadLoop {
-        framed_read,
-        inner: conn_data.clone(),
-    };
 
     let mut all_loops = AllLoops {
         write_loop,
-        read_loop,
     };
 
     future::poll_fn(move || all_loops.poll())
@@ -980,35 +979,34 @@ pub fn create_loops<T>(
 struct AllLoops<T>
     where
         T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
         ConnData<T> : ConnInner<Types=T>,
         ConnData<T> : CommandLoopCustom<Types=T>,
+        ConnData<T> : ReadLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
         WriteLoop<T> : WriteLoopCustom<Types=T>,
-        ReadLoop<T> : ReadLoopCustom<Types=T>,
 {
     write_loop: WriteLoop<T>,
-    read_loop: ReadLoop<T>,
 }
 
 impl<T> AllLoops<T>
     where
         T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
         ConnData<T> : ConnInner<Types=T>,
         ConnData<T> : CommandLoopCustom<Types=T>,
+        ConnData<T> : ReadLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
         WriteLoop<T> : WriteLoopCustom<Types=T>,
-        ReadLoop<T> : ReadLoopCustom<Types=T>,
 {
     fn poll(&mut self) -> Poll<(), error::Error> {
         let write_ready = self.write_loop.poll_write()? != Async::NotReady;
-        let read_ready = self.read_loop.read_process_frame()? != Async::NotReady;
 
         let mut conn_data: RefMut<ConnData<T>> = self.write_loop.inner.borrow_mut();
 
+        let read_ready = (*conn_data).read_process_frame()? != Async::NotReady;
         let command_ready = (*conn_data).poll_command()? != Async::NotReady;
 
         Ok(if write_ready || read_ready || command_ready {

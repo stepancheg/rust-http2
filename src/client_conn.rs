@@ -40,7 +40,6 @@ use client_conf::*;
 use client_tls::*;
 use socket::*;
 
-use rc_mut::*;
 use req_resp::RequestOrResponse;
 use headers_place::HeadersPlace;
 use ErrorCode;
@@ -48,6 +47,7 @@ use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
 use std::marker;
+use client_died_error_holder::ClientDiedErrorHolder;
 
 
 struct ClientTypes<I>(marker::PhantomData<I>);
@@ -101,7 +101,7 @@ impl<I> ConnInner for ClientInner<I>
 {
     type Types = ClientTypes<I>;
 
-    fn process_headers(&mut self, _self_rc: RcMut<Self>, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
         -> result::Result<Option<HttpStreamRef<ClientTypes<I>>>>
     {
         let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
@@ -260,8 +260,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I>
 }
 
 #[allow(dead_code)]
-type ClientReadLoop<I> = ReadLoop<ClientTypes<I>>;
-#[allow(dead_code)]
 type ClientWriteLoop<I> = WriteLoop<ClientTypes<I>>;
 
 
@@ -298,26 +296,33 @@ impl ClientConnection {
 
         let handshake = connect.and_then(|conn| client_handshake(conn, settings_frame));
 
-        let conn_data = ConnData::new(
-            lh.clone(),
-            CpuPoolOption::SingleThread,
-            ClientConnData {
-                callbacks: Box::new(callbacks),
-            },
-            conf.common,
-            settings,
-            to_write_tx.clone(),
-            command_rx);
+        let conn_died_error_holder = ClientDiedErrorHolder::new();
+        let conn_died_error_holder_copy = conn_died_error_holder.clone();
 
-        let conn_data_error_holder = conn_data.conn_died_error_holder.clone();
+        let lh_copy = lh.clone();
 
         let future = handshake.and_then(move |conn| {
             debug!("handshake done");
 
-            create_loops::<ClientTypes<_>>(conn_data, conn, to_write_rx)
+            let (read, write) = conn.split();
+
+            let conn_data = ConnData::new(
+                lh_copy,
+                CpuPoolOption::SingleThread,
+                ClientConnData {
+                    callbacks: Box::new(callbacks),
+                },
+                conf.common,
+                settings,
+                to_write_tx.clone(),
+                command_rx,
+                read,
+                conn_died_error_holder);
+
+            create_loops::<ClientTypes<_>>(conn_data, write, to_write_rx)
         });
 
-        let future = conn_data_error_holder.wrap_future(future);
+        let future = conn_died_error_holder_copy.wrap_future(future);
 
         lh.spawn(future);
 
@@ -471,7 +476,7 @@ impl Service for ClientConnection {
     }
 }
 
-impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ClientReadLoop<I>
+impl<I> ReadLoopCustom for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
