@@ -176,43 +176,6 @@ impl<I> ServerInner<I>
     }
 }
 
-impl<I> ConnInner for ServerInner<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
-{
-    type Types = ServerTypes<I>;
-
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<Option<HttpStreamRef<ServerTypes<I>>>>
-    {
-        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
-
-        let headers_place = match existing_stream {
-            true => HeadersPlace::Trailing,
-            false => HeadersPlace::Initial,
-        };
-
-        if let Err(e) = headers.validate(RequestOrResponse::Request, headers_place) {
-            warn!("invalid headers: {:?} {:?}", e, headers);
-            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-            return Ok(None);
-        }
-
-        if !existing_stream {
-            return self.new_stream_from_client(stream_id, headers).map(Some);
-        }
-
-        if end_stream == EndStream::No {
-            warn!("more headers without end stream flag");
-            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-            return Ok(None);
-        }
-
-        let mut stream = self.streams.get_mut(stream_id).unwrap();
-        stream.stream().set_headers(headers, end_stream == EndStream::Yes);
-        Ok(Some(stream))
-    }
-}
-
 
 enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
@@ -247,6 +210,37 @@ impl<I> ReadLoopCustom for ConnData<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;
+
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+        -> result::Result<Option<HttpStreamRef<ServerTypes<I>>>>
+    {
+        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
+
+        let headers_place = match existing_stream {
+            true => HeadersPlace::Trailing,
+            false => HeadersPlace::Initial,
+        };
+
+        if let Err(e) = headers.validate(RequestOrResponse::Request, headers_place) {
+            warn!("invalid headers: {:?} {:?}", e, headers);
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
+        if !existing_stream {
+            return self.new_stream_from_client(stream_id, headers).map(Some);
+        }
+
+        if end_stream == EndStream::No {
+            warn!("more headers without end stream flag");
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
+        let mut stream = self.streams.get_mut(stream_id).unwrap();
+        stream.stream().set_headers(headers, end_stream == EndStream::Yes);
+        Ok(Some(stream))
+    }
 }
 
 impl<I> CommandLoopCustom for ServerInner<I>

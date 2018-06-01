@@ -1,6 +1,5 @@
 use common::types::Types;
 use common::conn::ConnData;
-use common::conn::ConnInner;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use solicit::connection::HttpFrame;
@@ -52,7 +51,6 @@ pub trait WriteLoopCustom {
 impl<T> ConnData<T>
     where
         T : Types,
-        Self : ConnInner<Types=T>,
         Self : ReadLoopCustom<Types=T>,
         Self : WriteLoopCustom<Types=T>,
         Self : CommandLoopCustom<Types=T>,

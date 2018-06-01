@@ -123,7 +123,6 @@ impl ConnectionStateSnapshot {
 impl<T> ConnData<T>
     where
         T : Types,
-        Self : ConnInner<Types=T>,
         Self : ReadLoopCustom<Types=T>,
         Self : WriteLoopCustom<Types=T>,
         Self : CommandLoopCustom<Types=T>,
@@ -958,12 +957,4 @@ impl<T> ConnData<T>
     pub fn run(mut self) -> impl Future<Item=(), Error=error::Error> {
         future::poll_fn(move || self.poll())
     }
-}
-
-
-pub trait ConnInner : Sized + 'static {
-    type Types : Types;
-
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<Option<HttpStreamRef<Self::Types>>>;
 }

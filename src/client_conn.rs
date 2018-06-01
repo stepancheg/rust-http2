@@ -95,87 +95,6 @@ impl ConnDataSpecific for ClientConnData {
 }
 
 
-impl<I> ConnInner for ConnData<ClientTypes<I>>
-    where I : AsyncWrite + AsyncRead + Send + 'static
-{
-    type Types = ClientTypes<I>;
-
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<Option<HttpStreamRef<ClientTypes<I>>>>
-    {
-        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
-        if !existing_stream {
-            return Ok(None);
-        }
-
-        let in_message_stage = self.streams.get_mut(stream_id).unwrap()
-            .stream().in_message_stage;
-
-        let headers_place = match in_message_stage {
-            InMessageStage::Initial => HeadersPlace::Initial,
-            InMessageStage::AfterInitialHeaders => HeadersPlace::Trailing,
-            InMessageStage::AfterTrailingHeaders => {
-                return Err(error::Error::InternalError(
-                    format!("closed stream must be handled before")));
-            },
-        };
-
-        if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
-            warn!("invalid headers: {:?}: {:?}", e, headers);
-            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-            return Ok(None);
-        }
-
-        let status_1xx = match headers_place {
-            HeadersPlace::Initial => {
-                let status = headers.status();
-
-                let status_1xx = status >= 100 && status <= 199;
-                if status_1xx && end_stream == EndStream::Yes {
-                    warn!("1xx headers and end stream: {}", stream_id);
-                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-                    return Ok(None);
-                }
-                status_1xx
-            }
-            HeadersPlace::Trailing => {
-                if end_stream == EndStream::No {
-                    warn!("headers without end stream after data: {}", stream_id);
-                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-                    return Ok(None);
-                }
-                false
-            }
-        };
-
-        let mut stream = self.streams.get_mut(stream_id).unwrap();
-        if let Some(in_rem_content_length) = headers.content_length() {
-            stream.stream().in_rem_content_length = Some(in_rem_content_length);
-        }
-
-        stream.stream().in_message_stage = match (headers_place, status_1xx) {
-            (HeadersPlace::Initial, false) => InMessageStage::AfterInitialHeaders,
-            (HeadersPlace::Initial, true) => InMessageStage::Initial,
-            (HeadersPlace::Trailing, _) => InMessageStage::AfterTrailingHeaders,
-        };
-
-        // Ignore 1xx headers
-        if !status_1xx {
-            if let Some(ref mut response_handler) = stream.stream().peer_tx {
-                // TODO: reset stream on error
-                drop(response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
-                    content: DataOrHeaders::Headers(headers),
-                    last: end_stream == EndStream::Yes,
-                })));
-            } else {
-                // TODO: reset stream
-            }
-        }
-
-        Ok(Some(stream))
-    }
-}
-
 pub struct ClientConnection {
     write_tx: UnboundedSender<ClientToWriteMessage>,
     command_tx: UnboundedSender<ClientCommandMessage>,
@@ -477,6 +396,81 @@ impl<I> ReadLoopCustom for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
+
+    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
+        -> result::Result<Option<HttpStreamRef<ClientTypes<I>>>>
+    {
+        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
+        if !existing_stream {
+            return Ok(None);
+        }
+
+        let in_message_stage = self.streams.get_mut(stream_id).unwrap()
+            .stream().in_message_stage;
+
+        let headers_place = match in_message_stage {
+            InMessageStage::Initial => HeadersPlace::Initial,
+            InMessageStage::AfterInitialHeaders => HeadersPlace::Trailing,
+            InMessageStage::AfterTrailingHeaders => {
+                return Err(error::Error::InternalError(
+                    format!("closed stream must be handled before")));
+            },
+        };
+
+        if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
+            warn!("invalid headers: {:?}: {:?}", e, headers);
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            return Ok(None);
+        }
+
+        let status_1xx = match headers_place {
+            HeadersPlace::Initial => {
+                let status = headers.status();
+
+                let status_1xx = status >= 100 && status <= 199;
+                if status_1xx && end_stream == EndStream::Yes {
+                    warn!("1xx headers and end stream: {}", stream_id);
+                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                    return Ok(None);
+                }
+                status_1xx
+            }
+            HeadersPlace::Trailing => {
+                if end_stream == EndStream::No {
+                    warn!("headers without end stream after data: {}", stream_id);
+                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                    return Ok(None);
+                }
+                false
+            }
+        };
+
+        let mut stream = self.streams.get_mut(stream_id).unwrap();
+        if let Some(in_rem_content_length) = headers.content_length() {
+            stream.stream().in_rem_content_length = Some(in_rem_content_length);
+        }
+
+        stream.stream().in_message_stage = match (headers_place, status_1xx) {
+            (HeadersPlace::Initial, false) => InMessageStage::AfterInitialHeaders,
+            (HeadersPlace::Initial, true) => InMessageStage::Initial,
+            (HeadersPlace::Trailing, _) => InMessageStage::AfterTrailingHeaders,
+        };
+
+        // Ignore 1xx headers
+        if !status_1xx {
+            if let Some(ref mut response_handler) = stream.stream().peer_tx {
+                // TODO: reset stream on error
+                drop(response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
+                    content: DataOrHeaders::Headers(headers),
+                    last: end_stream == EndStream::Yes,
+                })));
+            } else {
+                // TODO: reset stream
+            }
+        }
+
+        Ok(Some(stream))
+    }
 }
 
 impl<I> CommandLoopCustom for ConnData<ClientTypes<I>>

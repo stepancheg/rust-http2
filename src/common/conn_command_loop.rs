@@ -1,6 +1,5 @@
 use common::types::Types;
 use common::conn::ConnData;
-use common::conn::ConnInner;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use result;
@@ -20,7 +19,6 @@ impl<T> ConnData<T>
     where
         T : Types,
         Self : CommandLoopCustom<Types=T>,
-        ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     pub fn poll_command(&mut self)
