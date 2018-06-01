@@ -11,8 +11,7 @@ use tokio_io::AsyncWrite;
 
 use futures::stream::Stream;
 use futures::Future;
-
-use server_conf::ServerConf;
+use ServerConf;
 
 
 pub trait ToSocketListener {

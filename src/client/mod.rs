@@ -1,3 +1,7 @@
+pub mod client_conf;
+pub mod client_conn;
+pub mod client_tls;
+
 use std::sync::Arc;
 use std::thread;
 use std::net::SocketAddr;
@@ -31,8 +35,6 @@ use solicit::StreamId;
 
 use solicit_async::*;
 
-use client_conn::*;
-use client_conf::*;
 use common::*;
 use client_died_error_holder::*;
 
@@ -41,7 +43,11 @@ use service::Service;
 use socket::ToClientStream;
 use socket::AnySocketAddr;
 
-pub use client_tls::ClientTlsOption;
+pub use client::client_tls::ClientTlsOption;
+use client::client_conf::ClientConf;
+use client::client_conn::ClientConnection;
+use client::client_conn::StartRequestMessage;
+use client::client_conn::ClientConnectionCallbacks;
 
 
 /// Builder for HTTP/2 client.
@@ -327,9 +333,9 @@ impl Service for Client {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {
-            headers: headers,
-            body: body,
-            resp_tx: resp_tx,
+            headers,
+            body,
+            resp_tx,
         };
 
         if let Err(_) = self.controller_tx.unbounded_send(ControllerCommand::StartRequest(start)) {

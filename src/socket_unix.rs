@@ -18,8 +18,7 @@ use socket::ToTokioListener;
 use socket::ToServerStream;
 use socket::ToClientStream;
 use socket::StreamItem;
-
-use server_conf::ServerConf;
+use ServerConf;
 
 
 impl ToSocketListener for String {

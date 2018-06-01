@@ -37,8 +37,6 @@ use service::Service;
 use data_or_trailers::*;
 use common::*;
 
-use server_tls::*;
-use server_conf::*;
 use socket::StreamItem;
 
 use misc::any_to_string;
@@ -50,6 +48,8 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
 use std::marker;
 use client_died_error_holder::ClientDiedErrorHolder;
+use ServerTlsOption;
+use ServerConf;
 
 
 struct ServerTypes<I>(marker::PhantomData<I>)

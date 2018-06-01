@@ -28,15 +28,9 @@ mod result;
 mod result_or_eof;
 
 mod codec;
-mod client_conf;
-mod client_conn;
-mod client_tls;
 mod service;
 mod service_paths;
 mod client;
-mod server_conf;
-mod server_conn;
-mod server_tls;
 mod socket;
 mod socket_tcp;
 mod server;
@@ -86,14 +80,14 @@ pub use exec::CpuPoolOption;
 
 pub use client::Client;
 pub use client::ClientBuilder;
-pub use client_conf::ClientConf;
-pub use client_tls::ClientTlsOption;
+pub use client::client_conf::ClientConf;
+pub use client::client_tls::ClientTlsOption;
 
 pub use server::Server;
 pub use server::ServerBuilder;
-pub use server_conf::ServerConf;
-pub use server_conf::ServerAlpn;
-pub use server_tls::ServerTlsOption;
+pub use server::server_conf::ServerConf;
+pub use server::server_conf::ServerAlpn;
+pub use server::server_tls::ServerTlsOption;
 
 pub use data_or_trailers::DataOrTrailers;
 pub use data_or_trailers::HttpStreamAfterHeaders;
@@ -109,7 +103,7 @@ pub use result::Result;
 #[doc(hidden)]
 pub mod for_test {
     pub use common::ConnectionStateSnapshot;
-    pub use server_conn::ServerConnection;
+    pub use server::server_conn::ServerConnection;
     pub use solicit_async::recv_raw_frame_sync;
     pub mod solicit {
         pub use ::solicit::*;

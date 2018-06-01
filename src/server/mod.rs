@@ -1,3 +1,7 @@
+pub mod server_conf;
+pub mod server_conn;
+pub mod server_tls;
+
 use std::thread;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -31,18 +35,18 @@ use futures_misc::*;
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
-use super::server_conn::*;
 use super::common::*;
 
 use service::Service;
 use service_paths::ServicePaths;
 
-use server_conf::*;
 use socket::AnySocketAddr;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
 
-pub use server_tls::ServerTlsOption;
+pub use self::server_tls::ServerTlsOption;
+pub use server::server_conf::ServerConf;
+pub use server::server_conn::ServerConnection;
 
 pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,

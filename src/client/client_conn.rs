@@ -36,8 +36,6 @@ use solicit_async::*;
 
 use common::*;
 use data_or_trailers::*;
-use client_conf::*;
-use client_tls::*;
 use socket::*;
 
 use req_resp::RequestOrResponse;
@@ -48,6 +46,8 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result_or_eof::ResultOrEof;
 use std::marker;
 use client_died_error_holder::ClientDiedErrorHolder;
+use ClientTlsOption;
+use ClientConf;
 
 
 struct ClientTypes<I>(marker::PhantomData<I>);

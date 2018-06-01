@@ -9,8 +9,6 @@ use tokio_core::net::TcpStream;
 use futures::stream::Stream;
 use futures::Future;
 
-use server_conf::ServerConf;
-
 use net2;
 
 use socket::AnySocketAddr;
@@ -19,6 +17,7 @@ use socket::ToTokioListener;
 use socket::ToServerStream;
 use socket::ToClientStream;
 use socket::StreamItem;
+use ServerConf;
 
 
 impl ToSocketListener for SocketAddr {
