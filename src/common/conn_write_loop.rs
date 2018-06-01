@@ -24,8 +24,6 @@ use result;
 use futures::Poll;
 use solicit_async::HttpFutureStreamSend;
 use futures::Async;
-use futures::Future;
-use futures::future;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -168,7 +166,7 @@ impl<I, T> WriteLoop<I, T>
         Ok(())
     }
 
-    fn poll_write(&mut self) -> Poll<(), error::Error> {
+    pub fn poll_write(&mut self) -> Poll<(), error::Error> {
         loop {
             if let Async::NotReady = self.poll_flush()? {
                 return Ok(Async::NotReady);
@@ -182,12 +180,6 @@ impl<I, T> WriteLoop<I, T>
 
             self.process_message(message)?;
         }
-    }
-
-    pub fn run_write(mut self)
-        -> impl Future<Item=(), Error=error::Error>
-    {
-        future::poll_fn(move || self.poll_write())
     }
 }
 

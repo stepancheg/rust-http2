@@ -9,8 +9,6 @@ use result;
 use futures::Poll;
 use error;
 use futures::Async;
-use futures::Future;
-use futures::future;
 
 
 pub struct CommandLoop<T>
@@ -37,7 +35,7 @@ impl<T> CommandLoop<T>
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
 {
-    fn poll_command(&mut self)
+    pub fn poll_command(&mut self)
         -> Poll<(), error::Error>
     {
         loop {
@@ -49,11 +47,5 @@ impl<T> CommandLoop<T>
 
             self.process_command_message(message)?;
         }
-    }
-
-    pub fn run_command(mut self)
-        -> Box<Future<Item=(), Error=error::Error>>
-    {
-        Box::new(future::poll_fn(move || self.poll_command()))
     }
 }

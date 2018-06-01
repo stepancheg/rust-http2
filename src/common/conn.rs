@@ -61,7 +61,10 @@ use tokio_io::io::ReadHalf;
 use common::conn_write_loop::WriteLoopCustom;
 use common::conn_read_loop::ReadLoopCustom;
 use common::conn_command_loop::CommandLoopCustom;
+use futures::future;
 use futures::Future;
+use futures::Poll;
+use futures::Async;
 
 
 pub trait ConnDataSpecific : 'static {
@@ -963,9 +966,54 @@ pub fn create_loops<T, W, R>(
         requests: command_requests,
     };
 
-    let run_write = write_loop.run_write();
-    let run_read = read_loop.run_read();
-    let run_command = command_loop.run_command();
+    let mut all_loops = AllLoops {
+        write_loop,
+        read_loop,
+        command_loop,
+    };
 
-    run_write.join(run_read).join(run_command).map(|_| ())
+    future::poll_fn(move || all_loops.poll())
+}
+
+struct AllLoops<T, W, R>
+    where
+        T : Types,
+        ConnData<T> : ConnInner,
+        HttpStreamCommon<T> : HttpStreamData,
+        W : AsyncWrite + Send + 'static,
+        R : AsyncRead + Send + 'static,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
+        WriteLoop<W, T> : WriteLoopCustom<Types=T>,
+        ReadLoop<R, T> : ReadLoopCustom<Types=T>,
+        CommandLoop<T> : CommandLoopCustom<Types=T>,
+{
+    write_loop: WriteLoop<W, T>,
+    read_loop: ReadLoop<R, T>,
+    command_loop: CommandLoop<T>,
+}
+
+impl<T, W, R> AllLoops<T, W, R>
+    where
+        T : Types,
+        ConnData<T> : ConnInner,
+        HttpStreamCommon<T> : HttpStreamData,
+        W : AsyncWrite + Send + 'static,
+        R : AsyncRead + Send + 'static,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
+        WriteLoop<W, T> : WriteLoopCustom<Types=T>,
+        ReadLoop<R, T> : ReadLoopCustom<Types=T>,
+        CommandLoop<T> : CommandLoopCustom<Types=T>,
+{
+    fn poll(&mut self) -> Poll<(), error::Error> {
+        let write_ready = self.write_loop.poll_write()? != Async::NotReady;
+        let read_ready = self.read_loop.read_process_frame()? != Async::NotReady;
+        let command_ready = self.command_loop.poll_command()? != Async::NotReady;
+        Ok(if write_ready || read_ready || command_ready {
+            Async::Ready(())
+        } else {
+            Async::NotReady
+        })
+    }
 }

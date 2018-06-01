@@ -1,6 +1,3 @@
-use futures::future;
-use futures::future::Future;
-
 use tokio_io::AsyncRead;
 use tokio_io::io::ReadHalf;
 
@@ -50,7 +47,7 @@ impl<I, T> ReadLoop<I, T>
     }
 
     /// Loop forever, never return `Ready`
-    fn read_process_frame(&mut self) -> Poll<(), error::Error> {
+    pub fn read_process_frame(&mut self) -> Poll<(), error::Error> {
         loop {
             if self.inner.with(|inner| inner.end_loop()) {
                 return Err(error::Error::Other("GOAWAY"));
@@ -72,9 +69,4 @@ impl<I, T> ReadLoop<I, T>
             inner.process_http_frame(inner_rc, frame)
         })
     }
-
-    pub fn run_read(mut self) -> impl Future<Item=(), Error=error::Error> {
-        future::poll_fn(move || self.read_process_frame())
-    }
-
 }
