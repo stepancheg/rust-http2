@@ -50,7 +50,6 @@ use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use common::conn_write_loop::CommonToWriteMessage;
 use common::conn_write_loop::WriteLoop;
 use common::conn_read_loop::ReadLoop;
-use common::conn_command_loop::CommandLoop;
 use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
@@ -65,6 +64,7 @@ use futures::future;
 use futures::Future;
 use futures::Poll;
 use futures::Async;
+use futures::sync::oneshot;
 
 
 pub trait ConnDataSpecific : 'static {
@@ -97,6 +97,8 @@ pub struct ConnData<T : Types> {
     pub goaway_sent: Option<GoawayFrame>,
     pub goaway_received: Option<GoawayFrame>,
     pub ping_sent: Option<u64>,
+
+    pub command_rx: HttpFutureStreamSend<T::CommandMessage>,
 }
 
 
@@ -129,7 +131,8 @@ impl<T : Types> ConnData<T>
         specific: T::ConnDataSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
-        to_write_tx: UnboundedSender<T::ToWriteMessage>)
+        to_write_tx: UnboundedSender<T::ToWriteMessage>,
+        command_rx: HttpFutureStreamSend<T::CommandMessage>)
             -> ConnData<T>
     {
         let mut conn = HttpConnection::new();
@@ -152,6 +155,7 @@ impl<T : Types> ConnData<T>
             ping_sent: None,
             pump_out_window_size: pump_window_size,
             peer_closed_streams: ClosedStreams::new(),
+            command_rx,
         }
     }
 
@@ -347,6 +351,14 @@ impl<T : Types> ConnData<T>
             out_window_size: self.conn.out_window_size.0,
             streams: self.streams.snapshot(),
         }
+    }
+
+    pub fn process_dump_state(&mut self, sender: oneshot::Sender<ConnectionStateSnapshot>)
+        -> result::Result<()>
+    {
+        // ignore send error, client might be already dead
+        drop(sender.send(self.dump_state()));
+        Ok(())
     }
 
     fn process_headers_frame(&mut self, self_rc: RcMut<Self>, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
@@ -932,7 +944,6 @@ pub fn create_loops<T, W, R>(
     write: WriteHalf<W>,
     read: ReadHalf<R>,
     write_requests: HttpFutureStreamSend<T::ToWriteMessage>,
-    command_requests: HttpFutureStreamSend<T::CommandMessage>,
 )
 -> impl Future<Item=(), Error=error::Error>
     where
@@ -942,10 +953,10 @@ pub fn create_loops<T, W, R>(
         W : AsyncWrite + Send + 'static,
         R : AsyncRead + Send + 'static,
         ConnData<T> : ConnInner<Types=T>,
+        ConnData<T> : CommandLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
         WriteLoop<W, T> : WriteLoopCustom<Types=T>,
         ReadLoop<R, T> : ReadLoopCustom<Types=T>,
-        CommandLoop<T> : CommandLoopCustom<Types=T>,
 {
     let conn_data = RcMut::new(conn_data);
 
@@ -961,15 +972,10 @@ pub fn create_loops<T, W, R>(
         framed_read,
         inner: conn_data.clone(),
     };
-    let command_loop = CommandLoop {
-        inner: conn_data.clone(),
-        requests: command_requests,
-    };
 
     let mut all_loops = AllLoops {
         write_loop,
         read_loop,
-        command_loop,
     };
 
     future::poll_fn(move || all_loops.poll())
@@ -983,14 +989,13 @@ struct AllLoops<T, W, R>
         W : AsyncWrite + Send + 'static,
         R : AsyncRead + Send + 'static,
         ConnData<T> : ConnInner<Types=T>,
+        ConnData<T> : CommandLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
         WriteLoop<W, T> : WriteLoopCustom<Types=T>,
         ReadLoop<R, T> : ReadLoopCustom<Types=T>,
-        CommandLoop<T> : CommandLoopCustom<Types=T>,
 {
     write_loop: WriteLoop<W, T>,
     read_loop: ReadLoop<R, T>,
-    command_loop: CommandLoop<T>,
 }
 
 impl<T, W, R> AllLoops<T, W, R>
@@ -1001,15 +1006,19 @@ impl<T, W, R> AllLoops<T, W, R>
         W : AsyncWrite + Send + 'static,
         R : AsyncRead + Send + 'static,
         ConnData<T> : ConnInner<Types=T>,
+        ConnData<T> : CommandLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
         WriteLoop<W, T> : WriteLoopCustom<Types=T>,
         ReadLoop<R, T> : ReadLoopCustom<Types=T>,
-        CommandLoop<T> : CommandLoopCustom<Types=T>,
 {
     fn poll(&mut self) -> Poll<(), error::Error> {
         let write_ready = self.write_loop.poll_write()? != Async::NotReady;
         let read_ready = self.read_loop.read_process_frame()? != Async::NotReady;
-        let command_ready = self.command_loop.poll_command()? != Async::NotReady;
+
+        let mut conn_data: RefMut<ConnData<T>> = self.write_loop.inner.borrow_mut();
+
+        let command_ready = (*conn_data).poll_command()? != Async::NotReady;
+
         Ok(if write_ready || read_ready || command_ready {
             Async::Ready(())
         } else {

@@ -251,8 +251,6 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I> {
 type ClientReadLoop<I> = ReadLoop<I, ClientTypes>;
 #[allow(dead_code)]
 type ClientWriteLoop<I> = WriteLoop<I, ClientTypes>;
-#[allow(dead_code)]
-type ClientCommandLoop = CommandLoop<ClientTypes>;
 
 
 pub trait ClientConnectionCallbacks : 'static {
@@ -296,7 +294,8 @@ impl ClientConnection {
             },
             conf.common,
             settings,
-            to_write_tx.clone());
+            to_write_tx.clone(),
+            command_rx);
 
         let conn_data_error_holder = conn_data.conn_died_error_holder.clone();
 
@@ -304,7 +303,7 @@ impl ClientConnection {
             debug!("handshake done");
             let (read, write) = conn.split();
 
-            create_loops::<ClientTypes, _, _>(conn_data, write, read, to_write_rx, command_rx)
+            create_loops::<ClientTypes, _, _>(conn_data, write, read, to_write_rx)
         });
 
         let future = conn_data_error_holder.wrap_future(future);
@@ -465,7 +464,7 @@ impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ClientReadLoop<I> {
     type Types = ClientTypes;
 }
 
-impl CommandLoopCustom for ClientCommandLoop {
+impl CommandLoopCustom for ClientInner {
     type Types = ClientTypes;
 
     fn process_command_message(&mut self, message: ClientCommandMessage) -> result::Result<()> {
@@ -477,16 +476,5 @@ impl CommandLoopCustom for ClientCommandLoop {
                 Ok(())
             },
         }
-    }
-}
-
-
-impl ClientCommandLoop {
-    fn process_dump_state(&mut self, sender: oneshot::Sender<ConnectionStateSnapshot>)
-        -> result::Result<()>
-    {
-        // ignore send error, client might be already dead
-        drop(sender.send(self.inner.with(|inner| inner.dump_state())));
-        Ok(())
     }
 }

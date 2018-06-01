@@ -3,23 +3,11 @@ use common::conn::ConnData;
 use common::conn::ConnInner;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
-use rc_mut::RcMut;
-use solicit_async::HttpFutureStreamSend;
 use result;
 use futures::Poll;
 use error;
 use futures::Async;
 
-
-pub struct CommandLoop<T>
-    where
-        T : Types,
-        ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
-{
-    pub inner: RcMut<ConnData<T>>,
-    pub requests: HttpFutureStreamSend<T::CommandMessage>,
-}
 
 pub trait CommandLoopCustom {
     type Types : Types;
@@ -28,18 +16,18 @@ pub trait CommandLoopCustom {
         -> result::Result<()>;
 }
 
-impl<T> CommandLoop<T>
+impl<T> ConnData<T>
     where
         T : Types,
         Self : CommandLoopCustom<Types=T>,
         ConnData<T> : ConnInner,
-        HttpStreamCommon<T> : HttpStreamData,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     pub fn poll_command(&mut self)
         -> Poll<(), error::Error>
     {
         loop {
-            let message = match self.requests.poll()? {
+            let message = match self.command_rx.poll()? {
                 Async::NotReady => return Ok(Async::NotReady),
                 Async::Ready(Some(message)) => message,
                 Async::Ready(None) => return Ok(Async::Ready(())),

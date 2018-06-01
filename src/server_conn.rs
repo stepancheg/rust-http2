@@ -204,8 +204,6 @@ impl ConnInner for ServerInner {
 type ServerReadLoop<I> = ReadLoop<I, ServerTypes>;
 #[allow(dead_code)]
 type ServerWriteLoop<I> = WriteLoop<I, ServerTypes>;
-#[allow(dead_code)]
-type ServerCommandLoop = CommandLoop<ServerTypes>;
 
 
 enum ServerToWriteMessage {
@@ -245,7 +243,7 @@ impl<I : AsyncRead + Send + 'static> ReadLoopCustom for ServerReadLoop<I> {
     type Types = ServerTypes;
 }
 
-impl CommandLoopCustom for ServerCommandLoop {
+impl CommandLoopCustom for ServerInner {
     type Types = ServerTypes;
 
     fn process_command_message(&mut self, message: ServerCommandMessage) -> result::Result<()> {
@@ -254,17 +252,6 @@ impl CommandLoopCustom for ServerCommandLoop {
         }
     }
 }
-
-impl ServerCommandLoop {
-    fn process_dump_state(&mut self, sender: oneshot::Sender<ConnectionStateSnapshot>)
-        -> result::Result<()>
-    {
-        // ignore send error, client might be already dead
-        drop(sender.send(self.inner.with(|inner| inner.dump_state())));
-        Ok(())
-    }
-}
-
 
 pub struct ServerConnection {
     command_tx: UnboundedSender<ServerCommandMessage>,
@@ -302,9 +289,10 @@ impl ServerConnection {
                 },
                 conf.common,
                 settings,
-                to_write_tx.clone());
+                to_write_tx.clone(),
+                command_rx);
 
-            create_loops::<ServerTypes, _, _>(inner, write, read, to_write_rx, command_rx)
+            create_loops::<ServerTypes, _, _>(inner, write, read, to_write_rx)
         });
 
         let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));
