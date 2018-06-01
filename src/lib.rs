@@ -68,7 +68,6 @@ mod solicit_async;
 mod solicit_misc;
 
 mod misc;
-mod rc_mut;
 
 mod resp;
 

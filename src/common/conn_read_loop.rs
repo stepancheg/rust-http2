@@ -7,6 +7,8 @@ use solicit::connection::HttpFrame;
 use error;
 use futures::Poll;
 use futures::Async;
+use common::conn_write_loop::WriteLoopCustom;
+use common::conn_command_loop::CommandLoopCustom;
 
 
 pub trait ReadLoopCustom {
@@ -16,8 +18,10 @@ pub trait ReadLoopCustom {
 impl<T> ConnData<T>
     where
         T : Types,
-        Self : ReadLoopCustom<Types=T>,
         Self : ConnInner<Types=T>,
+        Self : ReadLoopCustom<Types=T>,
+        Self : WriteLoopCustom<Types=T>,
+        Self : CommandLoopCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     /// Recv a frame from the network

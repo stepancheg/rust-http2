@@ -213,9 +213,6 @@ impl<I> ConnInner for ServerInner<I>
     }
 }
 
-#[allow(dead_code)]
-type ServerWriteLoop<I> = WriteLoop<ServerTypes<I>>;
-
 
 enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
@@ -232,7 +229,7 @@ enum ServerCommandMessage {
 }
 
 
-impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ServerWriteLoop<I>
+impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ConnData<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;
@@ -243,14 +240,6 @@ impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ServerWriteLoop<I>
                 self.process_common_message(common)
             },
         }
-    }
-}
-
-impl<I> ServerWriteLoop<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
-{
-    fn _loop_handle(&self) -> reactor::Handle {
-        self.inner.with(move |inner: &mut ServerInner<_>| inner.loop_handle.clone())
     }
 }
 
@@ -302,7 +291,7 @@ impl ServerConnection {
 
             let (read, write) = conn.split();
 
-            let inner = ConnData::new(
+            let conn_data = ConnData::<ServerTypes<I>>::new(
                 lh,
                 cpu_pool,
                 ServerConnData {
@@ -312,10 +301,12 @@ impl ServerConnection {
                 settings,
                 to_write_tx.clone(),
                 command_rx,
+                to_write_rx,
                 read,
+                write,
                 conn_died_error_holder);
 
-            create_loops::<ServerTypes<_>>(inner, write, to_write_rx)
+            conn_data.run()
         });
 
         let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));

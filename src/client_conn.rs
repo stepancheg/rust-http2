@@ -94,9 +94,8 @@ pub struct ClientConnData {
 impl ConnDataSpecific for ClientConnData {
 }
 
-type ClientInner<I> = ConnData<ClientTypes<I>>;
 
-impl<I> ConnInner for ClientInner<I>
+impl<I> ConnInner for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
@@ -207,7 +206,7 @@ enum ClientCommandMessage {
 }
 
 
-impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ClientWriteLoop<I>
+impl<I> WriteLoopCustom for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
@@ -220,7 +219,7 @@ impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ClientWriteLoop<I>
     }
 }
 
-impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I>
+impl<I> ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     fn process_start(&mut self, start: StartRequestMessage)
@@ -228,12 +227,12 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I>
     {
         let StartRequestMessage { headers, body, resp_tx } = start;
 
-        let stream_id = self.inner.with(move |inner: &mut ClientInner<I>| {
+        let stream_id = {
 
-            let stream_id = inner.next_local_stream_id();
+            let stream_id = self.next_local_stream_id();
 
             let out_window = {
-                let (mut http_stream, resp_stream, out_window) = inner.new_stream_data(
+                let (mut http_stream, resp_stream, out_window) = self.new_stream_data(
                     stream_id,
                     None,
                     InMessageStage::Initial,
@@ -248,19 +247,16 @@ impl<I : AsyncWrite + Send + 'static> ClientWriteLoop<I>
                 out_window
             };
 
-            inner.pump_stream_to_write_loop(stream_id, body.into_part_stream(), out_window);
+            self.pump_stream_to_write_loop(stream_id, body.into_part_stream(), out_window);
 
             stream_id
-        });
+        };
 
         // Also opens latch if necessary
         self.buffer_outg_stream(stream_id);
         Ok(())
     }
 }
-
-#[allow(dead_code)]
-type ClientWriteLoop<I> = WriteLoop<ClientTypes<I>>;
 
 
 pub trait ClientConnectionCallbacks : 'static {
@@ -306,7 +302,7 @@ impl ClientConnection {
 
             let (read, write) = conn.split();
 
-            let conn_data = ConnData::new(
+            let conn_data = ConnData::<ClientTypes<_>>::new(
                 lh_copy,
                 CpuPoolOption::SingleThread,
                 ClientConnData {
@@ -316,10 +312,11 @@ impl ClientConnection {
                 settings,
                 to_write_tx.clone(),
                 command_rx,
+                to_write_rx,
                 read,
+                write,
                 conn_died_error_holder);
-
-            create_loops::<ClientTypes<_>>(conn_data, write, to_write_rx)
+            conn_data.run()
         });
 
         let future = conn_died_error_holder_copy.wrap_future(future);
@@ -482,7 +479,7 @@ impl<I> ReadLoopCustom for ConnData<ClientTypes<I>>
     type Types = ClientTypes<I>;
 }
 
-impl<I> CommandLoopCustom for ClientInner<I>
+impl<I> CommandLoopCustom for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
