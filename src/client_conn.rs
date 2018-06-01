@@ -304,14 +304,7 @@ impl ClientConnection {
             debug!("handshake done");
             let (read, write) = conn.split();
 
-            let (write_loop, read_loop, command_loop) = create_loops::<ClientTypes, _, _>(
-                conn_data, write, read, to_write_rx, command_rx);
-
-            let run_write = write_loop.run_write();
-            let run_read = read_loop.run_read();
-            let run_command = command_loop.run_command();
-
-            run_write.join(run_read).join(run_command).map(|_| ())
+            create_loops::<ClientTypes, _, _>(conn_data, write, read, to_write_rx, command_rx)
         });
 
         let future = conn_data_error_holder.wrap_future(future);

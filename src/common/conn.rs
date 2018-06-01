@@ -58,6 +58,10 @@ use codec::http_framed_write::HttpFramedWrite;
 use solicit_async::HttpFutureStreamSend;
 use tokio_io::io::WriteHalf;
 use tokio_io::io::ReadHalf;
+use common::conn_write_loop::WriteLoopCustom;
+use common::conn_read_loop::ReadLoopCustom;
+use common::conn_command_loop::CommandLoopCustom;
+use futures::Future;
 
 
 pub trait ConnDataSpecific : 'static {
@@ -927,13 +931,18 @@ pub fn create_loops<T, W, R>(
     write_requests: HttpFutureStreamSend<T::ToWriteMessage>,
     command_requests: HttpFutureStreamSend<T::CommandMessage>,
 )
-    -> (WriteLoop<W, T>, ReadLoop<R, T>, CommandLoop<T>)
+-> impl Future<Item=(), Error=error::Error>
     where
         T : Types,
         ConnData<T> : ConnInner,
         HttpStreamCommon<T> : HttpStreamData,
-        W : AsyncWrite,
-        R : AsyncRead,
+        W : AsyncWrite + Send + 'static,
+        R : AsyncRead + Send + 'static,
+        ConnData<T> : ConnInner<Types=T>,
+        HttpStreamCommon<T> : HttpStreamData<Types=T>,
+        WriteLoop<W, T> : WriteLoopCustom<Types=T>,
+        ReadLoop<R, T> : ReadLoopCustom<Types=T>,
+        CommandLoop<T> : CommandLoopCustom<Types=T>,
 {
     let conn_data = RcMut::new(conn_data);
 
@@ -953,5 +962,10 @@ pub fn create_loops<T, W, R>(
         inner: conn_data.clone(),
         requests: command_requests,
     };
-    (write_loop, read_loop, command_loop)
+
+    let run_write = write_loop.run_write();
+    let run_read = read_loop.run_read();
+    let run_command = command_loop.run_command();
+
+    run_write.join(run_read).join(run_command).map(|_| ())
 }
