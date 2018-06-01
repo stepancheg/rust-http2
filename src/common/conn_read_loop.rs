@@ -68,7 +68,7 @@ impl<I, T> ReadLoop<I, T>
         })
     }
 
-    pub fn run(mut self) -> impl Future<Item=(), Error=error::Error> {
+    pub fn run_read(mut self) -> impl Future<Item=(), Error=error::Error> {
         future::poll_fn(move || self.read_process_frame())
     }
 

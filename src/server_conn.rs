@@ -237,7 +237,7 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
         }
     }
 
-    fn poll_run(&mut self, requests: &mut HttpFutureStreamSend<ServerToWriteMessage>)
+    fn poll_write(&mut self, requests: &mut HttpFutureStreamSend<ServerToWriteMessage>)
         -> Poll<(), error::Error>
     {
         loop {
@@ -255,10 +255,10 @@ impl<I : AsyncWrite + Send> ServerWriteLoop<I> {
         }
     }
 
-    pub fn run(mut self, mut requests: HttpFutureStreamSend<ServerToWriteMessage>)
+    pub fn run_write(mut self, mut requests: HttpFutureStreamSend<ServerToWriteMessage>)
         -> impl Future<Item=(), Error=error::Error>
     {
-        future::poll_fn(move || self.poll_run(&mut requests))
+        future::poll_fn(move || self.poll_write(&mut requests))
     }
 }
 
@@ -340,8 +340,8 @@ impl ServerConnection {
             let framed_read = HttpFramedJoinContinuationRead::new(read);
             let framed_write = HttpFramedWrite::new(write);
 
-            let run_write = ServerWriteLoop { framed_write, inner: inner.clone() }.run(Box::new(to_write_rx));
-            let run_read = ServerReadLoop { framed_read, inner: inner.clone() }.run();
+            let run_write = ServerWriteLoop { framed_write, inner: inner.clone() }.run_write(Box::new(to_write_rx));
+            let run_read = ServerReadLoop { framed_read, inner: inner.clone() }.run_read();
             let run_command = ServerCommandLoop { inner: inner.clone(), requests: command_rx }.run_command();
 
             run_write.join(run_read).join(run_command).map(|_| ())
