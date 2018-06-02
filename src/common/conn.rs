@@ -53,6 +53,8 @@ use common::conn_command::ConnCommandSideCustom;
 use common::conn_write::ConnWriteSideCustom;
 use hpack;
 use solicit::WindowSize;
+use std::collections::HashSet;
+use futures::task;
 
 
 /// Client or server fields of connection
@@ -101,6 +103,11 @@ pub struct Conn<T : Types> {
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder<'static>,
     pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
+
+    /// Try flush outgoing connection if window allows it on the next write poll
+    pub flush_conn: bool,
+    /// Try flush outgoing streams if window allows it on the next write poll
+    pub flush_streams: HashSet<u32>,
 
     /// Last known peer settings
     pub peer_settings: HttpSettings,
@@ -177,6 +184,7 @@ impl<T> Conn<T>
             framed_read,
             framed_write,
             write_rx,
+            flush_conn: false,
             decoder: hpack::Decoder::new(),
             encoder: hpack::Encoder::new(),
             in_window_size,
@@ -184,6 +192,7 @@ impl<T> Conn<T>
             peer_settings: DEFAULT_SETTINGS,
             our_settings_ack: DEFAULT_SETTINGS,
             our_settings_sent: Some(sent_settings),
+            flush_streams: HashSet::new(),
         }
     }
 
@@ -445,7 +454,13 @@ impl<T> Conn<T>
     }
 
     pub fn out_window_increased(&mut self, stream_id: Option<StreamId>) -> result::Result<()> {
-        self.send_common(CommonToWriteMessage::TryFlushStream(stream_id))
+        match stream_id {
+            Some(stream_id) => { self.flush_streams.insert(stream_id); },
+            None => self.flush_conn = true,
+        }
+        // Make sure writer loop is executed
+        task::current().notify();
+        Ok(())
     }
 
     /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.

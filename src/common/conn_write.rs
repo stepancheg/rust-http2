@@ -30,6 +30,7 @@ use solicit::frame::continuation::ContinuationFlag;
 use solicit::frame::DataFrame;
 use solicit::frame::DataFlag;
 use solicit::frame::FrameIR;
+use std::mem;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -196,16 +197,20 @@ impl<T> Conn<T>
         r
     }
 
-    pub fn buffer_outg_stream(&mut self, stream_id: StreamId) {
+    pub fn buffer_outg_stream(&mut self, stream_id: StreamId) -> result::Result<()> {
         let bytes = self.pop_outg_all_for_stream_bytes(stream_id);
 
         self.framed_write.buffer(bytes.into());
+
+        Ok(())
     }
 
-    fn buffer_outg_conn(&mut self) {
+    fn buffer_outg_conn(&mut self) -> result::Result<()> {
         let bytes = self.pop_outg_all_for_conn_bytes();
 
         self.framed_write.buffer(bytes.into());
+
+        Ok(())
     }
 
     fn process_stream_end(&mut self, stream_id: StreamId, error_code: ErrorCode) -> result::Result<()> {
@@ -219,7 +224,7 @@ impl<T> Conn<T>
             }
         };
         if let Some(stream_id) = stream_id {
-            self.buffer_outg_stream(stream_id);
+            self.buffer_outg_stream(stream_id)?;
         }
         Ok(())
     }
@@ -235,19 +240,13 @@ impl<T> Conn<T>
             }
         };
         if let Some(stream_id) = stream_id {
-            self.buffer_outg_stream(stream_id);
+            self.buffer_outg_stream(stream_id)?;
         }
         Ok(())
     }
 
     pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
         match common {
-            CommonToWriteMessage::TryFlushStream(None) => {
-                self.buffer_outg_conn();
-            },
-            CommonToWriteMessage::TryFlushStream(Some(stream_id)) => {
-                self.buffer_outg_stream(stream_id);
-            },
             CommonToWriteMessage::Frame(frame) => {
                 self.framed_write.buffer_frame(frame.into_http_frame());
             },
@@ -269,6 +268,16 @@ impl<T> Conn<T>
 
     pub fn poll_write(&mut self) -> Poll<(), error::Error> {
         loop {
+            if mem::replace(&mut self.flush_conn, false) {
+                self.buffer_outg_conn()?;
+            }
+
+            let stream_ids: Vec<StreamId> = self.flush_streams.iter().cloned().collect();
+            self.flush_streams.clear();
+            for stream_id in stream_ids {
+                self.buffer_outg_stream(stream_id)?;
+            }
+
             if let Async::NotReady = self.poll_flush()? {
                 return Ok(Async::NotReady);
             }
@@ -288,7 +297,6 @@ impl<T> Conn<T>
 // Message sent to write loop.
 // Processed while write loop is not handling network I/O.
 pub enum CommonToWriteMessage {
-    TryFlushStream(Option<StreamId>), // flush stream when window increased or new data added
     IncreaseInWindow(StreamId, u32),
     Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),

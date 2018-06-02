@@ -172,7 +172,7 @@ impl<I> Conn<ClientTypes<I>>
         };
 
         // Also opens latch if necessary
-        self.buffer_outg_stream(stream_id);
+        self.buffer_outg_stream(stream_id)?;
         Ok(())
     }
 }
