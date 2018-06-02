@@ -31,11 +31,11 @@ use solicit::frame::DataFrame;
 use solicit::frame::DataFlag;
 use solicit::frame::FrameIR;
 use std::mem;
+use common::goaway_state::GoAwayState;
 
 
 pub enum DirectlyToNetworkFrame {
     RstStream(RstStreamFrame),
-    GoAway(GoawayFrame),
     WindowUpdate(WindowUpdateFrame),
     Ping(PingFrame),
     Settings(SettingsFrame),
@@ -45,7 +45,6 @@ impl DirectlyToNetworkFrame {
     pub fn into_http_frame(self) -> HttpFrame {
         match self {
             DirectlyToNetworkFrame::RstStream(f) => f.into(),
-            DirectlyToNetworkFrame::GoAway(f) => f.into(),
             DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
             DirectlyToNetworkFrame::Ping(f) => f.into(),
             DirectlyToNetworkFrame::Settings(f) => f.into(),
@@ -259,9 +258,6 @@ impl<T> Conn<T>
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
                 self.increase_in_window(stream_id, increase)?;
             },
-            CommonToWriteMessage::CloseConn => {
-                return Err(error::Error::Other("close connection"));
-            }
         }
         Ok(())
     }
@@ -280,8 +276,50 @@ impl<T> Conn<T>
         Ok(())
     }
 
+    fn process_goaway_state(&mut self) -> result::Result<()> {
+        loop {
+            match self.goaway_state {
+                GoAwayState::None => return Ok(()),
+                GoAwayState::NeedToSend(error_code) => {
+                    let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
+                    self.framed_write.buffer_frame(HttpFrame::Goaway(frame));
+                    self.goaway_state = GoAwayState::Sending;
+                    continue;
+                }
+                GoAwayState::Sending => {
+                    match self.poll_flush()? {
+                        Async::Ready(()) => {
+                            self.goaway_state = GoAwayState::Sent;
+                        },
+                        Async::NotReady => {}
+                    }
+                    return Ok(());
+                }
+                GoAwayState::Sent => return Ok(()),
+            }
+        }
+    }
+
     pub fn poll_write(&mut self) -> Poll<(), error::Error> {
         loop {
+            self.process_goaway_state()?;
+
+            match self.goaway_state {
+                GoAwayState::None => {}
+                GoAwayState::NeedToSend(..) => {
+                    unreachable!();
+                }
+                GoAwayState::Sending => {
+                    assert!(self.framed_write.remaining() != 0);
+                    return Ok(Async::NotReady);
+                }
+                GoAwayState::Sent => {
+                    info!("GOAWAY sent, exiting loop");
+                    assert!(self.framed_write.remaining() == 0);
+                    return Ok(Async::Ready(()));
+                }
+            }
+
             self.process_flush_xxx_fields()?;
 
             if let Async::NotReady = self.poll_flush()? {
@@ -307,5 +345,4 @@ pub enum CommonToWriteMessage {
     Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),
     StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
-    CloseConn,
 }

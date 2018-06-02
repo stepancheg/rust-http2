@@ -55,6 +55,7 @@ use hpack;
 use solicit::WindowSize;
 use std::collections::HashSet;
 use futures::task;
+use common::goaway_state::GoAwayState;
 
 
 /// Client or server fields of connection
@@ -103,6 +104,7 @@ pub struct Conn<T : Types> {
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder<'static>,
     pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
+    pub goaway_state: GoAwayState,
 
     /// Try flush outgoing connection if window allows it on the next write poll
     pub flush_conn: bool,
@@ -184,6 +186,7 @@ impl<T> Conn<T>
             framed_read,
             framed_write,
             write_rx,
+            goaway_state: GoAwayState::None,
             flush_conn: false,
             decoder: hpack::Decoder::new(),
             encoder: hpack::Encoder::new(),
@@ -193,6 +196,7 @@ impl<T> Conn<T>
             our_settings_ack: DEFAULT_SETTINGS,
             our_settings_sent: Some(sent_settings),
             flush_streams: HashSet::new(),
+
         }
     }
 
@@ -317,9 +321,11 @@ impl<T> Conn<T>
     pub fn send_goaway(&mut self, error_code: ErrorCode)
         -> result::Result<()>
     {
-        let goaway = GoawayFrame::new(self.last_peer_stream_id, error_code);
-        self.send_directly_to_network(DirectlyToNetworkFrame::GoAway(goaway))?;
-        self.send_common(CommonToWriteMessage::CloseConn)?;
+        debug!("requesting to send GOAWAY with code {:?}", error_code);
+        if let GoAwayState::None = self.goaway_state {
+            self.goaway_state = GoAwayState::NeedToSend(error_code);
+            task::current().notify();
+        }
         Ok(())
     }
 
@@ -526,6 +532,7 @@ impl<T> Conn<T>
         let command_ready = self.poll_command()? != Async::NotReady;
 
         Ok(if write_ready || read_ready || command_ready {
+            info!("connection loop complete");
             Async::Ready(())
         } else {
             Async::NotReady
