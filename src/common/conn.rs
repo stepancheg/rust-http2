@@ -32,12 +32,12 @@ use super::stream_map::*;
 use super::closed_streams::*;
 use super::types::*;
 use super::conf::*;
-use super::pump_stream_to_write_loop::PumpStreamToWriteLoop;
+use super::pump_stream_to_write_loop::PumpStreamToWrite;
 use super::stream_from_network::StreamFromNetwork;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::window_size;
 use super::stream_queue_sync::stream_queue_sync;
-use super::conn_write_loop::DirectlyToNetworkFrame;
+use super::conn_write::DirectlyToNetworkFrame;
 
 
 pub use resp::Response;
@@ -46,7 +46,7 @@ use solicit::MAX_WINDOW_SIZE;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-use common::conn_write_loop::CommonToWriteMessage;
+use common::conn_write::CommonToWriteMessage;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use codec::http_framed_write::HttpFramedWrite;
 use solicit_async::HttpFutureStreamSend;
@@ -57,9 +57,9 @@ use futures::Async;
 use futures::sync::oneshot;
 use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
-use common::conn_read_loop::ReadLoopCustom;
-use common::conn_command_loop::CommandLoopCustom;
-use common::conn_write_loop::WriteLoopCustom;
+use common::conn_read::ConnReadSideCustom;
+use common::conn_command::ConnCommandSideCustom;
+use common::conn_write::ConnWriteSideCustom;
 
 
 pub trait ConnDataSpecific : 'static {
@@ -123,9 +123,9 @@ impl ConnectionStateSnapshot {
 impl<T> ConnData<T>
     where
         T : Types,
-        Self : ReadLoopCustom<Types=T>,
-        Self : WriteLoopCustom<Types=T>,
-        Self : CommandLoopCustom<Types=T>,
+        Self : ConnReadSideCustom<Types=T>,
+        Self : ConnWriteSideCustom<Types=T>,
+        Self : ConnCommandSideCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     pub fn new(
@@ -903,10 +903,10 @@ impl<T> ConnData<T>
         stream_id: StreamId,
         stream: DataOrHeadersWithFlagStream,
         out_window: window_size::StreamOutWindowReceiver)
-        -> PumpStreamToWriteLoop<T>
+        -> PumpStreamToWrite<T>
     {
         let stream = stream.catch_unwind();
-        PumpStreamToWriteLoop {
+        PumpStreamToWrite {
             to_write_tx: self.to_write_tx.clone(),
             stream_id: stream_id,
             out_window: out_window,

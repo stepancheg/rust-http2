@@ -164,7 +164,7 @@ impl<I> ServerInner<I>
             let response = response.into_part_stream();
             let response = response.catch_unwind();
 
-            PumpStreamToWriteLoop::<ServerTypes<I>> {
+            PumpStreamToWrite::<ServerTypes<I>> {
                 to_write_tx,
                 stream_id,
                 out_window,
@@ -192,7 +192,7 @@ enum ServerCommandMessage {
 }
 
 
-impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ConnData<ServerTypes<I>>
+impl<I : AsyncWrite + Send + 'static> ConnWriteSideCustom for ConnData<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;
@@ -206,7 +206,7 @@ impl<I : AsyncWrite + Send + 'static> WriteLoopCustom for ConnData<ServerTypes<I
     }
 }
 
-impl<I> ReadLoopCustom for ConnData<ServerTypes<I>>
+impl<I> ConnReadSideCustom for ConnData<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;
@@ -243,7 +243,7 @@ impl<I> ReadLoopCustom for ConnData<ServerTypes<I>>
     }
 }
 
-impl<I> CommandLoopCustom for ServerInner<I>
+impl<I> ConnCommandSideCustom for ServerInner<I>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;

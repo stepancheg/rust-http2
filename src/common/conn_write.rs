@@ -17,8 +17,8 @@ use solicit::frame::SettingsFrame;
 use result;
 use futures::Poll;
 use futures::Async;
-use common::conn_read_loop::ReadLoopCustom;
-use common::conn_command_loop::CommandLoopCustom;
+use common::conn_read::ConnReadSideCustom;
+use common::conn_command::ConnCommandSideCustom;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -42,7 +42,7 @@ impl DirectlyToNetworkFrame {
 }
 
 
-pub trait WriteLoopCustom {
+pub trait ConnWriteSideCustom {
     type Types : Types;
 
     fn process_message(&mut self, message: <Self::Types as Types>::ToWriteMessage) -> result::Result<()>;
@@ -51,9 +51,9 @@ pub trait WriteLoopCustom {
 impl<T> ConnData<T>
     where
         T : Types,
-        Self : ReadLoopCustom<Types=T>,
-        Self : WriteLoopCustom<Types=T>,
-        Self : CommandLoopCustom<Types=T>,
+        Self : ConnReadSideCustom<Types=T>,
+        Self : ConnWriteSideCustom<Types=T>,
+        Self : ConnCommandSideCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     pub fn poll_flush(&mut self) -> Poll<(), error::Error> {

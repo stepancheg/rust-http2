@@ -14,7 +14,7 @@ use super::types::Types;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use common::conn_write_loop::CommonToWriteMessage;
+use common::conn_write::CommonToWriteMessage;
 
 
 /// Stream that provides data from network.

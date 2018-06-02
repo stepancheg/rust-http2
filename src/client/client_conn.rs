@@ -125,7 +125,7 @@ enum ClientCommandMessage {
 }
 
 
-impl<I> WriteLoopCustom for ConnData<ClientTypes<I>>
+impl<I> ConnWriteSideCustom for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
@@ -392,7 +392,7 @@ impl Service for ClientConnection {
     }
 }
 
-impl<I> ReadLoopCustom for ConnData<ClientTypes<I>>
+impl<I> ConnReadSideCustom for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
@@ -473,7 +473,7 @@ impl<I> ReadLoopCustom for ConnData<ClientTypes<I>>
     }
 }
 
-impl<I> CommandLoopCustom for ConnData<ClientTypes<I>>
+impl<I> ConnCommandSideCustom for ConnData<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;

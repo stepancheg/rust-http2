@@ -1,9 +1,9 @@
 //! Common code for client and server
 
 mod conn;
-mod conn_command_loop;
-mod conn_write_loop;
-mod conn_read_loop;
+mod conn_command;
+mod conn_write;
+mod conn_read;
 mod stream;
 mod stream_map;
 mod closed_streams;
@@ -18,9 +18,9 @@ pub mod atomic_box_option;
 pub mod waiters;
 
 pub use self::conn::*;
-pub use self::conn_command_loop::*;
-pub use self::conn_write_loop::*;
-pub use self::conn_read_loop::*;
+pub use self::conn_command::*;
+pub use self::conn_write::*;
+pub use self::conn_read::*;
 pub use self::stream::*;
 pub use self::stream_map::*;
 pub use self::closed_streams::*;

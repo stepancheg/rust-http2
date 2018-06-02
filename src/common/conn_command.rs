@@ -8,7 +8,7 @@ use error;
 use futures::Async;
 
 
-pub trait CommandLoopCustom {
+pub trait ConnCommandSideCustom {
     type Types : Types;
 
     fn process_command_message(&mut self, message: <Self::Types as Types>::CommandMessage)
@@ -18,7 +18,7 @@ pub trait CommandLoopCustom {
 impl<T> ConnData<T>
     where
         T : Types,
-        Self : CommandLoopCustom<Types=T>,
+        Self : ConnCommandSideCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     pub fn poll_command(&mut self)
