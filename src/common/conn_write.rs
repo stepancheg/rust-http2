@@ -19,6 +19,17 @@ use futures::Poll;
 use futures::Async;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_command::ConnCommandSideCustom;
+use common::stream::HttpStreamCommand;
+use solicit::frame::FrameBuilder;
+use std::cmp;
+use solicit::frame::HeadersFrame;
+use solicit::connection::EndStream;
+use solicit::frame::HeadersFlag;
+use solicit::frame::ContinuationFrame;
+use solicit::frame::continuation::ContinuationFlag;
+use solicit::frame::DataFrame;
+use solicit::frame::DataFlag;
+use solicit::frame::FrameIR;
 
 
 pub enum DirectlyToNetworkFrame {
@@ -56,8 +67,133 @@ impl<T> Conn<T>
         Self : ConnCommandSideCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
-    pub fn poll_flush(&mut self) -> Poll<(), error::Error> {
+    fn poll_flush(&mut self) -> Poll<(), error::Error> {
         self.framed_write.poll_flush()
+    }
+
+    fn write_part(&mut self, target: &mut FrameBuilder, stream_id: StreamId, part: HttpStreamCommand) {
+        let max_frame_size = self.peer_settings.max_frame_size as usize;
+
+        match part {
+            HttpStreamCommand::Data(data, end_stream) => {
+                // if client requested end of stream,
+                // we must send at least one frame with end stream flag
+                if end_stream == EndStream::Yes && data.len() == 0 {
+                    // probably should send RST_STREAM
+                    let mut frame = DataFrame::with_data(stream_id, Vec::new());
+                    frame.set_flag(DataFlag::EndStream);
+
+                    debug!("sending frame {:?}", frame);
+
+                    frame.serialize_into(target);
+                    return;
+                }
+
+                let mut pos = 0;
+                while pos < data.len() {
+                    let end = cmp::min(data.len(), pos + max_frame_size);
+
+                    let end_stream_in_frame =
+                        if end == data.len() && end_stream == EndStream::Yes {
+                            EndStream::Yes
+                        } else {
+                            EndStream::No
+                        };
+
+                    let mut frame = DataFrame::with_data(stream_id, data.slice(pos, end));
+                    if end_stream_in_frame == EndStream::Yes {
+                        frame.set_flag(DataFlag::EndStream);
+                    }
+
+                    debug!("sending frame {:?}", frame);
+
+                    frame.serialize_into(target);
+
+                    pos = end;
+                }
+            }
+            HttpStreamCommand::Headers(headers, end_stream) => {
+                let headers_fragment = self
+                    .encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
+
+                let mut pos = 0;
+                while pos < headers_fragment.len() || pos == 0 {
+                    let end = cmp::min(headers_fragment.len(), pos + max_frame_size);
+
+                    let chunk = &headers_fragment[pos..end];
+
+                    if pos == 0 {
+                        let mut frame = HeadersFrame::new(chunk, stream_id);
+                        if end_stream == EndStream::Yes {
+                            frame.set_flag(HeadersFlag::EndStream);
+                        }
+
+                        if end == headers_fragment.len() {
+                            frame.set_flag(HeadersFlag::EndHeaders);
+                        }
+
+                        debug!("sending frame {:?}", frame);
+
+                        frame.serialize_into(target);
+                    } else {
+                        let mut frame = ContinuationFrame::new(chunk, stream_id);
+
+                        if end == headers_fragment.len() {
+                            frame.set_flag(ContinuationFlag::EndHeaders);
+                        }
+
+                        debug!("sending frame {:?}", frame);
+
+                        frame.serialize_into(target);
+                    }
+
+                    pos = end;
+                }
+            }
+            HttpStreamCommand::Rst(error_code) => {
+                let frame = RstStreamFrame::new(stream_id, error_code);
+
+                debug!("sending frame {:?}", frame);
+
+                frame.serialize_into(target);
+            }
+        }
+    }
+
+    fn pop_outg_all_for_stream_bytes(&mut self, stream_id: StreamId) -> Vec<u8> {
+        let mut send = FrameBuilder::new();
+        for part in self.pop_outg_all_for_stream(stream_id) {
+            self.write_part(&mut send, stream_id, part);
+        }
+        send.0
+    }
+
+    fn pop_outg_all_for_conn_bytes(&mut self) -> Vec<u8> {
+        // TODO: maintain own limits of out window
+        let mut send = FrameBuilder::new();
+        for (stream_id, part) in self.pop_outg_all_for_conn() {
+            self.write_part(&mut send, stream_id, part);
+        }
+        send.0
+    }
+
+    fn pop_outg_all_for_stream(&mut self, stream_id: StreamId) -> Vec<HttpStreamCommand> {
+        if let Some(stream) = self.streams.get_mut(stream_id) {
+            stream.pop_outg_all_maybe_remove(&mut self.out_window_size)
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub fn pop_outg_all_for_conn(&mut self) -> Vec<(StreamId, HttpStreamCommand)> {
+        let mut r = Vec::new();
+
+        // TODO: keep list of streams with data
+        for stream_id in self.streams.stream_ids() {
+            r.extend(self.pop_outg_all_for_stream(stream_id).into_iter().map(|s| (stream_id, s)));
+        }
+
+        r
     }
 
     pub fn buffer_outg_stream(&mut self, stream_id: StreamId) {
