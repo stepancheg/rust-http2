@@ -64,6 +64,10 @@ impl<W : AsyncWrite> HttpFramedWrite<W> {
         self.buf.extend_from_slice(&buf);
     }
 
+    pub fn remaining(&self) -> usize {
+        self.buf.remaining()
+    }
+
     pub fn buffer_frame(&mut self, frame: HttpFrame) {
         debug!("send {:?}", frame);
 

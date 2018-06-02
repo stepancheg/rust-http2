@@ -13,6 +13,7 @@ use super::stream::HttpStreamStateSnapshot;
 use super::types::Types;
 
 
+#[derive(Default)]
 pub struct StreamMap<T : Types> {
     pub map: HashMap<StreamId, HttpStreamCommon<T>>,
 }

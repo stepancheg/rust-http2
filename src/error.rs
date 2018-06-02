@@ -16,7 +16,7 @@ use solicit::frame::ParseFrameError;
 /// The enum represents an error code that are used in `RST_STREAM` and `GOAWAY` frames.
 /// These are defined in [Section 7](http://http2.github.io/http2-spec/#ErrorCodes) of the HTTP/2
 /// spec.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
     /// The associated condition is not a result of an error. For example, a GOAWAY might include
     /// this code to indicate graceful shutdown of a connection.
