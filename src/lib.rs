@@ -102,10 +102,18 @@ pub use result::Result;
 /// Functions used in tests
 #[doc(hidden)]
 pub mod for_test {
-    pub use common::ConnectionStateSnapshot;
-    pub use server::server_conn::ServerConnection;
+    pub use common::ConnStateSnapshot;
+    pub use server::server_conn::ServerConn;
     pub use solicit_async::recv_raw_frame_sync;
+
+    pub use solicit::WindowSize;
+    pub use solicit::DEFAULT_SETTINGS;
+    pub use solicit::frame::settings::HttpSettings;
+
     pub mod solicit {
         pub use ::solicit::*;
+    }
+    pub mod hpack {
+        pub use hpack::*;
     }
 }

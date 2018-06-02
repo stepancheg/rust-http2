@@ -57,7 +57,7 @@ fn simple_new() {
         Response::headers_and_stream(Headers::ok_200(), req)
     });
 
-    let mut tester = HttpConnectionTester::connect(server.port());
+    let mut tester = HttpConnTester::connect(server.port());
     tester.send_preface();
     tester.settings_xchg();
 
@@ -89,7 +89,7 @@ fn panic_in_handler() {
         }
     });
 
-    let mut tester = HttpConnectionTester::connect(server.port());
+    let mut tester = HttpConnTester::connect(server.port());
     tester.send_preface();
     tester.settings_xchg();
 
@@ -128,7 +128,7 @@ fn panic_in_stream() {
         }
     });
 
-    let mut tester = HttpConnectionTester::connect(server.port());
+    let mut tester = HttpConnTester::connect(server.port());
     tester.send_preface();
     tester.settings_xchg();
 
@@ -187,7 +187,7 @@ fn rst_stream_on_data_without_stream() {
 
     let server = ServerTest::new();
 
-    let mut tester = HttpConnectionTester::connect(server.port);
+    let mut tester = HttpConnTester::connect(server.port);
     tester.send_preface();
     tester.settings_xchg();
 
@@ -205,7 +205,7 @@ fn exceed_max_frame_size() {
 
     let server = ServerTest::new();
 
-    let mut tester = HttpConnectionTester::connect(server.port);
+    let mut tester = HttpConnTester::connect(server.port);
     tester.send_preface();
     tester.settings_xchg();
 
@@ -213,7 +213,7 @@ fn exceed_max_frame_size() {
 
     tester.recv_eof();
 
-    let mut tester = HttpConnectionTester::connect(server.port);
+    let mut tester = HttpConnTester::connect(server.port);
     tester.send_preface();
     tester.settings_xchg();
 
@@ -226,7 +226,7 @@ fn increase_frame_size() {
 
     let server = ServerTest::new();
 
-    let mut tester = HttpConnectionTester::connect(server.port);
+    let mut tester = HttpConnTester::connect(server.port);
     tester.send_preface();
     tester.settings_xchg();
 
@@ -246,22 +246,22 @@ fn exceed_window_size() {
 
     let server = ServerTest::new();
 
-    let mut tester = HttpConnectionTester::connect(server.port);
+    let mut tester = HttpConnTester::connect(server.port);
     tester.send_preface();
     tester.settings_xchg();
 
     let mut frame = SettingsFrame::new();
-    frame.settings.push(HttpSetting::MaxFrameSize(tester.conn.peer_settings.initial_window_size + 5));
+    frame.settings.push(HttpSetting::MaxFrameSize(tester.peer_settings.initial_window_size + 5));
     tester.send_recv_settings(frame);
 
-    let data = Vec::from_iter((0..tester.conn.peer_settings.initial_window_size + 3).map(|_| 2));
+    let data = Vec::from_iter((0..tester.peer_settings.initial_window_size + 3).map(|_| 2));
 
     // Deliberately set wrong out_windows_size so `send_data` wouldn't fail.
-    tester.conn.out_window_size.0 += 10000000;
+    tester.out_window_size.0 += 10000000;
     tester.send_data(1, &data, false);
     tester.recv_eof();
 
-    let mut tester = HttpConnectionTester::connect(server.port);
+    let mut tester = HttpConnTester::connect(server.port);
     tester.send_preface();
     tester.settings_xchg();
 
@@ -274,14 +274,14 @@ fn stream_window_gt_conn_window() {
 
     let server = ServerTest::new();
 
-    let mut tester = HttpConnectionTester::connect(server.port);
+    let mut tester = HttpConnTester::connect(server.port);
     tester.send_preface();
     tester.settings_xchg();
 
     let w = DEFAULT_SETTINGS.initial_window_size;
 
     // May need to be changed if server defaults are changed
-    assert_eq!(w as i32, tester.conn.in_window_size.size());
+    assert_eq!(w as i32, tester.in_window_size.size());
 
     tester.send_recv_settings(SettingsFrame::from_settings(vec![
         HttpSetting::InitialWindowSize(w * 2),
@@ -289,7 +289,7 @@ fn stream_window_gt_conn_window() {
 
     // Now new stream window is gt than conn window
 
-    let w = tester.conn.peer_settings.initial_window_size;
+    let w = tester.peer_settings.initial_window_size;
     tester.send_get(1, &format!("/blocks/{}/{}", w, 2));
 
     assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
@@ -335,7 +335,7 @@ fn do_not_poll_when_not_enough_window() {
         })
     });
 
-    let mut tester = HttpConnectionTester::connect(server.port());
+    let mut tester = HttpConnTester::connect(server.port());
     tester.send_preface();
     tester.settings_xchg();
 
@@ -366,7 +366,7 @@ pub fn server_sends_continuation_frame() {
         Response::headers_and_bytes(headers_copy.clone(), "there")
     });
 
-    let mut tester = HttpConnectionTester::connect(server.port());
+    let mut tester = HttpConnTester::connect(server.port());
     tester.send_preface();
     tester.settings_xchg();
 

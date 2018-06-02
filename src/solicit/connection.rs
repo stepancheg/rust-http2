@@ -15,14 +15,10 @@
 //! `HttpConnection`) and the higher layers that handle these events and pass them on to the
 //! application.
 
-use error::Error;
-use result::Result;
-use solicit::{StreamId, WindowSize};
-use solicit::DEFAULT_SETTINGS;
+use solicit::StreamId;
 use solicit::frame;
 use solicit::frame::*;
-use solicit::frame::settings::HttpSettings;
-use hpack;
+
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HttpFrameType {
@@ -225,32 +221,6 @@ impl From<ContinuationFrame> for HttpFrame {
 /// Similarly, it provides an API for handling events that arise from receiving frames, without
 /// requiring the higher level to directly look at the frames themselves, rather only the semantic
 /// content within the frames.
-pub struct HttpConnection {
-    /// HPACK decoder used to decode incoming headers before passing them on to the session.
-    pub decoder: hpack::Decoder<'static>,
-    /// The HPACK encoder used to encode headers before sending them on this connection.
-    pub encoder: hpack::Encoder<'static>,
-    /// Tracks the size of the outbound flow control window
-    pub out_window_size: WindowSize,
-    /// Tracks the size of the inbound flow control window
-    pub in_window_size: WindowSize,
-    /// Last known peer settings
-    pub peer_settings: HttpSettings,
-    /// Last our settings acknowledged
-    pub our_settings_ack: HttpSettings,
-    /// Last our settings sent
-    pub our_settings_sent: Option<HttpSettings>,
-}
-
-impl HttpConnection {
-    pub fn our_settings_sent(&self) -> &HttpSettings {
-        if let Some(ref sent) = self.our_settings_sent {
-            &sent
-        } else {
-            &self.our_settings_ack
-        }
-    }
-}
 
 /// An enum indicating whether the `HttpConnection` send operation should end the stream.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -259,43 +229,4 @@ pub enum EndStream {
     Yes,
     /// The stream should still be kept open
     No,
-}
-
-impl HttpConnection {
-    /// Creates a new `HttpConnection` that will use the given sender
-    /// for writing frames.
-    pub fn new() -> HttpConnection {
-        HttpConnection {
-            decoder: hpack::Decoder::new(),
-            encoder: hpack::Encoder::new(),
-            peer_settings: DEFAULT_SETTINGS,
-            our_settings_ack: DEFAULT_SETTINGS,
-            our_settings_sent: None,
-            in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
-            out_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
-        }
-    }
-
-    /// Internal helper method that decreases the outbound flow control window size.
-    pub fn decrease_out_window(&mut self, size: u32) -> Result<()> {
-        // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
-        // reach here only after sending a DATA frame, whose payload also cannot be larger than
-        // that, but we assert it just in case.
-        debug_assert!(size < 0x80000000);
-        self.out_window_size
-            .try_decrease(size as i32)
-            .map_err(|_| Error::WindowSizeOverflow)
-    }
-
-    /// Internal helper method that decreases the inbound flow control window size.
-    pub fn decrease_in_window(&mut self, size: u32) -> Result<()> {
-        // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
-        // reach here only after receiving a DATA frame, which would have been validated when
-        // parsed from the raw frame to have the correct payload size, but we assert it just in
-        // case.
-        debug_assert!(size < 0x80000000);
-        self.in_window_size
-            .try_decrease_to_positive(size as i32)
-            .map_err(|_| Error::WindowSizeOverflow)
-    }
 }

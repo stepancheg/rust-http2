@@ -46,7 +46,7 @@ use socket::ToTokioListener;
 
 pub use self::server_tls::ServerTlsOption;
 pub use server::server_conf::ServerConf;
-pub use server::server_conn::ServerConnection;
+pub use server::server_conn::ServerConn;
 
 pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
@@ -226,7 +226,7 @@ pub struct Server {
 #[derive(Default)]
 struct ServerState {
     last_conn_id: u64,
-    conns: HashMap<u64, ServerConnection>,
+    conns: HashMap<u64, ServerConn>,
 }
 
 impl ServerState {
@@ -243,11 +243,11 @@ impl ServerState {
 }
 
 pub struct ServerStateSnapshot {
-    pub conns: HashMap<u64, ConnectionStateSnapshot>,
+    pub conns: HashMap<u64, ConnStateSnapshot>,
 }
 
 impl ServerStateSnapshot {
-    pub fn single_conn(&self) -> (u64, &ConnectionStateSnapshot) {
+    pub fn single_conn(&self) -> (u64, &ConnStateSnapshot) {
         let mut iter = self.conns.iter();
         let (&id, conn) = iter.next().expect("no conns");
         assert!(iter.next().is_none(), "more than one conn");
@@ -285,7 +285,7 @@ fn spawn_server_event_loop<S, A>(
                 socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
             }
 
-            let (conn, future) = ServerConnection::new(
+            let (conn, future) = ServerConn::new(
                 &loop_handle, socket, tls, exec.clone(), conf, service);
 
             let conn_id = {

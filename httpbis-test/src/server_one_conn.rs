@@ -25,7 +25,7 @@ pub struct ServerOneConn {
     from_loop: FromLoop,
     join_handle: Option<thread::JoinHandle<()>>,
     shutdown_tx: Option<oneshot::Sender<()>>,
-    conn: Arc<Mutex<Option<ServerConnection>>>,
+    conn: Arc<Mutex<Option<ServerConn>>>,
 }
 
 struct FromLoop {
@@ -46,7 +46,7 @@ impl ServerOneConn {
         let (from_loop_tx, from_loop_rx) = oneshot::channel();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
-        let conn: Arc<Mutex<Option<ServerConnection>>> = Default::default();
+        let conn: Arc<Mutex<Option<ServerConn>>> = Default::default();
 
         let conn_for_thread = conn.clone();
 
@@ -71,7 +71,7 @@ impl ServerOneConn {
                     // close listening port
                     drop(listener);
 
-                    let (conn, future) = ServerConnection::new_plain_single_thread_fn(
+                    let (conn, future) = ServerConn::new_plain_single_thread_fn(
                             &handle, conn, Default::default(), service);
                         *conn_for_thread.lock().unwrap() = Some(conn);
                     future
@@ -98,7 +98,7 @@ impl ServerOneConn {
         self.from_loop.port
     }
 
-    pub fn dump_state(&self) -> ConnectionStateSnapshot {
+    pub fn dump_state(&self) -> ConnStateSnapshot {
         let g = self.conn.lock().expect("lock");
         let conn = g.as_ref().expect("conn");
         conn.dump_state().wait().expect("dump_status")

@@ -18,7 +18,6 @@ use solicit::frame::continuation::*;
 use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 use solicit::connection::EndStream;
-use solicit::connection::HttpConnection;
 use solicit::connection::HttpFrame;
 use solicit::connection::HttpFrameType;
 use solicit::frame::settings::HttpSettings;
@@ -60,13 +59,17 @@ use tokio_io::io::WriteHalf;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_command::ConnCommandSideCustom;
 use common::conn_write::ConnWriteSideCustom;
+use hpack;
+use solicit::WindowSize;
 
 
-pub trait ConnDataSpecific : 'static {
+/// Client or server fields of connection
+pub trait ConnSpecific : 'static {
 }
 
 
-pub struct ConnData<T : Types> {
+/// HTTP/2 connection state with socket and streams
+pub struct Conn<T : Types> {
     pub conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
 
     /// Client or server specific data
@@ -77,8 +80,6 @@ pub struct ConnData<T : Types> {
     pub loop_handle: reactor::Handle,
     /// Executor which drives requests on client and responses on server
     pub exec: Box<Executor>,
-    /// Connection state
-    pub conn: HttpConnection,
     /// Known streams
     pub streams: StreamMap<T>,
     /// Last streams known to be closed by peer
@@ -95,21 +96,37 @@ pub struct ConnData<T : Types> {
 
     pub command_rx: HttpFutureStreamSend<T::CommandMessage>,
 
+    /// Tracks the size of the outbound flow control window
+    pub out_window_size: WindowSize,
+    /// Tracks the size of the inbound flow control window
+    pub in_window_size: WindowSize,
+
     pub framed_read: HttpFramedJoinContinuationRead<ReadHalf<T::Io>>,
+    /// HPACK decoder used to decode incoming headers before passing them on to the session.
+    pub decoder: hpack::Decoder<'static>,
 
     pub framed_write: HttpFramedWrite<WriteHalf<T::Io>>,
+    /// The HPACK encoder used to encode headers before sending them on this connection.
+    pub encoder: hpack::Encoder<'static>,
     pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
+
+    /// Last known peer settings
+    pub peer_settings: HttpSettings,
+    /// Last our settings acknowledged
+    pub our_settings_ack: HttpSettings,
+    /// Last our settings sent
+    pub our_settings_sent: Option<HttpSettings>,
 }
 
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ConnectionStateSnapshot {
+pub struct ConnStateSnapshot {
     pub in_window_size: i32,
     pub out_window_size: i32,
     pub streams: HashMap<StreamId, HttpStreamStateSnapshot>,
 }
 
-impl ConnectionStateSnapshot {
+impl ConnStateSnapshot {
     pub fn single_stream(&self) -> (u32, &HttpStreamStateSnapshot) {
         let mut iter = self.streams.iter();
         let (&id, stream) = iter.next().expect("no streams");
@@ -120,7 +137,7 @@ impl ConnectionStateSnapshot {
 
 
 
-impl<T> ConnData<T>
+impl<T> Conn<T>
     where
         T : Types,
         Self : ConnReadSideCustom<Types=T>,
@@ -140,21 +157,20 @@ impl<T> ConnData<T>
         read: ReadHalf<T::Io>,
         write: WriteHalf<T::Io>,
         conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>)
-            -> ConnData<T>
+            -> Conn<T>
     {
-        let mut conn = HttpConnection::new();
-        conn.our_settings_sent = Some(sent_settings);
+        let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
+        let out_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
 
-        let pump_window_size = window_size::ConnOutWindowSender::new(conn.out_window_size.0 as u32);
+        let pump_window_size = window_size::ConnOutWindowSender::new(out_window_size.0 as u32);
 
         let framed_read = HttpFramedJoinContinuationRead::new(read);
         let framed_write = HttpFramedWrite::new(write);
 
-        ConnData {
+        Conn {
             conn_died_error_holder,
             specific,
             to_write_tx,
-            conn,
             streams: StreamMap::new(),
             last_local_stream_id: 0,
             last_peer_stream_id: 0,
@@ -169,6 +185,13 @@ impl<T> ConnData<T>
             framed_read,
             framed_write,
             write_rx,
+            decoder: hpack::Decoder::new(),
+            encoder: hpack::Encoder::new(),
+            in_window_size,
+            out_window_size,
+            peer_settings: DEFAULT_SETTINGS,
+            our_settings_ack: DEFAULT_SETTINGS,
+            our_settings_sent: Some(sent_settings),
         }
     }
 
@@ -193,7 +216,7 @@ impl<T> ConnData<T>
     {
         let (inc_tx, inc_rx) = stream_queue_sync(self.conn_died_error_holder.clone());
 
-        let in_window_size = self.conn.our_settings_sent().initial_window_size;
+        let in_window_size = self.our_settings_sent().initial_window_size;
 
         let stream_from_network = self.new_stream_from_network(
             inc_rx,
@@ -201,11 +224,11 @@ impl<T> ConnData<T>
             in_window_size);
 
         let (out_window_sender, out_window_receiver) =
-            self.pump_out_window_size.new_stream(self.conn.peer_settings.initial_window_size as u32);
+            self.pump_out_window_size.new_stream(self.peer_settings.initial_window_size as u32);
 
         let stream = HttpStreamCommon::new(
             in_window_size,
-            self.conn.peer_settings.initial_window_size,
+            self.peer_settings.initial_window_size,
             inc_tx,
             out_window_sender,
             in_rem_content_length,
@@ -235,7 +258,7 @@ impl<T> ConnData<T>
 
     pub fn pop_outg_all_for_stream(&mut self, stream_id: StreamId) -> Vec<HttpStreamCommand> {
         if let Some(stream) = self.streams.get_mut(stream_id) {
-            stream.pop_outg_all_maybe_remove(&mut self.conn.out_window_size)
+            stream.pop_outg_all_maybe_remove(&mut self.out_window_size)
         } else {
             Vec::new()
         }
@@ -253,7 +276,7 @@ impl<T> ConnData<T>
     }
 
     fn write_part(&mut self, target: &mut FrameBuilder, stream_id: StreamId, part: HttpStreamCommand) {
-        let max_frame_size = self.conn.peer_settings.max_frame_size as usize;
+        let max_frame_size = self.peer_settings.max_frame_size as usize;
 
         match part {
             HttpStreamCommand::Data(data, end_stream) => {
@@ -295,7 +318,7 @@ impl<T> ConnData<T>
             }
             HttpStreamCommand::Headers(headers, end_stream) => {
                 let headers_fragment = self
-                    .conn.encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
+                    .encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
 
                 let mut pos = 0;
                 while pos < headers_fragment.len() || pos == 0 {
@@ -358,15 +381,46 @@ impl<T> ConnData<T>
         send.0
     }
 
-    pub fn dump_state(&self) -> ConnectionStateSnapshot {
-        ConnectionStateSnapshot {
-            in_window_size: self.conn.in_window_size.0,
-            out_window_size: self.conn.out_window_size.0,
+    pub fn dump_state(&self) -> ConnStateSnapshot {
+        ConnStateSnapshot {
+            in_window_size: self.in_window_size.0,
+            out_window_size: self.out_window_size.0,
             streams: self.streams.snapshot(),
         }
     }
 
-    pub fn process_dump_state(&mut self, sender: oneshot::Sender<ConnectionStateSnapshot>)
+    pub fn our_settings_sent(&self) -> &HttpSettings {
+        if let Some(ref sent) = self.our_settings_sent {
+            &sent
+        } else {
+            &self.our_settings_ack
+        }
+    }
+
+    /// Internal helper method that decreases the outbound flow control window size.
+    fn _decrease_out_window(&mut self, size: u32) -> result::Result<()> {
+        // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
+        // reach here only after sending a DATA frame, whose payload also cannot be larger than
+        // that, but we assert it just in case.
+        debug_assert!(size < 0x80000000);
+        self.out_window_size
+            .try_decrease(size as i32)
+            .map_err(|_| error::Error::WindowSizeOverflow)
+    }
+
+    /// Internal helper method that decreases the inbound flow control window size.
+    pub fn decrease_in_window(&mut self, size: u32) -> result::Result<()> {
+        // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
+        // reach here only after receiving a DATA frame, which would have been validated when
+        // parsed from the raw frame to have the correct payload size, but we assert it just in
+        // case.
+        debug_assert!(size < 0x80000000);
+        self.in_window_size
+            .try_decrease_to_positive(size as i32)
+            .map_err(|_| error::Error::WindowSizeOverflow)
+    }
+
+    pub fn process_dump_state(&mut self, sender: oneshot::Sender<ConnStateSnapshot>)
         -> result::Result<()>
     {
         // ignore send error, client might be already dead
@@ -375,7 +429,7 @@ impl<T> ConnData<T>
     }
 
     fn process_headers_frame(&mut self, frame: HeadersFrame) -> result::Result<Option<HttpStreamRef<T>>> {
-        let headers = match self.conn.decoder.decode(&frame.header_fragment()) {
+        let headers = match self.decoder.decode(&frame.header_fragment()) {
             Err(e) => {
                 warn!("failed to decode headers: {:?}", e);
                 self.send_goaway(ErrorCode::CompressionError)?;
@@ -400,8 +454,8 @@ impl<T> ConnData<T>
     fn process_settings_ack(&mut self, frame: SettingsFrame) -> result::Result<()> {
         assert!(frame.is_ack());
 
-        if let Some(settings) = self.conn.our_settings_sent.take() {
-            self.conn.our_settings_ack = settings;
+        if let Some(settings) = self.our_settings_sent.take() {
+            self.our_settings_ack = settings;
             Ok(())
         } else {
             Err(error::Error::Other("SETTINGS ack without settings sent"))
@@ -425,7 +479,7 @@ impl<T> ConnData<T>
                         return Ok(());
                     }
 
-                    let old_size = self.conn.peer_settings.initial_window_size;
+                    let old_size = self.peer_settings.initial_window_size;
                     let delta = (new_size as i32) - (old_size as i32);
 
                     if delta != 0 {
@@ -453,7 +507,7 @@ impl<T> ConnData<T>
                 _ => {}
             }
 
-            self.conn.peer_settings.apply(setting);
+            self.peer_settings.apply(setting);
         }
 
         self.ack_settings()?;
@@ -529,7 +583,7 @@ impl<T> ConnData<T>
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
         assert_eq!(0, frame.stream_id);
 
-        let old_window_size = self.conn.out_window_size.0;
+        let old_window_size = self.out_window_size.0;
 
         // 6.9.1
         // A sender MUST NOT allow a flow-control window to exceed 2^31-1
@@ -539,13 +593,13 @@ impl<T> ConnData<T>
         // sends a RST_STREAM with an error code of FLOW_CONTROL_ERROR; for the
         // connection, a GOAWAY frame with an error code of FLOW_CONTROL_ERROR
         // is sent.
-        if let Err(_) = self.conn.out_window_size.try_increase(frame.increment) {
+        if let Err(_) = self.out_window_size.try_increase(frame.increment) {
             info!("attempted to increase window size too far");
             self.send_flow_control_error()?;
             return Ok(());
         }
 
-        debug!("conn out window size change: {} -> {}", old_window_size, self.conn.out_window_size);
+        debug!("conn out window size change: {} -> {}", old_window_size, self.out_window_size);
 
         self.pump_out_window_size.increase(frame.increment);
 
@@ -705,13 +759,13 @@ impl<T> ConnData<T>
     {
         let stream_id = frame.get_stream_id();
 
-        self.conn.decrease_in_window(frame.payload_len())?;
+        self.decrease_in_window(frame.payload_len())?;
 
         let increment_conn =
             // TODO: need something better
-            if self.conn.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
+            if self.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                 let increment = DEFAULT_SETTINGS.initial_window_size;
-                self.conn.in_window_size.try_increase(increment)
+                self.in_window_size.try_increase(increment)
                     .map_err(|()| error::Error::Other("failed to increase window size"))?;
 
                 Some(increment)

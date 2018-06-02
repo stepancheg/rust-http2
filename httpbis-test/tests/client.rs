@@ -32,9 +32,9 @@ use httpbis::for_test::solicit::DEFAULT_SETTINGS;
 fn stream_count() {
     init_logger();
 
-    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
+    let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
-    let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len());
 
     let req = client.start_post("/foobar", "localhost", Bytes::from(&b"xxyy"[..])).collect();
@@ -55,7 +55,7 @@ fn stream_count() {
     let message = req.wait().expect("r");
     assert_eq!((b"aabb"[..]).to_owned(), message.body);
 
-    let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -63,7 +63,7 @@ fn stream_count() {
 fn rst_is_error() {
     init_logger();
 
-    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
+    let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
     let req = client.start_get("/fgfg", "localhost").collect();
 
@@ -79,7 +79,7 @@ fn rst_is_error() {
         Err(e) => panic!("wrong error: {:?}", e),
     }
 
-    let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -87,7 +87,7 @@ fn rst_is_error() {
 fn handle_1xx_headers() {
     init_logger();
 
-    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
+    let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
     let req = client.start_get("/fgfg", "localhost").collect();
 
@@ -103,7 +103,7 @@ fn handle_1xx_headers() {
 
     req.wait().expect("Should be OK");
 
-    let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -111,7 +111,7 @@ fn handle_1xx_headers() {
 fn client_call_dropped() {
     init_logger();
 
-    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
+    let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
     {
         let req = client.start_get("/fgfg", "localhost");
@@ -131,7 +131,7 @@ fn client_call_dropped() {
         assert_eq!(200, resp.headers.status());
     }
 
-    let state: ConnectionStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -213,7 +213,7 @@ fn reconnect_on_goaway() {
 pub fn issue_89() {
     init_logger();
 
-    let (mut server_tester, client) = HttpConnectionTester::new_server_with_client_xchg();
+    let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
     let r1 = client.start_get("/r1", "localhost");
 
@@ -225,7 +225,7 @@ pub fn issue_89() {
     let mut resp1 = resp1.filter_data().wait();
 
     assert_eq!(
-        server_tester.conn.out_window_size.0,
+        server_tester.out_window_size.0,
         client.dump_state().wait().unwrap().in_window_size);
 
     let w = DEFAULT_SETTINGS.initial_window_size;

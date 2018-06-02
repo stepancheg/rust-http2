@@ -1,5 +1,5 @@
 use common::types::Types;
-use common::conn::ConnData;
+use common::conn::Conn;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use solicit::connection::HttpFrame;
@@ -48,7 +48,7 @@ pub trait ConnWriteSideCustom {
     fn process_message(&mut self, message: <Self::Types as Types>::ToWriteMessage) -> result::Result<()>;
 }
 
-impl<T> ConnData<T>
+impl<T> Conn<T>
     where
         T : Types,
         Self : ConnReadSideCustom<Types=T>,

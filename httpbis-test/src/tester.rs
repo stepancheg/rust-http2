@@ -28,10 +28,13 @@ use httpbis::for_test::solicit::frame::window_update::WindowUpdateFrame;
 use httpbis::for_test::solicit::frame::RawFrame;
 use httpbis::for_test::solicit::frame::rst_stream::RstStreamFrame;
 use httpbis::for_test::solicit::connection::HttpFrame;
-use httpbis::for_test::solicit::connection::HttpConnection;
+use httpbis::for_test::hpack;
 use httpbis::Client;
 
 use super::BIND_HOST;
+use httpbis::for_test::WindowSize;
+use httpbis::for_test::DEFAULT_SETTINGS;
+use httpbis::for_test::HttpSettings;
 
 
 pub struct HttpServerTester(net::TcpListener);
@@ -63,17 +66,15 @@ impl HttpServerTester {
         self.0.local_addr().unwrap().port()
     }
 
-    pub fn accept(&self) -> HttpConnectionTester {
+    pub fn accept(&self) -> HttpConnTester {
         debug!("accept connection...");
-        let r = HttpConnectionTester {
-            tcp: self.0.accept().unwrap().0,
-            conn: HttpConnection::new(),
-        };
+        let tcp = self.0.accept().unwrap().0;
+        let r = HttpConnTester::with_tcp(tcp);
         debug!("accept connection.");
         r
     }
 
-    pub fn accept_xchg(&self) -> HttpConnectionTester {
+    pub fn accept_xchg(&self) -> HttpConnTester {
         let mut tester = self.accept();
         tester.recv_preface();
         tester.settings_xchg();
@@ -83,31 +84,51 @@ impl HttpServerTester {
 
 static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
-pub struct HttpConnectionTester {
+pub struct HttpConnTester {
     tcp: net::TcpStream,
-    pub conn: HttpConnection,
+    pub out_window_size: WindowSize,
+    pub in_window_size: WindowSize,
+    pub decoder: hpack::Decoder<'static>,
+    pub encoder: hpack::Encoder<'static>,
+    /// Last known peer settings
+    pub peer_settings: HttpSettings,
+    /// Last our settings acknowledged
+    pub our_settings_ack: HttpSettings,
+    /// Last our settings sent
+    pub our_settings_sent: Option<HttpSettings>,
 }
 
-impl HttpConnectionTester {
-    pub fn new_server_with_client() -> (HttpConnectionTester, Client) {
+impl HttpConnTester {
+    pub fn with_tcp(tcp: net::TcpStream) -> HttpConnTester {
+        HttpConnTester {
+            tcp,
+            encoder: hpack::Encoder::new(),
+            decoder: hpack::Decoder::new(),
+            in_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
+            out_window_size: WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32),
+            peer_settings: DEFAULT_SETTINGS,
+            our_settings_ack: DEFAULT_SETTINGS,
+            our_settings_sent: None,
+        }
+    }
+
+    pub fn new_server_with_client() -> (HttpConnTester, Client) {
         let (server, client) = HttpServerTester::new_with_client();
         let tester = server.accept();
         (tester, client)
     }
 
-    pub fn new_server_with_client_xchg() -> (HttpConnectionTester, Client) {
-        let (mut tester, client) = HttpConnectionTester::new_server_with_client();
+    pub fn new_server_with_client_xchg() -> (HttpConnTester, Client) {
+        let (mut tester, client) = HttpConnTester::new_server_with_client();
         tester.recv_preface();
         tester.settings_xchg();
         (tester, client)
     }
 
-    pub fn connect(port: u16) -> HttpConnectionTester {
-        HttpConnectionTester {
-            tcp: net::TcpStream::connect((BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap())
-                .expect("connect"),
-            conn: HttpConnection::new(),
-        }
+    pub fn connect(port: u16) -> HttpConnTester {
+        let addr = (BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap();
+        let tcp = net::TcpStream::connect(addr).expect("connect");
+        Self::with_tcp(tcp)
     }
 
     pub fn recv_preface(&mut self) {
@@ -140,7 +161,7 @@ impl HttpConnectionTester {
     }
 
     pub fn send_window_update_conn(&mut self, increment: u32) {
-        self.conn.in_window_size.try_increase(increment).unwrap();
+        self.in_window_size.try_increase(increment).unwrap();
         self.send_frame(WindowUpdateFrame::for_connection(increment));
     }
 
@@ -149,7 +170,7 @@ impl HttpConnectionTester {
     }
 
     pub fn send_headers(&mut self, stream_id: StreamId, headers: Headers, end: bool) {
-        let fragment = self.conn.encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
+        let fragment = self.encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
         let mut headers_frame = HeadersFrame::new(fragment, stream_id);
         headers_frame.set_flag(HeadersFlag::EndHeaders);
         if end {
@@ -173,7 +194,7 @@ impl HttpConnectionTester {
             data_frame.set_flag(DataFlag::EndStream);
         }
         self.send_frame(data_frame);
-        self.conn.out_window_size.try_decrease_to_positive(data.len() as i32).expect("decrease");
+        self.out_window_size.try_decrease_to_positive(data.len() as i32).expect("decrease");
     }
 
     pub fn send_rst(&mut self, stream_id: StreamId, error_code: ErrorCode) {
@@ -183,7 +204,7 @@ impl HttpConnectionTester {
     pub fn recv_raw_frame(&mut self) -> RawFrame {
         for_test::recv_raw_frame_sync(
             &mut self.tcp,
-            self.conn.our_settings_ack.max_frame_size)
+            self.our_settings_ack.max_frame_size)
                 .expect("recv_raw_frame")
     }
 
@@ -197,14 +218,14 @@ impl HttpConnectionTester {
     pub fn recv_special_frame_process_special(&mut self) -> Option<HttpFrame> {
         let frame = self.fn_recv_frame_no_check_ack();
         if let HttpFrame::Settings(ref f) = frame {
-            if self.conn.our_settings_sent.is_some() && f.is_ack() {
+            if self.our_settings_sent.is_some() && f.is_ack() {
                 self.process_peer_settings_ack(&f);
                 return None;
             }
         }
         if let HttpFrame::WindowUpdate(ref f) = frame {
             if f.stream_id == 0 {
-                self.conn.out_window_size.try_increase(f.increment).expect("increment");
+                self.out_window_size.try_increase(f.increment).expect("increment");
             } else {
                 // TODO: store for use by test
             }
@@ -231,18 +252,18 @@ impl HttpConnectionTester {
     pub fn recv_frame_settings_set(&mut self) -> SettingsFrame {
         let settings = self.recv_frame_settings();
         assert!(!settings.is_ack());
-        self.conn.peer_settings.apply_from_frame(&settings);
+        self.peer_settings.apply_from_frame(&settings);
         settings
     }
 
     fn process_peer_settings_ack(&mut self, frame: &SettingsFrame) {
         assert!(frame.is_ack());
-        assert!(self.conn.our_settings_sent.is_some());
-        self.conn.our_settings_ack = self.conn.our_settings_sent.take().unwrap();
+        assert!(self.our_settings_sent.is_some());
+        self.our_settings_ack = self.our_settings_sent.take().unwrap();
     }
 
     pub fn recv_frame_settings_ack(&mut self) -> SettingsFrame {
-        assert!(self.conn.our_settings_sent.is_some());
+        assert!(self.our_settings_sent.is_some());
         let settings = self.recv_frame_settings();
         self.process_peer_settings_ack(&settings);
         settings
@@ -255,10 +276,10 @@ impl HttpConnectionTester {
     }
 
     pub fn send_settings(&mut self, settings: SettingsFrame) {
-        assert!(self.conn.our_settings_sent.is_none());
-        let mut new_settings = self.conn.our_settings_ack;
+        assert!(self.our_settings_sent.is_none());
+        let mut new_settings = self.our_settings_ack;
         new_settings.apply_from_frame(&settings);
-        self.conn.our_settings_sent = Some(new_settings);
+        self.our_settings_sent = Some(new_settings);
         self.send_frame(settings);
     }
 
@@ -340,7 +361,7 @@ impl HttpConnectionTester {
 
     pub fn recv_frame_headers_decode(&mut self) -> (HeadersFrame, Headers, u32) {
         let (frame, cont_count) = self.recv_frame_headers_continuation();
-        let headers = self.conn.decoder.decode(frame.header_fragment()).expect("decode");
+        let headers = self.decoder.decode(frame.header_fragment()).expect("decode");
         let headers = Headers(headers.into_iter().map(|(n, v)| Header::new(n, v)).collect());
         (frame, headers, cont_count)
     }
@@ -396,7 +417,7 @@ impl HttpConnectionTester {
             let end_of_stream = match frame {
                 HttpFrame::Headers(headers_frame) => {
                     let end_of_stream = headers_frame.is_end_of_stream();
-                    let headers = self.conn.decoder.decode(headers_frame.header_fragment()).expect("decode");
+                    let headers = self.decoder.decode(headers_frame.header_fragment()).expect("decode");
                     let headers = Headers(headers.into_iter().map(|(n, v)| Header::new(n, v)).collect());
                     r.headers.extend(headers);
                     end_of_stream

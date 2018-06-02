@@ -88,19 +88,19 @@ impl<I> HttpStreamData for ClientStream<I>
 }
 
 pub struct ClientConnData {
-    callbacks: Box<ClientConnectionCallbacks>,
+    callbacks: Box<ClientConnCallbacks>,
 }
 
-impl ConnDataSpecific for ClientConnData {
+impl ConnSpecific for ClientConnData {
 }
 
 
-pub struct ClientConnection {
+pub struct ClientConn {
     write_tx: UnboundedSender<ClientToWriteMessage>,
     command_tx: UnboundedSender<ClientCommandMessage>,
 }
 
-unsafe impl Sync for ClientConnection {}
+unsafe impl Sync for ClientConn {}
 
 pub struct StartRequestMessage {
     pub headers: Headers,
@@ -120,12 +120,12 @@ impl From<CommonToWriteMessage> for ClientToWriteMessage {
 }
 
 enum ClientCommandMessage {
-    DumpState(oneshot::Sender<ConnectionStateSnapshot>),
+    DumpState(oneshot::Sender<ConnStateSnapshot>),
     WaitForHandshake(oneshot::Sender<result::Result<()>>),
 }
 
 
-impl<I> ConnWriteSideCustom for ConnData<ClientTypes<I>>
+impl<I> ConnWriteSideCustom for Conn<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
@@ -138,7 +138,7 @@ impl<I> ConnWriteSideCustom for ConnData<ClientTypes<I>>
     }
 }
 
-impl<I> ConnData<ClientTypes<I>>
+impl<I> Conn<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     fn process_start(&mut self, start: StartRequestMessage)
@@ -178,13 +178,13 @@ impl<I> ConnData<ClientTypes<I>>
 }
 
 
-pub trait ClientConnectionCallbacks : 'static {
+pub trait ClientConnCallbacks: 'static {
     // called at most once
     fn goaway(&self, stream_id: StreamId, raw_error_code: u32);
 }
 
 
-impl ClientConnection {
+impl ClientConn {
     fn spawn_connected<I, C>(
         lh: reactor::Handle, connect: HttpFutureSend<I>,
         conf: ClientConf,
@@ -192,7 +192,7 @@ impl ClientConnection {
             -> Self
         where
             I : AsyncWrite + AsyncRead + Send + 'static,
-            C : ClientConnectionCallbacks,
+            C : ClientConnCallbacks,
     {
         let (to_write_tx, to_write_rx) = unbounded();
         let (command_tx, command_rx) = unbounded();
@@ -200,7 +200,7 @@ impl ClientConnection {
         let to_write_rx = Box::new(to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
         let command_rx = Box::new(command_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
 
-        let c = ClientConnection {
+        let c = ClientConn {
             write_tx: to_write_tx.clone(),
             command_tx: command_tx,
         };
@@ -221,7 +221,7 @@ impl ClientConnection {
 
             let (read, write) = conn.split();
 
-            let conn_data = ConnData::<ClientTypes<_>>::new(
+            let conn_data = Conn::<ClientTypes<_>>::new(
                 lh_copy,
                 CpuPoolOption::SingleThread,
                 ClientConnData {
@@ -251,13 +251,13 @@ impl ClientConnection {
         tls: ClientTlsOption<C>,
         conf: ClientConf,
         callbacks: H) -> Self
-        where H : ClientConnectionCallbacks, C : TlsConnector + Sync
+        where H : ClientConnCallbacks, C : TlsConnector + Sync
     {
         match tls {
             ClientTlsOption::Plain =>
-                ClientConnection::spawn_plain(lh.clone(), addr, conf, callbacks),
+                ClientConn::spawn_plain(lh.clone(), addr, conf, callbacks),
             ClientTlsOption::Tls(domain, connector) =>
-                ClientConnection::spawn_tls(lh.clone(), &domain, connector, addr, conf, callbacks),
+                ClientConn::spawn_tls(lh.clone(), &domain, connector, addr, conf, callbacks),
         }
     }
 
@@ -267,7 +267,7 @@ impl ClientConnection {
         conf: ClientConf,
         callbacks: C)
             -> Self
-        where C : ClientConnectionCallbacks
+        where C : ClientConnCallbacks
     {
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = addr.connect(&lh).map_err(Into::into);
@@ -288,7 +288,7 @@ impl ClientConnection {
             Box::new(connect.map(map_callback))
         };
 
-        ClientConnection::spawn_connected(lh, connect, conf, callbacks)
+        ClientConn::spawn_connected(lh, connect, conf, callbacks)
     }
 
     pub fn spawn_tls<H, C>(
@@ -299,7 +299,7 @@ impl ClientConnection {
         conf: ClientConf,
         callbacks: H)
             -> Self
-        where H : ClientConnectionCallbacks, C : TlsConnector + Sync
+        where H : ClientConnCallbacks, C : TlsConnector + Sync
     {
         let domain = domain.to_owned();
 
@@ -315,7 +315,7 @@ impl ClientConnection {
 
         let tls_conn = tls_conn.map_err(Error::from);
 
-        ClientConnection::spawn_connected(lh, Box::new(tls_conn), conf, callbacks)
+        ClientConn::spawn_connected(lh, Box::new(tls_conn), conf, callbacks)
     }
 
     pub fn start_request_with_resp_sender(
@@ -332,14 +332,14 @@ impl ClientConnection {
             })
     }
 
-    pub fn dump_state_with_resp_sender(&self, tx: oneshot::Sender<ConnectionStateSnapshot>) {
+    pub fn dump_state_with_resp_sender(&self, tx: oneshot::Sender<ConnStateSnapshot>) {
         // ignore error
         drop(self.command_tx.unbounded_send(ClientCommandMessage::DumpState(tx)));
     }
 
     /// For tests
     #[doc(hidden)]
-    pub fn _dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
+    pub fn _dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
         let (tx, rx) = oneshot::channel();
 
         self.dump_state_with_resp_sender(tx);
@@ -362,7 +362,7 @@ impl ClientConnection {
     }
 }
 
-impl Service for ClientConnection {
+impl Service for ClientConn {
     // TODO: copy-paste with Client::start_request
     fn start_request(
         &self,
@@ -392,7 +392,7 @@ impl Service for ClientConnection {
     }
 }
 
-impl<I> ConnReadSideCustom for ConnData<ClientTypes<I>>
+impl<I> ConnReadSideCustom for Conn<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;
@@ -473,7 +473,7 @@ impl<I> ConnReadSideCustom for ConnData<ClientTypes<I>>
     }
 }
 
-impl<I> ConnCommandSideCustom for ConnData<ClientTypes<I>>
+impl<I> ConnCommandSideCustom for Conn<ClientTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ClientTypes<I>;

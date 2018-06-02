@@ -10,7 +10,7 @@ pub trait Types : 'static {
     type Io : AsyncWrite + AsyncRead + Send + 'static;
     type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific : HttpStreamDataSpecific;
-    type ConnDataSpecific : ConnDataSpecific;
+    type ConnDataSpecific : ConnSpecific;
     // Message sent to write loop
     type ToWriteMessage : From<CommonToWriteMessage> + Send;
     type CommandMessage;

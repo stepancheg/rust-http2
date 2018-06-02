@@ -1,5 +1,5 @@
 use common::types::Types;
-use common::conn::ConnData;
+use common::conn::Conn;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use solicit::connection::HttpFrame;
@@ -22,7 +22,7 @@ pub trait ConnReadSideCustom {
         -> result::Result<Option<HttpStreamRef<Self::Types>>>;
 }
 
-impl<T> ConnData<T>
+impl<T> Conn<T>
     where
         T : Types,
         Self : ConnReadSideCustom<Types=T>,
@@ -32,7 +32,7 @@ impl<T> ConnData<T>
 {
     /// Recv a frame from the network
     fn recv_http_frame(&mut self) -> Poll<HttpFrame, error::Error> {
-        let max_frame_size = self.conn.our_settings_ack.max_frame_size;
+        let max_frame_size = self.our_settings_ack.max_frame_size;
 
         self.framed_read.poll_http_frame(max_frame_size)
     }

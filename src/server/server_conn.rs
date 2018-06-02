@@ -108,11 +108,11 @@ struct ServerConnData {
     factory: Arc<Service>,
 }
 
-impl ConnDataSpecific for ServerConnData {
+impl ConnSpecific for ServerConnData {
 }
 
 #[allow(dead_code)] // https://github.com/rust-lang/rust/issues/42303
-type ServerInner<I> = ConnData<ServerTypes<I>>;
+type ServerInner<I> = Conn<ServerTypes<I>>;
 
 impl<I> ServerInner<I>
     where I : AsyncWrite + AsyncRead + Send + 'static
@@ -188,11 +188,11 @@ impl From<CommonToWriteMessage> for ServerToWriteMessage {
 }
 
 enum ServerCommandMessage {
-    DumpState(oneshot::Sender<ConnectionStateSnapshot>),
+    DumpState(oneshot::Sender<ConnStateSnapshot>),
 }
 
 
-impl<I : AsyncWrite + Send + 'static> ConnWriteSideCustom for ConnData<ServerTypes<I>>
+impl<I : AsyncWrite + Send + 'static> ConnWriteSideCustom for Conn<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;
@@ -206,7 +206,7 @@ impl<I : AsyncWrite + Send + 'static> ConnWriteSideCustom for ConnData<ServerTyp
     }
 }
 
-impl<I> ConnReadSideCustom for ConnData<ServerTypes<I>>
+impl<I> ConnReadSideCustom for Conn<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
 {
     type Types = ServerTypes<I>;
@@ -255,13 +255,13 @@ impl<I> ConnCommandSideCustom for ServerInner<I>
     }
 }
 
-pub struct ServerConnection {
+pub struct ServerConn {
     command_tx: UnboundedSender<ServerCommandMessage>,
 }
 
-impl ServerConnection {
+impl ServerConn {
     fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, cpu_pool: CpuPoolOption, conf: ServerConf, service: Arc<F>)
-        -> (ServerConnection, HttpFuture<()>)
+        -> (ServerConn, HttpFuture<()>)
         where
             F : Service,
             I : AsyncRead + AsyncWrite + Send + 'static,
@@ -285,7 +285,7 @@ impl ServerConnection {
 
             let (read, write) = conn.split();
 
-            let conn_data = ConnData::<ServerTypes<I>>::new(
+            let conn_data = Conn::<ServerTypes<I>>::new(
                 lh,
                 cpu_pool,
                 ServerConnData {
@@ -305,7 +305,7 @@ impl ServerConnection {
 
         let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));
 
-        (ServerConnection {
+        (ServerConn {
             command_tx: command_tx,
         }, future)
     }
@@ -316,33 +316,33 @@ impl ServerConnection {
         tls: ServerTlsOption<A>,
         exec: CpuPoolOption,
         conf: ServerConf, service: Arc<S>)
-            -> (ServerConnection, HttpFuture<()>)
+            -> (ServerConn, HttpFuture<()>)
         where S : Service, A : TlsAcceptor
     {
         match tls {
             ServerTlsOption::Plain => {
                 let socket = Box::new(future::finished(socket));
-                ServerConnection::connected(lh, socket, exec, conf, service)
+                ServerConn::connected(lh, socket, exec, conf, service)
             }
             ServerTlsOption::Tls(acceptor) => {
                 let socket = Box::new(
                     tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from));
-                ServerConnection::connected(lh, socket, exec, conf, service)
+                ServerConn::connected(lh, socket, exec, conf, service)
             }
         }
     }
 
     pub fn new_plain_single_thread<S>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, service: Arc<S>)
-        -> (ServerConnection, HttpFuture<()>)
+        -> (ServerConn, HttpFuture<()>)
         where
             S : Service,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        ServerConnection::new(lh, Box::new(socket), no_tls, CpuPoolOption::SingleThread, conf, service)
+        ServerConn::new(lh, Box::new(socket), no_tls, CpuPoolOption::SingleThread, conf, service)
     }
 
     pub fn new_plain_single_thread_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
-        -> (ServerConnection, HttpFuture<()>)
+        -> (ServerConn, HttpFuture<()>)
         where
             F : Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
     {
@@ -356,11 +356,11 @@ impl ServerConnection {
             }
         }
 
-        ServerConnection::new_plain_single_thread(lh, socket, conf, Arc::new(HttpServiceFn(f)))
+        ServerConn::new_plain_single_thread(lh, socket, conf, Arc::new(HttpServiceFn(f)))
     }
 
     /// For tests
-    pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
+    pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
         let (tx, rx) = oneshot::channel();
 
         if let Err(_) = self.command_tx.clone().unbounded_send(ServerCommandMessage::DumpState(tx)) {

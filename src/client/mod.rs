@@ -45,9 +45,9 @@ use socket::AnySocketAddr;
 
 pub use client::client_tls::ClientTlsOption;
 use client::client_conf::ClientConf;
-use client::client_conn::ClientConnection;
+use client::client_conn::ClientConn;
 use client::client_conn::StartRequestMessage;
-use client::client_conn::ClientConnectionCallbacks;
+use client::client_conn::ClientConnCallbacks;
 
 
 /// Builder for HTTP/2 client.
@@ -305,7 +305,7 @@ impl Client {
 
     /// For tests
     #[doc(hidden)]
-    pub fn dump_state(&self) -> HttpFutureSend<ConnectionStateSnapshot> {
+    pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
         let (tx, rx) = oneshot::channel();
         // ignore error
         drop(self.controller_tx.unbounded_send(ControllerCommand::_DumpState(tx)));
@@ -358,7 +358,7 @@ enum ControllerCommand {
     GoAway,
     StartRequest(StartRequestMessage),
     WaitForConnect(oneshot::Sender<Result<()>>),
-    _DumpState(oneshot::Sender<ConnectionStateSnapshot>),
+    _DumpState(oneshot::Sender<ConnStateSnapshot>),
 }
 
 struct ControllerState<T : ToClientStream, C : TlsConnector> {
@@ -367,13 +367,13 @@ struct ControllerState<T : ToClientStream, C : TlsConnector> {
     tls: ClientTlsOption<C>,
     conf: ClientConf,
     // current connection
-    conn: Arc<ClientConnection>,
+    conn: Arc<ClientConn>,
     tx: UnboundedSender<ControllerCommand>,
 }
 
 impl<T : ToClientStream + 'static + Clone, C : TlsConnector> ControllerState<T, C> {
     fn init_conn(&mut self) {
-        let conn = ClientConnection::spawn(
+        let conn = ClientConn::spawn(
             self.handle.clone(),
             Box::new(self.socket_addr.clone()),
             self.tls.clone(),
@@ -435,7 +435,7 @@ struct CallbacksImpl {
     tx: UnboundedSender<ControllerCommand>,
 }
 
-impl ClientConnectionCallbacks for CallbacksImpl {
+impl ClientConnCallbacks for CallbacksImpl {
     fn goaway(&self, _stream_id: StreamId, _error_code: u32) {
         drop(self.tx.unbounded_send(ControllerCommand::GoAway));
     }
@@ -454,7 +454,7 @@ fn spawn_client_event_loop<T : ToClientStream + Send + Clone + 'static, C : TlsC
     client_died_error_holder: ClientDiedErrorHolder<ClientDiedType>)
 {
     let http_conn =
-        ClientConnection::spawn(handle.clone(), Box::new(socket_addr.clone()), tls.clone(), conf.clone(), CallbacksImpl {
+        ClientConn::spawn(handle.clone(), Box::new(socket_addr.clone()), tls.clone(), conf.clone(), CallbacksImpl {
             tx: controller_tx.clone(),
         });
 

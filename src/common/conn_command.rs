@@ -1,5 +1,5 @@
 use common::types::Types;
-use common::conn::ConnData;
+use common::conn::Conn;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use result;
@@ -15,7 +15,7 @@ pub trait ConnCommandSideCustom {
         -> result::Result<()>;
 }
 
-impl<T> ConnData<T>
+impl<T> Conn<T>
     where
         T : Types,
         Self : ConnCommandSideCustom<Types=T>,
