@@ -31,6 +31,7 @@ use solicit::frame::FrameIR;
 use std::mem;
 use common::goaway_state::GoAwayState;
 use futures::task;
+use common::iteration_exit::IterationExit;
 
 
 pub trait ConnWriteSideCustom {
@@ -268,27 +269,33 @@ impl<T> Conn<T>
         Ok(())
     }
 
-    fn process_goaway_state(&mut self) -> result::Result<()> {
+    pub fn process_goaway_state(&mut self) -> result::Result<IterationExit> {
         loop {
-            match self.goaway_state {
-                GoAwayState::None => return Ok(()),
+            self.goaway_state = match self.goaway_state {
+                GoAwayState::None => {
+                    return Ok(IterationExit::Continue);
+                },
                 GoAwayState::NeedToSend(error_code) => {
                     let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
                     self.framed_write.buffer_frame(HttpFrame::Goaway(frame));
-                    self.goaway_state = GoAwayState::Sending;
-                    continue;
+                    GoAwayState::Sending
                 }
                 GoAwayState::Sending => {
                     match self.poll_flush()? {
                         Async::Ready(()) => {
-                            self.goaway_state = GoAwayState::Sent;
+                            GoAwayState::Sent
                         },
-                        Async::NotReady => {}
+                        Async::NotReady => {
+                            assert!(self.framed_write.remaining() != 0);
+                            return Ok(IterationExit::NotReady);
+                        }
                     }
-                    return Ok(());
                 }
-                GoAwayState::Sent => return Ok(()),
-            }
+                GoAwayState::Sent => {
+                    assert!(self.framed_write.remaining() == 0);
+                    return Ok(IterationExit::ExitEarly);
+                },
+            };
         }
     }
 
@@ -305,24 +312,6 @@ impl<T> Conn<T>
     }
 
     pub fn poll_write(&mut self) -> Poll<(), error::Error> {
-        self.process_goaway_state()?;
-
-        match self.goaway_state {
-            GoAwayState::None => {}
-            GoAwayState::NeedToSend(..) => {
-                unreachable!();
-            }
-            GoAwayState::Sending => {
-                assert!(self.framed_write.remaining() != 0);
-                return Ok(Async::NotReady);
-            }
-            GoAwayState::Sent => {
-                info!("GOAWAY sent, exiting loop");
-                assert!(self.framed_write.remaining() == 0);
-                return Ok(Async::Ready(()));
-            }
-        }
-
         self.process_flush_xxx_fields()?;
 
         if let Async::Ready(()) = self.process_write_queue()? {

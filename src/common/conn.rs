@@ -54,6 +54,7 @@ use solicit::WindowSize;
 use std::collections::HashSet;
 use futures::task;
 use common::goaway_state::GoAwayState;
+use common::iteration_exit::IterationExit;
 
 
 /// Client or server fields of connection
@@ -506,6 +507,12 @@ impl<T> Conn<T>
     }
 
     fn poll(&mut self) -> Poll<(), error::Error> {
+        match self.process_goaway_state()? {
+            IterationExit::NotReady => return Ok(Async::NotReady),
+            IterationExit::ExitEarly => return Ok(Async::Ready(())),
+            IterationExit::Continue => {}
+        }
+
         let write_ready = self.poll_write()? != Async::NotReady;
         let read_ready = self.read_process_frame()? != Async::NotReady;
         let command_ready = self.poll_command()? != Async::NotReady;
