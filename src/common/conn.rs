@@ -315,7 +315,8 @@ impl<T> Conn<T>
         self.streams.remove_stream(stream_id);
 
         let rst_stream = RstStreamFrame::new(stream_id, error_code);
-        self.send_directly_to_network(DirectlyToNetworkFrame::RstStream(rst_stream))
+        self.send_frame_and_notify(rst_stream);
+        Ok(())
     }
 
     pub fn send_goaway(&mut self, error_code: ErrorCode)

@@ -35,14 +35,12 @@ use futures::task;
 
 
 pub enum DirectlyToNetworkFrame {
-    RstStream(RstStreamFrame),
     WindowUpdate(WindowUpdateFrame),
 }
 
 impl DirectlyToNetworkFrame {
     pub fn into_http_frame(self) -> HttpFrame {
         match self {
-            DirectlyToNetworkFrame::RstStream(f) => f.into(),
             DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
         }
     }
