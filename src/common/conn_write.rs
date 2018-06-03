@@ -292,32 +292,8 @@ impl<T> Conn<T>
         }
     }
 
-    pub fn poll_write(&mut self) -> Poll<(), error::Error> {
+    fn process_write_queue(&mut self) -> Poll<(), error::Error> {
         loop {
-            self.process_goaway_state()?;
-
-            match self.goaway_state {
-                GoAwayState::None => {}
-                GoAwayState::NeedToSend(..) => {
-                    unreachable!();
-                }
-                GoAwayState::Sending => {
-                    assert!(self.framed_write.remaining() != 0);
-                    return Ok(Async::NotReady);
-                }
-                GoAwayState::Sent => {
-                    info!("GOAWAY sent, exiting loop");
-                    assert!(self.framed_write.remaining() == 0);
-                    return Ok(Async::Ready(()));
-                }
-            }
-
-            self.process_flush_xxx_fields()?;
-
-            if let Async::NotReady = self.poll_flush()? {
-                return Ok(Async::NotReady);
-            }
-
             let message = match self.write_rx.poll()? {
                 Async::NotReady => return Ok(Async::NotReady),
                 Async::Ready(Some(message)) => message,
@@ -326,6 +302,35 @@ impl<T> Conn<T>
 
             self.process_message(message)?;
         }
+    }
+
+    pub fn poll_write(&mut self) -> Poll<(), error::Error> {
+        self.process_goaway_state()?;
+
+        match self.goaway_state {
+            GoAwayState::None => {}
+            GoAwayState::NeedToSend(..) => {
+                unreachable!();
+            }
+            GoAwayState::Sending => {
+                assert!(self.framed_write.remaining() != 0);
+                return Ok(Async::NotReady);
+            }
+            GoAwayState::Sent => {
+                info!("GOAWAY sent, exiting loop");
+                assert!(self.framed_write.remaining() == 0);
+                return Ok(Async::Ready(()));
+            }
+        }
+
+        self.process_flush_xxx_fields()?;
+
+        if let Async::Ready(()) = self.process_write_queue()? {
+            return Ok(Async::Ready(()));
+        }
+
+        self.poll_flush()?;
+        Ok(Async::NotReady)
     }
 }
 
