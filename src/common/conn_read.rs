@@ -243,7 +243,7 @@ impl<T> Conn<T>
             self.peer_settings.apply(setting);
         }
 
-        self.ack_settings()?;
+        self.send_ack_settings()?;
 
         if out_window_increased {
             self.out_window_increased(None)?;

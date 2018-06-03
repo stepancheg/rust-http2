@@ -469,12 +469,6 @@ impl<T> Conn<T>
         Ok(())
     }
 
-    /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
-    pub fn ack_settings(&mut self) -> result::Result<()> {
-        let settings = SettingsFrame::new_ack();
-        self.send_directly_to_network(DirectlyToNetworkFrame::Settings(settings))
-    }
-
     /// Should we close the connection because of GOAWAY state
     pub fn end_loop(&self) -> bool {
         let goaway = self.goaway_sent.is_some() || self.goaway_received.is_some();

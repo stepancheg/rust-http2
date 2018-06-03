@@ -43,6 +43,11 @@ impl Buffer {
         self.position = 0;
         self.data.extend_from_slice(data);
     }
+
+    pub fn extend_from_vec(&mut self, data: Vec<u8>) {
+        // TODO: reuse memory
+        self.extend_from_slice(&data);
+    }
 }
 
 
@@ -68,11 +73,11 @@ impl<W : AsyncWrite> HttpFramedWrite<W> {
         self.buf.remaining()
     }
 
-    pub fn buffer_frame(&mut self, frame: HttpFrame) {
+    pub fn buffer_frame<F : Into<HttpFrame>>(&mut self, frame: F) {
+        let frame = frame.into();
         debug!("send {:?}", frame);
 
-        // TODO: reuse memory
-        self.buf.extend_from_slice(&frame.serialize_into_vec());
+        self.buf.extend_from_vec(frame.serialize_into_vec());
     }
 
     pub fn poll_flush(&mut self) -> Poll<(), error::Error> {

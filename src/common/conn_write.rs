@@ -32,13 +32,13 @@ use solicit::frame::DataFlag;
 use solicit::frame::FrameIR;
 use std::mem;
 use common::goaway_state::GoAwayState;
+use futures::task;
 
 
 pub enum DirectlyToNetworkFrame {
     RstStream(RstStreamFrame),
     WindowUpdate(WindowUpdateFrame),
     Ping(PingFrame),
-    Settings(SettingsFrame),
 }
 
 impl DirectlyToNetworkFrame {
@@ -47,7 +47,6 @@ impl DirectlyToNetworkFrame {
             DirectlyToNetworkFrame::RstStream(f) => f.into(),
             DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
             DirectlyToNetworkFrame::Ping(f) => f.into(),
-            DirectlyToNetworkFrame::Settings(f) => f.into(),
         }
     }
 }
@@ -209,6 +208,15 @@ impl<T> Conn<T>
 
         self.framed_write.buffer(bytes.into());
 
+        Ok(())
+    }
+
+    /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
+    pub fn send_ack_settings(&mut self) -> result::Result<()> {
+        let settings = SettingsFrame::new_ack();
+        // TODO: should not be in front of GOAWAY
+        self.framed_write.buffer_frame(settings);
+        task::current().notify();
         Ok(())
     }
 
