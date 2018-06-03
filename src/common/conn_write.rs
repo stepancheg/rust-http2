@@ -266,17 +266,23 @@ impl<T> Conn<T>
         Ok(())
     }
 
+    fn process_flush_xxx_fields(&mut self) -> result::Result<()> {
+        if mem::replace(&mut self.flush_conn, false) {
+            self.buffer_outg_conn()?;
+        }
+
+        let stream_ids: Vec<StreamId> = self.flush_streams.iter().cloned().collect();
+        self.flush_streams.clear();
+        for stream_id in stream_ids {
+            self.buffer_outg_stream(stream_id)?;
+        }
+
+        Ok(())
+    }
+
     pub fn poll_write(&mut self) -> Poll<(), error::Error> {
         loop {
-            if mem::replace(&mut self.flush_conn, false) {
-                self.buffer_outg_conn()?;
-            }
-
-            let stream_ids: Vec<StreamId> = self.flush_streams.iter().cloned().collect();
-            self.flush_streams.clear();
-            for stream_id in stream_ids {
-                self.buffer_outg_stream(stream_id)?;
-            }
+            self.process_flush_xxx_fields()?;
 
             if let Async::NotReady = self.poll_flush()? {
                 return Ok(Async::NotReady);
