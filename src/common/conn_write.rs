@@ -49,7 +49,7 @@ impl<T> Conn<T>
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     fn poll_flush(&mut self) -> Poll<(), error::Error> {
-        self.framed_write.poll_flush()
+        self.queued_write.poll()
     }
 
     fn write_part(&mut self, target: &mut FrameBuilder, stream_id: StreamId, part: HttpStreamCommand) {
@@ -180,7 +180,7 @@ impl<T> Conn<T>
     pub fn buffer_outg_stream(&mut self, stream_id: StreamId) -> result::Result<()> {
         let bytes = self.pop_outg_all_for_stream_bytes(stream_id);
 
-        self.framed_write.buffer(bytes.into());
+        self.queued_write.queue_bytes(bytes);
 
         Ok(())
     }
@@ -188,14 +188,14 @@ impl<T> Conn<T>
     fn buffer_outg_conn(&mut self) -> result::Result<()> {
         let bytes = self.pop_outg_all_for_conn_bytes();
 
-        self.framed_write.buffer(bytes.into());
+        self.queued_write.queue_bytes(bytes);
 
         Ok(())
     }
 
     pub fn send_frame_and_notify<F : Into<HttpFrame>>(&mut self, frame: F) {
         // TODO: some of frames should not be in front of GOAWAY
-        self.framed_write.buffer_frame(frame);
+        self.queued_write.queue(frame);
         // Notify the task to make sure write loop is called again
         // to flush the buffer
         task::current().notify();
@@ -277,7 +277,7 @@ impl<T> Conn<T>
                 },
                 GoAwayState::NeedToSend(error_code) => {
                     let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
-                    self.framed_write.buffer_frame(HttpFrame::Goaway(frame));
+                    self.queued_write.queue(HttpFrame::Goaway(frame));
                     GoAwayState::Sending
                 }
                 GoAwayState::Sending => {
@@ -286,13 +286,13 @@ impl<T> Conn<T>
                             GoAwayState::Sent
                         },
                         Async::NotReady => {
-                            assert!(self.framed_write.remaining() != 0);
+                            assert!(!self.queued_write.remaining_empty());
                             return Ok(IterationExit::NotReady);
                         }
                     }
                 }
                 GoAwayState::Sent => {
-                    assert!(self.framed_write.remaining() == 0);
+                    assert!(self.queued_write.remaining_empty());
                     return Ok(IterationExit::ExitEarly);
                 },
             };

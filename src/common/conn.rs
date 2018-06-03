@@ -37,7 +37,6 @@ use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
-use codec::http_framed_write::HttpFramedWrite;
 use solicit_async::HttpFutureStreamSend;
 use futures::future;
 use futures::Future;
@@ -55,6 +54,7 @@ use std::collections::HashSet;
 use futures::task;
 use common::goaway_state::GoAwayState;
 use common::iteration_exit::IterationExit;
+use codec::queued_write::QueuedWrite;
 
 
 /// Client or server fields of connection
@@ -99,7 +99,7 @@ pub struct Conn<T : Types> {
     /// HPACK decoder used to decode incoming headers before passing them on to the session.
     pub decoder: hpack::Decoder<'static>,
 
-    pub framed_write: HttpFramedWrite<WriteHalf<T::Io>>,
+    pub queued_write: QueuedWrite<WriteHalf<T::Io>>,
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder<'static>,
     pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
@@ -165,7 +165,7 @@ impl<T> Conn<T>
         let pump_window_size = window_size::ConnOutWindowSender::new(out_window_size.0 as u32);
 
         let framed_read = HttpFramedJoinContinuationRead::new(read);
-        let framed_write = HttpFramedWrite::new(write);
+        let queued_write = QueuedWrite::new(write);
 
         Conn {
             conn_died_error_holder,
@@ -183,7 +183,7 @@ impl<T> Conn<T>
             peer_closed_streams: ClosedStreams::new(),
             command_rx,
             framed_read,
-            framed_write,
+            queued_write,
             write_rx,
             goaway_state: GoAwayState::None,
             flush_conn: false,
