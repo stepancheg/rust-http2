@@ -16,7 +16,6 @@ use result;
 use futures::Poll;
 use futures::Async;
 use common::conn_read::ConnReadSideCustom;
-use common::conn_command::ConnCommandSideCustom;
 use common::stream::HttpStreamCommand;
 use solicit::frame::FrameBuilder;
 use std::cmp;
@@ -31,6 +30,8 @@ use solicit::frame::FrameIR;
 use std::mem;
 use futures::task;
 use common::iteration_exit::IterationExit;
+use futures::sync::oneshot;
+use common::conn::ConnStateSnapshot;
 
 
 pub trait ConnWriteSideCustom {
@@ -44,7 +45,6 @@ impl<T> Conn<T>
         T : Types,
         Self : ConnReadSideCustom<Types=T>,
         Self : ConnWriteSideCustom<Types=T>,
-        Self : ConnCommandSideCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     fn poll_flush(&mut self) -> Poll<(), error::Error> {
@@ -250,6 +250,9 @@ impl<T> Conn<T>
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
                 self.increase_in_window(stream_id, increase)?;
             },
+            CommonToWriteMessage::DumpState(sender) => {
+                self.process_dump_state(sender)?;
+            },
         }
         Ok(())
     }
@@ -322,4 +325,5 @@ pub enum CommonToWriteMessage {
     IncreaseInWindow(StreamId, u32),
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),
     StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
+    DumpState(oneshot::Sender<ConnStateSnapshot>),
 }

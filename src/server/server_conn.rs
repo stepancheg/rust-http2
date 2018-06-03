@@ -63,7 +63,6 @@ impl<I> Types for ServerTypes<I>
     type HttpStreamSpecific = ServerStreamData;
     type ConnDataSpecific = ServerConnData;
     type ToWriteMessage = ServerToWriteMessage;
-    type CommandMessage = ServerCommandMessage;
 
     fn out_request_or_response() -> RequestOrResponse {
         RequestOrResponse::Response
@@ -187,10 +186,6 @@ impl From<CommonToWriteMessage> for ServerToWriteMessage {
     }
 }
 
-enum ServerCommandMessage {
-    DumpState(oneshot::Sender<ConnStateSnapshot>),
-}
-
 
 impl<I : AsyncWrite + Send + 'static> ConnWriteSideCustom for Conn<ServerTypes<I>>
     where I : AsyncWrite + AsyncRead + Send + 'static
@@ -243,20 +238,8 @@ impl<I> ConnReadSideCustom for Conn<ServerTypes<I>>
     }
 }
 
-impl<I> ConnCommandSideCustom for ServerInner<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
-{
-    type Types = ServerTypes<I>;
-
-    fn process_command_message(&mut self, message: ServerCommandMessage) -> result::Result<()> {
-        match message {
-            ServerCommandMessage::DumpState(sender) => self.process_dump_state(sender),
-        }
-    }
-}
-
 pub struct ServerConn {
-    command_tx: UnboundedSender<ServerCommandMessage>,
+    write_tx: UnboundedSender<ServerToWriteMessage>,
 }
 
 impl ServerConn {
@@ -268,17 +251,17 @@ impl ServerConn {
     {
         let lh = lh.clone();
 
-        let (to_write_tx, to_write_rx) = unbounded::<ServerToWriteMessage>();
-        let (command_tx, command_rx) = unbounded::<ServerCommandMessage>();
+        let (write_tx, write_rx) = unbounded::<ServerToWriteMessage>();
 
-        let to_write_rx = Box::new(to_write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
-        let command_rx = Box::new(command_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "command"))));
+        let write_rx = Box::new(write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
 
         let settings_frame = SettingsFrame::from_settings(vec![ HttpSetting::EnablePush(false) ]);
         let mut settings = DEFAULT_SETTINGS;
         settings.apply_from_frame(&settings_frame);
 
         let handshake = socket.and_then(|conn| server_handshake(conn, settings_frame));
+
+        let write_tx_copy = write_tx.clone();
 
         let run = handshake.and_then(move |conn| {
             let conn_died_error_holder = ClientDiedErrorHolder::new();
@@ -293,9 +276,8 @@ impl ServerConn {
                 },
                 conf.common,
                 settings,
-                to_write_tx.clone(),
-                command_rx,
-                to_write_rx,
+                write_tx_copy,
+                write_rx,
                 read,
                 write,
                 conn_died_error_holder);
@@ -306,7 +288,7 @@ impl ServerConn {
         let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));
 
         (ServerConn {
-            command_tx: command_tx,
+            write_tx,
         }, future)
     }
 
@@ -363,7 +345,7 @@ impl ServerConn {
     pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
         let (tx, rx) = oneshot::channel();
 
-        if let Err(_) = self.command_tx.clone().unbounded_send(ServerCommandMessage::DumpState(tx)) {
+        if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(CommonToWriteMessage::DumpState(tx))) {
             return Box::new(future::err(error::Error::Other("failed to send req to dump state")));
         }
 

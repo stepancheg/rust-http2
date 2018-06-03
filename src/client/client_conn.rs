@@ -60,7 +60,6 @@ impl<I> Types for ClientTypes<I>
     type HttpStreamSpecific = ClientStreamData;
     type ConnDataSpecific = ClientConnData;
     type ToWriteMessage = ClientToWriteMessage;
-    type CommandMessage = ClientCommandMessage;
 
     fn out_request_or_response() -> RequestOrResponse {
         RequestOrResponse::Request
@@ -97,7 +96,6 @@ impl ConnSpecific for ClientConnData {
 
 pub struct ClientConn {
     write_tx: UnboundedSender<ClientToWriteMessage>,
-    command_tx: UnboundedSender<ClientCommandMessage>,
 }
 
 unsafe impl Sync for ClientConn {}
@@ -110,6 +108,7 @@ pub struct StartRequestMessage {
 
 enum ClientToWriteMessage {
     Start(StartRequestMessage),
+    WaitForHandshake(oneshot::Sender<result::Result<()>>),
     Common(CommonToWriteMessage),
 }
 
@@ -117,11 +116,6 @@ impl From<CommonToWriteMessage> for ClientToWriteMessage {
     fn from(m: CommonToWriteMessage) -> Self {
         ClientToWriteMessage::Common(m)
     }
-}
-
-enum ClientCommandMessage {
-    DumpState(oneshot::Sender<ConnStateSnapshot>),
-    WaitForHandshake(oneshot::Sender<result::Result<()>>),
 }
 
 
@@ -134,6 +128,11 @@ impl<I> ConnWriteSideCustom for Conn<ClientTypes<I>>
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
             ClientToWriteMessage::Common(common) => self.process_common_message(common),
+            ClientToWriteMessage::WaitForHandshake(tx) => {
+                // ignore error
+                drop(tx.send(Ok(())));
+                Ok(())
+            },
         }
     }
 }
@@ -195,14 +194,11 @@ impl ClientConn {
             C : ClientConnCallbacks,
     {
         let (to_write_tx, to_write_rx) = unbounded();
-        let (command_tx, command_rx) = unbounded();
 
         let to_write_rx = Box::new(to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
-        let command_rx = Box::new(command_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
 
         let c = ClientConn {
             write_tx: to_write_tx.clone(),
-            command_tx: command_tx,
         };
 
         let settings_frame = SettingsFrame::from_settings(vec![ HttpSetting::EnablePush(false) ]);
@@ -230,7 +226,6 @@ impl ClientConn {
                 conf.common,
                 settings,
                 to_write_tx.clone(),
-                command_rx,
                 to_write_rx,
                 read,
                 write,
@@ -333,8 +328,9 @@ impl ClientConn {
     }
 
     pub fn dump_state_with_resp_sender(&self, tx: oneshot::Sender<ConnStateSnapshot>) {
+        let message = ClientToWriteMessage::Common(CommonToWriteMessage::DumpState(tx));
         // ignore error
-        drop(self.command_tx.unbounded_send(ClientCommandMessage::DumpState(tx)));
+        drop(self.write_tx.unbounded_send(message));
     }
 
     /// For tests
@@ -352,10 +348,10 @@ impl ClientConn {
     pub fn wait_for_connect_with_resp_sender(&self, tx: oneshot::Sender<result::Result<()>>)
         -> std_Result<(), oneshot::Sender<result::Result<()>>>
     {
-        self.command_tx.unbounded_send(ClientCommandMessage::WaitForHandshake(tx))
+        self.write_tx.unbounded_send(ClientToWriteMessage::WaitForHandshake(tx))
             .map_err(|send_error| {
                 match send_error.into_inner() {
-                    ClientCommandMessage::WaitForHandshake(tx) => tx,
+                    ClientToWriteMessage::WaitForHandshake(tx) => tx,
                     _ => unreachable!(),
                 }
             })
@@ -470,22 +466,5 @@ impl<I> ConnReadSideCustom for Conn<ClientTypes<I>>
         }
 
         Ok(Some(stream))
-    }
-}
-
-impl<I> ConnCommandSideCustom for Conn<ClientTypes<I>>
-    where I : AsyncWrite + AsyncRead + Send + 'static
-{
-    type Types = ClientTypes<I>;
-
-    fn process_command_message(&mut self, message: ClientCommandMessage) -> result::Result<()> {
-        match message {
-            ClientCommandMessage::DumpState(sender) => self.process_dump_state(sender),
-            ClientCommandMessage::WaitForHandshake(tx) => {
-                // ignore error
-                drop(tx.send(Ok(())));
-                Ok(())
-            },
-        }
     }
 }

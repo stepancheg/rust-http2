@@ -8,7 +8,6 @@ use error;
 use futures::Poll;
 use futures::Async;
 use common::conn_write::ConnWriteSideCustom;
-use common::conn_command::ConnCommandSideCustom;
 use solicit::connection::EndStream;
 use Headers;
 use result;
@@ -46,7 +45,6 @@ impl<T> Conn<T>
         T : Types,
         Self : ConnReadSideCustom<Types=T>,
         Self : ConnWriteSideCustom<Types=T>,
-        Self : ConnCommandSideCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     /// Recv a frame from the network

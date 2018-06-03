@@ -46,7 +46,6 @@ use futures::sync::oneshot;
 use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
 use common::conn_read::ConnReadSideCustom;
-use common::conn_command::ConnCommandSideCustom;
 use common::conn_write::ConnWriteSideCustom;
 use hpack;
 use solicit::WindowSize;
@@ -86,8 +85,6 @@ pub struct Conn<T : Types> {
     pub goaway_sent: Option<GoawayFrame>,
     pub goaway_received: Option<GoawayFrame>,
     pub ping_sent: Option<u64>,
-
-    pub command_rx: HttpFutureStreamSend<T::CommandMessage>,
 
     /// Tracks the size of the outbound flow control window
     pub out_window_size: WindowSize,
@@ -140,7 +137,6 @@ impl<T> Conn<T>
         T : Types,
         Self : ConnReadSideCustom<Types=T>,
         Self : ConnWriteSideCustom<Types=T>,
-        Self : ConnCommandSideCustom<Types=T>,
         HttpStreamCommon<T> : HttpStreamData<Types=T>,
 {
     pub fn new(
@@ -150,7 +146,6 @@ impl<T> Conn<T>
         _conf: CommonConf,
         sent_settings: HttpSettings,
         to_write_tx: UnboundedSender<T::ToWriteMessage>,
-        command_rx: HttpFutureStreamSend<T::CommandMessage>,
         write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
         read: ReadHalf<T::Io>,
         write: WriteHalf<T::Io>,
@@ -179,7 +174,6 @@ impl<T> Conn<T>
             ping_sent: None,
             pump_out_window_size: pump_window_size,
             peer_closed_streams: ClosedStreams::new(),
-            command_rx,
             framed_read,
             queued_write,
             write_rx,
@@ -501,9 +495,8 @@ impl<T> Conn<T>
 
         let write_ready = self.poll_write()? != Async::NotReady;
         let read_ready = self.read_process_frame()? != Async::NotReady;
-        let command_ready = self.poll_command()? != Async::NotReady;
 
-        Ok(if write_ready || read_ready || command_ready {
+        Ok(if write_ready || read_ready {
             info!("connection loop complete");
             Async::Ready(())
         } else {

@@ -1,7 +1,6 @@
 //! Common code for client and server
 
 mod conn;
-mod conn_command;
 mod conn_write;
 mod conn_read;
 mod stream;
@@ -19,7 +18,6 @@ pub mod waiters;
 mod iteration_exit;
 
 pub use self::conn::*;
-pub use self::conn_command::*;
 pub use self::conn_write::*;
 pub use self::conn_read::*;
 pub use self::stream::*;
