@@ -1,4 +1,4 @@
-# https://github.com/rust-lang-nursery/rustfmt/pull/1267
+# https://github.com/rust-lang-nursery/rustfmt/issues/2764
 space_before_bound = true
 
 normalize_comments = false
