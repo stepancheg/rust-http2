@@ -29,7 +29,6 @@ use solicit::frame::DataFrame;
 use solicit::frame::DataFlag;
 use solicit::frame::FrameIR;
 use std::mem;
-use common::goaway_state::GoAwayState;
 use futures::task;
 use common::iteration_exit::IterationExit;
 
@@ -269,34 +268,27 @@ impl<T> Conn<T>
         Ok(())
     }
 
+    pub fn send_goaway(&mut self, error_code: ErrorCode)
+        -> result::Result<()>
+    {
+        debug!("requesting to send GOAWAY with code {:?}", error_code);
+        let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
+        self.queued_write.queue_goaway(frame);
+        task::current().notify();
+        Ok(())
+    }
+
     pub fn process_goaway_state(&mut self) -> result::Result<IterationExit> {
-        loop {
-            self.goaway_state = match self.goaway_state {
-                GoAwayState::None => {
-                    return Ok(IterationExit::Continue);
-                },
-                GoAwayState::NeedToSend(error_code) => {
-                    let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
-                    self.queued_write.queue(HttpFrame::Goaway(frame));
-                    GoAwayState::Sending
-                }
-                GoAwayState::Sending => {
-                    match self.poll_flush()? {
-                        Async::Ready(()) => {
-                            GoAwayState::Sent
-                        },
-                        Async::NotReady => {
-                            assert!(!self.queued_write.remaining_empty());
-                            return Ok(IterationExit::NotReady);
-                        }
-                    }
-                }
-                GoAwayState::Sent => {
-                    assert!(self.queued_write.remaining_empty());
-                    return Ok(IterationExit::ExitEarly);
-                },
-            };
-        }
+        Ok(if self.queued_write.goaway_queued() {
+            self.queued_write.poll()?;
+            if self.queued_write.remaining_empty() {
+                IterationExit::ExitEarly
+            } else {
+                IterationExit::NotReady
+            }
+        } else {
+            IterationExit::Continue
+        })
     }
 
     fn process_write_queue(&mut self) -> Poll<(), error::Error> {

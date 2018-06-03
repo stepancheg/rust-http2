@@ -52,7 +52,6 @@ use hpack;
 use solicit::WindowSize;
 use std::collections::HashSet;
 use futures::task;
-use common::goaway_state::GoAwayState;
 use common::iteration_exit::IterationExit;
 use codec::queued_write::QueuedWrite;
 
@@ -103,7 +102,6 @@ pub struct Conn<T : Types> {
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder<'static>,
     pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
-    pub goaway_state: GoAwayState,
 
     /// Try flush outgoing connection if window allows it on the next write poll
     pub flush_conn: bool,
@@ -185,7 +183,6 @@ impl<T> Conn<T>
             framed_read,
             queued_write,
             write_rx,
-            goaway_state: GoAwayState::None,
             flush_conn: false,
             decoder: hpack::Decoder::new(),
             encoder: hpack::Encoder::new(),
@@ -315,17 +312,6 @@ impl<T> Conn<T>
 
         let rst_stream = RstStreamFrame::new(stream_id, error_code);
         self.send_frame_and_notify(rst_stream);
-        Ok(())
-    }
-
-    pub fn send_goaway(&mut self, error_code: ErrorCode)
-        -> result::Result<()>
-    {
-        debug!("requesting to send GOAWAY with code {:?}", error_code);
-        if let GoAwayState::None = self.goaway_state {
-            self.goaway_state = GoAwayState::NeedToSend(error_code);
-            task::current().notify();
-        }
         Ok(())
     }
 

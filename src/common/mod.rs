@@ -16,7 +16,6 @@ pub mod stream_queue_sync;
 mod window_size;
 pub mod atomic_box_option;
 pub mod waiters;
-mod goaway_state;
 mod iteration_exit;
 
 pub use self::conn::*;
