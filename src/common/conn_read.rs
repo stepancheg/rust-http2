@@ -35,7 +35,6 @@ use solicit::frame::DataFrame;
 use solicit::frame::Frame;
 
 
-
 pub trait ConnReadSideCustom {
     type Types : Types;
 
@@ -138,7 +137,8 @@ impl<T> Conn<T>
             }
         } else {
             let ping = PingFrame::new_ack(frame.opaque_data());
-            self.send_directly_to_network(DirectlyToNetworkFrame::Ping(ping))
+            self.send_frame_and_notify(ping);
+            Ok(())
         }
     }
 

@@ -12,7 +12,6 @@ use ErrorCode;
 use solicit::frame::RstStreamFrame;
 use solicit::frame::GoawayFrame;
 use solicit::frame::WindowUpdateFrame;
-use solicit::frame::PingFrame;
 use solicit::frame::SettingsFrame;
 use result;
 use futures::Poll;
@@ -38,7 +37,6 @@ use futures::task;
 pub enum DirectlyToNetworkFrame {
     RstStream(RstStreamFrame),
     WindowUpdate(WindowUpdateFrame),
-    Ping(PingFrame),
 }
 
 impl DirectlyToNetworkFrame {
@@ -46,7 +44,6 @@ impl DirectlyToNetworkFrame {
         match self {
             DirectlyToNetworkFrame::RstStream(f) => f.into(),
             DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
-            DirectlyToNetworkFrame::Ping(f) => f.into(),
         }
     }
 }
@@ -211,12 +208,18 @@ impl<T> Conn<T>
         Ok(())
     }
 
+    pub fn send_frame_and_notify<F : Into<HttpFrame>>(&mut self, frame: F) {
+        // TODO: some of frames should not be in front of GOAWAY
+        self.framed_write.buffer_frame(frame);
+        // Notify the task to make sure write loop is called again
+        // to flush the buffer
+        task::current().notify();
+    }
+
     /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
     pub fn send_ack_settings(&mut self) -> result::Result<()> {
         let settings = SettingsFrame::new_ack();
-        // TODO: should not be in front of GOAWAY
-        self.framed_write.buffer_frame(settings);
-        task::current().notify();
+        self.send_frame_and_notify(settings);
         Ok(())
     }
 
