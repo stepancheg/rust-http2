@@ -11,7 +11,6 @@ use error;
 use ErrorCode;
 use solicit::frame::RstStreamFrame;
 use solicit::frame::GoawayFrame;
-use solicit::frame::WindowUpdateFrame;
 use solicit::frame::SettingsFrame;
 use result;
 use futures::Poll;
@@ -32,19 +31,6 @@ use solicit::frame::FrameIR;
 use std::mem;
 use common::goaway_state::GoAwayState;
 use futures::task;
-
-
-pub enum DirectlyToNetworkFrame {
-    WindowUpdate(WindowUpdateFrame),
-}
-
-impl DirectlyToNetworkFrame {
-    pub fn into_http_frame(self) -> HttpFrame {
-        match self {
-            DirectlyToNetworkFrame::WindowUpdate(f) => f.into(),
-        }
-    }
-}
 
 
 pub trait ConnWriteSideCustom {
@@ -255,9 +241,6 @@ impl<T> Conn<T>
 
     pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
         match common {
-            CommonToWriteMessage::Frame(frame) => {
-                self.framed_write.buffer_frame(frame.into_http_frame());
-            },
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)?;
             },
@@ -351,7 +334,6 @@ impl<T> Conn<T>
 // Processed while write loop is not handling network I/O.
 pub enum CommonToWriteMessage {
     IncreaseInWindow(StreamId, u32),
-    Frame(DirectlyToNetworkFrame),    // write frame immediately to the network
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),
     StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
 }

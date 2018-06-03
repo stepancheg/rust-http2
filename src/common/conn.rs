@@ -29,7 +29,6 @@ use super::stream_from_network::StreamFromNetwork;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::window_size;
 use super::stream_queue_sync::stream_queue_sync;
-use super::conn_write::DirectlyToNetworkFrame;
 
 
 pub use resp::Response;
@@ -37,7 +36,6 @@ pub use resp::Response;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-use common::conn_write::CommonToWriteMessage;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use codec::http_framed_write::HttpFramedWrite;
 use solicit_async::HttpFutureStreamSend;
@@ -446,20 +444,6 @@ impl<T> Conn<T>
         self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)
     }
 
-    fn send_common(&mut self, message: CommonToWriteMessage)
-            -> result::Result<()>
-        where T::ToWriteMessage : From<CommonToWriteMessage>
-    {
-        self.to_write_tx.unbounded_send(message.into())
-            .map_err(|_| error::Error::Other("write loop died"))
-    }
-
-    /// Schedule a write for HTTP frame
-    /// Must not be data frame
-    pub fn send_directly_to_network(&mut self, frame: DirectlyToNetworkFrame) -> result::Result<()> {
-        self.send_common(CommonToWriteMessage::Frame(frame))
-    }
-
     pub fn out_window_increased(&mut self, stream_id: Option<StreamId>) -> result::Result<()> {
         match stream_id {
             Some(stream_id) => { self.flush_streams.insert(stream_id); },
@@ -516,8 +500,8 @@ impl<T> Conn<T>
         };
 
         let window_update = WindowUpdateFrame::for_stream(stream_id, increase);
-        self.send_directly_to_network(DirectlyToNetworkFrame::WindowUpdate(window_update))?;
-        
+        self.send_frame_and_notify(window_update);
+
         Ok(())
     }
 

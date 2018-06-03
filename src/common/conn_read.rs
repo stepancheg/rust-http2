@@ -17,7 +17,6 @@ use solicit_misc::HttpFrameClassified;
 use solicit_misc::HttpFrameStream;
 use solicit_misc::HttpFrameConn;
 use solicit::frame::PingFrame;
-use common::conn_write::DirectlyToNetworkFrame;
 use solicit::frame::GoawayFrame;
 use solicit::frame::WindowUpdateFrame;
 use solicit::frame::RstStreamFrame;
@@ -112,7 +111,7 @@ impl<T> Conn<T>
 
         if let Some(increment_conn) = increment_conn {
             let window_update = WindowUpdateFrame::for_connection(increment_conn);
-            self.send_directly_to_network(DirectlyToNetworkFrame::WindowUpdate(window_update))?;
+            self.send_frame_and_notify(window_update);
         }
 
         if let Some(error) = error {
