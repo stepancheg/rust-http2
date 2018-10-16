@@ -58,7 +58,7 @@ where
     type Io = I;
     type HttpStreamData = ClientStream<I>;
     type HttpStreamSpecific = ClientStreamData;
-    type ConnDataSpecific = ClientConnData;
+    type ConnSpecific = ClientConnData;
     type ToWriteMessage = ClientToWriteMessage;
 
     fn out_request_or_response() -> RequestOrResponse {

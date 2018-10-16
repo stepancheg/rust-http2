@@ -61,7 +61,7 @@ pub struct Conn<T: Types> {
     pub conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
 
     /// Client or server specific data
-    pub specific: T::ConnDataSpecific,
+    pub specific: T::ConnSpecific,
     /// Messages to be sent to write loop
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     /// Reactor we are using
@@ -135,7 +135,7 @@ where
     pub fn new(
         loop_handle: reactor::Handle,
         exec: CpuPoolOption,
-        specific: T::ConnDataSpecific,
+        specific: T::ConnSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
         to_write_tx: UnboundedSender<T::ToWriteMessage>,
