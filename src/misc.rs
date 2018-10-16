@@ -17,7 +17,7 @@ impl<'a> fmt::Debug for BsDebug<'a> {
             }
         }
         write!(fmt, "\"")?;
-    	Ok(())
+        Ok(())
     }
 }
 

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
+use std::ptr;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
-use std::ptr;
 
 /// Atomic `Box<Option<T>>`
 pub struct AtomicBoxOption<T> {
@@ -13,11 +13,12 @@ impl<T> Drop for AtomicBoxOption<T> {
     fn drop(&mut self) {
         let ptr = self.load_raw(Ordering::Relaxed);
         if !ptr.is_null() {
-            unsafe { Box::from_raw(ptr); }
+            unsafe {
+                Box::from_raw(ptr);
+            }
         }
     }
 }
-
 
 unsafe fn into_raw<T>(o: Option<Box<T>>) -> *mut T {
     match o {
@@ -33,7 +34,6 @@ unsafe fn from_raw<T>(p: *mut T) -> Option<Box<T>> {
         Some(Box::from_raw(p))
     }
 }
-
 
 impl<T> AtomicBoxOption<T> {
     pub fn new() -> AtomicBoxOption<T> {
@@ -72,14 +72,19 @@ impl<T> AtomicBoxOption<T> {
         self.swap(Some(value), ordering);
     }
 
-    pub fn compare_exchange(&self,
-        compare: *mut T, exchange: Option<Box<T>>,
-        success: Ordering, failure: Ordering)
-        -> Result<Option<Box<T>>, (*mut T, Option<Box<T>>)>
-    {
+    pub fn compare_exchange(
+        &self,
+        compare: *mut T,
+        exchange: Option<Box<T>>,
+        success: Ordering,
+        failure: Ordering,
+    ) -> Result<Option<Box<T>>, (*mut T, Option<Box<T>>)> {
         let exchange = unsafe { into_raw(exchange) };
 
-        match self.ptr.compare_exchange(compare, exchange, success, failure) {
+        match self
+            .ptr
+            .compare_exchange(compare, exchange, success, failure)
+        {
             Ok(p) => unsafe { Ok(from_raw(p)) },
             Err(p) => Err((p, unsafe { from_raw(exchange) })),
         }
@@ -90,9 +95,9 @@ impl<T> AtomicBoxOption<T> {
 mod test {
 
     use std::ptr;
-    use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
+    use std::sync::Arc;
 
     use super::*;
 
@@ -104,9 +109,7 @@ mod test {
     impl Canary {
         fn new(count: Arc<AtomicUsize>) -> Canary {
             count.fetch_add(1, Ordering::Relaxed);
-            Canary {
-                count: count,
-            }
+            Canary { count: count }
         }
     }
 
@@ -123,8 +126,14 @@ mod test {
         let b = AtomicBoxOption::new();
 
         assert!(b.swap(None, Ordering::SeqCst).is_none());
-        assert!(b.swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst).is_none());
-        assert!(b.swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst).is_some());
+        assert!(
+            b.swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst)
+                .is_none()
+        );
+        assert!(
+            b.swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst)
+                .is_some()
+        );
 
         drop(b);
 
@@ -137,18 +146,26 @@ mod test {
 
         let b = AtomicBoxOption::new();
 
-        assert!(b.compare_exchange(
-            ptr::null_mut(), None,
-            Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok());
-        assert!(b.compare_exchange(
-            ptr::null_mut(), Some(Box::new(Canary::new(count.clone()))),
-            Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok());
-        assert!(b.compare_exchange(
-            ptr::null_mut(), Some(Box::new(Canary::new(count.clone()))),
-            Ordering::SeqCst, Ordering::SeqCst)
-                .is_err());
+        assert!(
+            b.compare_exchange(ptr::null_mut(), None, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        );
+        assert!(
+            b.compare_exchange(
+                ptr::null_mut(),
+                Some(Box::new(Canary::new(count.clone()))),
+                Ordering::SeqCst,
+                Ordering::SeqCst
+            ).is_ok()
+        );
+        assert!(
+            b.compare_exchange(
+                ptr::null_mut(),
+                Some(Box::new(Canary::new(count.clone()))),
+                Ordering::SeqCst,
+                Ordering::SeqCst
+            ).is_err()
+        );
 
         drop(b);
 

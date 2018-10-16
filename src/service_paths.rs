@@ -1,13 +1,11 @@
-use std::sync::Arc;
-use std::collections::HashMap;
 use std::collections::hash_map;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use service::Service;
-use solicit::header::Headers;
 use data_or_trailers::HttpStreamAfterHeaders;
 use resp::Response;
-
-
+use service::Service;
+use solicit::header::Headers;
 
 #[derive(Default)]
 struct Node {
@@ -36,17 +34,11 @@ impl Node {
 
     fn remove_service(&mut self, path: &str) -> Option<Arc<Service>> {
         match split_path(path) {
-            None => {
-                self.service.take()
-            }
-            Some((first, rem)) => {
-                match self.children.get_mut(first) {
-                    Some(child) => {
-                        child.remove_service(rem)
-                    }
-                    None => None,
-                }
-            }
+            None => self.service.take(),
+            Some((first, rem)) => match self.children.get_mut(first) {
+                Some(child) => child.remove_service(rem),
+                None => None,
+            },
         }
     }
 
@@ -71,12 +63,8 @@ fn split_path<'a>(mut path: &'a str) -> Option<(&'a str, &'a str)> {
     } else {
         let slash = path.find('/');
         match slash {
-            Some(slash) => {
-                Some((&path[..slash], &path[slash + 1..]))
-            }
-            None => {
-                Some((path, ""))
-            }
+            Some(slash) => Some((&path[..slash], &path[slash + 1..])),
+            None => Some((path, "")),
         }
     }
 }
@@ -91,10 +79,15 @@ fn test_split_path() {
     assert_eq!(Some(("first", "")), split_path("/first/"));
     assert_eq!(Some(("first", "second")), split_path("/first/second"));
     assert_eq!(Some(("first", "second/")), split_path("/first/second/"));
-    assert_eq!(Some(("first", "second/third")), split_path("/first/second/third"));
-    assert_eq!(Some(("first", "second/third/")), split_path("/first/second/third/"));
+    assert_eq!(
+        Some(("first", "second/third")),
+        split_path("/first/second/third")
+    );
+    assert_eq!(
+        Some(("first", "second/third/")),
+        split_path("/first/second/third/")
+    );
 }
-
 
 /// Convient implementation of `Service` which allows delegation to
 /// multiple `Service` implementations provided by user.
@@ -141,9 +134,10 @@ impl ServicePaths {
     }
 
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
-        where F : Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static
+    where
+        F: Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
     {
-        impl<F : Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static> Service for F {
+        impl<F: Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static> Service for F {
             fn start_request(&self, headers: Headers, req: HttpStreamAfterHeaders) -> Response {
                 self(headers, req)
             }
@@ -152,7 +146,7 @@ impl ServicePaths {
         self.set_service(path, Arc::new(service))
     }
 
-    pub fn remove_service(&mut self, path: &str) ->Option<Arc<Service>> {
+    pub fn remove_service(&mut self, path: &str) -> Option<Arc<Service>> {
         assert!(path.starts_with("/"));
         self.root.remove_service(path)
     }

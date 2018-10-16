@@ -2,21 +2,21 @@ pub mod server_conf;
 pub mod server_conn;
 pub mod server_tls;
 
-use std::thread;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::thread;
 
 use tls_api;
 
 use tokio_core::reactor;
 
 use futures::future;
-use futures::future::Future;
 use futures::future::join_all;
+use futures::future::Future;
 use futures::stream;
 use futures::stream::Stream;
 use futures::sync::oneshot;
@@ -48,7 +48,7 @@ pub use self::server_tls::ServerTlsOption;
 pub use server::server_conf::ServerConf;
 pub use server::server_conn::ServerConn;
 
-pub struct ServerBuilder<A : tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
+pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
     pub cpu_pool: CpuPoolOption,
     pub tls: ServerTlsOption<A>,
@@ -78,7 +78,7 @@ impl ServerBuilder<tls_api_stub::TlsAcceptor> {
     }
 }
 
-impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
+impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     /// Set port server listens on.
     /// Can be zero to bind on any available port,
     /// which can be later obtained by `Server::local_addr`.
@@ -87,7 +87,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
     }
 
     /// Set port server listens on.
-    pub fn set_addr<S : ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
+    pub fn set_addr<S: ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
         let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
         if addrs.is_empty() {
             return Err(Error::Other("addr is resolved to empty list"));
@@ -108,7 +108,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     }
 }
 
-impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
+impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     /// New server builder with defaults.
     ///
     /// To call this function `ServerBuilder` must be parameterized with TLS acceptor.
@@ -171,7 +171,7 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
                     shutdown_future,
                     conf,
                     service,
-                    alive_tx
+                    alive_tx,
                 ));
                 future::finished(())
             });
@@ -182,8 +182,12 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
             let conf = self.conf;
             let service = self.service;
             let join_handle = thread::Builder::new()
-                .name(conf.thread_name.clone().unwrap_or_else(|| "http2-server-loop".to_owned()).to_string())
-                .spawn(move || {
+                .name(
+                    conf.thread_name
+                        .clone()
+                        .unwrap_or_else(|| "http2-server-loop".to_owned())
+                        .to_string(),
+                ).spawn(move || {
                     let mut lp = reactor::Core::new().expect("http2server");
                     let done_rx = spawn_server_event_loop(
                         lp.handle(),
@@ -194,7 +198,8 @@ impl<A : tls_api::TlsAcceptor> ServerBuilder<A> {
                         shutdown_future,
                         conf,
                         service,
-                        alive_tx);
+                        alive_tx,
+                    );
                     drop(lp.run(done_rx));
                 })?;
             Completion::Thread(join_handle)
@@ -231,14 +236,15 @@ struct ServerState {
 
 impl ServerState {
     fn snapshot(&self) -> HttpFutureSend<ServerStateSnapshot> {
-        let futures: Vec<_> = self.conns.iter()
+        let futures: Vec<_> = self
+            .conns
+            .iter()
             .map(|(&id, conn)| conn.dump_state().map(move |state| (id, state)))
             .collect();
 
-        Box::new(join_all(futures)
-            .map(|states| ServerStateSnapshot {
-                conns: states.into_iter().collect(),
-            }))
+        Box::new(join_all(futures).map(|states| ServerStateSnapshot {
+            conns: states.into_iter().collect(),
+        }))
     }
 }
 
@@ -264,9 +270,11 @@ fn spawn_server_event_loop<S, A>(
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
     service: S,
-    _alive_tx: mpsc::Sender<()>)
-        -> oneshot::Receiver<()>
-    where S : Service, A : TlsAcceptor,
+    _alive_tx: mpsc::Sender<()>,
+) -> oneshot::Receiver<()>
+where
+    S: Service,
+    A: TlsAcceptor,
 {
     let service = Arc::new(service);
 
@@ -274,48 +282,59 @@ fn spawn_server_event_loop<S, A>(
 
     let stuff = stream::repeat((handle.clone(), service, state, tls, conf));
 
-    let loop_run = tokio_listener.incoming().map_err(Error::from).zip(stuff)
-        .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
+    let loop_run = tokio_listener
+        .incoming()
+        .map_err(Error::from)
+        .zip(stuff)
+        .for_each(
+            move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
+                if socket.is_tcp() {
+                    info!(
+                        "accepted connection from {}",
+                        peer_addr.downcast_ref::<SocketAddr>().unwrap()
+                    );
 
-            if socket.is_tcp() {
-                info!("accepted connection from {}",
-                    peer_addr.downcast_ref::<SocketAddr>().unwrap());
+                    let no_delay = conf.no_delay.unwrap_or(true);
+                    socket
+                        .set_nodelay(no_delay)
+                        .expect("failed to set TCP_NODELAY");
+                }
 
-                let no_delay = conf.no_delay.unwrap_or(true);
-                socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
-            }
+                let (conn, future) =
+                    ServerConn::new(&loop_handle, socket, tls, exec.clone(), conf, service);
 
-            let (conn, future) = ServerConn::new(
-                &loop_handle, socket, tls, exec.clone(), conf, service);
-
-            let conn_id = {
-                let mut g = state.lock().expect("lock");
-                g.last_conn_id += 1;
-                let conn_id = g.last_conn_id;
-                let prev = g.conns.insert(conn_id, conn);
-                assert!(prev.is_none());
-                conn_id
-            };
-
-            loop_handle.spawn(future
-                .then(move |r| {
+                let conn_id = {
                     let mut g = state.lock().expect("lock");
-                    let removed = g.conns.remove(&conn_id);
-                    assert!(removed.is_some());
-                    r
-                })
-                .map_err(|e| { warn!("connection end: {:?}", e); () }));
-            Ok(())
-        });
+                    g.last_conn_id += 1;
+                    let conn_id = g.last_conn_id;
+                    let prev = g.conns.insert(conn_id, conn);
+                    assert!(prev.is_none());
+                    conn_id
+                };
+
+                loop_handle.spawn(
+                    future
+                        .then(move |r| {
+                            let mut g = state.lock().expect("lock");
+                            let removed = g.conns.remove(&conn_id);
+                            assert!(removed.is_some());
+                            r
+                        }).map_err(|e| {
+                            warn!("connection end: {:?}", e);
+                            ()
+                        }),
+                );
+                Ok(())
+            },
+        );
 
     let (done_tx, done_rx) = oneshot::channel();
 
-    let shutdown_future = shutdown_future
-        .then(move |_| {
-            // Must complete with error,
-            // so `join` with this future cancels another future.
-            future::failed::<(), _>(Error::Shutdown)
-        });
+    let shutdown_future = shutdown_future.then(move |_| {
+        // Must complete with error,
+        // so `join` with this future cancels another future.
+        future::failed::<(), _>(Error::Shutdown)
+    });
 
     // Wait for either completion of connection (i. e. error)
     // or shutdown signal.
@@ -358,10 +377,9 @@ impl Drop for Server {
             Completion::Thread(join) => drop(join.join()),
             Completion::Rx(_rx) => {
                 // cannot wait on _rx, because Core might not be running
-            },
+            }
         };
 
         self.local_addr.cleanup();
     }
 }
-

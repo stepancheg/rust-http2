@@ -1,8 +1,8 @@
 //! Single client connection
 
+use std::io;
 use std::result::Result as std_Result;
 use std::sync::Arc;
-use std::io;
 
 use error;
 use error::Error;
@@ -10,26 +10,26 @@ use result;
 
 use exec::CpuPoolOption;
 
-use solicit::StreamId;
-use solicit::header::*;
 use solicit::connection::EndStream;
 use solicit::frame::settings::*;
+use solicit::header::*;
+use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
 use service::Service;
 
 use futures::future::Future;
 use futures::stream::Stream;
-use futures::sync::oneshot;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
+use futures::sync::oneshot;
 
 use tls_api::TlsConnector;
 
 use tokio_core::reactor;
-use tokio_timer::Timer;
-use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
+use tokio_timer::Timer;
 use tokio_tls_api;
 
 use solicit_async::*;
@@ -38,22 +38,22 @@ use common::*;
 use data_or_trailers::*;
 use socket::*;
 
-use req_resp::RequestOrResponse;
-use headers_place::HeadersPlace;
-use ErrorCode;
+use client_died_error_holder::ClientDiedErrorHolder;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use headers_place::HeadersPlace;
+use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
 use std::marker;
-use client_died_error_holder::ClientDiedErrorHolder;
-use ClientTlsOption;
 use ClientConf;
-
+use ClientTlsOption;
+use ErrorCode;
 
 struct ClientTypes<I>(marker::PhantomData<I>);
 
 impl<I> Types for ClientTypes<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Io = I;
     type HttpStreamData = ClientStream<I>;
@@ -70,18 +70,15 @@ impl<I> Types for ClientTypes<I>
     }
 }
 
+pub struct ClientStreamData {}
 
-
-pub struct ClientStreamData {
-}
-
-impl HttpStreamDataSpecific for ClientStreamData {
-}
+impl HttpStreamDataSpecific for ClientStreamData {}
 
 type ClientStream<I> = HttpStreamCommon<ClientTypes<I>>;
 
 impl<I> HttpStreamData for ClientStream<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Types = ClientTypes<I>;
 }
@@ -90,9 +87,7 @@ pub struct ClientConnData {
     callbacks: Box<ClientConnCallbacks>,
 }
 
-impl ConnSpecific for ClientConnData {
-}
-
+impl ConnSpecific for ClientConnData {}
 
 pub struct ClientConn {
     write_tx: UnboundedSender<ClientToWriteMessage>,
@@ -118,9 +113,9 @@ impl From<CommonToWriteMessage> for ClientToWriteMessage {
     }
 }
 
-
 impl<I> ConnWriteSideCustom for Conn<ClientTypes<I>>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Types = ClientTypes<I>;
 
@@ -132,21 +127,23 @@ impl<I> ConnWriteSideCustom for Conn<ClientTypes<I>>
                 // ignore error
                 drop(tx.send(Ok(())));
                 Ok(())
-            },
+            }
         }
     }
 }
 
 impl<I> Conn<ClientTypes<I>>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    fn process_start(&mut self, start: StartRequestMessage)
-        -> result::Result<()>
-    {
-        let StartRequestMessage { headers, body, resp_tx } = start;
+    fn process_start(&mut self, start: StartRequestMessage) -> result::Result<()> {
+        let StartRequestMessage {
+            headers,
+            body,
+            resp_tx,
+        } = start;
 
         let stream_id = {
-
             let stream_id = self.next_local_stream_id();
 
             let out_window = {
@@ -154,13 +151,17 @@ impl<I> Conn<ClientTypes<I>>
                     stream_id,
                     None,
                     InMessageStage::Initial,
-                    ClientStreamData {});
+                    ClientStreamData {},
+                );
 
                 if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
                     warn!("caller died");
                 }
 
-                http_stream.stream().outgoing.push_back(DataOrHeaders::Headers(headers));
+                http_stream
+                    .stream()
+                    .outgoing
+                    .push_back(DataOrHeaders::Headers(headers));
 
                 out_window
             };
@@ -176,32 +177,34 @@ impl<I> Conn<ClientTypes<I>>
     }
 }
 
-
 pub trait ClientConnCallbacks: 'static {
     // called at most once
     fn goaway(&self, stream_id: StreamId, raw_error_code: u32);
 }
 
-
 impl ClientConn {
     fn spawn_connected<I, C>(
-        lh: reactor::Handle, connect: HttpFutureSend<I>,
+        lh: reactor::Handle,
+        connect: HttpFutureSend<I>,
         conf: ClientConf,
-        callbacks: C)
-            -> Self
-        where
-            I : AsyncWrite + AsyncRead + Send + 'static,
-            C : ClientConnCallbacks,
+        callbacks: C,
+    ) -> Self
+    where
+        I: AsyncWrite + AsyncRead + Send + 'static,
+        C: ClientConnCallbacks,
     {
         let (to_write_tx, to_write_rx) = unbounded();
 
-        let to_write_rx = Box::new(to_write_rx.map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
+        let to_write_rx = Box::new(
+            to_write_rx
+                .map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))),
+        );
 
         let c = ClientConn {
             write_tx: to_write_tx.clone(),
         };
 
-        let settings_frame = SettingsFrame::from_settings(vec![ HttpSetting::EnablePush(false) ]);
+        let settings_frame = SettingsFrame::from_settings(vec![HttpSetting::EnablePush(false)]);
         let mut settings = DEFAULT_SETTINGS;
         settings.apply_from_frame(&settings_frame);
 
@@ -229,7 +232,8 @@ impl ClientConn {
                 to_write_rx,
                 read,
                 write,
-                conn_died_error_holder);
+                conn_died_error_holder,
+            );
             conn_data.run()
         });
 
@@ -245,14 +249,17 @@ impl ClientConn {
         addr: Box<ToClientStream>,
         tls: ClientTlsOption<C>,
         conf: ClientConf,
-        callbacks: H) -> Self
-        where H : ClientConnCallbacks, C : TlsConnector + Sync
+        callbacks: H,
+    ) -> Self
+    where
+        H: ClientConnCallbacks,
+        C: TlsConnector + Sync,
     {
         match tls {
-            ClientTlsOption::Plain =>
-                ClientConn::spawn_plain(lh.clone(), addr, conf, callbacks),
-            ClientTlsOption::Tls(domain, connector) =>
-                ClientConn::spawn_tls(lh.clone(), &domain, connector, addr, conf, callbacks),
+            ClientTlsOption::Plain => ClientConn::spawn_plain(lh.clone(), addr, conf, callbacks),
+            ClientTlsOption::Tls(domain, connector) => {
+                ClientConn::spawn_tls(lh.clone(), &domain, connector, addr, conf, callbacks)
+            }
         }
     }
 
@@ -260,9 +267,10 @@ impl ClientConn {
         lh: reactor::Handle,
         addr: Box<ToClientStream>,
         conf: ClientConf,
-        callbacks: C)
-            -> Self
-        where C : ClientConnCallbacks
+        callbacks: C,
+    ) -> Self
+    where
+        C: ClientConnCallbacks,
     {
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = addr.connect(&lh).map_err(Into::into);
@@ -270,18 +278,21 @@ impl ClientConn {
             info!("connected to {}", addr);
 
             if socket.is_tcp() {
-                socket.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
+                socket
+                    .set_nodelay(no_delay)
+                    .expect("failed to set TCP_NODELAY");
             }
 
             socket
         };
 
-        let connect: Box<Future<Item=_, Error=_> + Send> = if let Some(timeout) = conf.connection_timeout {
-            let timer = Timer::default();
-            Box::new(timer.timeout(connect, timeout).map(map_callback))
-        } else {
-            Box::new(connect.map(map_callback))
-        };
+        let connect: Box<Future<Item = _, Error = _> + Send> =
+            if let Some(timeout) = conf.connection_timeout {
+                let timer = Timer::default();
+                Box::new(timer.timeout(connect, timeout).map(map_callback))
+            } else {
+                Box::new(connect.map(map_callback))
+            };
 
         ClientConn::spawn_connected(lh, connect, conf, callbacks)
     }
@@ -292,20 +303,24 @@ impl ClientConn {
         connector: Arc<C>,
         addr: Box<ToClientStream>,
         conf: ClientConf,
-        callbacks: H)
-            -> Self
-        where H : ClientConnCallbacks, C : TlsConnector + Sync
+        callbacks: H,
+    ) -> Self
+    where
+        H: ClientConnCallbacks,
+        C: TlsConnector + Sync,
     {
         let domain = domain.to_owned();
 
-        let connect = addr.connect(&lh)
-            .map(move |c| { info!("connected to {}", addr); c })
-            .map_err(|e| e.into());
+        let connect = addr
+            .connect(&lh)
+            .map(move |c| {
+                info!("connected to {}", addr);
+                c
+            }).map_err(|e| e.into());
 
         let tls_conn = connect.and_then(move |conn| {
-            tokio_tls_api::connect_async(&*connector, &domain, conn).map_err(|e| {
-                Error::IoError(io::Error::new(io::ErrorKind::Other, e))
-            })
+            tokio_tls_api::connect_async(&*connector, &domain, conn)
+                .map_err(|e| Error::IoError(io::Error::new(io::ErrorKind::Other, e)))
         });
 
         let tls_conn = tls_conn.map_err(Error::from);
@@ -315,15 +330,13 @@ impl ClientConn {
 
     pub fn start_request_with_resp_sender(
         &self,
-        start: StartRequestMessage)
-            -> Result<(), StartRequestMessage>
-    {
-        self.write_tx.unbounded_send(ClientToWriteMessage::Start(start))
-            .map_err(|send_error| {
-                match send_error.into_inner() {
-                    ClientToWriteMessage::Start(start) => start,
-                    _ => unreachable!(),
-                }
+        start: StartRequestMessage,
+    ) -> Result<(), StartRequestMessage> {
+        self.write_tx
+            .unbounded_send(ClientToWriteMessage::Start(start))
+            .map_err(|send_error| match send_error.into_inner() {
+                ClientToWriteMessage::Start(start) => start,
+                _ => unreachable!(),
             })
     }
 
@@ -340,32 +353,28 @@ impl ClientConn {
 
         self.dump_state_with_resp_sender(tx);
 
-        let rx = rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
+        let rx =
+            rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
 
         Box::new(rx)
     }
 
-    pub fn wait_for_connect_with_resp_sender(&self, tx: oneshot::Sender<result::Result<()>>)
-        -> std_Result<(), oneshot::Sender<result::Result<()>>>
-    {
-        self.write_tx.unbounded_send(ClientToWriteMessage::WaitForHandshake(tx))
-            .map_err(|send_error| {
-                match send_error.into_inner() {
-                    ClientToWriteMessage::WaitForHandshake(tx) => tx,
-                    _ => unreachable!(),
-                }
+    pub fn wait_for_connect_with_resp_sender(
+        &self,
+        tx: oneshot::Sender<result::Result<()>>,
+    ) -> std_Result<(), oneshot::Sender<result::Result<()>>> {
+        self.write_tx
+            .unbounded_send(ClientToWriteMessage::WaitForHandshake(tx))
+            .map_err(|send_error| match send_error.into_inner() {
+                ClientToWriteMessage::WaitForHandshake(tx) => tx,
+                _ => unreachable!(),
             })
     }
 }
 
 impl Service for ClientConn {
     // TODO: copy-paste with Client::start_request
-    fn start_request(
-        &self,
-        headers: Headers,
-        body: HttpStreamAfterHeaders)
-            -> Response
-    {
+    fn start_request(&self, headers: Headers, body: HttpStreamAfterHeaders) -> Response {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {
@@ -378,7 +387,8 @@ impl Service for ClientConn {
             return Response::err(error::Error::Other("client died"));
         }
 
-        let resp_rx = resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
+        let resp_rx =
+            resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
 
         let resp_rx = resp_rx.map(|r| r.into_stream_flag());
 
@@ -389,28 +399,39 @@ impl Service for ClientConn {
 }
 
 impl<I> ConnReadSideCustom for Conn<ClientTypes<I>>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Types = ClientTypes<I>;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<Option<HttpStreamRef<ClientTypes<I>>>>
-    {
-        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
+    fn process_headers(
+        &mut self,
+        stream_id: StreamId,
+        end_stream: EndStream,
+        headers: Headers,
+    ) -> result::Result<Option<HttpStreamRef<ClientTypes<I>>>> {
+        let existing_stream = self
+            .get_stream_for_headers_maybe_send_error(stream_id)?
+            .is_some();
         if !existing_stream {
             return Ok(None);
         }
 
-        let in_message_stage = self.streams.get_mut(stream_id).unwrap()
-            .stream().in_message_stage;
+        let in_message_stage = self
+            .streams
+            .get_mut(stream_id)
+            .unwrap()
+            .stream()
+            .in_message_stage;
 
         let headers_place = match in_message_stage {
             InMessageStage::Initial => HeadersPlace::Initial,
             InMessageStage::AfterInitialHeaders => HeadersPlace::Trailing,
             InMessageStage::AfterTrailingHeaders => {
-                return Err(error::Error::InternalError(
-                    format!("closed stream must be handled before")));
-            },
+                return Err(error::Error::InternalError(format!(
+                    "closed stream must be handled before"
+                )));
+            }
         };
 
         if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
@@ -456,10 +477,12 @@ impl<I> ConnReadSideCustom for Conn<ClientTypes<I>>
         if !status_1xx {
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
                 // TODO: reset stream on error
-                drop(response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
-                    content: DataOrHeaders::Headers(headers),
-                    last: end_stream == EndStream::Yes,
-                })));
+                drop(
+                    response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
+                        content: DataOrHeaders::Headers(headers),
+                        last: end_stream == EndStream::Yes,
+                    })),
+                );
             } else {
                 // TODO: reset stream
             }

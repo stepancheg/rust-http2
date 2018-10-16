@@ -1,14 +1,14 @@
+use std::marker;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::marker;
 
 use futures::future::Future;
 
 use error;
-use std::panic::AssertUnwindSafe;
 use misc::any_to_string;
+use std::panic::AssertUnwindSafe;
 
-pub trait DiedType : Default + Clone {
+pub trait DiedType: Default + Clone {
     fn what() -> &'static str;
 }
 
@@ -29,14 +29,13 @@ impl DiedType for ClientConnDiedType {
     }
 }
 
-
 #[derive(Default, Clone)]
-pub struct ClientDiedErrorHolder<D : DiedType> {
+pub struct ClientDiedErrorHolder<D: DiedType> {
     error: Arc<Mutex<Option<Arc<error::Error>>>>,
     _marker: marker::PhantomData<D>,
 }
 
-impl<D : DiedType> ClientDiedErrorHolder<D> {
+impl<D: DiedType> ClientDiedErrorHolder<D> {
     pub fn new() -> Self {
         Default::default()
     }
@@ -53,10 +52,10 @@ impl<D : DiedType> ClientDiedErrorHolder<D> {
         }
     }
 
-    pub fn wrap_future(&self, future: impl Future<Item=(), Error=error::Error>)
-        -> impl Future<Item=(), Error=()>
-    {
-
+    pub fn wrap_future(
+        &self,
+        future: impl Future<Item = (), Error = error::Error>,
+    ) -> impl Future<Item = (), Error = ()> {
         let holder = self.clone();
         let future = future.then(move |r| {
             match r {
@@ -85,4 +84,3 @@ impl<D : DiedType> ClientDiedErrorHolder<D> {
         future
     }
 }
-

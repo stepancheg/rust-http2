@@ -1,27 +1,25 @@
-use tokio_io::AsyncWrite;
+use bytes::Bytes;
 use codec::http_framed_write::HttpFramedWrite;
-use solicit::connection::HttpFrame;
-use std::collections::VecDeque;
-use futures::Poll;
 use error;
 use futures::Async;
-use bytes::Bytes;
+use futures::Poll;
+use solicit::connection::HttpFrame;
 use solicit::frame::GoawayFrame;
-
+use std::collections::VecDeque;
+use tokio_io::AsyncWrite;
 
 enum HttpFrameOrBytes {
     Frame(HttpFrame),
     Bytes(Bytes),
 }
 
-
-pub struct QueuedWrite<W : AsyncWrite> {
+pub struct QueuedWrite<W: AsyncWrite> {
     framed_write: HttpFramedWrite<W>,
     frames: VecDeque<HttpFrameOrBytes>,
     goaway_queued: bool,
 }
 
-impl<W : AsyncWrite> QueuedWrite<W> {
+impl<W: AsyncWrite> QueuedWrite<W> {
     pub fn new(write: W) -> QueuedWrite<W> {
         QueuedWrite {
             framed_write: HttpFramedWrite::new(write),
@@ -38,11 +36,11 @@ impl<W : AsyncWrite> QueuedWrite<W> {
         self.frames.push_back(frame);
     }
 
-    pub fn queue<F : Into<HttpFrame>>(&mut self, frame: F) {
+    pub fn queue<F: Into<HttpFrame>>(&mut self, frame: F) {
         self.queue_frame_or_bytes(HttpFrameOrBytes::Frame(frame.into()));
     }
 
-    pub fn queue_bytes<B : Into<Bytes>>(&mut self, frame: B) {
+    pub fn queue_bytes<B: Into<Bytes>>(&mut self, frame: B) {
         self.queue_frame_or_bytes(HttpFrameOrBytes::Bytes(frame.into()));
     }
 
@@ -62,9 +60,7 @@ impl<W : AsyncWrite> QueuedWrite<W> {
         loop {
             match self.framed_write.poll_flush()? {
                 Async::Ready(()) => {}
-                Async::NotReady => {
-                    return Ok(Async::NotReady)
-                }
+                Async::NotReady => return Ok(Async::NotReady),
             }
 
             match self.frames.pop_front() {

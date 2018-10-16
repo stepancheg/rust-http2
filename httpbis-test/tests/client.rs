@@ -1,16 +1,16 @@
 //! Tests for client.
 
+use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-use std::sync::mpsc;
 
-extern crate regex;
 extern crate bytes;
-extern crate httpbis;
-extern crate futures;
-extern crate tokio_core;
-extern crate log;
 extern crate env_logger;
+extern crate futures;
+extern crate httpbis;
+extern crate log;
+extern crate regex;
+extern crate tokio_core;
 
 extern crate httpbis_test;
 use httpbis_test::*;
@@ -23,10 +23,10 @@ use futures::sync::oneshot;
 
 use tokio_core::reactor;
 
+use httpbis::for_test::solicit::DEFAULT_SETTINGS;
+use httpbis::for_test::*;
 use httpbis::ErrorCode;
 use httpbis::*;
-use httpbis::for_test::*;
-use httpbis::for_test::solicit::DEFAULT_SETTINGS;
 
 #[test]
 fn stream_count() {
@@ -37,7 +37,9 @@ fn stream_count() {
     let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
     assert_eq!(0, state.streams.len());
 
-    let req = client.start_post("/foobar", "localhost", Bytes::from(&b"xxyy"[..])).collect();
+    let req = client
+        .start_post("/foobar", "localhost", Bytes::from(&b"xxyy"[..]))
+        .collect();
 
     let headers = server_tester.recv_frame_headers_check(1, false);
     assert_eq!("POST", headers.get(":method"));
@@ -75,7 +77,7 @@ fn rst_is_error() {
 
     match req.wait() {
         Ok(..) => panic!("expected error"),
-        Err(Error::CodeError(ErrorCode::InadequateSecurity)) => {},
+        Err(Error::CodeError(ErrorCode::InadequateSecurity)) => {}
         Err(e) => panic!("wrong error: {:?}", e),
     }
 
@@ -226,7 +228,8 @@ pub fn issue_89() {
 
     assert_eq!(
         server_tester.out_window_size.0,
-        client.dump_state().wait().unwrap().in_window_size);
+        client.dump_state().wait().unwrap().in_window_size
+    );
 
     let w = DEFAULT_SETTINGS.initial_window_size;
     assert_eq!(w as i32, client.dump_state().wait().unwrap().in_window_size);
@@ -235,12 +238,18 @@ pub fn issue_89() {
     assert_eq!(2, resp1.next().unwrap().unwrap().len());
 
     // client does not send WINDOW_UPDATE on such small changes
-    assert_eq!((w - 2) as i32, client.dump_state().wait().unwrap().in_window_size);
+    assert_eq!(
+        (w - 2) as i32,
+        client.dump_state().wait().unwrap().in_window_size
+    );
 
     let _r3 = client.start_get("/r3", "localhost");
 
     // This is the cause of issue #89
-    assert_eq!(w as i32, client.dump_state().wait().unwrap().streams[&3].in_window_size);
+    assert_eq!(
+        w as i32,
+        client.dump_state().wait().unwrap().streams[&3].in_window_size
+    );
 
     // Cannot reliably check that stream actually resets
 }
@@ -269,7 +278,8 @@ fn external_event_loop() {
 
         tx.send(clients).expect("send clients");
 
-        core.run(shutdown_rx.map_err(|_| panic!("aaa"))).expect("run");
+        core.run(shutdown_rx.map_err(|_| panic!("aaa")))
+            .expect("run");
     });
 
     for client in rx.recv().expect("rx") {

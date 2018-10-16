@@ -1,11 +1,11 @@
 //! The module contains the implementation of the `DATA` frame and associated flags.
 
-use std::borrow::Cow;
-use solicit::StreamId;
-use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame, parse_padded_payload};
+use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
-use solicit::frame::flags::*;
+use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use solicit::StreamId;
+use std::borrow::Cow;
 
 use bytes::Bytes;
 
@@ -16,10 +16,7 @@ pub const DATA_FRAME_TYPE: u8 = 0x0;
 /// bitmask.
 ///
 /// HTTP/2 spec, section 6.1.
-#[derive(Clone)]
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Copy)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum DataFlag {
     EndStream = 0x1,
     Padded = 0x8,
@@ -157,7 +154,12 @@ impl Frame for DataFrame {
     /// constructed from the given `RawFrame`.
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<DataFrame> {
         // Unpack the header
-        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        let FrameHeader {
+            length,
+            frame_type,
+            flags,
+            stream_id,
+        } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != DATA_FRAME_TYPE {
             return Err(ParseFrameError::InternalError);
@@ -226,10 +228,10 @@ impl FrameIR for DataFrame {
 mod tests {
     use super::{DataFlag, DataFrame};
     use solicit::frame::tests::build_padded_frame_payload;
-    use solicit::tests::common::raw_frame_from_parts;
-    use solicit::frame::{pack_header, Frame};
-    use solicit::frame::FrameIR;
     use solicit::frame::FrameHeader;
+    use solicit::frame::FrameIR;
+    use solicit::frame::{pack_header, Frame};
+    use solicit::tests::common::raw_frame_from_parts;
 
     /// Tests that the `DataFrame` struct correctly interprets a DATA frame
     /// with no padding set.

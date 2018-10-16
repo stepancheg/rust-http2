@@ -1,5 +1,5 @@
-extern crate httpbis;
 extern crate env_logger;
+extern crate httpbis;
 
 use std::process;
 

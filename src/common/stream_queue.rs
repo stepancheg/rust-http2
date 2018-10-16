@@ -2,9 +2,8 @@ use std::collections::VecDeque;
 
 use data_or_headers::DataOrHeaders;
 
-use error::ErrorCode;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
-
+use error::ErrorCode;
 
 pub fn data_size(content: &DataOrHeaders) -> usize {
     match *content {
@@ -12,7 +11,6 @@ pub fn data_size(content: &DataOrHeaders) -> usize {
         DataOrHeaders::Data(ref d) => d.len(),
     }
 }
-
 
 // Outgoing frames queue
 pub struct StreamQueue {

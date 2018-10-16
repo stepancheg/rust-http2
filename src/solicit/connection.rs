@@ -15,10 +15,9 @@
 //! `HttpConnection`) and the higher layers that handle these events and pass them on to the
 //! application.
 
-use solicit::StreamId;
 use solicit::frame;
 use solicit::frame::*;
-
+use solicit::StreamId;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HttpFrameType {
@@ -39,9 +38,7 @@ pub enum HttpFrameType {
 ///
 /// The variants wrap the appropriate `Frame` implementation, except for the `UnknownFrame`
 /// variant, which provides an owned representation of the underlying `RawFrame`
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum HttpFrame {
     Data(DataFrame),
     Headers(HeadersFrame),
@@ -56,31 +53,36 @@ pub enum HttpFrame {
     Unknown(RawFrame),
 }
 
-impl HttpFrame{
+impl HttpFrame {
     pub fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HttpFrame> {
         let frame = match raw_frame.header().frame_type {
-            frame::data::DATA_FRAME_TYPE =>
-                HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
-            frame::headers::HEADERS_FRAME_TYPE =>
-                HttpFrame::Headers(HttpFrame::parse_frame(&raw_frame)?),
-            frame::priority::PRIORITY_FRAME_TYPE =>
-                HttpFrame::Priority(HttpFrame::parse_frame(&raw_frame)?),
-            frame::rst_stream::RST_STREAM_FRAME_TYPE =>
-                HttpFrame::RstStream(HttpFrame::parse_frame(&raw_frame)?),
-            frame::settings::SETTINGS_FRAME_TYPE =>
-                HttpFrame::Settings(HttpFrame::parse_frame(&raw_frame)?),
-            frame::push_promise::PUSH_PROMISE_FRAME_TYPE =>
-                HttpFrame::PushPromise(HttpFrame::parse_frame(&raw_frame)?),
-            frame::ping::PING_FRAME_TYPE =>
-                HttpFrame::Ping(HttpFrame::parse_frame(&raw_frame)?),
-            frame::goaway::GOAWAY_FRAME_TYPE =>
-                HttpFrame::Goaway(HttpFrame::parse_frame(&raw_frame)?),
-            frame::window_update::WINDOW_UPDATE_FRAME_TYPE =>
-                HttpFrame::WindowUpdate(HttpFrame::parse_frame(&raw_frame)?),
-            frame::continuation::CONTINUATION_FRAME_TYPE =>
-                HttpFrame::Continuation(HttpFrame::parse_frame(&raw_frame)?),
-            _ =>
-                HttpFrame::Unknown(raw_frame.as_ref().into()),
+            frame::data::DATA_FRAME_TYPE => HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
+            frame::headers::HEADERS_FRAME_TYPE => {
+                HttpFrame::Headers(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::priority::PRIORITY_FRAME_TYPE => {
+                HttpFrame::Priority(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::rst_stream::RST_STREAM_FRAME_TYPE => {
+                HttpFrame::RstStream(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::settings::SETTINGS_FRAME_TYPE => {
+                HttpFrame::Settings(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::push_promise::PUSH_PROMISE_FRAME_TYPE => {
+                HttpFrame::PushPromise(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::ping::PING_FRAME_TYPE => HttpFrame::Ping(HttpFrame::parse_frame(&raw_frame)?),
+            frame::goaway::GOAWAY_FRAME_TYPE => {
+                HttpFrame::Goaway(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::window_update::WINDOW_UPDATE_FRAME_TYPE => {
+                HttpFrame::WindowUpdate(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::continuation::CONTINUATION_FRAME_TYPE => {
+                HttpFrame::Continuation(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            _ => HttpFrame::Unknown(raw_frame.as_ref().into()),
         };
 
         Ok(frame)
@@ -135,17 +137,17 @@ impl HttpFrame{
 impl FrameIR for HttpFrame {
     fn serialize_into(self, builder: &mut FrameBuilder) {
         match self {
-            HttpFrame::Data(f)         => f.serialize_into(builder),
-            HttpFrame::Headers(f)      => f.serialize_into(builder),
-            HttpFrame::Priority(f)     => f.serialize_into(builder),
-            HttpFrame::RstStream(f)    => f.serialize_into(builder),
-            HttpFrame::Settings(f)     => f.serialize_into(builder),
-            HttpFrame::PushPromise(f)  => f.serialize_into(builder),
-            HttpFrame::Ping(f)         => f.serialize_into(builder),
-            HttpFrame::Goaway(f)       => f.serialize_into(builder),
+            HttpFrame::Data(f) => f.serialize_into(builder),
+            HttpFrame::Headers(f) => f.serialize_into(builder),
+            HttpFrame::Priority(f) => f.serialize_into(builder),
+            HttpFrame::RstStream(f) => f.serialize_into(builder),
+            HttpFrame::Settings(f) => f.serialize_into(builder),
+            HttpFrame::PushPromise(f) => f.serialize_into(builder),
+            HttpFrame::Ping(f) => f.serialize_into(builder),
+            HttpFrame::Goaway(f) => f.serialize_into(builder),
             HttpFrame::WindowUpdate(f) => f.serialize_into(builder),
             HttpFrame::Continuation(f) => f.serialize_into(builder),
-            HttpFrame::Unknown(f)      => f.serialize_into(builder),
+            HttpFrame::Unknown(f) => f.serialize_into(builder),
         }
     }
 }

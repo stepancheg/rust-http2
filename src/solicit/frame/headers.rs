@@ -2,11 +2,11 @@
 
 use bytes::Bytes;
 
-use solicit::StreamId;
-use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame, parse_padded_payload};
+use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
-use solicit::frame::flags::*;
+use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use solicit::StreamId;
 
 pub const HEADERS_FRAME_TYPE: u8 = 0x1;
 
@@ -15,10 +15,7 @@ pub const HEADERS_FRAME_TYPE: u8 = 0x1;
 /// bitmask.
 ///
 /// HTTP/2 spec, section 6.2.
-#[derive(Clone)]
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Copy)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum HeadersFlag {
     EndStream = 0x1,
     EndHeaders = 0x4,
@@ -45,9 +42,7 @@ impl Flag for HeadersFlag {
 
 /// The struct represents the dependency information that can be attached to
 /// a stream and sent within a HEADERS frame (one with the Priority flag set).
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct StreamDependency {
     /// The ID of the stream that a particular stream depends on
     pub stream_id: StreamId,
@@ -112,16 +107,14 @@ impl StreamDependency {
     ///
     /// Where "E" is set if the dependency is exclusive.
     pub fn serialize(&self) -> [u8; 5] {
-        let e_bit = if self.is_exclusive {
-            1 << 7
-        } else {
-            0
-        };
-        [(((self.stream_id >> 24) & 0x000000FF) as u8) | e_bit,
-         (((self.stream_id >> 16) & 0x000000FF) as u8),
-         (((self.stream_id >>  8) & 0x000000FF) as u8),
-         (((self.stream_id      ) & 0x000000FF) as u8),
-         self.weight]
+        let e_bit = if self.is_exclusive { 1 << 7 } else { 0 };
+        [
+            (((self.stream_id >> 24) & 0x000000FF) as u8) | e_bit,
+            (((self.stream_id >> 16) & 0x000000FF) as u8),
+            (((self.stream_id >> 8) & 0x000000FF) as u8),
+            (((self.stream_id) & 0x000000FF) as u8),
+            self.weight,
+        ]
     }
 }
 
@@ -144,7 +137,7 @@ pub struct HeadersFrame {
 impl HeadersFrame {
     /// Creates a new `HeadersFrame` with the given header fragment and stream
     /// ID. No padding, no stream dependency, and no flags are set.
-    pub fn new<B : Into<Bytes>>(fragment: B, stream_id: StreamId) -> HeadersFrame {
+    pub fn new<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> HeadersFrame {
         HeadersFrame {
             header_fragment: fragment.into(),
             stream_id: stream_id,
@@ -156,10 +149,11 @@ impl HeadersFrame {
 
     /// Creates a new `HeadersFrame` with the given header fragment, stream ID
     /// and stream dependency information. No padding and no flags are set.
-    pub fn with_dependency(fragment: Vec<u8>,
-                           stream_id: StreamId,
-                           stream_dep: StreamDependency)
-                           -> HeadersFrame {
+    pub fn with_dependency(
+        fragment: Vec<u8>,
+        stream_id: StreamId,
+        stream_dep: StreamDependency,
+    ) -> HeadersFrame {
         HeadersFrame {
             header_fragment: Bytes::from(fragment),
             stream_id: stream_id,
@@ -231,7 +225,12 @@ impl Frame for HeadersFrame {
     /// Otherwise, returns a newly constructed `HeadersFrame`.
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HeadersFrame> {
         // Unpack the header
-        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        let FrameHeader {
+            length,
+            frame_type,
+            flags,
+            stream_id,
+        } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != HEADERS_FRAME_TYPE {
             return Err(ParseFrameError::InternalError);
@@ -329,12 +328,12 @@ impl FrameIR for HeadersFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeadersFrame, HeadersFlag, StreamDependency};
+    use super::{HeadersFlag, HeadersFrame, StreamDependency};
     use solicit::frame::tests::build_padded_frame_payload;
-    use solicit::tests::common::raw_frame_from_parts;
-    use solicit::frame::{pack_header, Frame};
     use solicit::frame::FrameHeader;
     use solicit::frame::FrameIR;
+    use solicit::frame::{pack_header, Frame};
+    use solicit::tests::common::raw_frame_from_parts;
 
     /// Tests that a stream dependency structure can be correctly parsed by the
     /// `StreamDependency::parse` method.

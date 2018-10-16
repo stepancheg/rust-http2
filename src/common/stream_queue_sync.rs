@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
-use futures::Async;
-use futures::Poll;
 use futures::stream::Stream;
 use futures::sync::mpsc::unbounded;
-use futures::sync::mpsc::UnboundedSender;
 use futures::sync::mpsc::UnboundedReceiver;
+use futures::sync::mpsc::UnboundedSender;
+use futures::Async;
+use futures::Poll;
 
 use result_or_eof::ResultOrEof;
 
@@ -18,7 +18,6 @@ use error;
 use client_died_error_holder::*;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
-
 
 struct Shared {
     data_size: AtomicUsize,
@@ -38,7 +37,11 @@ pub struct StreamQueueSyncReceiver {
 impl StreamQueueSyncSender {
     pub fn send(&self, item: ResultOrEof<DataOrHeadersWithFlag, error::Error>) -> Result<(), ()> {
         if let ResultOrEof::Item(ref part) = item {
-            if let &DataOrHeadersWithFlag { content: DataOrHeaders::Data(ref b), .. } = part {
+            if let &DataOrHeadersWithFlag {
+                content: DataOrHeaders::Data(ref b),
+                ..
+            } = part
+            {
                 self.shared.data_size.fetch_add(b.len(), Ordering::SeqCst);
             }
         }
@@ -79,8 +82,11 @@ impl Stream for StreamQueueSyncReceiver {
             Ok(Async::Ready(Some(ResultOrEof::Item(part)))) => part,
         };
 
-
-        if let DataOrHeadersWithFlag { content: DataOrHeaders::Data(ref b) , .. } = part {
+        if let DataOrHeadersWithFlag {
+            content: DataOrHeaders::Data(ref b),
+            ..
+        } = part
+        {
             self.shared.data_size.fetch_sub(b.len(), Ordering::SeqCst);
         }
 
@@ -88,11 +94,11 @@ impl Stream for StreamQueueSyncReceiver {
     }
 }
 
-pub fn stream_queue_sync(conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>)
-    -> (StreamQueueSyncSender, StreamQueueSyncReceiver)
-{
+pub fn stream_queue_sync(
+    conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
+) -> (StreamQueueSyncSender, StreamQueueSyncReceiver) {
     let shared = Arc::new(Shared {
-        data_size: AtomicUsize::new(0)
+        data_size: AtomicUsize::new(0),
     });
 
     let (utx, urx) = unbounded();

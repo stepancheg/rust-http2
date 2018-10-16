@@ -1,10 +1,10 @@
 //! The module contains the implementation of the `RST_STREAM` frame.
 
-use solicit::StreamId;
-use solicit::frame::{Frame, FrameIR, FrameBuilder, FrameHeader, RawFrame};
+use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
-use solicit::frame::flags::*;
+use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use solicit::StreamId;
 
 use error::ErrorCode;
 
@@ -57,7 +57,12 @@ impl Frame for RstStreamFrame {
     type FlagType = NoFlag;
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
-        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        let FrameHeader {
+            length,
+            frame_type,
+            flags,
+            stream_id,
+        } = raw_frame.header();
         if length != RST_STREAM_FRAME_LEN {
             return Err(ParseFrameError::InternalError);
         }
@@ -107,8 +112,8 @@ mod tests {
     use super::RstStreamFrame;
 
     use error::ErrorCode;
-    use solicit::frame::{pack_header, FrameHeader, Frame};
     use solicit::frame::FrameIR;
+    use solicit::frame::{pack_header, Frame, FrameHeader};
 
     /// A helper function that creates a new Vec containing the serialized representation of the
     /// given `FrameHeader` followed by the raw provided payload.
@@ -171,22 +176,30 @@ mod tests {
     fn test_serialize_protocol_error() {
         let frame = RstStreamFrame::new(1, ErrorCode::ProtocolError);
         let raw = frame.serialize_into_vec();
-        assert_eq!(raw, prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 1), vec![0, 0, 0, 1]));
+        assert_eq!(
+            raw,
+            prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 1), vec![0, 0, 0, 1])
+        );
     }
 
     #[test]
     fn test_serialize_stream_closed() {
         let frame = RstStreamFrame::new(2, ErrorCode::StreamClosed);
         let raw = frame.serialize_into_vec();
-        assert_eq!(raw, prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 2), vec![0, 0, 0, 0x5]));
+        assert_eq!(
+            raw,
+            prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 2), vec![0, 0, 0, 0x5])
+        );
     }
 
     #[test]
     fn test_serialize_raw_error_code() {
         let frame = RstStreamFrame::with_raw_error_code(3, 1024);
         let raw = frame.serialize_into_vec();
-        assert_eq!(raw,
-                   prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 3), vec![0, 0, 0x04, 0]));
+        assert_eq!(
+            raw,
+            prepare_frame_bytes(FrameHeader::new(4, 0x3, 0, 3), vec![0, 0, 0x04, 0])
+        );
     }
 
     #[test]

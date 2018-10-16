@@ -5,18 +5,18 @@
 //#[cfg(feature="interop_tests")]
 //extern crate rustc_serialize;
 
+use std::collections::vec_deque;
+use std::collections::VecDeque;
 use std::fmt;
 use std::iter;
 use std::slice;
-use std::collections::VecDeque;
-use std::collections::vec_deque;
 
 // Re-export the main HPACK API entry points.
 pub use self::decoder::Decoder;
 pub use self::encoder::Encoder;
 
-pub mod encoder;
 pub mod decoder;
+pub mod encoder;
 pub mod huffman;
 
 /// An `Iterator` through elements of the `DynamicTable`.
@@ -220,10 +220,12 @@ struct HeaderTableIter<'a> {
     // The mapper is required to transform the elements yielded from the static
     // table to a type that matches the elements yielded from the dynamic table.
     inner: iter::Chain<
-            iter::Map<
-                slice::Iter<'a, (&'a [u8], &'a [u8])>,
-                fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8])>,
-            DynamicTableIter<'a>>,
+        iter::Map<
+            slice::Iter<'a, (&'a [u8], &'a [u8])>,
+            fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8]),
+        >,
+        DynamicTableIter<'a>,
+    >,
 }
 
 impl<'a> Iterator for HeaderTableIter<'a> {
@@ -243,8 +245,7 @@ impl<'a> Iterator for HeaderTableIter<'a> {
 /// `HeaderTableIter` we need to be able to refer to a real type for the Fn
 /// template parameter, which means that when instantiating an instance, a
 /// closure cannot be passed, since it cannot be named.
-fn static_table_mapper<'a>(h: &'a (&'a [u8], &'a [u8]))
-        -> (&'a [u8], &'a [u8]) {
+fn static_table_mapper<'a>(h: &'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8]) {
     *h
 }
 
@@ -276,10 +277,11 @@ impl<'a> HeaderTable<'a> {
     /// corresponds to the header name, value pairs in the described order.
     pub fn iter(&'a self) -> HeaderTableIter<'a> {
         HeaderTableIter {
-            inner: self.static_table.iter()
-                                    .map(static_table_mapper as
-                                            fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8]))
-                                    .chain(self.dynamic_table.iter()),
+            inner: self
+                .static_table
+                .iter()
+                .map(static_table_mapper as fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8]))
+                .chain(self.dynamic_table.iter()),
         }
     }
 
@@ -303,16 +305,11 @@ impl<'a> HeaderTable<'a> {
     ///
     /// This is according to the [HPACK spec, section 2.3.3.]
     /// (http://http2.github.io/http2-spec/compression.html#index.address.space)
-    pub fn get_from_table(&self, index: usize)
-            -> Option<(&[u8], &[u8])> {
+    pub fn get_from_table(&self, index: usize) -> Option<(&[u8], &[u8])> {
         // The IETF defined table indexing as 1-based.
         // So, before starting, make sure the given index is within the proper
         // bounds.
-        let real_index = if index > 0 {
-            index - 1
-        } else {
-            return None
-        };
+        let real_index = if index > 0 { index - 1 } else { return None };
 
         if real_index < self.static_table.len() {
             // It is in the static table so just return that...
@@ -322,10 +319,8 @@ impl<'a> HeaderTable<'a> {
             let dynamic_index = real_index - self.static_table.len();
             if dynamic_index < self.dynamic_table.len() {
                 match self.dynamic_table.get(dynamic_index) {
-                    Some(&(ref name, ref value)) => {
-                        Some((name, value))
-                    },
-                    None => None
+                    Some(&(ref name, ref value)) => Some((name, value)),
+                    None => None,
                 }
             } else {
                 // Index out of bounds!
@@ -380,67 +375,67 @@ impl<'a> HeaderTable<'a> {
 /// The table represents the static header table defined by the HPACK spec.
 /// (HPACK, Appendix A)
 static STATIC_TABLE: &'static [(&'static [u8], &'static [u8])] = &[
-  (b":authority", b""),
-  (b":method", b"GET"),
-  (b":method", b"POST"),
-  (b":path", b"/"),
-  (b":path", b"/index.html"),
-  (b":scheme", b"http"),
-  (b":scheme", b"https"),
-  (b":status", b"200"),
-  (b":status", b"204"),
-  (b":status", b"206"),
-  (b":status", b"304"),
-  (b":status", b"400"),
-  (b":status", b"404"),
-  (b":status", b"500"),
-  (b"accept-", b""),
-  (b"accept-encoding", b"gzip, deflate"),
-  (b"accept-language", b""),
-  (b"accept-ranges", b""),
-  (b"accept", b""),
-  (b"access-control-allow-origin", b""),
-  (b"age", b""),
-  (b"allow", b""),
-  (b"authorization", b""),
-  (b"cache-control", b""),
-  (b"content-disposition", b""),
-  (b"content-encoding", b""),
-  (b"content-language", b""),
-  (b"content-length", b""),
-  (b"content-location", b""),
-  (b"content-range", b""),
-  (b"content-type", b""),
-  (b"cookie", b""),
-  (b"date", b""),
-  (b"etag", b""),
-  (b"expect", b""),
-  (b"expires", b""),
-  (b"from", b""),
-  (b"host", b""),
-  (b"if-match", b""),
-  (b"if-modified-since", b""),
-  (b"if-none-match", b""),
-  (b"if-range", b""),
-  (b"if-unmodified-since", b""),
-  (b"last-modified", b""),
-  (b"link", b""),
-  (b"location", b""),
-  (b"max-forwards", b""),
-  (b"proxy-authenticate", b""),
-  (b"proxy-authorization", b""),
-  (b"range", b""),
-  (b"referer", b""),
-  (b"refresh", b""),
-  (b"retry-after", b""),
-  (b"server", b""),
-  (b"set-cookie", b""),
-  (b"strict-transport-security", b""),
-  (b"transfer-encoding", b""),
-  (b"user-agent", b""),
-  (b"vary", b""),
-  (b"via", b""),
-  (b"www-authenticate", b""),
+    (b":authority", b""),
+    (b":method", b"GET"),
+    (b":method", b"POST"),
+    (b":path", b"/"),
+    (b":path", b"/index.html"),
+    (b":scheme", b"http"),
+    (b":scheme", b"https"),
+    (b":status", b"200"),
+    (b":status", b"204"),
+    (b":status", b"206"),
+    (b":status", b"304"),
+    (b":status", b"400"),
+    (b":status", b"404"),
+    (b":status", b"500"),
+    (b"accept-", b""),
+    (b"accept-encoding", b"gzip, deflate"),
+    (b"accept-language", b""),
+    (b"accept-ranges", b""),
+    (b"accept", b""),
+    (b"access-control-allow-origin", b""),
+    (b"age", b""),
+    (b"allow", b""),
+    (b"authorization", b""),
+    (b"cache-control", b""),
+    (b"content-disposition", b""),
+    (b"content-encoding", b""),
+    (b"content-language", b""),
+    (b"content-length", b""),
+    (b"content-location", b""),
+    (b"content-range", b""),
+    (b"content-type", b""),
+    (b"cookie", b""),
+    (b"date", b""),
+    (b"etag", b""),
+    (b"expect", b""),
+    (b"expires", b""),
+    (b"from", b""),
+    (b"host", b""),
+    (b"if-match", b""),
+    (b"if-modified-since", b""),
+    (b"if-none-match", b""),
+    (b"if-range", b""),
+    (b"if-unmodified-since", b""),
+    (b"last-modified", b""),
+    (b"link", b""),
+    (b"location", b""),
+    (b"max-forwards", b""),
+    (b"proxy-authenticate", b""),
+    (b"proxy-authorization", b""),
+    (b"range", b""),
+    (b"referer", b""),
+    (b"refresh", b""),
+    (b"retry-after", b""),
+    (b"server", b""),
+    (b"set-cookie", b""),
+    (b"strict-transport-security", b""),
+    (b"transfer-encoding", b""),
+    (b"user-agent", b""),
+    (b"vary", b""),
+    (b"via", b""),
+    (b"www-authenticate", b""),
 ];
 
 #[cfg(test)]
@@ -484,8 +479,7 @@ mod tests {
         // Resized?
         assert_eq!(32 + 6, table.get_size());
         // Only has the second header?
-        assert_eq!(table.to_vec(), vec![
-            (b"123".to_vec(), b"456".to_vec())]);
+        assert_eq!(table.to_vec(), vec![(b"123".to_vec(), b"456".to_vec())]);
     }
 
     /// Tests that when inserting a new header whose size is larger than the
@@ -517,8 +511,7 @@ mod tests {
         table.set_max_table_size(38);
 
         assert_eq!(32 + 2, table.get_size());
-        assert_eq!(table.to_vec(), vec![
-            (b"c".to_vec(), b"d".to_vec())]);
+        assert_eq!(table.to_vec(), vec![(b"c".to_vec(), b"d".to_vec())]);
     }
 
     /// Tests that setting the maximum table size to 0 clears the dynamic
@@ -564,11 +557,7 @@ mod tests {
 
         let iter_res: Vec<(&[u8], &[u8])> = table.iter().collect();
 
-        let expected: Vec<(&[u8], &[u8])> = vec![
-            (b"c", b"d"),
-            (b"123", b"456"),
-            (b"a", b"b"),
-        ];
+        let expected: Vec<(&[u8], &[u8])> = vec![(b"c", b"d"), (b"123", b"456"), (b"a", b"b")];
         assert_eq!(iter_res, expected);
     }
 
@@ -626,8 +615,10 @@ mod tests {
 
         table.add_header(header.0.clone(), header.1.clone());
 
-        assert_eq!(table.get_from_table(STATIC_TABLE.len() + 1).unwrap(),
-                   ((&header.0[..], &header.1[..])));
+        assert_eq!(
+            table.get_from_table(STATIC_TABLE.len() + 1).unwrap(),
+            ((&header.0[..], &header.1[..]))
+        );
     }
 
     /// Tests that the `iter` method of the `HeaderTable` returns an iterator
@@ -636,10 +627,7 @@ mod tests {
     #[test]
     fn test_header_table_iter() {
         let mut table = HeaderTable::with_static_table(STATIC_TABLE);
-        let headers: [(&[u8], &[u8]); 2] = [
-            (b"a", b"b"),
-            (b"c", b"d"),
-        ];
+        let headers: [(&[u8], &[u8]); 2] = [(b"a", b"b"), (b"c", b"d")];
         for header in headers.iter() {
             table.add_header(header.0.to_vec(), header.1.to_vec());
         }
@@ -653,8 +641,11 @@ mod tests {
         }
         // Part of the dynamic table correctly iterated through: the elements
         // are in reversed order of insertion in the dynamic table.
-        for (h1, h2) in iterated.iter().skip(STATIC_TABLE.len())
-                                .zip(headers.iter().rev()) {
+        for (h1, h2) in iterated
+            .iter()
+            .skip(STATIC_TABLE.len())
+            .zip(headers.iter().rev())
+        {
             assert_eq!(h1, h2);
         }
     }
@@ -666,8 +657,7 @@ mod tests {
         let table = HeaderTable::with_static_table(STATIC_TABLE);
 
         for (i, h) in STATIC_TABLE.iter().enumerate() {
-            assert_eq!(table.find_header(*h).unwrap(),
-                       (i + 1, true));
+            assert_eq!(table.find_header(*h).unwrap(), (i + 1, true));
         }
     }
 
@@ -720,7 +710,6 @@ mod tests {
             }
         }
     }
-
 
     /// Tests that searching for an entry in the header table, which should be
     /// fully in the dynamic table (both name and value), works correctly.

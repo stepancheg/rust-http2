@@ -26,10 +26,7 @@ impl HuffmanCodeSymbol {
 }
 
 /// Represents the error variants that the `HuffmanDecoder` can return.
-#[derive(PartialEq)]
-#[derive(Copy)]
-#[derive(Clone)]
-#[derive(Debug)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub enum HuffmanDecoderError {
     /// Any padding strictly larger than 7 bits MUST be interpreted as an error
     PaddingTooLarge,
@@ -60,8 +57,7 @@ impl HuffmanDecoder {
             panic!("Invalid Huffman code table. It must define exactly 257 symbols.");
         }
 
-        let mut decoder_table: HashMap<u8, HashMap<u32, HuffmanCodeSymbol>> =
-            HashMap::new();
+        let mut decoder_table: HashMap<u8, HashMap<u32, HuffmanCodeSymbol>> = HashMap::new();
         let mut eos_codepoint: Option<(u32, u8)> = None;
 
         for (symbol, &(code, code_len)) in table.iter().enumerate() {
@@ -75,7 +71,7 @@ impl HuffmanDecoder {
                     // We also remember the code point of the EOS for easier
                     // reference later on.
                     eos_codepoint = Some((code, code_len));
-                },
+                }
                 _ => {}
             };
             subtable.insert(code, huff_symbol);
@@ -119,7 +115,7 @@ impl HuffmanDecoder {
                             // If the EOS symbol is detected within the stream,
                             // we need to consider it an error.
                             return Err(HuffmanDecoderError::EOSInString);
-                        },
+                        }
                     };
                     result.push(decoded_symbol);
                     current = 0;
@@ -135,7 +131,7 @@ impl HuffmanDecoder {
 
         // First: the check for the length of the padding
         if current_len > 7 {
-            return Err(HuffmanDecoderError::PaddingTooLarge)
+            return Err(HuffmanDecoderError::PaddingTooLarge);
         }
 
         // Second: the padding corresponds to the most-significant bits of the
@@ -182,7 +178,9 @@ struct BitIterator<'a, I: Iterator> {
 }
 
 impl<'a, I: Iterator> BitIterator<'a, I>
-        where I: Iterator<Item=&'a u8> {
+where
+    I: Iterator<Item = &'a u8>,
+{
     pub fn new(iterator: I) -> BitIterator<'a, I> {
         BitIterator::<'a, I> {
             buffer_iterator: iterator,
@@ -193,7 +191,9 @@ impl<'a, I: Iterator> BitIterator<'a, I>
 }
 
 impl<'a, I> Iterator for BitIterator<'a, I>
-        where I: Iterator<Item=&'a u8> {
+where
+    I: Iterator<Item = &'a u8>,
+{
     type Item = bool;
 
     fn next(&mut self) -> Option<bool> {
@@ -492,15 +492,12 @@ mod tests {
     /// A helper function that converts the given slice containing values `1`
     /// and `0` to a `Vec` of `bool`s, according to the number.
     fn to_expected_bit_result(numbers: &[u8]) -> Vec<bool> {
-        numbers.iter().map(|b| -> bool {
-            *b == 1
-        }).collect()
+        numbers.iter().map(|b| -> bool { *b == 1 }).collect()
     }
 
     #[test]
     fn test_bit_iterator_single_byte() {
-        let expected_result = to_expected_bit_result(
-            &[0, 0, 0, 0, 1, 0, 1, 0]);
+        let expected_result = to_expected_bit_result(&[0, 0, 0, 0, 1, 0, 1, 0]);
 
         let mut res: Vec<bool> = Vec::new();
         for b in BitIterator::new(vec![10u8].iter()) {
@@ -512,13 +509,10 @@ mod tests {
 
     #[test]
     fn test_bit_iterator_multiple_bytes() {
-        let expected_result = to_expected_bit_result(
-            &[0, 0, 0, 0, 1, 0, 1, 0,
-              1, 1, 1, 1, 1, 1, 1, 1,
-              1, 0, 0, 0, 0, 0, 0, 0,
-              0, 0, 0, 0, 0, 0, 0, 1,
-              0, 0, 0, 0, 0, 0, 0, 0,
-              1, 0, 1, 0, 1, 0, 1, 0]);
+        let expected_result = to_expected_bit_result(&[
+            0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+        ]);
 
         let mut res: Vec<bool> = Vec::new();
         for b in BitIterator::new(vec![10u8, 255, 128, 1, 0, 170].iter()) {
@@ -629,10 +623,13 @@ mod tests {
 
             let result = decoder.decode(&hex_buffer);
 
-            assert_eq!(HuffmanDecoderError::EOSInString, match result {
-                Err(e) => e,
-                _ => panic!("Expected error due to EOS symbol in string"),
-            });
+            assert_eq!(
+                HuffmanDecoderError::EOSInString,
+                match result {
+                    Err(e) => e,
+                    _ => panic!("Expected error due to EOS symbol in string"),
+                }
+            );
         }
         {
             // Full EOS after a valid character.
@@ -640,10 +637,13 @@ mod tests {
 
             let result = decoder.decode(&hex_buffer);
 
-            assert_eq!(HuffmanDecoderError::EOSInString, match result {
-                Err(e) => e,
-                _ => panic!("Expected error due to EOS symbol in string"),
-            });
+            assert_eq!(
+                HuffmanDecoderError::EOSInString,
+                match result {
+                    Err(e) => e,
+                    _ => panic!("Expected error due to EOS symbol in string"),
+                }
+            );
         }
     }
 
@@ -667,10 +667,13 @@ mod tests {
 
         let result = decoder.decode(&hex_buffer);
 
-        assert_eq!(HuffmanDecoderError::PaddingTooLarge, match result {
-            Err(e) => e,
-            _ => panic!("Expected `PaddingTooLarge` error"),
-        });
+        assert_eq!(
+            HuffmanDecoderError::PaddingTooLarge,
+            match result {
+                Err(e) => e,
+                _ => panic!("Expected `PaddingTooLarge` error"),
+            }
+        );
     }
 
     /// Tests that when there is a certain number of padding bits that deviate
@@ -683,20 +686,26 @@ mod tests {
 
             let result = decoder.decode(&hex_buffer);
 
-            assert_eq!(HuffmanDecoderError::InvalidPadding, match result {
-                Err(e) => e,
-                _ => panic!("Expected `InvalidPadding` error"),
-            });
+            assert_eq!(
+                HuffmanDecoderError::InvalidPadding,
+                match result {
+                    Err(e) => e,
+                    _ => panic!("Expected `InvalidPadding` error"),
+                }
+            );
         }
         {
             let hex_buffer = [254, 0];
 
             let result = decoder.decode(&hex_buffer);
 
-            assert_eq!(HuffmanDecoderError::InvalidPadding, match result {
-                Err(e) => e,
-                _ => panic!("Expected `InvalidPadding` error"),
-            });
+            assert_eq!(
+                HuffmanDecoderError::InvalidPadding,
+                match result {
+                    Err(e) => e,
+                    _ => panic!("Expected `InvalidPadding` error"),
+                }
+            );
         }
     }
 }

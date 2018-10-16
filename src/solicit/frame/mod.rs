@@ -4,8 +4,8 @@ use std::mem;
 
 use bytes::Bytes;
 
-use solicit::StreamId;
 use solicit::frame::flags::*;
+use solicit::StreamId;
 
 /// A helper macro that unpacks a sequence of 4 bytes found in the buffer with
 /// the given identifier, starting at the given offset, into the given integer
@@ -19,12 +19,12 @@ use solicit::frame::flags::*;
 /// assert_eq!(1u32, unpack_octets_4!(buf, 0, u32));
 /// ```
 macro_rules! unpack_octets_4 {
-    ($buf:expr, $offset:expr, $tip:ty) => (
-        (($buf[$offset + 0] as $tip) << 24) |
-        (($buf[$offset + 1] as $tip) << 16) |
-        (($buf[$offset + 2] as $tip) <<  8) |
-        (($buf[$offset + 3] as $tip) <<  0)
-    );
+    ($buf:expr, $offset:expr, $tip:ty) => {
+        (($buf[$offset + 0] as $tip) << 24)
+            | (($buf[$offset + 1] as $tip) << 16)
+            | (($buf[$offset + 2] as $tip) << 8)
+            | (($buf[$offset + 3] as $tip) << 0)
+    };
 }
 
 /// Parse the next 4 octets in the given buffer, assuming they represent an HTTP/2 stream ID.
@@ -40,28 +40,28 @@ fn parse_stream_id(buf: &[u8]) -> u32 {
 pub mod builder;
 pub mod continuation;
 pub mod data;
-pub mod headers;
-pub mod rst_stream;
-pub mod priority;
-pub mod settings;
-pub mod goaway;
-pub mod ping;
-pub mod window_update;
-pub mod push_promise;
 mod flags;
+pub mod goaway;
+pub mod headers;
+pub mod ping;
+pub mod priority;
+pub mod push_promise;
+pub mod rst_stream;
+pub mod settings;
+pub mod window_update;
 
 pub use self::builder::FrameBuilder;
 
-pub use self::data::{DataFlag, DataFrame};
-pub use self::headers::{HeadersFlag, HeadersFrame};
-pub use self::priority::PriorityFrame;
-pub use self::rst_stream::RstStreamFrame;
-pub use self::settings::{SettingsFlag, SettingsFrame, HttpSetting};
-pub use self::goaway::GoawayFrame;
-pub use self::ping::PingFrame;
-pub use self::window_update::WindowUpdateFrame;
 pub use self::continuation::ContinuationFrame;
+pub use self::data::{DataFlag, DataFrame};
+pub use self::goaway::GoawayFrame;
+pub use self::headers::{HeadersFlag, HeadersFrame};
+pub use self::ping::PingFrame;
+pub use self::priority::PriorityFrame;
 pub use self::push_promise::PushPromiseFrame;
+pub use self::rst_stream::RstStreamFrame;
+pub use self::settings::{HttpSetting, SettingsFlag, SettingsFrame};
+pub use self::window_update::WindowUpdateFrame;
 
 pub const FRAME_HEADER_LEN: usize = 9;
 
@@ -95,13 +95,17 @@ impl FrameHeader {
 pub fn unpack_header_from_slice(header: &[u8]) -> FrameHeader {
     assert_eq!(FRAME_HEADER_LEN, header.len());
 
-    let length: u32 = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) |
-        (header[2] as u32);
+    let length: u32 = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) | (header[2] as u32);
     let frame_type = header[3];
     let flags = header[4];
     let stream_id = parse_stream_id(&header[5..]);
 
-    FrameHeader { length, frame_type, flags, stream_id }
+    FrameHeader {
+        length,
+        frame_type,
+        flags,
+        stream_id,
+    }
 }
 
 /// Deconstructs a `FrameHeader` into its corresponding 4 components,
@@ -115,17 +119,24 @@ pub fn unpack_header(header: &FrameHeaderBuffer) -> FrameHeader {
 
 /// Constructs a buffer of 9 bytes that represents the given `FrameHeader`.
 pub fn pack_header(header: &FrameHeader) -> FrameHeaderBuffer {
-    let &FrameHeader { length, frame_type, flags, stream_id } = header;
+    let &FrameHeader {
+        length,
+        frame_type,
+        flags,
+        stream_id,
+    } = header;
 
-    [(((length >> 16) & 0x000000FF) as u8),
-     (((length >>  8) & 0x000000FF) as u8),
-     (((length      ) & 0x000000FF) as u8),
-     frame_type,
-     flags,
-     (((stream_id >> 24) & 0x000000FF) as u8),
-     (((stream_id >> 16) & 0x000000FF) as u8),
-     (((stream_id >>  8) & 0x000000FF) as u8),
-     (((stream_id      ) & 0x000000FF) as u8)]
+    [
+        (((length >> 16) & 0x000000FF) as u8),
+        (((length >> 8) & 0x000000FF) as u8),
+        (((length) & 0x000000FF) as u8),
+        frame_type,
+        flags,
+        (((stream_id >> 24) & 0x000000FF) as u8),
+        (((stream_id >> 16) & 0x000000FF) as u8),
+        (((stream_id >> 8) & 0x000000FF) as u8),
+        (((stream_id) & 0x000000FF) as u8),
+    ]
 }
 
 /// A helper function that parses the given payload, considering it padded.
@@ -170,7 +181,8 @@ pub trait FrameIR {
     fn serialize_into(self, builder: &mut FrameBuilder);
 
     fn serialize_into_vec(self) -> Vec<u8>
-        where Self : Sized
+    where
+        Self: Sized,
     {
         let mut buf = FrameBuilder::new();
         self.serialize_into(&mut buf);
@@ -197,12 +209,11 @@ pub enum ParseFrameError {
 
 pub type ParseFrameResult<T> = Result<T, ParseFrameError>;
 
-
 /// A trait that all HTTP/2 frame structs need to implement.
-pub trait Frame : Sized {
+pub trait Frame: Sized {
     /// The type that represents the flags that the particular `Frame` can take.
     /// This makes sure that only valid `Flag`s are used with each `Frame`.
-    type FlagType : Flag;
+    type FlagType: Flag;
 
     /// Creates a new `Frame` from the given `RawFrame` (i.e. header and
     /// payload), if possible.
@@ -236,9 +247,7 @@ pub trait Frame : Sized {
 /// It does not try to interpret the payload bytes, nor do any validation in
 /// terms of its validity based on the frame type given in the header.
 /// It is simply a wrapper around the two parts of an HTTP/2 frame.
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct RawFrame {
     /// The raw frame representation, including both the raw header representation
     /// (in the first 9 bytes), followed by the raw payload representation.
@@ -256,7 +265,7 @@ impl RawFrame {
     /// (due to there not being enough bytes in the buffer). If the `RawFrame` is successfully
     /// parsed it returns the frame, borrowing a part of the original buffer. Therefore, this
     /// method makes no copies, nor does it perform any extra allocations.
-    pub fn parse<B : Into<Bytes>>(into_buf: B) -> ParseFrameResult<RawFrame> {
+    pub fn parse<B: Into<Bytes>>(into_buf: B) -> ParseFrameResult<RawFrame> {
         // TODO(mlalic): This might allow an extra parameter that specifies the maximum frame
         //               payload length?
 
@@ -342,12 +351,16 @@ impl AsRef<[u8]> for RawFrame {
 /// invalid HTTP/2 frame.
 impl From<Vec<u8>> for RawFrame {
     fn from(raw: Vec<u8>) -> RawFrame {
-        RawFrame { raw_content: Bytes::from(raw) }
+        RawFrame {
+            raw_content: Bytes::from(raw),
+        }
     }
 }
 impl<'a> From<&'a [u8]> for RawFrame {
     fn from(raw: &'a [u8]) -> RawFrame {
-        RawFrame { raw_content: Bytes::from(raw) }
+        RawFrame {
+            raw_content: Bytes::from(raw),
+        }
     }
 }
 
@@ -361,7 +374,7 @@ impl FrameIR for RawFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{unpack_header, pack_header, RawFrame, FrameHeader};
+    use super::{pack_header, unpack_header, FrameHeader, RawFrame};
 
     /// Tests that the `unpack_header` function correctly returns the
     /// components of HTTP/2 frame headers.
@@ -370,39 +383,75 @@ mod tests {
         {
             let header = [0, 0, 1, 2, 3, 0, 0, 0, 4];
             assert_eq!(
-                FrameHeader { length: 1, frame_type: 2, flags: 3, stream_id: 4 },
-                unpack_header(&header));
+                FrameHeader {
+                    length: 1,
+                    frame_type: 2,
+                    flags: 3,
+                    stream_id: 4
+                },
+                unpack_header(&header)
+            );
         }
         {
             let header = [0, 1, 0, 0, 0, 0, 0, 0, 0];
             assert_eq!(
-                FrameHeader { length: 256, frame_type: 0, flags: 0, stream_id: 0 },
-                unpack_header(&header));
+                FrameHeader {
+                    length: 256,
+                    frame_type: 0,
+                    flags: 0,
+                    stream_id: 0
+                },
+                unpack_header(&header)
+            );
         }
         {
             let header = [1, 0, 0, 0, 0, 0, 0, 0, 0];
             assert_eq!(
-                FrameHeader { length: 256 * 256, frame_type: 0, flags: 0, stream_id: 0 },
-            unpack_header(&header));
+                FrameHeader {
+                    length: 256 * 256,
+                    frame_type: 0,
+                    flags: 0,
+                    stream_id: 0
+                },
+                unpack_header(&header)
+            );
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 1];
             assert_eq!(
-                FrameHeader { length:(1 << 24) - 1, frame_type: 0, flags: 0, stream_id: 1 },
-                unpack_header(&header));
+                FrameHeader {
+                    length: (1 << 24) - 1,
+                    frame_type: 0,
+                    flags: 0,
+                    stream_id: 1
+                },
+                unpack_header(&header)
+            );
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 1, 1, 1, 1];
             assert_eq!(
-                FrameHeader { length: (1 << 24) - 1, frame_type: 0, flags: 0, stream_id: 1 + (1 << 8) + (1 << 16) + (1 << 24) },
-                unpack_header(&header));
+                FrameHeader {
+                    length: (1 << 24) - 1,
+                    frame_type: 0,
+                    flags: 0,
+                    stream_id: 1 + (1 << 8) + (1 << 16) + (1 << 24)
+                },
+                unpack_header(&header)
+            );
         }
         {
             // Ignores reserved bit within the stream id (the most significant bit)
             let header = [0, 0, 1, 0, 0, 0x80, 0, 0, 1];
             assert_eq!(
-                FrameHeader { length: 1, frame_type: 0, flags: 0, stream_id: 1 },
-                unpack_header(&header));
+                FrameHeader {
+                    length: 1,
+                    frame_type: 0,
+                    flags: 0,
+                    stream_id: 1
+                },
+                unpack_header(&header)
+            );
         }
     }
 
@@ -440,11 +489,15 @@ mod tests {
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 1];
-            assert_eq!(pack_header(&FrameHeader::new((1 << 24) - 1, 0, 0, 1)), header);
+            assert_eq!(
+                pack_header(&FrameHeader::new((1 << 24) - 1, 0, 0, 1)),
+                header
+            );
         }
         {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 1, 1, 1, 1];
-            let header_components = FrameHeader::new((1 << 24) - 1, 0, 0, 1 + (1 << 8) + (1 << 16) + (1 << 24));
+            let header_components =
+                FrameHeader::new((1 << 24) - 1, 0, 0, 1 + (1 << 8) + (1 << 16) + (1 << 24));
             assert_eq!(pack_header(&header_components), header);
         }
     }

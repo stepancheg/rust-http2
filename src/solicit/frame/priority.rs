@@ -1,17 +1,16 @@
-use bytes::IntoBuf;
 use bytes::Buf;
+use bytes::IntoBuf;
 
-use solicit::StreamId;
-use solicit::frame::Frame;
-use solicit::frame::FrameIR;
-use solicit::frame::FrameHeader;
-use solicit::frame::RawFrame;
 use solicit::frame::builder::FrameBuilder;
-use solicit::frame::flags::NoFlag;
 use solicit::frame::flags::Flags;
+use solicit::frame::flags::NoFlag;
+use solicit::frame::Frame;
+use solicit::frame::FrameHeader;
+use solicit::frame::FrameIR;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
-
+use solicit::frame::RawFrame;
+use solicit::StreamId;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct PriorityFrame {
@@ -28,7 +27,12 @@ impl Frame for PriorityFrame {
     type FlagType = NoFlag;
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
-        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        let FrameHeader {
+            length,
+            frame_type,
+            flags,
+            stream_id,
+        } = raw_frame.header();
         if length != 5 {
             return Err(ParseFrameError::IncorrectFrameLength(length));
         }

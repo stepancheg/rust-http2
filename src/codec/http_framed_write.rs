@@ -1,21 +1,20 @@
-use tokio_io::AsyncWrite;
 use error;
+use tokio_io::AsyncWrite;
 
+use bytes::Buf;
+use bytes::Bytes;
+use codec::write_buffer::WriteBuffer;
+use futures::Async;
+use futures::Poll;
 use solicit::connection::HttpFrame;
 use solicit::frame::FrameIR;
-use bytes::Bytes;
-use futures::Poll;
-use bytes::Buf;
-use futures::Async;
-use codec::write_buffer::WriteBuffer;
 
-
-pub struct HttpFramedWrite<W : AsyncWrite> {
+pub struct HttpFramedWrite<W: AsyncWrite> {
     write: W,
     buf: WriteBuffer,
 }
 
-impl<W : AsyncWrite> HttpFramedWrite<W> {
+impl<W: AsyncWrite> HttpFramedWrite<W> {
     pub fn new(write: W) -> Self {
         HttpFramedWrite {
             write,
@@ -27,14 +26,14 @@ impl<W : AsyncWrite> HttpFramedWrite<W> {
         self.buf.remaining()
     }
 
-    pub fn buffer_frame<F : Into<HttpFrame>>(&mut self, frame: F) {
+    pub fn buffer_frame<F: Into<HttpFrame>>(&mut self, frame: F) {
         let frame = frame.into();
         debug!("send {:?}", frame);
 
         self.buf.extend_from_vec(frame.serialize_into_vec());
     }
 
-    pub fn buffer_bytes<B : Into<Bytes>>(&mut self, bytes: B) {
+    pub fn buffer_bytes<B: Into<Bytes>>(&mut self, bytes: B) {
         let bytes = bytes.into();
         self.buf.extend_from_bytes(bytes);
     }
@@ -51,4 +50,3 @@ impl<W : AsyncWrite> HttpFramedWrite<W> {
         }
     }
 }
-

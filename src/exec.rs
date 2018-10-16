@@ -7,17 +7,17 @@ use futures_cpupool::CpuPool;
 use tokio_core::reactor;
 
 pub trait Executor {
-    fn execute(&self, f: Box<Future<Item=(), Error=Void> + Send + 'static>);
+    fn execute(&self, f: Box<Future<Item = (), Error = Void> + Send + 'static>);
 }
 
 impl Executor for CpuPool {
-    fn execute(&self, f: Box<Future<Item=(), Error=Void> + Send + 'static>) {
+    fn execute(&self, f: Box<Future<Item = (), Error = Void> + Send + 'static>) {
         self.spawn(f).forget();
     }
 }
 
 impl Executor for reactor::Handle {
-    fn execute(&self, f: Box<Future<Item=(), Error=Void> + Send + 'static>) {
+    fn execute(&self, f: Box<Future<Item = (), Error = Void> + Send + 'static>) {
         self.spawn(f.map_err(|e| match e {}));
     }
 }

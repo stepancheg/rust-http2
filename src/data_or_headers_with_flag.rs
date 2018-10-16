@@ -1,18 +1,17 @@
-use futures::stream::Stream;
 use futures::stream;
+use futures::stream::Stream;
 
 use bytes::Bytes;
 
 use data_or_headers::DataOrHeaders;
-use solicit::header::Headers;
-use solicit::connection::EndStream;
-use solicit_async::HttpFutureStreamSend;
 use data_or_trailers::DataOrTrailers;
 use error;
-use std::panic::AssertUnwindSafe;
-use misc::any_to_string;
 use futures::Poll;
-
+use misc::any_to_string;
+use solicit::connection::EndStream;
+use solicit::header::Headers;
+use solicit_async::HttpFutureStreamSend;
+use std::panic::AssertUnwindSafe;
 
 /// Stream frame content with END_STREAM flag
 pub struct DataOrHeadersWithFlag {
@@ -57,24 +56,20 @@ impl DataOrHeadersWithFlag {
                 let end_stream = if last { EndStream::Yes } else { EndStream::No };
                 DataOrTrailers::Data(data, end_stream)
             }
-            (DataOrHeaders::Headers(headers), _) => {
-                DataOrTrailers::Trailers(headers)
-            }
+            (DataOrHeaders::Headers(headers), _) => DataOrTrailers::Trailers(headers),
         }
     }
 }
 
-
 /// Stream of DATA of HEADER frames
-pub struct DataOrHeadersWithFlagStream(
-    pub HttpFutureStreamSend<DataOrHeadersWithFlag>
-);
+pub struct DataOrHeadersWithFlagStream(pub HttpFutureStreamSend<DataOrHeadersWithFlag>);
 
 impl DataOrHeadersWithFlagStream {
     // constructors
 
     pub fn new<S>(s: S) -> DataOrHeadersWithFlagStream
-        where S : Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send + 'static
+    where
+        S: Stream<Item = DataOrHeadersWithFlag, Error = error::Error> + Send + 'static,
     {
         DataOrHeadersWithFlagStream(Box::new(s))
     }
@@ -84,17 +79,22 @@ impl DataOrHeadersWithFlagStream {
     }
 
     pub fn bytes<S>(bytes: S) -> DataOrHeadersWithFlagStream
-        where S : Stream<Item=Bytes, Error=error::Error> + Send + 'static
+    where
+        S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
     {
         DataOrHeadersWithFlagStream::new(bytes.map(DataOrHeadersWithFlag::intermediate_data))
     }
 
     pub fn once(part: DataOrHeaders) -> DataOrHeadersWithFlagStream {
-        DataOrHeadersWithFlagStream::new(stream::once(Ok(DataOrHeadersWithFlag { content: part, last: true })))
+        DataOrHeadersWithFlagStream::new(stream::once(Ok(DataOrHeadersWithFlag {
+            content: part,
+            last: true,
+        })))
     }
 
     pub fn once_bytes<B>(bytes: B) -> DataOrHeadersWithFlagStream
-        where B : Into<Bytes>
+    where
+        B: Into<Bytes>,
     {
         DataOrHeadersWithFlagStream::once(DataOrHeaders::Data(bytes.into()))
     }
@@ -108,12 +108,12 @@ impl DataOrHeadersWithFlagStream {
 
     /// Take only `DATA` frames from the stream
     pub fn filter_data(self) -> HttpFutureStreamSend<Bytes> {
-        Box::new(self.filter_map(|DataOrHeadersWithFlag { content, .. }| {
-            match content {
+        Box::new(
+            self.filter_map(|DataOrHeadersWithFlag { content, .. }| match content {
                 DataOrHeaders::Data(data) => Some(data),
                 _ => None,
-            }
-        }))
+            }),
+        )
     }
 
     /// Wrap a stream with `catch_unwind` combinator.
@@ -127,7 +127,7 @@ impl DataOrHeadersWithFlagStream {
                     // TODO: send plain text error if headers weren't sent yet
                     warn!("handler panicked: {}", e);
                     Err(error::Error::HandlerPanicked(e))
-                },
+                }
             }
         }))
     }

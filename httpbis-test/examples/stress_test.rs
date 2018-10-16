@@ -1,11 +1,11 @@
 extern crate bytes;
-extern crate httpbis;
 extern crate futures;
+extern crate httpbis;
 extern crate regex;
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use std::thread;
 use std::time::Duration;
@@ -15,20 +15,18 @@ use regex::Regex;
 use bytes::Bytes;
 
 use futures::future::Future;
-use futures::stream::Stream;
-use futures::stream;
 use futures::sink::Sink;
+use futures::stream;
+use futures::stream::Stream;
 use futures::sync::mpsc;
 
 use httpbis::*;
 
-
-
 fn new_server() -> Server {
     let mut server = ServerBuilder::new_plain();
-    server.service.set_service_fn("/200", |_, _| {
-        Response::headers(Headers::ok_200())
-    });
+    server
+        .service
+        .set_service_fn("/200", |_, _| Response::headers(Headers::ok_200()));
     server.service.set_service_fn("/inf", |headers, _| {
         let re = Regex::new("/inf/(\\d+)").expect("regex");
         let captures = re.captures(headers.path()).expect("captures");
@@ -36,7 +34,8 @@ fn new_server() -> Server {
 
         Response::headers_and_bytes_stream(
             Headers::ok_200(),
-            stream::repeat(Bytes::from(vec![17; size as usize])))
+            stream::repeat(Bytes::from(vec![17; size as usize])),
+        )
     });
     server.service.set_service_fn("/bq", |headers, _| {
         let re = Regex::new("/bq/(\\d+)").expect("regex");
@@ -54,16 +53,13 @@ fn new_server() -> Server {
             }
         });
 
-        Response::headers_and_bytes_stream(
-            Headers::ok_200(),
-            rx.map_err(|_| unreachable!()))
+        Response::headers_and_bytes_stream(Headers::ok_200(), rx.map_err(|_| unreachable!()))
     });
     server.set_port(0);
     server.build().expect("server")
 }
 
-
-fn spawn<F : FnOnce(Client, Arc<AtomicBool>) + Send + 'static>(port: u16, f: F) -> Arc<AtomicBool> {
+fn spawn<F: FnOnce(Client, Arc<AtomicBool>) + Send + 'static>(port: u16, f: F) -> Arc<AtomicBool> {
     let still_alive = Arc::new(AtomicBool::new(false));
     let still_alive_copy = still_alive.clone();
     thread::spawn(move || {
@@ -74,11 +70,14 @@ fn spawn<F : FnOnce(Client, Arc<AtomicBool>) + Send + 'static>(port: u16, f: F) 
     still_alive
 }
 
-
 fn get_200(client: Client, still_alive: Arc<AtomicBool>) {
     loop {
         still_alive.store(true, Ordering::SeqCst);
-        let r = client.start_get("/200", "localhost").collect().wait().expect("get");
+        let r = client
+            .start_get("/200", "localhost")
+            .collect()
+            .wait()
+            .expect("get");
         assert_eq!(200, r.headers.status());
     }
 }
@@ -124,7 +123,6 @@ fn bq_100(client: Client, still_alive: Arc<AtomicBool>) {
 fn bq_10m(client: Client, still_alive: Arc<AtomicBool>) {
     inf_impl(client, still_alive, "/bq/10000000", 10000000);
 }
-
 
 fn main() {
     let server = new_server();

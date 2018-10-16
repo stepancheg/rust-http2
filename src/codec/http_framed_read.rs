@@ -1,32 +1,28 @@
 use bytes::Bytes;
 use bytes::BytesMut;
 
-use tokio_io::AsyncRead;
 use error;
 use futures::Async;
-use solicit::frame::unpack_header_from_slice;
+use solicit::connection::HttpFrame;
 use solicit::frame::headers::HeadersFlag;
 use solicit::frame::push_promise::PushPromiseFlag;
-use ErrorCode;
-use solicit::frame::RawFrame;
-use solicit::connection::HttpFrame;
+use solicit::frame::unpack_header_from_slice;
 use solicit::frame::HeadersFrame;
 use solicit::frame::PushPromiseFrame;
+use solicit::frame::RawFrame;
 use solicit::StreamId;
-
+use tokio_io::AsyncRead;
+use ErrorCode;
 
 /// Buffered read for reading HTTP/2 frames.
-pub struct HttpFramedRead<R : AsyncRead> {
+pub struct HttpFramedRead<R: AsyncRead> {
     read: R,
     buf: BytesMut,
 }
 
-
 pub const FRAME_HEADER_LEN: usize = 9;
 
-
-impl<R : AsyncRead> HttpFramedRead<R> {
-
+impl<R: AsyncRead> HttpFramedRead<R> {
     pub fn new(read: R) -> HttpFramedRead<R> {
         HttpFramedRead {
             read,
@@ -49,7 +45,7 @@ impl<R : AsyncRead> HttpFramedRead<R> {
     fn fill_buff_to_at_least(&mut self, at_least: usize) -> Result<Async<()>, error::Error> {
         while self.buf.len() < at_least {
             if let Async::NotReady = self.fill_buf()? {
-                return Ok(Async::NotReady)
+                return Ok(Async::NotReady);
             }
         }
         Ok(Async::Ready(()))
@@ -66,8 +62,10 @@ impl<R : AsyncRead> HttpFramedRead<R> {
         };
 
         if header.length > max_frame_size {
-            warn!("closing conn because peer sent frame with size: {}, max_frame_size: {}",
-                header.length, max_frame_size);
+            warn!(
+                "closing conn because peer sent frame with size: {}, max_frame_size: {}",
+                header.length, max_frame_size
+            );
             return Err(error::Error::CodeError(ErrorCode::FrameSizeError));
         }
 
@@ -78,7 +76,7 @@ impl<R : AsyncRead> HttpFramedRead<R> {
         }
 
         Ok(Async::Ready(RawFrame {
-            raw_content: self.buf.split_to(total_len).freeze()
+            raw_content: self.buf.split_to(total_len).freeze(),
         }))
     }
 
@@ -106,17 +104,21 @@ impl Continuable {
     fn extend_header_fragment(&mut self, bytes: Bytes) {
         let header_fragment = match self {
             &mut Continuable::Headers(ref mut headers) => &mut headers.header_fragment,
-            &mut Continuable::PushPromise(ref mut push_promise) => &mut push_promise.header_fragment,
+            &mut Continuable::PushPromise(ref mut push_promise) => {
+                &mut push_promise.header_fragment
+            }
         };
         header_fragment.extend_from_slice(&bytes);
     }
 
     fn set_end_headers(&mut self) {
         match self {
-            &mut Continuable::Headers(ref mut headers) =>
-                headers.flags.set(HeadersFlag::EndHeaders),
-            &mut Continuable::PushPromise(ref mut push_promise) =>
-                push_promise.flags.set(PushPromiseFlag::EndHeaders),
+            &mut Continuable::Headers(ref mut headers) => {
+                headers.flags.set(HeadersFlag::EndHeaders)
+            }
+            &mut Continuable::PushPromise(ref mut push_promise) => {
+                push_promise.flags.set(PushPromiseFlag::EndHeaders)
+            }
         }
     }
 
@@ -128,13 +130,13 @@ impl Continuable {
     }
 }
 
-pub struct HttpFramedJoinContinuationRead<R : AsyncRead> {
+pub struct HttpFramedJoinContinuationRead<R: AsyncRead> {
     framed_read: HttpFramedRead<R>,
     // TODO: check total size is not exceeded some limit
     header_opt: Option<Continuable>,
 }
 
-impl<R : AsyncRead> HttpFramedJoinContinuationRead<R> {
+impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
     pub fn new(read: R) -> Self {
         HttpFramedJoinContinuationRead {
             framed_read: HttpFramedRead::new(read),
@@ -142,7 +144,10 @@ impl<R : AsyncRead> HttpFramedJoinContinuationRead<R> {
         }
     }
 
-    pub fn poll_http_frame(&mut self, max_frame_size: u32) -> Result<Async<HttpFrame>, error::Error> {
+    pub fn poll_http_frame(
+        &mut self,
+        max_frame_size: u32,
+    ) -> Result<Async<HttpFrame>, error::Error> {
         loop {
             let frame = match self.framed_read.poll_http_frame(max_frame_size)? {
                 Async::NotReady => return Ok(Async::NotReady),
@@ -152,7 +157,9 @@ impl<R : AsyncRead> HttpFramedJoinContinuationRead<R> {
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::Other("expecting CONTINUATION frame, got HEADERS"))
+                        return Err(error::Error::Other(
+                            "expecting CONTINUATION frame, got HEADERS",
+                        ));
                     } else {
                         if h.flags.is_set(HeadersFlag::EndHeaders) {
                             return Ok(Async::Ready(HttpFrame::Headers(h)));
@@ -164,7 +171,9 @@ impl<R : AsyncRead> HttpFramedJoinContinuationRead<R> {
                 }
                 HttpFrame::PushPromise(p) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::Other("expecting CONTINUATION frame, got PUSH_PROMISE"))
+                        return Err(error::Error::Other(
+                            "expecting CONTINUATION frame, got PUSH_PROMISE",
+                        ));
                     } else {
                         if p.flags.is_set(PushPromiseFlag::EndHeaders) {
                             return Ok(Async::Ready(HttpFrame::PushPromise(p)));
@@ -177,7 +186,9 @@ impl<R : AsyncRead> HttpFramedJoinContinuationRead<R> {
                 HttpFrame::Continuation(c) => {
                     if let Some(mut h) = self.header_opt.take() {
                         if h.get_stream_id() != c.stream_id {
-                            return Err(error::Error::Other("CONTINUATION frame with different stream id"))
+                            return Err(error::Error::Other(
+                                "CONTINUATION frame with different stream id",
+                            ));
                         } else {
                             let header_end = c.is_headers_end();
                             h.extend_header_fragment(c.header_fragment);
@@ -199,7 +210,7 @@ impl<R : AsyncRead> HttpFramedJoinContinuationRead<R> {
                     } else {
                         return Ok(Async::Ready(f));
                     }
-                },
+                }
             };
         }
     }

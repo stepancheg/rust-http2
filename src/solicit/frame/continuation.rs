@@ -1,25 +1,21 @@
 use bytes::Bytes;
 
-use solicit::StreamId;
-use solicit::frame::RawFrame;
-use solicit::frame::Frame;
-use solicit::frame::FrameIR;
-use solicit::frame::FrameHeader;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::ParseFrameError;
 use solicit::frame::builder::FrameBuilder;
+use solicit::frame::Frame;
+use solicit::frame::FrameHeader;
+use solicit::frame::FrameIR;
+use solicit::frame::ParseFrameError;
+use solicit::frame::ParseFrameResult;
+use solicit::frame::RawFrame;
+use solicit::StreamId;
 
 use super::flags::Flag;
 use super::flags::Flags;
 
-
 pub const CONTINUATION_FRAME_TYPE: u8 = 0x9;
 
 /// An enum representing the flags that a `ContinuationFrame` can have.
-#[derive(Clone)]
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Copy)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum ContinuationFlag {
     EndHeaders = 0x4,
 }
@@ -31,9 +27,7 @@ impl Flag for ContinuationFlag {
     }
 
     fn flags() -> &'static [Self] {
-        static FLAGS: &'static [ContinuationFlag] = &[
-            ContinuationFlag::EndHeaders,
-        ];
+        static FLAGS: &'static [ContinuationFlag] = &[ContinuationFlag::EndHeaders];
         FLAGS
     }
 }
@@ -55,7 +49,7 @@ pub struct ContinuationFrame {
 }
 
 impl ContinuationFrame {
-    pub fn new<B : Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
+    pub fn new<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
         ContinuationFrame {
             header_fragment: fragment.into(),
             stream_id: stream_id,
@@ -87,7 +81,12 @@ impl Frame for ContinuationFrame {
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<ContinuationFrame> {
         // Unpack the header
-        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        let FrameHeader {
+            length,
+            frame_type,
+            flags,
+            stream_id,
+        } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != CONTINUATION_FRAME_TYPE {
             return Err(ParseFrameError::InternalError);

@@ -1,12 +1,12 @@
 extern crate bytes;
-extern crate regex;
+extern crate env_logger;
 extern crate futures;
 extern crate httpbis;
-extern crate tokio_core;
 extern crate log;
-extern crate env_logger;
+extern crate regex;
 #[cfg(unix)]
 extern crate tempdir;
+extern crate tokio_core;
 
 extern crate httpbis_test;
 use httpbis_test::*;
@@ -22,12 +22,11 @@ use futures::stream::Stream;
 use futures::sync::mpsc;
 
 use httpbis::Client;
-use httpbis::ServerBuilder;
-use httpbis::Service;
-use httpbis::Response;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
-
+use httpbis::Response;
+use httpbis::ServerBuilder;
+use httpbis::Service;
 
 #[test]
 fn smoke() {
@@ -60,11 +59,7 @@ fn smoke_unix_domain_sockets() {
 
     let _server = ServerTest::new_unix(test_addr.to_owned());
 
-    let client: Client =
-        Client::new_plain_unix(
-            test_addr,
-            Default::default()
-        ).expect("client");
+    let client: Client = Client::new_plain_unix(test_addr, Default::default()).expect("client");
 
     let mut futures = Vec::new();
     for _ in 0..10 {
@@ -106,8 +101,11 @@ fn seq_long() {
     let client: Client =
         Client::new_plain(BIND_HOST, server.port, Default::default()).expect("client");
 
-    let (headers, parts) = client.start_get("/blocks/100000/100", "localhost").0
-        .wait().expect("get");
+    let (headers, parts) = client
+        .start_get("/blocks/100000/100", "localhost")
+        .0
+        .wait()
+        .expect("get");
 
     assert_eq!(200, headers.status());
 
@@ -131,22 +129,37 @@ fn seq_slow() {
 
     impl Service for Handler {
         fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-            let rx = self.rx.lock().unwrap().take().expect("can be called only once");
-            Response::headers_and_bytes_stream(
-                Headers::ok_200(),
-                rx.map_err(|_| unreachable!()))
+            let rx = self
+                .rx
+                .lock()
+                .unwrap()
+                .take()
+                .expect("can be called only once");
+            Response::headers_and_bytes_stream(Headers::ok_200(), rx.map_err(|_| unreachable!()))
         }
     }
 
     let mut server = ServerBuilder::new_plain();
     server.set_port(0);
-    server.service.set_service("/", Arc::new(Handler { rx: Mutex::new(Some(rx)) }));
+    server.service.set_service(
+        "/",
+        Arc::new(Handler {
+            rx: Mutex::new(Some(rx)),
+        }),
+    );
     let server = server.build().expect("server");
 
-    let client: Client =
-        Client::new_plain(BIND_HOST, server.local_addr().port().unwrap(), Default::default()).expect("client");
+    let client: Client = Client::new_plain(
+        BIND_HOST,
+        server.local_addr().port().unwrap(),
+        Default::default(),
+    ).expect("client");
 
-    let (headers, resp) = client.start_get("/gfgfg", "localhost").0.wait().expect("get");
+    let (headers, resp) = client
+        .start_get("/gfgfg", "localhost")
+        .0
+        .wait()
+        .expect("get");
 
     assert_eq!(200, headers.status());
 
@@ -170,6 +183,9 @@ fn seq_slow() {
         // TODO
         assert_eq!(None, resp.next().map(|e| format!("{:?}", e)));
     } else {
-        assert_eq!(Some(Ok(Bytes::new())), resp.next().map(|r| r.map_err(|e| format!("{:?}", e))));
+        assert_eq!(
+            Some(Ok(Bytes::new())),
+            resp.next().map(|r| r.map_err(|e| format!("{:?}", e)))
+        );
     }
 }

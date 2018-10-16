@@ -1,8 +1,8 @@
 use std::panic;
 
-use futures::Poll;
 use futures::stream;
 use futures::stream::Stream;
+use futures::Poll;
 
 use bytes::Bytes;
 
@@ -12,12 +12,11 @@ use solicit::header::Headers;
 
 use solicit_async::*;
 
-use misc::any_to_string;
-use solicit::connection::EndStream;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-
+use misc::any_to_string;
+use solicit::connection::EndStream;
 
 /// Stream frame content after initial headers
 pub enum DataOrTrailers {
@@ -34,22 +33,17 @@ impl DataOrTrailers {
 
     pub fn into_part(self) -> DataOrHeadersWithFlag {
         match self {
-            DataOrTrailers::Data(data, end_stream) => {
-                DataOrHeadersWithFlag {
-                    content: DataOrHeaders::Data(data),
-                    last: end_stream == EndStream::Yes,
-                }
-            }
-            DataOrTrailers::Trailers(headers) => {
-                DataOrHeadersWithFlag {
-                    content: DataOrHeaders::Headers(headers),
-                    last: true,
-                }
-            }
+            DataOrTrailers::Data(data, end_stream) => DataOrHeadersWithFlag {
+                content: DataOrHeaders::Data(data),
+                last: end_stream == EndStream::Yes,
+            },
+            DataOrTrailers::Trailers(headers) => DataOrHeadersWithFlag {
+                content: DataOrHeaders::Headers(headers),
+                last: true,
+            },
         }
     }
 }
-
 
 /// Stream of DATA or HEADERS frames after initial HEADERS.
 ///
@@ -58,22 +52,22 @@ impl DataOrTrailers {
 ///
 /// Most users won't need anything except data, so this type provides
 /// convenient constructors and accessors.
-pub struct HttpStreamAfterHeaders(
-    pub HttpFutureStreamSend<DataOrTrailers>
-);
+pub struct HttpStreamAfterHeaders(pub HttpFutureStreamSend<DataOrTrailers>);
 
 impl HttpStreamAfterHeaders {
     // constructors
 
     /// Box and wraper futures stream of `DataOrTrailers`.
     pub fn new<S>(s: S) -> HttpStreamAfterHeaders
-        where S : Stream<Item=DataOrTrailers, Error=error::Error> + Send + 'static
+    where
+        S: Stream<Item = DataOrTrailers, Error = error::Error> + Send + 'static,
     {
         HttpStreamAfterHeaders(Box::new(s))
     }
 
     pub(crate) fn from_parts<S>(s: S) -> HttpStreamAfterHeaders
-        where S : Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send + 'static
+    where
+        S: Stream<Item = DataOrHeadersWithFlag, Error = error::Error> + Send + 'static,
     {
         HttpStreamAfterHeaders::new(s.map(DataOrHeadersWithFlag::into_after_headers))
     }
@@ -85,19 +79,16 @@ impl HttpStreamAfterHeaders {
 
     /// Create a response from a stream of bytes.
     pub fn bytes<S>(bytes: S) -> HttpStreamAfterHeaders
-        where S : Stream<Item=Bytes, Error=error::Error> + Send + 'static
+    where
+        S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
     {
         HttpStreamAfterHeaders::new(bytes.map(DataOrTrailers::intermediate_data))
     }
 
     pub fn once(part: DataOrHeaders) -> HttpStreamAfterHeaders {
         let part = match part {
-            DataOrHeaders::Data(data) => {
-                DataOrTrailers::Data(data, EndStream::Yes)
-            },
-            DataOrHeaders::Headers(header) => {
-                DataOrTrailers::Trailers(header)
-            },
+            DataOrHeaders::Data(data) => DataOrTrailers::Data(data, EndStream::Yes),
+            DataOrHeaders::Headers(header) => DataOrTrailers::Trailers(header),
         };
         HttpStreamAfterHeaders::new(stream::once(Ok(part)))
     }
@@ -108,7 +99,8 @@ impl HttpStreamAfterHeaders {
     ///
     /// If bytes object is large, it will be split into multiple frames.
     pub fn once_bytes<B>(bytes: B) -> HttpStreamAfterHeaders
-        where B : Into<Bytes>
+    where
+        B: Into<Bytes>,
     {
         HttpStreamAfterHeaders::once(DataOrHeaders::Data(bytes.into()))
     }
@@ -116,16 +108,16 @@ impl HttpStreamAfterHeaders {
     // getters
 
     /// Take only `DATA` frames from the stream
-    pub fn filter_data(self) -> impl Stream<Item=Bytes, Error=error::Error> + Send {
-        self.filter_map(|p| {
-            match p {
-                DataOrTrailers::Data(data, ..) => Some(data),
-                DataOrTrailers::Trailers(..) => None,
-            }
+    pub fn filter_data(self) -> impl Stream<Item = Bytes, Error = error::Error> + Send {
+        self.filter_map(|p| match p {
+            DataOrTrailers::Data(data, ..) => Some(data),
+            DataOrTrailers::Trailers(..) => None,
         })
     }
 
-    pub(crate) fn into_flag_stream(self) -> impl Stream<Item=DataOrHeadersWithFlag, Error=error::Error> + Send {
+    pub(crate) fn into_flag_stream(
+        self,
+    ) -> impl Stream<Item = DataOrHeadersWithFlag, Error = error::Error> + Send {
         self.0.map(DataOrTrailers::into_part)
     }
 
@@ -144,7 +136,7 @@ impl HttpStreamAfterHeaders {
                     // TODO: send plain text error if headers weren't sent yet
                     warn!("handler panicked: {}", e);
                     Err(error::Error::HandlerPanicked(e))
-                },
+                }
             }
         }))
     }

@@ -12,7 +12,6 @@ use futures::task::Task;
 
 use super::atomic_box_option::AtomicBoxOption;
 
-
 struct WakerShared {
     waiters: Mutex<Vec<Arc<WaiterShared>>>,
 }
@@ -25,8 +24,8 @@ impl Waker {
     pub fn new() -> Waker {
         Waker {
             shared: Arc::new(WakerShared {
-                waiters: Mutex::new(Vec::new())
-            })
+                waiters: Mutex::new(Vec::new()),
+            }),
         }
     }
 
@@ -56,7 +55,6 @@ pub struct Waiter {
     shared: Arc<WaiterShared>,
 }
 
-
 struct WaiterShared {
     task: AtomicBoxOption<Task>,
     waker_knows: AtomicBool,
@@ -65,7 +63,7 @@ struct WaiterShared {
 impl WaiterShared {
     fn wake(&self) {
         match self.task.swap_null(Ordering::SeqCst) {
-            None => {},
+            None => {}
             Some(task) => task.notify(),
         }
     }
@@ -75,7 +73,9 @@ impl Waiter {
     pub fn park(&self) {
         let mut lock = self.waker.waiters.lock().expect("lock");
 
-        self.shared.task.store_box(Box::new(task::current()), Ordering::SeqCst);
+        self.shared
+            .task
+            .store_box(Box::new(task::current()), Ordering::SeqCst);
 
         if self.shared.waker_knows.load(Ordering::Relaxed) {
             return;

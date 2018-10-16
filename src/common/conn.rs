@@ -4,64 +4,60 @@ use futures::sync::mpsc::UnboundedSender;
 
 use tokio_core::reactor;
 
-use exec::Executor;
 use exec::CpuPoolOption;
+use exec::Executor;
 
 use error;
 use error::ErrorCode;
 use result;
 
-use solicit::frame::*;
-use solicit::StreamId;
-use solicit::DEFAULT_SETTINGS;
 use solicit::connection::HttpFrameType;
 use solicit::frame::settings::HttpSettings;
+use solicit::frame::*;
 use solicit::session::StreamState;
 use solicit::session::StreamStateIdleOrClosed;
+use solicit::StreamId;
+use solicit::DEFAULT_SETTINGS;
 
-use super::stream::*;
-use super::stream_map::*;
 use super::closed_streams::*;
-use super::types::*;
 use super::conf::*;
 use super::pump_stream_to_write_loop::PumpStreamToWrite;
+use super::stream::*;
 use super::stream_from_network::StreamFromNetwork;
-use super::stream_queue_sync::StreamQueueSyncReceiver;
-use super::window_size;
+use super::stream_map::*;
 use super::stream_queue_sync::stream_queue_sync;
-
+use super::stream_queue_sync::StreamQueueSyncReceiver;
+use super::types::*;
+use super::window_size;
 
 pub use resp::Response;
 
-use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientConnDiedType;
-use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
+use client_died_error_holder::ClientDiedErrorHolder;
 use codec::http_framed_read::HttpFramedJoinContinuationRead;
-use solicit_async::HttpFutureStreamSend;
-use futures::future;
-use futures::Future;
-use futures::Poll;
-use futures::Async;
-use futures::sync::oneshot;
-use tokio_io::io::ReadHalf;
-use tokio_io::io::WriteHalf;
+use codec::queued_write::QueuedWrite;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::ConnWriteSideCustom;
+use common::iteration_exit::IterationExit;
+use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
+use futures::future;
+use futures::sync::oneshot;
+use futures::task;
+use futures::Async;
+use futures::Future;
+use futures::Poll;
 use hpack;
 use solicit::WindowSize;
+use solicit_async::HttpFutureStreamSend;
 use std::collections::HashSet;
-use futures::task;
-use common::iteration_exit::IterationExit;
-use codec::queued_write::QueuedWrite;
-
+use tokio_io::io::ReadHalf;
+use tokio_io::io::WriteHalf;
 
 /// Client or server fields of connection
-pub trait ConnSpecific : 'static {
-}
-
+pub trait ConnSpecific: 'static {}
 
 /// HTTP/2 connection state with socket and streams
-pub struct Conn<T : Types> {
+pub struct Conn<T: Types> {
     pub conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
 
     /// Client or server specific data
@@ -113,7 +109,6 @@ pub struct Conn<T : Types> {
     pub our_settings_sent: Option<HttpSettings>,
 }
 
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ConnStateSnapshot {
     pub in_window_size: i32,
@@ -130,14 +125,12 @@ impl ConnStateSnapshot {
     }
 }
 
-
-
 impl<T> Conn<T>
-    where
-        T : Types,
-        Self : ConnReadSideCustom<Types=T>,
-        Self : ConnWriteSideCustom<Types=T>,
-        HttpStreamCommon<T> : HttpStreamData<Types=T>,
+where
+    T: Types,
+    Self: ConnReadSideCustom<Types = T>,
+    Self: ConnWriteSideCustom<Types = T>,
+    HttpStreamCommon<T>: HttpStreamData<Types = T>,
 {
     pub fn new(
         loop_handle: reactor::Handle,
@@ -149,9 +142,8 @@ impl<T> Conn<T>
         write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
         read: ReadHalf<T::Io>,
         write: WriteHalf<T::Io>,
-        conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>)
-            -> Conn<T>
-    {
+        conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
+    ) -> Conn<T> {
         let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
         let out_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
 
@@ -186,7 +178,6 @@ impl<T> Conn<T>
             our_settings_ack: DEFAULT_SETTINGS,
             our_settings_sent: Some(sent_settings),
             flush_streams: HashSet::new(),
-
         }
     }
 
@@ -200,26 +191,26 @@ impl<T> Conn<T>
         id
     }
 
-
     pub fn new_stream_data(
         &mut self,
         stream_id: StreamId,
         in_rem_content_length: Option<u64>,
         in_message_stage: InMessageStage,
-        specific: T::HttpStreamSpecific)
-        -> (HttpStreamRef<T>, StreamFromNetwork<T>, window_size::StreamOutWindowReceiver)
-    {
+        specific: T::HttpStreamSpecific,
+    ) -> (
+        HttpStreamRef<T>,
+        StreamFromNetwork<T>,
+        window_size::StreamOutWindowReceiver,
+    ) {
         let (inc_tx, inc_rx) = stream_queue_sync(self.conn_died_error_holder.clone());
 
         let in_window_size = self.our_settings_sent().initial_window_size;
 
-        let stream_from_network = self.new_stream_from_network(
-            inc_rx,
-            stream_id,
-            in_window_size);
+        let stream_from_network = self.new_stream_from_network(inc_rx, stream_id, in_window_size);
 
-        let (out_window_sender, out_window_receiver) =
-            self.pump_out_window_size.new_stream(self.peer_settings.initial_window_size as u32);
+        let (out_window_sender, out_window_receiver) = self
+            .pump_out_window_size
+            .new_stream(self.peer_settings.initial_window_size as u32);
 
         let stream = HttpStreamCommon::new(
             in_window_size,
@@ -228,7 +219,8 @@ impl<T> Conn<T>
             out_window_sender,
             in_rem_content_length,
             in_message_stage,
-            specific);
+            specific,
+        );
 
         let stream = self.streams.insert(stream_id, stream);
 
@@ -239,9 +231,8 @@ impl<T> Conn<T>
         &self,
         rx: StreamQueueSyncReceiver,
         stream_id: StreamId,
-        in_window_size: u32)
-            -> StreamFromNetwork<T>
-    {
+        in_window_size: u32,
+    ) -> StreamFromNetwork<T> {
         StreamFromNetwork {
             rx,
             stream_id,
@@ -249,7 +240,6 @@ impl<T> Conn<T>
             in_window_size,
         }
     }
-
 
     pub fn dump_state(&self) -> ConnStateSnapshot {
         ConnStateSnapshot {
@@ -290,17 +280,20 @@ impl<T> Conn<T>
             .map_err(|_| error::Error::WindowSizeOverflow)
     }
 
-    pub fn process_dump_state(&mut self, sender: oneshot::Sender<ConnStateSnapshot>)
-        -> result::Result<()>
-    {
+    pub fn process_dump_state(
+        &mut self,
+        sender: oneshot::Sender<ConnStateSnapshot>,
+    ) -> result::Result<()> {
         // ignore send error, client might be already dead
         drop(sender.send(self.dump_state()));
         Ok(())
     }
 
-    pub fn send_rst_stream(&mut self, stream_id: StreamId, error_code: ErrorCode)
-        -> result::Result<()>
-    {
+    pub fn send_rst_stream(
+        &mut self,
+        stream_id: StreamId,
+        error_code: ErrorCode,
+    ) -> result::Result<()> {
         // TODO: probably notify handlers
         self.streams.remove_stream(stream_id);
 
@@ -314,12 +307,11 @@ impl<T> Conn<T>
     }
 
     fn stream_state_idle_or_closed(&self, stream_id: StreamId) -> StreamStateIdleOrClosed {
-        let last_stream_id =
-            if T::is_init_locally(stream_id) {
-                self.last_local_stream_id
-            } else {
-                self.last_peer_stream_id
-            };
+        let last_stream_id = if T::is_init_locally(stream_id) {
+            self.last_local_stream_id
+        } else {
+            self.last_peer_stream_id
+        };
 
         if stream_id > last_stream_id {
             StreamStateIdleOrClosed::Idle
@@ -335,17 +327,19 @@ impl<T> Conn<T>
         }
     }
 
-    pub fn get_stream_maybe_send_error(&mut self, stream_id: StreamId, frame_type: HttpFrameType)
-        -> result::Result<Option<HttpStreamRef<T>>>
-    {
+    pub fn get_stream_maybe_send_error(
+        &mut self,
+        stream_id: StreamId,
+        frame_type: HttpFrameType,
+    ) -> result::Result<Option<HttpStreamRef<T>>> {
         let stream_state = self.stream_state(stream_id);
 
         match stream_state {
             StreamState::Idle => {
                 let send_connection_error = match frame_type {
-                    HttpFrameType::Headers |
-                    HttpFrameType::Priority |
-                    HttpFrameType::PushPromise => false,
+                    HttpFrameType::Headers
+                    | HttpFrameType::Priority
+                    | HttpFrameType::PushPromise => false,
                     _ => true,
                 };
 
@@ -363,14 +357,17 @@ impl<T> Conn<T>
                 // this state, it MUST respond with a stream error (Section 5.4.2) of
                 // type STREAM_CLOSED.
                 let send_rst = match frame_type {
-                    HttpFrameType::WindowUpdate |
-                    HttpFrameType::Priority |
-                    HttpFrameType::RstStream => false,
+                    HttpFrameType::WindowUpdate
+                    | HttpFrameType::Priority
+                    | HttpFrameType::RstStream => false,
                     _ => true,
                 };
-                
+
                 if send_rst {
-                    debug!("stream is half-closed remote: {}, sending RST_STREAM", stream_id);
+                    debug!(
+                        "stream is half-closed remote: {}, sending RST_STREAM",
+                        stream_id
+                    );
                     self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
                 }
             }
@@ -395,16 +392,15 @@ impl<T> Conn<T>
                 // (Section 5.4.1) of type PROTOCOL_ERROR.
 
                 let send_stream_closed = match frame_type {
-                    HttpFrameType::RstStream |
-                    HttpFrameType::Priority |
-                    HttpFrameType::WindowUpdate => false,
+                    HttpFrameType::RstStream
+                    | HttpFrameType::Priority
+                    | HttpFrameType::WindowUpdate => false,
                     _ => true,
                 };
 
                 // TODO: http2 spec requires sending stream or connection error
                 // depending on how stream was closed
                 if send_stream_closed {
-
                     if self.peer_closed_streams.contains(stream_id) {
                         debug!("stream is closed by peer: {}, sending GOAWAY", stream_id);
                         self.send_goaway(ErrorCode::StreamClosed)?;
@@ -419,15 +415,18 @@ impl<T> Conn<T>
         Ok(self.streams.get_mut(stream_id))
     }
 
-    pub fn get_stream_for_headers_maybe_send_error(&mut self, stream_id: StreamId)
-        -> result::Result<Option<HttpStreamRef<T>>>
-    {
+    pub fn get_stream_for_headers_maybe_send_error(
+        &mut self,
+        stream_id: StreamId,
+    ) -> result::Result<Option<HttpStreamRef<T>>> {
         self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)
     }
 
     pub fn out_window_increased(&mut self, stream_id: Option<StreamId>) -> result::Result<()> {
         match stream_id {
-            Some(stream_id) => { self.flush_streams.insert(stream_id); },
+            Some(stream_id) => {
+                self.flush_streams.insert(stream_id);
+            }
             None => self.flush_conn = true,
         }
         // Make sure writer loop is executed
@@ -446,9 +445,8 @@ impl<T> Conn<T>
         &self,
         stream_id: StreamId,
         stream: DataOrHeadersWithFlagStream,
-        out_window: window_size::StreamOutWindowReceiver)
-        -> PumpStreamToWrite<T>
-    {
+        out_window: window_size::StreamOutWindowReceiver,
+    ) -> PumpStreamToWrite<T> {
         let stream = stream.catch_unwind();
         PumpStreamToWrite {
             to_write_tx: self.to_write_tx.clone(),
@@ -462,13 +460,12 @@ impl<T> Conn<T>
         &self,
         stream_id: StreamId,
         stream: DataOrHeadersWithFlagStream,
-        out_window: window_size::StreamOutWindowReceiver)
-    {
+        out_window: window_size::StreamOutWindowReceiver,
+    ) {
         let stream = stream.catch_unwind();
-        self.exec.execute(Box::new(self.new_pump_stream_to_write_loop(
-            stream_id,
-            stream,
-            out_window)));
+        self.exec.execute(Box::new(
+            self.new_pump_stream_to_write_loop(stream_id, stream, out_window),
+        ));
     }
 
     pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
@@ -504,7 +501,7 @@ impl<T> Conn<T>
         })
     }
 
-    pub fn run(mut self) -> impl Future<Item=(), Error=error::Error> {
+    pub fn run(mut self) -> impl Future<Item = (), Error = error::Error> {
         future::poll_fn(move || self.poll())
     }
 }

@@ -2,7 +2,7 @@ use std::fmt;
 use std::marker;
 
 /// A trait that all HTTP/2 frame header flags need to implement.
-pub trait Flag : fmt::Debug + Copy + Clone + Sized {
+pub trait Flag: fmt::Debug + Copy + Clone + Sized {
     /// Returns a bit mask that represents the flag.
     fn bitmask(&self) -> u8;
 
@@ -15,13 +15,11 @@ pub trait Flag : fmt::Debug + Copy + Clone + Sized {
 
 /// A helper struct that can be used by all frames that do not define any flags.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum NoFlag {
-}
+pub enum NoFlag {}
 
 impl Flag for NoFlag {
     fn bitmask(&self) -> u8 {
-        match *self {
-        }
+        match *self {}
     }
 
     fn flags() -> &'static [Self] {
@@ -30,7 +28,6 @@ impl Flag for NoFlag {
     }
 }
 
-
 #[derive(PartialEq, Eq, Copy, Clone)]
 /// 4.1
 /// Flags: An 8-bit field reserved for boolean flags specific to the frame type.
@@ -38,9 +35,9 @@ impl Flag for NoFlag {
 /// Flags are assigned semantics specific to the indicated frame type.
 /// Flags that have no defined semantics for a particular frame type
 /// MUST be ignored and MUST be left unset (0x0) when sending.
-pub struct Flags<F : Flag + 'static>(pub u8, marker::PhantomData<F>);
+pub struct Flags<F: Flag + 'static>(pub u8, marker::PhantomData<F>);
 
-impl<F : Flag> Flags<F> {
+impl<F: Flag> Flags<F> {
     pub fn new(value: u8) -> Flags<F> {
         Flags(value, marker::PhantomData)
     }
@@ -58,13 +55,13 @@ impl<F : Flag> Flags<F> {
     }
 }
 
-impl<F : Flag> Default for Flags<F> {
+impl<F: Flag> Default for Flags<F> {
     fn default() -> Self {
         Flags::new(0)
     }
 }
 
-impl<F : Flag> fmt::Debug for Flags<F> {
+impl<F: Flag> fmt::Debug for Flags<F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.0 == 0 {
             return write!(f, "0");
@@ -125,6 +122,9 @@ mod test {
         assert_eq!("Foo", format!("{:?}", Flags::<FakeFlag>::new(0x1)));
         assert_eq!("0x62", format!("{:?}", Flags::<FakeFlag>::new(0x62)));
         assert_eq!("Foo|Bar", format!("{:?}", Flags::<FakeFlag>::new(0x81)));
-        assert_eq!("Foo|Bar|0x62", format!("{:?}", Flags::<FakeFlag>::new(0x81 | 0x62)));
+        assert_eq!(
+            "Foo|Bar|0x62",
+            format!("{:?}", Flags::<FakeFlag>::new(0x81 | 0x62))
+        );
     }
 }

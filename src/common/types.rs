@@ -2,17 +2,17 @@ use solicit::StreamId;
 
 use super::*;
 use req_resp::RequestOrResponse;
-use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 
 /// Client or server type names for connection and stream
-pub trait Types : 'static {
-    type Io : AsyncWrite + AsyncRead + Send + 'static;
+pub trait Types: 'static {
+    type Io: AsyncWrite + AsyncRead + Send + 'static;
     type HttpStreamData: HttpStreamData;
-    type HttpStreamSpecific : HttpStreamDataSpecific;
-    type ConnDataSpecific : ConnSpecific;
+    type HttpStreamSpecific: HttpStreamDataSpecific;
+    type ConnDataSpecific: ConnSpecific;
     // Message sent to write loop
-    type ToWriteMessage : From<CommonToWriteMessage> + Send;
+    type ToWriteMessage: From<CommonToWriteMessage> + Send;
 
     fn out_request_or_response() -> RequestOrResponse;
 

@@ -1,7 +1,6 @@
-use solicit::header::Headers;
 use data_or_trailers::HttpStreamAfterHeaders;
 use resp::Response;
-
+use solicit::header::Headers;
 
 /// Central HTTP/2 service interface.
 ///
@@ -10,7 +9,7 @@ use resp::Response;
 /// Client API simply implements this trait.
 ///
 /// Server implementation calls implementation of this trait providede by user.
-pub trait Service : Send + Sync + 'static {
+pub trait Service: Send + Sync + 'static {
     /// Start HTTP/2 request.
     ///
     /// `headers` param specifies initial request headers.

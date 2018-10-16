@@ -1,16 +1,16 @@
 use std::io;
-use std::sync::Arc;
 use std::panic;
+use std::sync::Arc;
 
 use error;
 use result;
 
 use exec::CpuPoolOption;
 
-use solicit::StreamId;
-use solicit::header::*;
 use solicit::connection::EndStream;
 use solicit::frame::settings::*;
+use solicit::header::*;
+use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
 use bytes::Bytes;
@@ -23,40 +23,41 @@ use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
 use futures::sync::oneshot;
 
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor;
+use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 use tokio_tls_api;
 
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
-use solicit_async::*;
-use service::Service;
-use data_or_trailers::*;
 use common::*;
+use data_or_trailers::*;
+use service::Service;
+use solicit_async::*;
 
 use socket::StreamItem;
 
-use misc::any_to_string;
-use req_resp::RequestOrResponse;
-use headers_place::HeadersPlace;
-use ErrorCode;
+use client_died_error_holder::ClientDiedErrorHolder;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use headers_place::HeadersPlace;
+use misc::any_to_string;
+use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
 use std::marker;
-use client_died_error_holder::ClientDiedErrorHolder;
-use ServerTlsOption;
+use ErrorCode;
 use ServerConf;
-
+use ServerTlsOption;
 
 struct ServerTypes<I>(marker::PhantomData<I>)
-    where I : AsyncWrite + AsyncRead + Send + 'static;
+where
+    I: AsyncWrite + AsyncRead + Send + 'static;
 
 impl<I> Types for ServerTypes<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Io = I;
     type HttpStreamData = ServerStream<I>;
@@ -73,17 +74,15 @@ impl<I> Types for ServerTypes<I>
     }
 }
 
+pub struct ServerStreamData {}
 
-pub struct ServerStreamData {
-}
-
-impl HttpStreamDataSpecific for ServerStreamData {
-}
+impl HttpStreamDataSpecific for ServerStreamData {}
 
 type ServerStream<I> = HttpStreamCommon<ServerTypes<I>>;
 
 impl<I> ServerStream<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     fn set_headers(&mut self, headers: Headers, last: bool) {
         if let Some(ref mut sender) = self.peer_tx {
@@ -98,7 +97,8 @@ impl<I> ServerStream<I>
 }
 
 impl<I> HttpStreamData for ServerStream<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Types = ServerTypes<I>;
 }
@@ -107,24 +107,30 @@ struct ServerConnData {
     factory: Arc<Service>,
 }
 
-impl ConnSpecific for ServerConnData {
-}
+impl ConnSpecific for ServerConnData {}
 
 #[allow(dead_code)] // https://github.com/rust-lang/rust/issues/42303
 type ServerInner<I> = Conn<ServerTypes<I>>;
 
 impl<I> ServerInner<I>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    fn new_stream_from_client(&mut self, stream_id: StreamId, headers: Headers)
-        -> result::Result<HttpStreamRef<ServerTypes<I>>>
-    {
+    fn new_stream_from_client(
+        &mut self,
+        stream_id: StreamId,
+        headers: Headers,
+    ) -> result::Result<HttpStreamRef<ServerTypes<I>>> {
         if ServerTypes::<I>::is_init_locally(stream_id) {
-            return Err(error::Error::Other("initiated stream with server id from client"));
+            return Err(error::Error::Other(
+                "initiated stream with server id from client",
+            ));
         }
 
         if stream_id <= self.last_peer_stream_id {
-            return Err(error::Error::Other("stream id is le than already existing stream id"));
+            return Err(error::Error::Other(
+                "stream id is le than already existing stream id",
+            ));
         }
 
         self.last_peer_stream_id = stream_id;
@@ -135,7 +141,8 @@ impl<I> ServerInner<I>
             stream_id,
             headers.content_length(),
             InMessageStage::AfterInitialHeaders,
-            ServerStreamData {});
+            ServerStreamData {},
+        );
 
         let req_stream = HttpStreamAfterHeaders::from_parts(req_stream);
 
@@ -156,7 +163,10 @@ impl<I> ServerInner<I>
                 let headers = Headers::internal_error_500();
                 Response::from_stream(stream::iter_ok(vec![
                     DataOrHeadersWithFlag::intermediate_headers(headers),
-                    DataOrHeadersWithFlag::last_data(Bytes::from(format!("handler panicked: {}", e))),
+                    DataOrHeadersWithFlag::last_data(Bytes::from(format!(
+                        "handler panicked: {}",
+                        e
+                    ))),
                 ]))
             });
 
@@ -175,7 +185,6 @@ impl<I> ServerInner<I>
     }
 }
 
-
 enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
 }
@@ -186,30 +195,34 @@ impl From<CommonToWriteMessage> for ServerToWriteMessage {
     }
 }
 
-
-impl<I : AsyncWrite + Send + 'static> ConnWriteSideCustom for Conn<ServerTypes<I>>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+impl<I: AsyncWrite + Send + 'static> ConnWriteSideCustom for Conn<ServerTypes<I>>
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Types = ServerTypes<I>;
 
     fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
         match message {
-            ServerToWriteMessage::Common(common) => {
-                self.process_common_message(common)
-            },
+            ServerToWriteMessage::Common(common) => self.process_common_message(common),
         }
     }
 }
 
 impl<I> ConnReadSideCustom for Conn<ServerTypes<I>>
-    where I : AsyncWrite + AsyncRead + Send + 'static
+where
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     type Types = ServerTypes<I>;
 
-    fn process_headers(&mut self, stream_id: StreamId, end_stream: EndStream, headers: Headers)
-        -> result::Result<Option<HttpStreamRef<ServerTypes<I>>>>
-    {
-        let existing_stream = self.get_stream_for_headers_maybe_send_error(stream_id)?.is_some();
+    fn process_headers(
+        &mut self,
+        stream_id: StreamId,
+        end_stream: EndStream,
+        headers: Headers,
+    ) -> result::Result<Option<HttpStreamRef<ServerTypes<I>>>> {
+        let existing_stream = self
+            .get_stream_for_headers_maybe_send_error(stream_id)?
+            .is_some();
 
         let headers_place = match existing_stream {
             true => HeadersPlace::Trailing,
@@ -233,7 +246,9 @@ impl<I> ConnReadSideCustom for Conn<ServerTypes<I>>
         }
 
         let mut stream = self.streams.get_mut(stream_id).unwrap();
-        stream.stream().set_headers(headers, end_stream == EndStream::Yes);
+        stream
+            .stream()
+            .set_headers(headers, end_stream == EndStream::Yes);
         Ok(Some(stream))
     }
 }
@@ -243,19 +258,27 @@ pub struct ServerConn {
 }
 
 impl ServerConn {
-    fn connected<F, I>(lh: &reactor::Handle, socket: HttpFutureSend<I>, cpu_pool: CpuPoolOption, conf: ServerConf, service: Arc<F>)
-        -> (ServerConn, HttpFuture<()>)
-        where
-            F : Service,
-            I : AsyncRead + AsyncWrite + Send + 'static,
+    fn connected<F, I>(
+        lh: &reactor::Handle,
+        socket: HttpFutureSend<I>,
+        cpu_pool: CpuPoolOption,
+        conf: ServerConf,
+        service: Arc<F>,
+    ) -> (ServerConn, HttpFuture<()>)
+    where
+        F: Service,
+        I: AsyncRead + AsyncWrite + Send + 'static,
     {
         let lh = lh.clone();
 
         let (write_tx, write_rx) = unbounded::<ServerToWriteMessage>();
 
-        let write_rx = Box::new(write_rx.map_err(|()| error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))));
+        let write_rx =
+            Box::new(write_rx.map_err(|()| {
+                error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))
+            }));
 
-        let settings_frame = SettingsFrame::from_settings(vec![ HttpSetting::EnablePush(false) ]);
+        let settings_frame = SettingsFrame::from_settings(vec![HttpSetting::EnablePush(false)]);
         let mut settings = DEFAULT_SETTINGS;
         settings.apply_from_frame(&settings_frame);
 
@@ -271,25 +294,25 @@ impl ServerConn {
             let conn_data = Conn::<ServerTypes<I>>::new(
                 lh,
                 cpu_pool,
-                ServerConnData {
-                    factory: service,
-                },
+                ServerConnData { factory: service },
                 conf.common,
                 settings,
                 write_tx_copy,
                 write_rx,
                 read,
                 write,
-                conn_died_error_holder);
+                conn_died_error_holder,
+            );
 
             conn_data.run()
         });
 
-        let future = Box::new(run.then(|x| { info!("connection end: {:?}", x); x }));
+        let future = Box::new(run.then(|x| {
+            info!("connection end: {:?}", x);
+            x
+        }));
 
-        (ServerConn {
-            write_tx,
-        }, future)
+        (ServerConn { write_tx }, future)
     }
 
     pub fn new<S, A>(
@@ -297,9 +320,12 @@ impl ServerConn {
         socket: Box<StreamItem>,
         tls: ServerTlsOption<A>,
         exec: CpuPoolOption,
-        conf: ServerConf, service: Arc<S>)
-            -> (ServerConn, HttpFuture<()>)
-        where S : Service, A : TlsAcceptor
+        conf: ServerConf,
+        service: Arc<S>,
+    ) -> (ServerConn, HttpFuture<()>)
+    where
+        S: Service,
+        A: TlsAcceptor,
     {
         match tls {
             ServerTlsOption::Plain => {
@@ -308,30 +334,47 @@ impl ServerConn {
             }
             ServerTlsOption::Tls(acceptor) => {
                 let socket = Box::new(
-                    tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from));
+                    tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from),
+                );
                 ServerConn::connected(lh, socket, exec, conf, service)
             }
         }
     }
 
-    pub fn new_plain_single_thread<S>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, service: Arc<S>)
-        -> (ServerConn, HttpFuture<()>)
-        where
-            S : Service,
+    pub fn new_plain_single_thread<S>(
+        lh: &reactor::Handle,
+        socket: TcpStream,
+        conf: ServerConf,
+        service: Arc<S>,
+    ) -> (ServerConn, HttpFuture<()>)
+    where
+        S: Service,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        ServerConn::new(lh, Box::new(socket), no_tls, CpuPoolOption::SingleThread, conf, service)
+        ServerConn::new(
+            lh,
+            Box::new(socket),
+            no_tls,
+            CpuPoolOption::SingleThread,
+            conf,
+            service,
+        )
     }
 
-    pub fn new_plain_single_thread_fn<F>(lh: &reactor::Handle, socket: TcpStream, conf: ServerConf, f: F)
-        -> (ServerConn, HttpFuture<()>)
-        where
-            F : Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
+    pub fn new_plain_single_thread_fn<F>(
+        lh: &reactor::Handle,
+        socket: TcpStream,
+        conf: ServerConf,
+        f: F,
+    ) -> (ServerConn, HttpFuture<()>)
+    where
+        F: Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
     {
         struct HttpServiceFn<F>(F);
 
         impl<F> Service for HttpServiceFn<F>
-            where F : Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static
+        where
+            F: Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
         {
             fn start_request(&self, headers: Headers, req: HttpStreamAfterHeaders) -> Response {
                 (self.0)(headers, req)
@@ -345,13 +388,16 @@ impl ServerConn {
     pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
         let (tx, rx) = oneshot::channel();
 
-        if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(CommonToWriteMessage::DumpState(tx))) {
-            return Box::new(future::err(error::Error::Other("failed to send req to dump state")));
+        if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(
+            CommonToWriteMessage::DumpState(tx),
+        )) {
+            return Box::new(future::err(error::Error::Other(
+                "failed to send req to dump state",
+            )));
         }
 
         let rx = rx.map_err(|_| error::Error::Other("oneshot canceled"));
 
         Box::new(rx)
     }
-
 }

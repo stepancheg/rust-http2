@@ -4,12 +4,12 @@ use tls_api::TlsConnector;
 
 use solicit::HttpScheme;
 
-pub enum ClientTlsOption<C : TlsConnector> {
+pub enum ClientTlsOption<C: TlsConnector> {
     Plain,
     Tls(String, Arc<C>), // domain
 }
 
-impl<C : TlsConnector> Clone for ClientTlsOption<C> {
+impl<C: TlsConnector> Clone for ClientTlsOption<C> {
     fn clone(&self) -> Self {
         match self {
             &ClientTlsOption::Plain => ClientTlsOption::Plain,
@@ -18,7 +18,7 @@ impl<C : TlsConnector> Clone for ClientTlsOption<C> {
     }
 }
 
-impl<C : TlsConnector> ClientTlsOption<C> {
+impl<C: TlsConnector> ClientTlsOption<C> {
     pub fn http_scheme(&self) -> HttpScheme {
         match self {
             &ClientTlsOption::Plain => HttpScheme::Http,

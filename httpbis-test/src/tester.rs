@@ -1,41 +1,40 @@
 #![allow(dead_code)]
 
 use std::io;
-use std::io::Write;
 use std::io::Read;
+use std::io::Write;
 
-use std::str;
 use std::net;
 use std::net::ToSocketAddrs;
+use std::str;
 
 use bytes::Bytes;
 
 use httpbis::for_test;
-use httpbis::SimpleHttpMessage;
-use httpbis::for_test::solicit::StreamId;
-use httpbis::ErrorCode;
-use httpbis::for_test::solicit::header::*;
-use httpbis::for_test::solicit::frame::FrameIR;
-use httpbis::for_test::solicit::frame::settings::SettingsFrame;
-use httpbis::for_test::solicit::frame::headers::HeadersFrame;
-use httpbis::for_test::solicit::frame::headers::HeadersFlag;
-use httpbis::for_test::solicit::frame::continuation::ContinuationFrame;
-use httpbis::for_test::solicit::frame::continuation::ContinuationFlag;
-use httpbis::for_test::solicit::frame::data::DataFrame;
-use httpbis::for_test::solicit::frame::data::DataFlag;
-use httpbis::for_test::solicit::frame::goaway::GoawayFrame;
-use httpbis::for_test::solicit::frame::window_update::WindowUpdateFrame;
-use httpbis::for_test::solicit::frame::RawFrame;
-use httpbis::for_test::solicit::frame::rst_stream::RstStreamFrame;
-use httpbis::for_test::solicit::connection::HttpFrame;
 use httpbis::for_test::hpack;
+use httpbis::for_test::solicit::connection::HttpFrame;
+use httpbis::for_test::solicit::frame::continuation::ContinuationFlag;
+use httpbis::for_test::solicit::frame::continuation::ContinuationFrame;
+use httpbis::for_test::solicit::frame::data::DataFlag;
+use httpbis::for_test::solicit::frame::data::DataFrame;
+use httpbis::for_test::solicit::frame::goaway::GoawayFrame;
+use httpbis::for_test::solicit::frame::headers::HeadersFlag;
+use httpbis::for_test::solicit::frame::headers::HeadersFrame;
+use httpbis::for_test::solicit::frame::rst_stream::RstStreamFrame;
+use httpbis::for_test::solicit::frame::settings::SettingsFrame;
+use httpbis::for_test::solicit::frame::window_update::WindowUpdateFrame;
+use httpbis::for_test::solicit::frame::FrameIR;
+use httpbis::for_test::solicit::frame::RawFrame;
+use httpbis::for_test::solicit::header::*;
+use httpbis::for_test::solicit::StreamId;
 use httpbis::Client;
+use httpbis::ErrorCode;
+use httpbis::SimpleHttpMessage;
 
 use super::BIND_HOST;
+use httpbis::for_test::HttpSettings;
 use httpbis::for_test::WindowSize;
 use httpbis::for_test::DEFAULT_SETTINGS;
-use httpbis::for_test::HttpSettings;
-
 
 pub struct HttpServerTester(net::TcpListener);
 
@@ -56,8 +55,8 @@ impl HttpServerTester {
     pub fn new_with_client() -> (HttpServerTester, Client) {
         let server = HttpServerTester::new();
 
-        let client = Client::new_plain(BIND_HOST, server.port(), Default::default())
-            .expect("client");
+        let client =
+            Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("client");
 
         (server, client)
     }
@@ -156,8 +155,10 @@ impl HttpConnTester {
         self.tcp.write(PREFACE).expect("send");
     }
 
-    pub fn send_frame<F : FrameIR>(&mut self, frame: F) {
-        self.tcp.write(&frame.serialize_into_vec()).expect("send_frame");
+    pub fn send_frame<F: FrameIR>(&mut self, frame: F) {
+        self.tcp
+            .write(&frame.serialize_into_vec())
+            .expect("send_frame");
     }
 
     pub fn send_window_update_conn(&mut self, increment: u32) {
@@ -166,11 +167,16 @@ impl HttpConnTester {
     }
 
     pub fn send_goaway(&mut self, last_stream_id: StreamId) {
-        self.send_frame(GoawayFrame::new(last_stream_id, ErrorCode::InadequateSecurity));
+        self.send_frame(GoawayFrame::new(
+            last_stream_id,
+            ErrorCode::InadequateSecurity,
+        ));
     }
 
     pub fn send_headers(&mut self, stream_id: StreamId, headers: Headers, end: bool) {
-        let fragment = self.encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
+        let fragment = self
+            .encoder
+            .encode(headers.0.iter().map(|h| (h.name(), h.value())));
         let mut headers_frame = HeadersFrame::new(fragment, stream_id);
         headers_frame.set_flag(HeadersFlag::EndHeaders);
         if end {
@@ -194,7 +200,9 @@ impl HttpConnTester {
             data_frame.set_flag(DataFlag::EndStream);
         }
         self.send_frame(data_frame);
-        self.out_window_size.try_decrease_to_positive(data.len() as i32).expect("decrease");
+        self.out_window_size
+            .try_decrease_to_positive(data.len() as i32)
+            .expect("decrease");
     }
 
     pub fn send_rst(&mut self, stream_id: StreamId, error_code: ErrorCode) {
@@ -202,10 +210,8 @@ impl HttpConnTester {
     }
 
     pub fn recv_raw_frame(&mut self) -> RawFrame {
-        for_test::recv_raw_frame_sync(
-            &mut self.tcp,
-            self.our_settings_ack.max_frame_size)
-                .expect("recv_raw_frame")
+        for_test::recv_raw_frame_sync(&mut self.tcp, self.our_settings_ack.max_frame_size)
+            .expect("recv_raw_frame")
     }
 
     pub fn fn_recv_frame_no_check_ack(&mut self) -> HttpFrame {
@@ -225,7 +231,9 @@ impl HttpConnTester {
         }
         if let HttpFrame::WindowUpdate(ref f) = frame {
             if f.stream_id == 0 {
-                self.out_window_size.try_increase(f.increment).expect("increment");
+                self.out_window_size
+                    .try_increase(f.increment)
+                    .expect("increment");
             } else {
                 // TODO: store for use by test
             }
@@ -334,11 +342,10 @@ impl HttpConnTester {
     }
 
     pub fn recv_frame_headers_continuation(&mut self) -> (HeadersFrame, u32) {
-        let mut headers =
-            match self.recv_frame() {
-                HttpFrame::Headers(headers) => headers,
-                f => panic!("expecting HEADERS, got: {:?}", f),
-            };
+        let mut headers = match self.recv_frame() {
+            HttpFrame::Headers(headers) => headers,
+            f => panic!("expecting HEADERS, got: {:?}", f),
+        };
 
         if headers.flags.is_set(HeadersFlag::EndHeaders) {
             return (headers, 0);
@@ -350,7 +357,9 @@ impl HttpConnTester {
             let continuation = self.recv_frame_continuation();
             cont_count += 1;
 
-            headers.header_fragment.extend_from_slice(&continuation.header_fragment);
+            headers
+                .header_fragment
+                .extend_from_slice(&continuation.header_fragment);
 
             if continuation.flags.is_set(ContinuationFlag::EndHeaders) {
                 headers.set_flag(HeadersFlag::EndHeaders);
@@ -361,8 +370,16 @@ impl HttpConnTester {
 
     pub fn recv_frame_headers_decode(&mut self) -> (HeadersFrame, Headers, u32) {
         let (frame, cont_count) = self.recv_frame_headers_continuation();
-        let headers = self.decoder.decode(frame.header_fragment()).expect("decode");
-        let headers = Headers(headers.into_iter().map(|(n, v)| Header::new(n, v)).collect());
+        let headers = self
+            .decoder
+            .decode(frame.header_fragment())
+            .expect("decode");
+        let headers = Headers(
+            headers
+                .into_iter()
+                .map(|(n, v)| Header::new(n, v))
+                .collect(),
+        );
         (frame, headers, cont_count)
     }
 
@@ -417,8 +434,16 @@ impl HttpConnTester {
             let end_of_stream = match frame {
                 HttpFrame::Headers(headers_frame) => {
                     let end_of_stream = headers_frame.is_end_of_stream();
-                    let headers = self.decoder.decode(headers_frame.header_fragment()).expect("decode");
-                    let headers = Headers(headers.into_iter().map(|(n, v)| Header::new(n, v)).collect());
+                    let headers = self
+                        .decoder
+                        .decode(headers_frame.header_fragment())
+                        .expect("decode");
+                    let headers = Headers(
+                        headers
+                            .into_iter()
+                            .map(|(n, v)| Header::new(n, v))
+                            .collect(),
+                    );
                     r.headers.extend(headers);
                     end_of_stream
                 }

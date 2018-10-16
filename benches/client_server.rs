@@ -1,25 +1,23 @@
 // `cargo test --benches` and `#[feature(test)]` work only in nightly
 #![cfg(rustc_nightly)]
-
 #![feature(test)]
 
 use std::sync::Arc;
 
-extern crate test;
-extern crate httpbis;
-extern crate futures;
 extern crate bytes;
+extern crate futures;
+extern crate httpbis;
+extern crate test;
 
 use httpbis::*;
 
+use futures::future::Future;
 use futures::stream;
 use futures::stream::Stream;
-use futures::future::Future;
 
 use bytes::Bytes;
 
 use test::Bencher;
-
 
 #[bench]
 fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
@@ -30,7 +28,8 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
             fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
                 Response::headers_and_bytes_stream(
                     Headers::ok_200(),
-                    stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))))
+                    stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))),
+                )
             }
         }
 
@@ -42,10 +41,14 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
         let client = Client::new_plain(
             "127.0.0.1",
             server.local_addr().port().unwrap(),
-            Default::default())
-                .expect("client");
+            Default::default(),
+        ).expect("client");
 
-        let (header, body) = client.start_get("/any", "localhost").0.wait().expect("headers");
+        let (header, body) = client
+            .start_get("/any", "localhost")
+            .0
+            .wait()
+            .expect("headers");
         assert_eq!(200, header.status());
 
         let mut s = 0;
@@ -79,16 +82,19 @@ fn thousand_small_requests(b: &mut Bencher) {
         let client = Client::new_plain(
             "127.0.0.1",
             server.local_addr().port().unwrap(),
-            Default::default())
-            .expect("client");
+            Default::default(),
+        ).expect("client");
 
         for _i in 0..1000 {
-            let (header, body) = client.start_get("/any", "localhost").0.wait().expect("headers");
+            let (header, body) = client
+                .start_get("/any", "localhost")
+                .0
+                .wait()
+                .expect("headers");
             assert_eq!(200, header.status());
 
             // TODO: check content
             body.collect().wait().expect("body");
         }
-
     })
 }

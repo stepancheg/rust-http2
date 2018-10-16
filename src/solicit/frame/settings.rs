@@ -1,10 +1,10 @@
 //! The module contains the implementation of the `SETTINGS` frame and associated flags.
 
-use solicit::StreamId;
-use solicit::frame::{FrameBuilder, FrameIR, Frame, FrameHeader, RawFrame};
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
+use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use solicit::StreamId;
 use solicit::MAX_WINDOW_SIZE;
 
 pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
@@ -13,10 +13,7 @@ pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
 /// frame.
 ///
 /// Each setting has a value that is a 32 bit unsigned integer (6.5.1.).
-#[derive(Clone)]
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Copy)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum HttpSetting {
     HeaderTableSize(u32),
     EnablePush(bool),
@@ -40,7 +37,7 @@ impl HttpSetting {
                     _ => return Err(ParseFrameError::IncorrectSettingsPushValue(val)),
                 };
                 HttpSetting::EnablePush(b)
-            },
+            }
             3 => HttpSetting::MaxConcurrentStreams(val),
             4 => {
                 if val > MAX_WINDOW_SIZE {
@@ -51,7 +48,7 @@ impl HttpSetting {
                     // We handle it in `process_settings_req`
                 }
                 HttpSetting::InitialWindowSize(val)
-            },
+            }
             5 => {
                 if val < 0x4000 || val >= 0x100_0000 {
                     // 6.5.2.  Defined SETTINGS Parameters
@@ -63,7 +60,7 @@ impl HttpSetting {
                     return Err(ParseFrameError::IncorrectSettingsMaxFrameSize(val));
                 }
                 HttpSetting::MaxFrameSize(val)
-            },
+            }
             6 => HttpSetting::MaxHeaderListSize(val),
             _ => return Ok(None),
         }))
@@ -102,12 +99,12 @@ impl HttpSetting {
     /// Gets the setting value by unpacking it from the wrapped `u32`.
     pub fn get_val(&self) -> u32 {
         match *self {
-            HttpSetting::HeaderTableSize(val)      |
-            HttpSetting::MaxConcurrentStreams(val) |
-            HttpSetting::InitialWindowSize(val)    |
-            HttpSetting::MaxFrameSize(val)         |
-            HttpSetting::MaxHeaderListSize(val)    => val,
-            HttpSetting::EnablePush(true)  => 1,
+            HttpSetting::HeaderTableSize(val)
+            | HttpSetting::MaxConcurrentStreams(val)
+            | HttpSetting::InitialWindowSize(val)
+            | HttpSetting::MaxFrameSize(val)
+            | HttpSetting::MaxHeaderListSize(val) => val,
+            HttpSetting::EnablePush(true) => 1,
             HttpSetting::EnablePush(false) => 0,
         }
     }
@@ -116,12 +113,14 @@ impl HttpSetting {
     /// according to section 6.5.1.
     fn serialize(&self) -> [u8; 6] {
         let (id, val) = (self.get_id(), self.get_val());
-        [((id >> 8) & 0x00FF) as u8,
-         ((id     ) & 0x00FF) as u8,
-         (((val >> 24) & 0x000000FF) as u8),
-         (((val >> 16) & 0x000000FF) as u8),
-         (((val >>  8) & 0x000000FF) as u8),
-         (((val      ) & 0x000000FF) as u8)]
+        [
+            ((id >> 8) & 0x00FF) as u8,
+            ((id) & 0x00FF) as u8,
+            (((val >> 24) & 0x000000FF) as u8),
+            (((val >> 16) & 0x000000FF) as u8),
+            (((val >> 8) & 0x000000FF) as u8),
+            (((val) & 0x000000FF) as u8),
+        ]
     }
 }
 
@@ -159,10 +158,7 @@ impl HttpSettings {
 /// bitmask.
 ///
 /// HTTP/2 spec, section 6.5.
-#[derive(Clone)]
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Copy)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum SettingsFlag {
     Ack = 0x1,
 }
@@ -196,9 +192,7 @@ impl Flag for SettingsFlag {
 /// What is *not* treated as an error (for now) are settings values out of
 /// allowed bounds such as a EnablePush being set to something other than 0 or
 /// 1.
-#[derive(PartialEq)]
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct SettingsFrame {
     /// Contains all the settings that are currently set in the frame. It is
     /// safe to access this field (to read, add, or remove settings), even
@@ -309,7 +303,12 @@ impl Frame for SettingsFrame {
     /// Otherwise, returns a newly constructed `SettingsFrame`.
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<SettingsFrame> {
         // Unpack the header
-        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        let FrameHeader {
+            length,
+            frame_type,
+            flags,
+            stream_id,
+        } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != SETTINGS_FRAME_TYPE {
             return Err(ParseFrameError::InternalError);
@@ -334,7 +333,7 @@ impl Frame for SettingsFrame {
             } else {
                 // The SETTINGS flag MUST not have a payload if Ack is set
                 Err(ParseFrameError::ProtocolError)
-            }
+            };
         }
 
         let settings = SettingsFrame::parse_payload(&raw_frame.payload())?;
@@ -362,7 +361,7 @@ impl Frame for SettingsFrame {
             length: self.payload_len(),
             frame_type: SETTINGS_FRAME_TYPE,
             flags: self.flags.0,
-            stream_id: 0
+            stream_id: 0,
         }
     }
 }
@@ -379,9 +378,9 @@ impl FrameIR for SettingsFrame {
 #[cfg(test)]
 mod tests {
     use super::{HttpSetting, SettingsFrame};
-    use solicit::tests::common::raw_frame_from_parts;
-    use solicit::frame::{pack_header, Frame, FrameHeader};
     use solicit::frame::FrameIR;
+    use solicit::frame::{pack_header, Frame, FrameHeader};
+    use solicit::tests::common::raw_frame_from_parts;
 
     /// Tests that a `SettingsFrame` correctly handles a SETTINGS frame with
     /// no ACK flag and only a single setting.
@@ -575,10 +574,21 @@ mod tests {
         frame.add_setting(HttpSetting::EnablePush(false));
         let expected = {
             let mut res: Vec<u8> = Vec::new();
-            res.extend(pack_header(
-                &FrameHeader { length: 6, frame_type: 4, flags: 0, stream_id: 0 })
-                    .to_vec().into_iter());
-            res.extend(HttpSetting::EnablePush(false).serialize().to_vec().into_iter());
+            res.extend(
+                pack_header(&FrameHeader {
+                    length: 6,
+                    frame_type: 4,
+                    flags: 0,
+                    stream_id: 0,
+                }).to_vec()
+                .into_iter(),
+            );
+            res.extend(
+                HttpSetting::EnablePush(false)
+                    .serialize()
+                    .to_vec()
+                    .into_iter(),
+            );
 
             res
         };
@@ -597,11 +607,27 @@ mod tests {
         frame.add_setting(HttpSetting::MaxHeaderListSize(0));
         let expected = {
             let mut res: Vec<u8> = Vec::new();
-            res.extend(pack_header(
-                &FrameHeader { length: 6 * 2, frame_type: 4, flags: 0, stream_id: 0 })
-                    .to_vec().into_iter());
-            res.extend(HttpSetting::EnablePush(false).serialize().to_vec().into_iter());
-            res.extend(HttpSetting::MaxHeaderListSize(0).serialize().to_vec().into_iter());
+            res.extend(
+                pack_header(&FrameHeader {
+                    length: 6 * 2,
+                    frame_type: 4,
+                    flags: 0,
+                    stream_id: 0,
+                }).to_vec()
+                .into_iter(),
+            );
+            res.extend(
+                HttpSetting::EnablePush(false)
+                    .serialize()
+                    .to_vec()
+                    .into_iter(),
+            );
+            res.extend(
+                HttpSetting::MaxHeaderListSize(0)
+                    .serialize()
+                    .to_vec()
+                    .into_iter(),
+            );
 
             res
         };
@@ -616,9 +642,12 @@ mod tests {
     #[test]
     fn test_settings_frame_serialize_ack() {
         let frame = SettingsFrame::new_ack();
-        let expected = pack_header(
-            &FrameHeader { length: 0, frame_type: 4, flags: 1, stream_id: 0 })
-                .to_vec();
+        let expected = pack_header(&FrameHeader {
+            length: 0,
+            frame_type: 4,
+            flags: 1,
+            stream_id: 0,
+        }).to_vec();
 
         let serialized = frame.serialize_into_vec();
 

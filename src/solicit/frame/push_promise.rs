@@ -1,23 +1,21 @@
-use bytes::Bytes;
 use bytes::Buf;
+use bytes::Bytes;
 use bytes::IntoBuf;
 
-use solicit::StreamId;
-use solicit::frame::Frame;
-use solicit::frame::FrameIR;
-use solicit::frame::RawFrame;
-use solicit::frame::FrameHeader;
-use solicit::frame::parse_padded_payload;
 use solicit::frame::builder::FrameBuilder;
+use solicit::frame::parse_padded_payload;
+use solicit::frame::Frame;
+use solicit::frame::FrameHeader;
+use solicit::frame::FrameIR;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
+use solicit::frame::RawFrame;
+use solicit::StreamId;
 
 use super::flags::Flag;
 use super::flags::Flags;
 
-
 pub const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
-
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PushPromiseFrame {
@@ -45,10 +43,8 @@ impl Flag for PushPromiseFlag {
     }
 
     fn flags() -> &'static [PushPromiseFlag] {
-        static FLAGS: &'static [PushPromiseFlag] = &[
-            PushPromiseFlag::EndHeaders,
-            PushPromiseFlag::Padded,
-        ];
+        static FLAGS: &'static [PushPromiseFlag] =
+            &[PushPromiseFlag::EndHeaders, PushPromiseFlag::Padded];
         FLAGS
     }
 }
@@ -74,10 +70,15 @@ impl Frame for PushPromiseFrame {
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<PushPromiseFrame> {
         // Unpack the header
-        let FrameHeader { length, frame_type, flags, stream_id } = raw_frame.header();
+        let FrameHeader {
+            length,
+            frame_type,
+            flags,
+            stream_id,
+        } = raw_frame.header();
         // Check that the frame type is correct for this frame implementation
         if frame_type != PUSH_PROMISE_FRAME_TYPE {
-            return Err(ParseFrameError::InternalError)
+            return Err(ParseFrameError::InternalError);
         }
 
         // Check that the length given in the header matches the payload
@@ -107,9 +108,7 @@ impl Frame for PushPromiseFrame {
 
         let promised_stream_id = buf.get_u32_be();
 
-        let header_fragment = payload.slice(
-            (length as usize) - buf.remaining(),
-            payload.len());
+        let header_fragment = payload.slice((length as usize) - buf.remaining(), payload.len());
 
         Ok(PushPromiseFrame {
             header_fragment,
@@ -153,4 +152,3 @@ impl FrameIR for PushPromiseFrame {
         }
     }
 }
-

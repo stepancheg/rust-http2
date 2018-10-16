@@ -1,20 +1,19 @@
+use std::collections::HashSet;
+use std::fmt;
+use std::iter::FromIterator;
 use std::result;
 use std::str;
 use std::str::FromStr;
-use std::fmt;
-use std::iter::FromIterator;
-use std::collections::HashSet;
 
-use req_resp::RequestOrResponse;
 use headers_place::HeadersPlace;
+use req_resp::RequestOrResponse;
 
-use result::Result;
 use error::Error;
+use result::Result;
 
 use assert_types::*;
 
 use bytes::Bytes;
-
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum PseudoHeaderName {
@@ -31,32 +30,32 @@ pub enum PseudoHeaderName {
 impl PseudoHeaderName {
     pub fn name(&self) -> &'static str {
         match *self {
-            PseudoHeaderName::Method =>    ":method",
-            PseudoHeaderName::Scheme =>    ":scheme",
+            PseudoHeaderName::Method => ":method",
+            PseudoHeaderName::Scheme => ":scheme",
             PseudoHeaderName::Authority => ":authority",
-            PseudoHeaderName::Path =>      ":path",
-            PseudoHeaderName::Status =>    ":status",
+            PseudoHeaderName::Path => ":path",
+            PseudoHeaderName::Status => ":status",
         }
     }
 
     pub fn parse(value: &[u8]) -> Result<PseudoHeaderName> {
         match value {
-            b":method"    => Ok(PseudoHeaderName::Method),
-            b":scheme"    => Ok(PseudoHeaderName::Scheme),
+            b":method" => Ok(PseudoHeaderName::Method),
+            b":scheme" => Ok(PseudoHeaderName::Scheme),
             b":authority" => Ok(PseudoHeaderName::Authority),
-            b":path"      => Ok(PseudoHeaderName::Path),
-            b":status"    => Ok(PseudoHeaderName::Status),
-            _             => Err(Error::Other("invalid pseudo header")),
+            b":path" => Ok(PseudoHeaderName::Path),
+            b":status" => Ok(PseudoHeaderName::Status),
+            _ => Err(Error::Other("invalid pseudo header")),
         }
     }
 
     pub fn req_or_resp(&self) -> RequestOrResponse {
         match *self {
-            PseudoHeaderName::Method    => RequestOrResponse::Request,
-            PseudoHeaderName::Scheme    => RequestOrResponse::Request,
+            PseudoHeaderName::Method => RequestOrResponse::Request,
+            PseudoHeaderName::Scheme => RequestOrResponse::Request,
             PseudoHeaderName::Authority => RequestOrResponse::Request,
-            PseudoHeaderName::Path      => RequestOrResponse::Request,
-            PseudoHeaderName::Status    => RequestOrResponse::Response,
+            PseudoHeaderName::Path => RequestOrResponse::Request,
+            PseudoHeaderName::Status => RequestOrResponse::Response,
         }
     }
 
@@ -71,9 +70,7 @@ impl PseudoHeaderName {
             PseudoHeaderName::Authority,
             PseudoHeaderName::Path,
         ];
-        static RESPONSE_HEADERS: &[PseudoHeaderName] = &[
-            PseudoHeaderName::Status,
-        ];
+        static RESPONSE_HEADERS: &[PseudoHeaderName] = &[PseudoHeaderName::Status];
         match request_or_response {
             RequestOrResponse::Request => REQUEST_HEADERS,
             RequestOrResponse::Response => RESPONSE_HEADERS,
@@ -92,7 +89,6 @@ impl PseudoHeaderName {
     }
 }
 
-
 #[allow(dead_code)]
 pub struct HeaderName(Bytes);
 
@@ -101,8 +97,6 @@ impl<'a> From<&'a str> for HeaderName {
         unimplemented!()
     }
 }
-
-
 
 /// A convenience struct representing a part of a header (either the name or the value).
 pub struct HeaderPart(Bytes);
@@ -132,13 +126,13 @@ impl<'a> From<&'a [u8]> for HeaderPart {
 }
 
 macro_rules! from_static_size_array {
-    ($N:expr) => (
+    ($N:expr) => {
         impl<'a> From<&'a [u8; $N]> for HeaderPart {
             fn from(buf: &'a [u8; $N]) -> HeaderPart {
                 buf[..].into()
             }
         }
-    );
+    };
 }
 
 macro_rules! impl_from_static_size_array {
@@ -150,30 +144,7 @@ macro_rules! impl_from_static_size_array {
 }
 
 impl_from_static_size_array!(
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    20,
-    21,
-    22,
-    23,
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
 );
 
 impl From<String> for HeaderPart {
@@ -220,9 +191,7 @@ impl Header {
     /// Creates a new `Header` with the given name and value.
     ///
     /// The name and value need to be convertible into a `HeaderPart`.
-    pub fn new<N: Into<HeaderPart>, V: Into<HeaderPart>>(name: N,
-                                                                 value: V)
-                                                                 -> Header {
+    pub fn new<N: Into<HeaderPart>, V: Into<HeaderPart>>(name: N, value: V) -> Header {
         Header {
             name: name.into().0,
             value: value.into().0,
@@ -240,7 +209,11 @@ impl Header {
 
     /// name: value
     pub fn format(&self) -> String {
-        format!("{}: {}", String::from_utf8_lossy(&self.name), String::from_utf8_lossy(&self.value))
+        format!(
+            "{}: {}",
+            String::from_utf8_lossy(&self.name),
+            String::from_utf8_lossy(&self.value)
+        )
     }
 
     pub fn is_preudo_header(&self) -> bool {
@@ -354,9 +327,7 @@ impl Headers {
     }
 
     pub fn from_status(code: u32) -> Headers {
-        Headers(vec![
-            Header::new(":status", format!("{}", code)),
-        ])
+        Headers(vec![Header::new(":status", format!("{}", code))])
     }
 
     pub fn ok_200() -> Headers {
@@ -375,9 +346,11 @@ impl Headers {
         self.0.iter().any(|h| h.is_preudo_header())
     }
 
-    pub fn validate(&self, req_or_resp: RequestOrResponse, headers_place: HeadersPlace)
-        -> HeaderResult<()>
-    {
+    pub fn validate(
+        &self,
+        req_or_resp: RequestOrResponse,
+        headers_place: HeadersPlace,
+    ) -> HeaderResult<()> {
         let mut saw_regular_header = false;
 
         // TODO: array is enough
@@ -449,7 +422,8 @@ impl Headers {
     }
 
     pub fn get_opt<'a>(&'a self, name: &str) -> Option<&'a str> {
-        self.0.iter()
+        self.0
+            .iter()
             .find(|h| h.name() == name.as_bytes())
             .and_then(|h| str::from_utf8(h.value()).ok())
     }
@@ -458,9 +432,8 @@ impl Headers {
         self.get_opt(name).unwrap()
     }
 
-    pub fn get_opt_parse<I : FromStr>(&self, name: &str) -> Option<I> {
-        self.get_opt(name)
-            .and_then(|h| h.parse().ok())
+    pub fn get_opt_parse<I: FromStr>(&self, name: &str) -> Option<I> {
+        self.get_opt(name).and_then(|h| h.parse().ok())
     }
 
     pub fn status(&self) -> u32 {
@@ -492,7 +465,7 @@ impl Headers {
 }
 
 impl FromIterator<Header> for Headers {
-    fn from_iter<T : IntoIterator<Item=Header>>(iter: T) -> Headers {
+    fn from_iter<T: IntoIterator<Item = Header>>(iter: T) -> Headers {
         Headers(iter.into_iter().collect())
     }
 }
@@ -516,9 +489,11 @@ mod test {
     fn test_debug() {
         assert_eq!(
             "Header { name: b\":method\", value: b\"GET\" }",
-            format!("{:?}", Header::new(b":method", b"GET")));
+            format!("{:?}", Header::new(b":method", b"GET"))
+        );
         assert_eq!(
             "Header { name: b\":method\", value: b\"\\xcd\" }",
-            format!("{:?}", Header::new(b":method", b"\xcd")));
+            format!("{:?}", Header::new(b":method", b"\xcd"))
+        );
     }
 }

@@ -4,11 +4,10 @@ extern crate tls_api_openssl;
 
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::thread;
-
 
 struct ServiceImpl {
     counter: Arc<AtomicUsize>,
@@ -17,15 +16,17 @@ struct ServiceImpl {
 impl ServiceImpl {
     fn new() -> ServiceImpl {
         ServiceImpl {
-            counter: Arc::new(AtomicUsize::new(0))
+            counter: Arc::new(AtomicUsize::new(0)),
         }
     }
 }
 
 impl httpbis::Service for ServiceImpl {
-    fn start_request(&self, req_headers: httpbis::Headers, _req: httpbis::HttpStreamAfterHeaders)
-        -> httpbis::Response
-    {
+    fn start_request(
+        &self,
+        req_headers: httpbis::Headers,
+        _req: httpbis::HttpStreamAfterHeaders,
+    ) -> httpbis::Response {
         println!("starting request: {:?}", req_headers);
 
         if req_headers.method() == "POST" {
@@ -35,7 +36,8 @@ impl httpbis::Service for ServiceImpl {
             let mut resp_headers = httpbis::Headers::ok_200();
             resp_headers.add("content-type", "text/html; charset=utf-8");
 
-            let page = format!("
+            let page = format!(
+                "
 <html>
     <head>
         <title>httpbis demo</title>
@@ -50,20 +52,22 @@ impl httpbis::Service for ServiceImpl {
         </div>
     </body>
 </html>
-        ", self.counter.load(Ordering::Relaxed));
+        ",
+                self.counter.load(Ordering::Relaxed)
+            );
 
             httpbis::Response::headers_and_bytes(resp_headers, page)
         }
     }
 }
 
-
 fn main() {
-
     let pkcs12 = include_bytes!("../httpbis-test/tests/identity.p12");
     let mut tls_acceptor = tls_api_openssl::TlsAcceptorBuilder::from_pkcs12(pkcs12, "mypass")
         .expect("acceptor builder");
-    tls_acceptor.set_alpn_protocols(&[b"h2"]).expect("set_alpn_protocols");
+    tls_acceptor
+        .set_alpn_protocols(&[b"h2"])
+        .expect("set_alpn_protocols");
 
     let mut conf = httpbis::ServerConf::new();
     conf.alpn = Some(httpbis::ServerAlpn::Require);
@@ -71,11 +75,16 @@ fn main() {
     server.set_port(8443);
     server.set_tls(tls_acceptor.build().expect("tls acceptor"));
     server.conf = conf;
-    server.service.set_service("/", Arc::new(ServiceImpl::new()));
+    server
+        .service
+        .set_service("/", Arc::new(ServiceImpl::new()));
     let server = server.build().expect("server");
 
     println!("started server");
-    println!("check it at: https://localhost:{}/", server.local_addr().port().unwrap());
+    println!(
+        "check it at: https://localhost:{}/",
+        server.local_addr().port().unwrap()
+    );
 
     loop {
         thread::park();

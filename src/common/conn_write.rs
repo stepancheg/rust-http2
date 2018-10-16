@@ -1,57 +1,64 @@
-use common::types::Types;
 use common::conn::Conn;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
+use common::types::Types;
 use solicit::connection::HttpFrame;
 use solicit::StreamId;
 
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
-use error;
-use ErrorCode;
-use solicit::frame::RstStreamFrame;
-use solicit::frame::GoawayFrame;
-use solicit::frame::SettingsFrame;
-use result;
-use futures::Poll;
-use futures::Async;
-use common::conn_read::ConnReadSideCustom;
-use common::stream::HttpStreamCommand;
-use solicit::frame::FrameBuilder;
-use std::cmp;
-use solicit::frame::HeadersFrame;
-use solicit::connection::EndStream;
-use solicit::frame::HeadersFlag;
-use solicit::frame::ContinuationFrame;
-use solicit::frame::continuation::ContinuationFlag;
-use solicit::frame::DataFrame;
-use solicit::frame::DataFlag;
-use solicit::frame::FrameIR;
-use std::mem;
-use futures::task;
-use common::iteration_exit::IterationExit;
-use futures::sync::oneshot;
 use common::conn::ConnStateSnapshot;
-
+use common::conn_read::ConnReadSideCustom;
+use common::iteration_exit::IterationExit;
+use common::stream::HttpStreamCommand;
+use error;
+use futures::sync::oneshot;
+use futures::task;
+use futures::Async;
+use futures::Poll;
+use result;
+use solicit::connection::EndStream;
+use solicit::frame::continuation::ContinuationFlag;
+use solicit::frame::ContinuationFrame;
+use solicit::frame::DataFlag;
+use solicit::frame::DataFrame;
+use solicit::frame::FrameBuilder;
+use solicit::frame::FrameIR;
+use solicit::frame::GoawayFrame;
+use solicit::frame::HeadersFlag;
+use solicit::frame::HeadersFrame;
+use solicit::frame::RstStreamFrame;
+use solicit::frame::SettingsFrame;
+use std::cmp;
+use std::mem;
+use ErrorCode;
 
 pub trait ConnWriteSideCustom {
-    type Types : Types;
+    type Types: Types;
 
-    fn process_message(&mut self, message: <Self::Types as Types>::ToWriteMessage) -> result::Result<()>;
+    fn process_message(
+        &mut self,
+        message: <Self::Types as Types>::ToWriteMessage,
+    ) -> result::Result<()>;
 }
 
 impl<T> Conn<T>
-    where
-        T : Types,
-        Self : ConnReadSideCustom<Types=T>,
-        Self : ConnWriteSideCustom<Types=T>,
-        HttpStreamCommon<T> : HttpStreamData<Types=T>,
+where
+    T: Types,
+    Self: ConnReadSideCustom<Types = T>,
+    Self: ConnWriteSideCustom<Types = T>,
+    HttpStreamCommon<T>: HttpStreamData<Types = T>,
 {
     fn poll_flush(&mut self) -> Poll<(), error::Error> {
         self.queued_write.poll()
     }
 
-    fn write_part(&mut self, target: &mut FrameBuilder, stream_id: StreamId, part: HttpStreamCommand) {
+    fn write_part(
+        &mut self,
+        target: &mut FrameBuilder,
+        stream_id: StreamId,
+        part: HttpStreamCommand,
+    ) {
         let max_frame_size = self.peer_settings.max_frame_size as usize;
 
         match part {
@@ -73,12 +80,11 @@ impl<T> Conn<T>
                 while pos < data.len() {
                     let end = cmp::min(data.len(), pos + max_frame_size);
 
-                    let end_stream_in_frame =
-                        if end == data.len() && end_stream == EndStream::Yes {
-                            EndStream::Yes
-                        } else {
-                            EndStream::No
-                        };
+                    let end_stream_in_frame = if end == data.len() && end_stream == EndStream::Yes {
+                        EndStream::Yes
+                    } else {
+                        EndStream::No
+                    };
 
                     let mut frame = DataFrame::with_data(stream_id, data.slice(pos, end));
                     if end_stream_in_frame == EndStream::Yes {
@@ -94,7 +100,8 @@ impl<T> Conn<T>
             }
             HttpStreamCommand::Headers(headers, end_stream) => {
                 let headers_fragment = self
-                    .encoder.encode(headers.0.iter().map(|h| (h.name(), h.value())));
+                    .encoder
+                    .encode(headers.0.iter().map(|h| (h.name(), h.value())));
 
                 let mut pos = 0;
                 while pos < headers_fragment.len() || pos == 0 {
@@ -170,7 +177,11 @@ impl<T> Conn<T>
 
         // TODO: keep list of streams with data
         for stream_id in self.streams.stream_ids() {
-            r.extend(self.pop_outg_all_for_stream(stream_id).into_iter().map(|s| (stream_id, s)));
+            r.extend(
+                self.pop_outg_all_for_stream(stream_id)
+                    .into_iter()
+                    .map(|s| (stream_id, s)),
+            );
         }
 
         r
@@ -192,7 +203,7 @@ impl<T> Conn<T>
         Ok(())
     }
 
-    pub fn send_frame_and_notify<F : Into<HttpFrame>>(&mut self, frame: F) {
+    pub fn send_frame_and_notify<F: Into<HttpFrame>>(&mut self, frame: F) {
         // TODO: some of frames should not be in front of GOAWAY
         self.queued_write.queue(frame);
         // Notify the task to make sure write loop is called again
@@ -207,7 +218,11 @@ impl<T> Conn<T>
         Ok(())
     }
 
-    fn process_stream_end(&mut self, stream_id: StreamId, error_code: ErrorCode) -> result::Result<()> {
+    fn process_stream_end(
+        &mut self,
+        stream_id: StreamId,
+        error_code: ErrorCode,
+    ) -> result::Result<()> {
         let stream_id = {
             let stream = self.streams.get_mut(stream_id);
             if let Some(mut stream) = stream {
@@ -223,7 +238,11 @@ impl<T> Conn<T>
         Ok(())
     }
 
-    fn process_stream_enqueue(&mut self, stream_id: StreamId, part: DataOrHeadersWithFlag) -> result::Result<()> {
+    fn process_stream_enqueue(
+        &mut self,
+        stream_id: StreamId,
+        part: DataOrHeadersWithFlag,
+    ) -> result::Result<()> {
         let stream_id = {
             let stream = self.streams.get_mut(stream_id);
             if let Some(mut stream) = stream {
@@ -243,16 +262,16 @@ impl<T> Conn<T>
         match common {
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)?;
-            },
+            }
             CommonToWriteMessage::StreamEnqueue(stream_id, part) => {
                 self.process_stream_enqueue(stream_id, part)?;
-            },
+            }
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
                 self.increase_in_window(stream_id, increase)?;
-            },
+            }
             CommonToWriteMessage::DumpState(sender) => {
                 self.process_dump_state(sender)?;
-            },
+            }
         }
         Ok(())
     }
@@ -271,9 +290,7 @@ impl<T> Conn<T>
         Ok(())
     }
 
-    pub fn send_goaway(&mut self, error_code: ErrorCode)
-        -> result::Result<()>
-    {
+    pub fn send_goaway(&mut self, error_code: ErrorCode) -> result::Result<()> {
         debug!("requesting to send GOAWAY with code {:?}", error_code);
         let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
         self.queued_write.queue_goaway(frame);
@@ -318,12 +335,11 @@ impl<T> Conn<T>
     }
 }
 
-
 // Message sent to write loop.
 // Processed while write loop is not handling network I/O.
 pub enum CommonToWriteMessage {
     IncreaseInWindow(StreamId, u32),
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),
-    StreamEnd(StreamId, ErrorCode),   // send when user provided handler completed the stream
+    StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
     DumpState(oneshot::Sender<ConnStateSnapshot>),
 }

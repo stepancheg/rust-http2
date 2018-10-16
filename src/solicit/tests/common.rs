@@ -2,8 +2,7 @@
 
 use std::io::Write;
 
-use solicit::frame::{RawFrame, FrameHeader, pack_header};
-
+use solicit::frame::{pack_header, FrameHeader, RawFrame};
 
 /// Creates a new `RawFrame` from two separate parts: the header and the payload.
 /// Useful for tests that need to create frames, since they can easily specify the header and the
@@ -15,4 +14,3 @@ pub fn raw_frame_from_parts(header: FrameHeader, payload: Vec<u8>) -> RawFrame {
     assert_eq!(payload.len(), buf.write(&payload).unwrap());
     buf.into()
 }
-

@@ -1,32 +1,31 @@
 #![allow(dead_code)]
 
-use futures::Async;
-use futures::Poll;
 use futures::stream::Stream;
 use futures::sync::mpsc::UnboundedSender;
+use futures::Async;
+use futures::Poll;
 
 use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
 use error;
 
-use super::types::Types;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
+use super::types::Types;
+use common::conn_write::CommonToWriteMessage;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use common::conn_write::CommonToWriteMessage;
-
 
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.
-pub struct StreamFromNetwork<T : Types> {
+pub struct StreamFromNetwork<T: Types> {
     pub rx: StreamQueueSyncReceiver,
     pub stream_id: StreamId,
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     pub in_window_size: u32,
 }
 
-impl<T : Types> Stream for StreamFromNetwork<T> {
+impl<T: Types> Stream for StreamFromNetwork<T> {
     type Item = DataOrHeadersWithFlag;
     type Error = error::Error;
 
@@ -38,7 +37,11 @@ impl<T : Types> Stream for StreamFromNetwork<T> {
             Ok(Async::Ready(Some(part))) => part,
         };
 
-        if let DataOrHeadersWithFlag { content: DataOrHeaders::Data(ref b), .. } = part {
+        if let DataOrHeadersWithFlag {
+            content: DataOrHeaders::Data(ref b),
+            ..
+        } = part
+        {
             self.in_window_size -= b.len() as u32;
 
             // TODO: use different
@@ -58,7 +61,7 @@ impl<T : Types> Stream for StreamFromNetwork<T> {
     }
 }
 
-impl<T : Types> Drop for StreamFromNetwork<T> {
+impl<T: Types> Drop for StreamFromNetwork<T> {
     fn drop(&mut self) {
         // TODO: reset stream
     }

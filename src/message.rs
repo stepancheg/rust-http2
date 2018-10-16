@@ -18,17 +18,23 @@ impl SimpleHttpMessage {
 
     /// Multiline string
     pub fn dump(&self) -> String {
-        format!("{}\n{}", self.headers.dump(), String::from_utf8_lossy(&self.body))
+        format!(
+            "{}\n{}",
+            self.headers.dump(),
+            String::from_utf8_lossy(&self.body)
+        )
     }
 
     pub fn from_parts<I>(iter: I) -> SimpleHttpMessage
-        where I : IntoIterator<Item=DataOrHeadersWithFlag>
+    where
+        I: IntoIterator<Item = DataOrHeadersWithFlag>,
     {
         SimpleHttpMessage::from_part_content(iter.into_iter().map(|c| c.content))
     }
 
     pub fn from_part_content<I>(iter: I) -> SimpleHttpMessage
-        where I : IntoIterator<Item=DataOrHeaders>
+    where
+        I: IntoIterator<Item = DataOrHeaders>,
     {
         let mut r: SimpleHttpMessage = Default::default();
         for c in iter {

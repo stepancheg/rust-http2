@@ -1,10 +1,10 @@
-use std::net::SocketAddr;
-use std::io;
 use std::any::Any;
+use std::io;
+use std::net::SocketAddr;
 
-use tokio_core::reactor;
 use tokio_core::net::TcpListener;
 use tokio_core::net::TcpStream;
+use tokio_core::reactor;
 
 use futures::stream::Stream;
 use futures::Future;
@@ -12,13 +12,12 @@ use futures::Future;
 use net2;
 
 use socket::AnySocketAddr;
+use socket::StreamItem;
+use socket::ToClientStream;
+use socket::ToServerStream;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
-use socket::ToServerStream;
-use socket::ToClientStream;
-use socket::StreamItem;
 use ServerConf;
-
 
 impl ToSocketListener for SocketAddr {
     fn to_listener(&self, conf: &ServerConf) -> Box<ToTokioListener + Send> {
@@ -42,11 +41,7 @@ fn configure_tcp(_tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
     Ok(())
 }
 
-fn listener(
-    addr: &SocketAddr,
-    conf: &ServerConf)
-        -> io::Result<::std::net::TcpListener>
-{
+fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpListener> {
     let listener = match *addr {
         SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
         SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
@@ -78,23 +73,26 @@ impl ToTokioListener for ::std::net::TcpListener {
 }
 
 impl ToServerStream for TcpListener {
-    fn incoming(self: Box<Self>)
-        -> Box<Stream<Item=(Box<StreamItem>, Box<Any>), Error=io::Error>>
-    {
-        let stream = (*self).incoming().map(|(stream, addr)|
-            (Box::new(stream) as Box<StreamItem>, Box::new(addr) as Box<Any>)
-        );
+    fn incoming(
+        self: Box<Self>,
+    ) -> Box<Stream<Item = (Box<StreamItem>, Box<Any>), Error = io::Error>> {
+        let stream = (*self).incoming().map(|(stream, addr)| {
+            (
+                Box::new(stream) as Box<StreamItem>,
+                Box::new(addr) as Box<Any>,
+            )
+        });
         Box::new(stream)
     }
 }
 
 impl ToClientStream for SocketAddr {
-    fn connect(&self, handle: &reactor::Handle)
-        -> Box<Future<Item=Box<StreamItem>, Error=io::Error> + Send>
-    {
-        let stream = TcpStream::connect(self, &handle).map(|stream|
-            Box::new(stream) as Box<StreamItem>
-        );
+    fn connect(
+        &self,
+        handle: &reactor::Handle,
+    ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send> {
+        let stream =
+            TcpStream::connect(self, &handle).map(|stream| Box::new(stream) as Box<StreamItem>);
         Box::new(stream)
     }
 }

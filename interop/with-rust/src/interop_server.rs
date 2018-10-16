@@ -1,10 +1,10 @@
-extern crate futures;
 extern crate bytes;
-extern crate log;
 extern crate env_logger;
+extern crate futures;
+extern crate log;
+extern crate regex;
 extern crate tls_api;
 extern crate tls_api_openssl;
-extern crate regex;
 
 extern crate httpbis;
 extern crate httpbis_interop;
@@ -18,16 +18,16 @@ use futures::stream;
 
 use regex::Regex;
 
+use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use tls_api_openssl::TlsAcceptor;
 use tls_api_openssl::TlsAcceptorBuilder;
-use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
-use httpbis::SimpleHttpMessage;
 use httpbis::Headers;
-use httpbis::Response;
-use httpbis::Service;
-use httpbis::ServerBuilder;
 use httpbis::HttpStreamAfterHeaders;
+use httpbis::Response;
+use httpbis::ServerBuilder;
+use httpbis::Service;
+use httpbis::SimpleHttpMessage;
 use httpbis_interop::PORT;
 
 struct Found200 {}
@@ -49,18 +49,22 @@ impl Service for Blocks {
             let count: u32 = captures.get(2).expect("2").as_str().parse().expect("parse");
             return Response::headers_and_bytes_stream(
                 Headers::ok_200(),
-                stream::iter_ok((0..count)
-                    .map(move |i| Bytes::from(vec![(i % 0xff) as u8; size as usize]))));
+                stream::iter_ok(
+                    (0..count).map(move |i| Bytes::from(vec![(i % 0xff) as u8; size as usize])),
+                ),
+            );
         }
 
-        return Response::not_found_404()
+        return Response::not_found_404();
     }
 }
 
 fn test_tls_acceptor() -> TlsAcceptor {
     let pkcs12 = include_bytes!("../../identity.p12");
     let mut builder = TlsAcceptorBuilder::from_pkcs12(pkcs12, "mypass").unwrap();
-    builder.set_alpn_protocols(&[b"h2"]).expect("set_alpn_protocols");
+    builder
+        .set_alpn_protocols(&[b"h2"])
+        .expect("set_alpn_protocols");
     builder.build().unwrap()
 }
 

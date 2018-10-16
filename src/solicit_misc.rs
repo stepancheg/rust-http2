@@ -1,8 +1,7 @@
-use solicit::StreamId;
 use result::Result;
-use solicit::frame::*;
 use solicit::connection::HttpFrame;
-
+use solicit::frame::*;
+use solicit::StreamId;
 
 /// Frames with stream
 #[derive(Debug)]
@@ -55,7 +54,6 @@ impl HttpFrameStream {
             &HttpFrameStream::Continuation(..) => panic!("end of stream is defined in HEADERS"),
         }
     }
-
 }
 
 /// Frames without stream (zero stream id)
@@ -94,7 +92,9 @@ impl HttpFrameClassified {
             HttpFrame::Priority(f) => HttpFrameClassified::Stream(HttpFrameStream::Priority(f)),
             HttpFrame::RstStream(f) => HttpFrameClassified::Stream(HttpFrameStream::RstStream(f)),
             HttpFrame::Settings(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
-            HttpFrame::PushPromise(f) => HttpFrameClassified::Stream(HttpFrameStream::PushPromise(f)),
+            HttpFrame::PushPromise(f) => {
+                HttpFrameClassified::Stream(HttpFrameStream::PushPromise(f))
+            }
             HttpFrame::Ping(f) => HttpFrameClassified::Conn(HttpFrameConn::Ping(f)),
             HttpFrame::Goaway(f) => HttpFrameClassified::Conn(HttpFrameConn::Goaway(f)),
             HttpFrame::WindowUpdate(f) => {
@@ -103,8 +103,10 @@ impl HttpFrameClassified {
                 } else {
                     HttpFrameClassified::Conn(HttpFrameConn::WindowUpdate(f))
                 }
-            },
-            HttpFrame::Continuation(f) => HttpFrameClassified::Stream(HttpFrameStream::Continuation(f)),
+            }
+            HttpFrame::Continuation(f) => {
+                HttpFrameClassified::Stream(HttpFrameStream::Continuation(f))
+            }
             HttpFrame::Unknown(f) => HttpFrameClassified::Unknown(f),
         }
     }
@@ -113,4 +115,3 @@ impl HttpFrameClassified {
         Ok(HttpFrameClassified::from(HttpFrame::from_raw(raw_frame)?))
     }
 }
-

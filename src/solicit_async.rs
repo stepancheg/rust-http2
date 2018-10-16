@@ -11,28 +11,26 @@ use futures::future::Future;
 use futures::stream::Stream;
 
 use tokio_io::io::write_all;
-use tokio_io::AsyncWrite;
 use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 
 use error;
 use error::Error;
 use result::Result;
 
-use solicit::frame::FRAME_HEADER_LEN;
+use solicit::frame::settings::SettingsFrame;
+use solicit::frame::unpack_header;
+use solicit::frame::FrameIR;
 use solicit::frame::RawFrame;
 use solicit::frame::RawFrameRef;
-use solicit::frame::FrameIR;
-use solicit::frame::unpack_header;
-use solicit::frame::settings::SettingsFrame;
+use solicit::frame::FRAME_HEADER_LEN;
 
 use misc::BsDebug;
 
+pub type HttpFuture<T> = Box<Future<Item = T, Error = Error>>;
 
-pub type HttpFuture<T> = Box<Future<Item=T, Error=Error>>;
-
-pub type HttpFutureSend<T> = Box<Future<Item=T, Error=Error> + Send>;
-pub type HttpFutureStreamSend<T> = Box<Stream<Item=T, Error=Error> + Send>;
-
+pub type HttpFutureSend<T> = Box<Future<Item = T, Error = Error> + Send>;
+pub type HttpFutureStreamSend<T> = Box<Stream<Item = T, Error = Error> + Send>;
 
 /// Inefficient, but OK because used only in tests
 pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFrame> {
@@ -53,30 +51,40 @@ pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFr
 }
 
 #[allow(dead_code)]
-pub fn send_raw_frame<W : AsyncWrite + Send + 'static>(write: W, frame: RawFrame) -> HttpFuture<W> {
+pub fn send_raw_frame<W: AsyncWrite + Send + 'static>(write: W, frame: RawFrame) -> HttpFuture<W> {
     let bytes = frame.serialize();
-    Box::new(write_all(write, bytes.clone())
-        .map(|(w, _)| w)
-        .map_err(|e| e.into()))
+    Box::new(
+        write_all(write, bytes.clone())
+            .map(|(w, _)| w)
+            .map_err(|e| e.into()),
+    )
 }
 
-pub fn send_frame<W : AsyncWrite + Send + 'static, F : FrameIR>(write: W, frame: F)
-    -> impl Future<Item=W, Error=error::Error>
-{
+pub fn send_frame<W: AsyncWrite + Send + 'static, F: FrameIR>(
+    write: W,
+    frame: F,
+) -> impl Future<Item = W, Error = error::Error> {
     let buf = frame.serialize_into_vec();
-    debug!("send frame {}", RawFrameRef { raw_content: &buf }.frame_type());
-    write_all(write, buf)
-        .map(|(w, _)| w)
-        .map_err(|e| e.into())
+    debug!(
+        "send frame {}",
+        RawFrameRef { raw_content: &buf }.frame_type()
+    );
+    write_all(write, buf).map(|(w, _)| w).map_err(|e| e.into())
 }
 
 static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
-fn send_settings<W : AsyncWrite + Send + 'static>(conn: W, settings: SettingsFrame) -> HttpFuture<W> {
+fn send_settings<W: AsyncWrite + Send + 'static>(
+    conn: W,
+    settings: SettingsFrame,
+) -> HttpFuture<W> {
     Box::new(send_frame(conn, settings))
 }
 
-pub fn client_handshake<I : AsyncWrite + AsyncRead + Send + 'static>(conn: I, settings: SettingsFrame) -> HttpFuture<I> {
+pub fn client_handshake<I: AsyncWrite + AsyncRead + Send + 'static>(
+    conn: I,
+    settings: SettingsFrame,
+) -> HttpFuture<I> {
     debug!("send PREFACE");
     let send_preface = write_all(conn, PREFACE)
         .map(|(conn, _)| conn)
@@ -100,18 +108,19 @@ fn looks_like_http_1(buf: &[u8]) -> bool {
     buf.starts_with(b"GET ") || buf.starts_with(b"POST ") || buf.starts_with(b"HEAD ")
 }
 
-
 /// Recv HTTP/2 preface, or sent HTTP/1 500 and return error is input looks like HTTP/1 request
 fn recv_preface_or_handle_http_1<I>(conn: I) -> HttpFuture<I>
-    where I : AsyncRead + AsyncWrite + Send + 'static
+where
+    I: AsyncRead + AsyncWrite + Send + 'static,
 {
-    struct Intermediate<I : AsyncRead> {
+    struct Intermediate<I: AsyncRead> {
         collected: Vec<u8>,
         conn: Option<I>,
     }
 
-    impl<I : AsyncRead> Future for Intermediate<I>
-        where I : AsyncRead + AsyncWrite + Send + 'static
+    impl<I: AsyncRead> Future for Intermediate<I>
+    where
+        I: AsyncRead + AsyncWrite + Send + 'static,
     {
         type Item = HttpFuture<I>;
         type Error = Error;
@@ -121,7 +130,12 @@ fn recv_preface_or_handle_http_1<I>(conn: I) -> HttpFuture<I>
                 // Read byte-by-byte
                 // Note it could be slow
                 let mut buf = [0];
-                let count = match self.conn.as_mut().expect("poll after completed").read(&mut buf) {
+                let count = match self
+                    .conn
+                    .as_mut()
+                    .expect("poll after completed")
+                    .read(&mut buf)
+                {
                     Ok(count) => count,
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                         return Ok(Async::NotReady);
@@ -143,7 +157,9 @@ fn recv_preface_or_handle_http_1<I>(conn: I) -> HttpFuture<I>
                 self.collected.push(c);
 
                 if self.collected == PREFACE {
-                    return Ok(Async::Ready(Box::new(future::ok(self.conn.take().unwrap()))));
+                    return Ok(Async::Ready(Box::new(future::ok(
+                        self.conn.take().unwrap(),
+                    ))));
                 }
 
                 // TODO: check only for first \n
@@ -151,29 +167,33 @@ fn recv_preface_or_handle_http_1<I>(conn: I) -> HttpFuture<I>
                     if looks_like_http_1(&self.collected) {
                         let w = write_all(self.conn.take().unwrap(), HTTP_1_500_RESPONSE);
                         let write = w.map_err(Error::from);
-                        let write = write.then(|_| {
-                            Err(Error::Other("request is made using HTTP/1"))
-                        });
+                        let write =
+                            write.then(|_| Err(Error::Other("request is made using HTTP/1")));
                         return Ok(Async::Ready(Box::new(write)));
                     }
                 }
 
                 if self.collected.len() == PREFACE.len() {
-                    return Err(Error::InvalidFrame(
-                        format!("wrong preface, likely TLS: {:?}", BsDebug(&self.collected))));
+                    return Err(Error::InvalidFrame(format!(
+                        "wrong preface, likely TLS: {:?}",
+                        BsDebug(&self.collected)
+                    )));
                 }
             }
         }
     }
 
-    Box::new(Intermediate {
-        conn: Some(conn),
-        collected: Vec::new(),
-    }.flatten())
+    Box::new(
+        Intermediate {
+            conn: Some(conn),
+            collected: Vec::new(),
+        }.flatten(),
+    )
 }
 
 pub fn server_handshake<I>(conn: I, settings: SettingsFrame) -> HttpFuture<I>
-    where I : AsyncRead + AsyncWrite + Send + 'static
+where
+    I: AsyncRead + AsyncWrite + Send + 'static,
 {
     let mut preface_buf = Vec::with_capacity(PREFACE.len());
     preface_buf.resize(PREFACE.len(), 0);

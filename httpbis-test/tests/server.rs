@@ -1,53 +1,52 @@
 //! Tests for server.
 
-extern crate regex;
 extern crate bytes;
+extern crate env_logger;
 extern crate futures;
-extern crate tokio_core;
-extern crate tokio_tls_api;
 extern crate httpbis;
 extern crate log;
-extern crate env_logger;
+extern crate regex;
+extern crate tokio_core;
+extern crate tokio_tls_api;
 
 extern crate httpbis_test;
 use httpbis_test::*;
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use bytes::Bytes;
 
 use tokio_core::reactor;
 
-use std::io::Write as _Write;
 use std::io::Read as _Read;
+use std::io::Write as _Write;
 use std::thread;
 
+use futures::future::Future;
+use futures::stream;
+use futures::stream::Stream;
+use futures::sync::oneshot;
 use futures::Async;
 use futures::Poll;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::stream;
-use futures::sync::oneshot;
 
-use httpbis::*;
 use httpbis::for_test::solicit::frame::headers::*;
-use httpbis::for_test::solicit::frame::settings::SettingsFrame;
 use httpbis::for_test::solicit::frame::settings::HttpSetting;
+use httpbis::for_test::solicit::frame::settings::SettingsFrame;
 use httpbis::for_test::solicit::DEFAULT_SETTINGS;
+use httpbis::*;
 
 use std::iter::FromIterator;
 use std::net::TcpStream;
 use std::sync::mpsc;
 
 #[cfg(unix)]
-extern crate unix_socket;
-#[cfg(unix)]
 extern crate tempdir;
 #[cfg(unix)]
+extern crate unix_socket;
+#[cfg(unix)]
 use unix_socket::UnixStream;
-
 
 #[test]
 fn simple_new() {
@@ -174,9 +173,16 @@ fn response_large() {
 
     // TODO: rewrite with TCP
     let client = Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
-    let resp = client.start_post("/foobar", "localhost", Bytes::from(&b""[..])).collect().wait().expect("wait");
+    let resp = client
+        .start_post("/foobar", "localhost", Bytes::from(&b""[..]))
+        .collect()
+        .wait()
+        .expect("wait");
     assert_eq!(large_resp.len(), resp.body.len());
-    assert_eq!((large_resp.len(), &large_resp[..]), (resp.body.len(), &resp.body[..]));
+    assert_eq!(
+        (large_resp.len(), &large_resp[..]),
+        (resp.body.len(), &resp.body[..])
+    );
 
     assert_eq!(0, server.dump_state().streams.len());
 }
@@ -251,7 +257,9 @@ fn exceed_window_size() {
     tester.settings_xchg();
 
     let mut frame = SettingsFrame::new();
-    frame.settings.push(HttpSetting::MaxFrameSize(tester.peer_settings.initial_window_size + 5));
+    frame.settings.push(HttpSetting::MaxFrameSize(
+        tester.peer_settings.initial_window_size + 5,
+    ));
     tester.send_recv_settings(frame);
 
     let data = Vec::from_iter((0..tester.peer_settings.initial_window_size + 3).map(|_| 2));
@@ -285,7 +293,8 @@ fn stream_window_gt_conn_window() {
 
     tester.send_recv_settings(SettingsFrame::from_settings(vec![
         HttpSetting::InitialWindowSize(w * 2),
-        HttpSetting::MaxFrameSize(w * 10)]));
+        HttpSetting::MaxFrameSize(w * 10),
+    ]));
 
     // Now new stream window is gt than conn window
 
@@ -297,7 +306,10 @@ fn stream_window_gt_conn_window() {
 
     let server_sn = server.server.dump_state().wait().expect("state");
     assert_eq!(0, server_sn.single_conn().1.out_window_size);
-    assert_eq!(w as i32, server_sn.single_conn().1.single_stream().1.out_window_size);
+    assert_eq!(
+        w as i32,
+        server_sn.single_conn().1.single_stream().1.out_window_size
+    );
 
     tester.send_window_update_conn(w);
 
@@ -324,15 +336,21 @@ fn do_not_poll_when_not_enough_window() {
                 let polls = self.polls.fetch_add(1, Ordering::SeqCst);
                 Ok(Async::Ready(match polls {
                     0 | 1 | 2 => Some(Bytes::from(vec![
-                        polls as u8; DEFAULT_SETTINGS.initial_window_size as usize])),
+                        polls as u8;
+                        DEFAULT_SETTINGS.initial_window_size
+                            as usize
+                    ])),
                     _ => None,
                 }))
             }
         }
 
-        Response::headers_and_bytes_stream(Headers::ok_200(), StreamImpl {
-            polls: polls_copy.clone(),
-        })
+        Response::headers_and_bytes_stream(
+            Headers::ok_200(),
+            StreamImpl {
+                polls: polls_copy.clone(),
+            },
+        )
     });
 
     let mut tester = HttpConnTester::connect(server.port());
@@ -340,13 +358,15 @@ fn do_not_poll_when_not_enough_window() {
     tester.settings_xchg();
 
     tester.send_recv_settings(SettingsFrame::from_settings(vec![
-        HttpSetting::MaxFrameSize(DEFAULT_SETTINGS.initial_window_size * 5)]));
+        HttpSetting::MaxFrameSize(DEFAULT_SETTINGS.initial_window_size * 5),
+    ]));
 
     tester.send_get(1, "/fgfg");
     assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
     assert_eq!(
         DEFAULT_SETTINGS.initial_window_size as usize,
-        tester.recv_frame_data_check(1, false).len());
+        tester.recv_frame_data_check(1, false).len()
+    );
 
     assert_eq!(2, polls.load(Ordering::SeqCst));
 }
@@ -357,7 +377,10 @@ pub fn server_sends_continuation_frame() {
 
     let mut headers = Headers::ok_200();
     for i in 0..1000 {
-        headers.add(&format!("abcdefghijklmnop{}", i), &format!("ABCDEFGHIJKLMNOP{}", i));
+        headers.add(
+            &format!("abcdefghijklmnop{}", i),
+            &format!("ABCDEFGHIJKLMNOP{}", i),
+        );
     }
 
     let headers_copy = headers.clone();
@@ -391,7 +414,11 @@ pub fn http_1_1() {
 
     let mut read = Vec::new();
     tcp_stream.read_to_end(&mut read).expect("read");
-    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", BsDebug(&read));
+    assert!(
+        &read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"),
+        "{:?}",
+        BsDebug(&read)
+    );
 }
 
 #[cfg(unix)]
@@ -409,7 +436,11 @@ pub fn http_1_1_unix() {
 
     let mut read = Vec::new();
     unix_stream.read_to_end(&mut read).expect("read");
-    assert!(&read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"), "{:?}", BsDebug(&read));
+    assert!(
+        &read.starts_with(b"HTTP/1.1 500 Internal Server Error\r\n"),
+        "{:?}",
+        BsDebug(&read)
+    );
 }
 
 #[test]
@@ -427,13 +458,18 @@ fn external_event_loop() {
             let mut server = ServerBuilder::new_plain();
             server.event_loop = Some(core.remote());
             server.set_port(0);
-            server.service.set_service_fn(
-                "/",
-                |_, _| Response::headers_and_bytes(Headers::ok_200(), "aabb"));
+            server.service.set_service_fn("/", |_, _| {
+                Response::headers_and_bytes(Headers::ok_200(), "aabb")
+            });
             servers.push(server.build().expect("server"));
         }
 
-        tx.send(servers.iter().map(|s| s.local_addr().port().unwrap()).collect::<Vec<_>>()).expect("send");
+        tx.send(
+            servers
+                .iter()
+                .map(|s| s.local_addr().port().unwrap())
+                .collect::<Vec<_>>(),
+        ).expect("send");
 
         core.run(shutdown_rx).expect("run");
     });
@@ -441,9 +477,12 @@ fn external_event_loop() {
     let ports = rx.recv().expect("recv");
 
     for port in ports {
-        let client = Client::new_plain(BIND_HOST, port, ClientConf::new())
-            .expect("client");
-        let resp = client.start_get("/", "localhost").collect().wait().expect("ok");
+        let client = Client::new_plain(BIND_HOST, port, ClientConf::new()).expect("client");
+        let resp = client
+            .start_get("/", "localhost")
+            .collect()
+            .wait()
+            .expect("ok");
         assert_eq!(b"aabb", &resp.body[..]);
     }
 

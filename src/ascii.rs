@@ -5,7 +5,6 @@ use std::str;
 
 use bytes::Bytes;
 
-
 /// Bytes wrapper that guarantees that contained bytes are ASCII.
 pub struct Ascii(Bytes);
 
