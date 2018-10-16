@@ -125,28 +125,6 @@ impl<'a> From<&'a [u8]> for HeaderPart {
     }
 }
 
-macro_rules! from_static_size_array {
-    ($N:expr) => {
-        impl<'a> From<&'a [u8; $N]> for HeaderPart {
-            fn from(buf: &'a [u8; $N]) -> HeaderPart {
-                buf[..].into()
-            }
-        }
-    };
-}
-
-macro_rules! impl_from_static_size_array {
-    ($($N:expr,)+) => {
-        $(
-            from_static_size_array!($N);
-        )+
-    }
-}
-
-impl_from_static_size_array!(
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-);
-
 impl From<String> for HeaderPart {
     fn from(s: String) -> HeaderPart {
         From::from(s.into_bytes())
@@ -476,9 +454,9 @@ mod test {
 
     #[test]
     fn test_partial_eq_of_headers() {
-        let fully_static = Header::new(b":method", b"GET");
-        let static_name = Header::new(b":method", b"GET".to_vec());
-        let other = Header::new(b":path", b"/");
+        let fully_static = Header::new(&b":method"[..], &b"GET"[..]);
+        let static_name = Header::new(&b":method"[..], b"GET".to_vec());
+        let other = Header::new(&b":path"[..], &b"/"[..]);
 
         assert!(fully_static == static_name);
         assert!(fully_static != other);
@@ -489,11 +467,11 @@ mod test {
     fn test_debug() {
         assert_eq!(
             "Header { name: b\":method\", value: b\"GET\" }",
-            format!("{:?}", Header::new(b":method", b"GET"))
+            format!("{:?}", Header::new(&b":method"[..], &b"GET"[..]))
         );
         assert_eq!(
             "Header { name: b\":method\", value: b\"\\xcd\" }",
-            format!("{:?}", Header::new(b":method", b"\xcd"))
+            format!("{:?}", Header::new(&b":method"[..], &b"\xcd"[..]))
         );
     }
 }
