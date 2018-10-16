@@ -5,7 +5,6 @@ use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 use solicit::StreamId;
-use std::borrow::Cow;
 
 use bytes::Bytes;
 
@@ -31,22 +30,6 @@ impl Flag for DataFlag {
     fn flags() -> &'static [Self] {
         static FLAGS: &'static [DataFlag] = &[DataFlag::EndStream, DataFlag::Padded];
         FLAGS
-    }
-}
-
-/// A helper struct that allows the chunk to be either borrowed or owned. Used to provide the
-/// `From` implementations that allow us to implement generic methods that accept any type that can
-/// be converted into a `DataChunk` (given that the native `Cow` type does not have these
-/// implementations and we cannot add them).
-pub struct DataChunk<'a>(Cow<'a, [u8]>);
-impl<'a> From<Vec<u8>> for DataChunk<'a> {
-    fn from(vec: Vec<u8>) -> DataChunk<'a> {
-        DataChunk(Cow::Owned(vec))
-    }
-}
-impl<'a> From<&'a [u8]> for DataChunk<'a> {
-    fn from(buf: &'a [u8]) -> DataChunk<'a> {
-        DataChunk(Cow::Borrowed(buf))
     }
 }
 
