@@ -82,19 +82,25 @@ impl HeaderTable {
     ///
     /// This is according to the [HPACK spec, section 2.3.3.]
     /// (http://http2.github.io/http2-spec/compression.html#index.address.space)
-    pub fn get_from_table(&self, index: usize) -> Option<(&[u8], &[u8])> {
+    pub fn get_from_table(&self, index: usize) -> Option<(Bytes, Bytes)> {
         // The IETF defined table indexing as 1-based.
         // So, before starting, make sure the given index is within the proper
         // bounds.
         let real_index = if index > 0 { index - 1 } else { return None };
 
         match self.static_table.get_by_index(real_index as u32) {
-            Ok(header) => Some(header),
+            Ok((k, v)) => Some((Bytes::from_static(k), Bytes::from_static(v))),
             Err(dynamic_index) => match self.dynamic_table.get(dynamic_index as usize) {
-                Some(&(ref name, ref value)) => Some((name, value)),
+                Some(&(ref name, ref value)) => Some((name.clone(), value.clone())),
                 None => None,
             },
         }
+    }
+
+    #[cfg(test)]
+    pub fn get_from_table_vec(&self, index: usize) -> Option<(Vec<u8>, Vec<u8>)> {
+        self.get_from_table(index)
+            .map(|(k, v)| (k.to_vec(), v.to_vec()))
     }
 
     /// Finds the given header in the header table. Tries to match both the
@@ -142,6 +148,8 @@ impl HeaderTable {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
+
     use super::static_table::STATIC_TABLE;
     use super::HeaderTable;
     use hpack::static_table::StaticTable;
@@ -153,8 +161,11 @@ mod tests {
     fn test_header_table_index_static() {
         let table = HeaderTable::with_static_table(StaticTable::new());
 
-        for (index, entry) in STATIC_TABLE.iter().enumerate() {
-            assert_eq!(table.get_from_table(index + 1).unwrap(), *entry);
+        for (index, (k, v)) in STATIC_TABLE.iter().enumerate() {
+            assert_eq!(
+                table.get_from_table(index + 1).unwrap(),
+                (Bytes::from(*k), Bytes::from(*v))
+            );
         }
     }
 
@@ -190,8 +201,8 @@ mod tests {
         table.add_header_for_test(header.0.clone(), header.1.clone());
 
         assert_eq!(
-            table.get_from_table(STATIC_TABLE.len() + 1).unwrap(),
-            ((&header.0[..], &header.1[..]))
+            table.get_from_table_vec(STATIC_TABLE.len() + 1).unwrap(),
+            header
         );
     }
 

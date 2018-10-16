@@ -4,7 +4,6 @@
 //! The decoder only follows HPACK rules, without performing any additional
 //! (semantic) checks on the header name/value pairs, i.e. it considers the
 //! headers as opaque octets.
-use std::borrow::Cow;
 use std::num::Wrapping;
 
 use bytes::Bytes;
@@ -90,7 +89,7 @@ fn decode_integer(buf: &[u8], prefix_size: u8) -> Result<(usize, usize), Decoder
 ///
 /// Returns the decoded string in a newly allocated `Vec` and the number of
 /// bytes consumed from the given buffer.
-fn decode_string<'a>(buf: &'a [u8]) -> Result<(Cow<'a, [u8]>, usize), DecoderError> {
+fn decode_string<'a>(buf: &'a [u8]) -> Result<(Bytes, usize), DecoderError> {
     let (len, consumed) = decode_integer(buf, 7)?;
     debug!("decode_string: Consumed = {}, len = {}", consumed, len);
     if consumed + len > buf.len() {
@@ -112,11 +111,11 @@ fn decode_string<'a>(buf: &'a [u8]) -> Result<(Cow<'a, [u8]>, usize), DecoderErr
             }
             Ok(res) => res,
         };
-        Ok((Cow::Owned(decoded), consumed + len))
+        Ok((Bytes::from(decoded), consumed + len))
     } else {
         // The octets were transmitted raw
         debug!("decode_string: Raw octet string received");
-        Ok((Cow::Borrowed(raw_string), consumed + len))
+        Ok((Bytes::from(raw_string), consumed + len))
     }
 }
 
@@ -261,7 +260,7 @@ impl Decoder {
     /// appropriate error is returned as the `Err` variant of the `Result`.
     pub fn decode_with_cb<F>(&mut self, buf: &[u8], mut cb: F) -> Result<(), DecoderError>
     where
-        F: FnMut(Cow<[u8]>, Cow<[u8]>),
+        F: FnMut(Bytes, Bytes),
     {
         let mut current_octet_index = 0;
 
@@ -277,7 +276,7 @@ impl Decoder {
             let consumed = match FieldRepresentation::new(initial_octet) {
                 FieldRepresentation::Indexed => {
                     let ((name, value), consumed) = self.decode_indexed(buffer_leftover)?;
-                    cb(Cow::Borrowed(name), Cow::Borrowed(value));
+                    cb(name, value);
 
                     consumed
                 }
@@ -285,12 +284,7 @@ impl Decoder {
                     let ((name, value), consumed) = {
                         let ((name, value), consumed) =
                             self.decode_literal(buffer_leftover, true)?;
-                        cb(Cow::Borrowed(&name), Cow::Borrowed(&value));
-
-                        // Since we are to add the decoded header to the header table, we need to
-                        // convert them into owned buffers that the decoder can keep internally.
-                        let name = name.into_owned();
-                        let value = value.into_owned();
+                        cb(name.clone(), value.clone());
 
                         ((name, value), consumed)
                     };
@@ -352,15 +346,13 @@ impl Decoder {
     pub fn decode(&mut self, buf: &[u8]) -> DecoderResult {
         let mut header_list = Vec::new();
 
-        self.decode_with_cb(buf, |n, v| {
-            header_list.push((n.into_owned(), v.into_owned()))
-        })?;
+        self.decode_with_cb(buf, |n, v| header_list.push((n.to_vec(), v.to_vec())))?;
 
         Ok(header_list)
     }
 
     /// Decodes an indexed header representation.
-    fn decode_indexed(&self, buf: &[u8]) -> Result<((&[u8], &[u8]), usize), DecoderError> {
+    fn decode_indexed(&self, buf: &[u8]) -> Result<((Bytes, Bytes), usize), DecoderError> {
         let (index, consumed) = decode_integer(buf, 7)?;
         debug!(
             "Decoding indexed: index = {}, consumed = {}",
@@ -377,7 +369,7 @@ impl Decoder {
     /// In this context, the "table" references the definition of the table
     /// where the static table is concatenated with the dynamic table and is
     /// 1-indexed.
-    fn get_from_table(&self, index: usize) -> Result<(&[u8], &[u8]), DecoderError> {
+    fn get_from_table(&self, index: usize) -> Result<(Bytes, Bytes), DecoderError> {
         self.header_table
             .get_from_table(index)
             .ok_or(DecoderError::HeaderIndexOutOfBounds)
@@ -393,7 +385,7 @@ impl Decoder {
         &'b self,
         buf: &'b [u8],
         index: bool,
-    ) -> Result<((Cow<[u8]>, Cow<[u8]>), usize), DecoderError> {
+    ) -> Result<((Bytes, Bytes), usize), DecoderError> {
         let prefix = if index { 6 } else { 4 };
         let (table_index, mut consumed) = decode_integer(buf, prefix)?;
 
@@ -406,7 +398,7 @@ impl Decoder {
         } else {
             // Read name indexed from the table
             let (name, _) = self.get_from_table(table_index)?;
-            Cow::Borrowed(name)
+            name
         };
 
         // Now read the value as a literal...
@@ -450,7 +442,7 @@ impl Decoder {
 mod tests {
     use super::decode_integer;
 
-    use std::borrow::Cow;
+    use bytes::Bytes;
 
     use super::super::encoder::encode_integer;
     use super::super::huffman::HuffmanDecoderError;
@@ -624,36 +616,31 @@ mod tests {
 
     #[test]
     fn test_decode_string_no_huffman() {
-        /// Checks that the result matches the expectation, but also that the `Cow` is borrowed!
-        fn assert_borrowed_eq<'a>(expected: (&[u8], usize), result: (Cow<'a, [u8]>, usize)) {
-            let (expected_str, expected_len) = expected;
-            let (actual_str, actual_len) = result;
-            assert_eq!(expected_len, actual_len);
-            match actual_str {
-                Cow::Borrowed(actual) => assert_eq!(actual, expected_str),
-                _ => panic!("Expected the result to be borrowed!"),
-            };
-        }
-
         assert_eq!(
-            (Cow::Borrowed(&b"abc"[..]), 4),
+            (Bytes::from(&b"abc"[..]), 4),
             decode_string(&[3, b'a', b'b', b'c']).ok().unwrap()
         );
         assert_eq!(
-            (Cow::Borrowed(&b"a"[..]), 2),
+            (Bytes::from(&b"a"[..]), 2),
             decode_string(&[1, b'a']).ok().unwrap()
         );
         assert_eq!(
-            (Cow::Borrowed(&b""[..]), 1),
+            (Bytes::from(&b""[..]), 1),
             decode_string(&[0, b'a']).ok().unwrap()
         );
 
-        assert_borrowed_eq(
-            (&b"abc"[..], 4),
+        assert_eq!(
+            (Bytes::from(&b"abc"[..]), 4),
             decode_string(&[3, b'a', b'b', b'c']).ok().unwrap(),
         );
-        assert_borrowed_eq((&b"a"[..], 2), decode_string(&[1, b'a']).ok().unwrap());
-        assert_borrowed_eq((&b""[..], 1), decode_string(&[0, b'a']).ok().unwrap());
+        assert_eq!(
+            (Bytes::from(&b"a"[..]), 2),
+            decode_string(&[1, b'a']).ok().unwrap()
+        );
+        assert_eq!(
+            (Bytes::from(&b""[..]), 1),
+            decode_string(&[0, b'a']).ok().unwrap()
+        );
 
         // Buffer smaller than advertised string length
         assert_eq!(
@@ -675,7 +662,7 @@ mod tests {
             encoded.extend(full_string.clone().into_iter());
 
             assert_eq!(
-                (Cow::Owned(full_string), encoded.len()),
+                (Bytes::from(full_string), encoded.len()),
                 decode_string(&encoded).ok().unwrap()
             );
         }
@@ -685,7 +672,7 @@ mod tests {
             encoded.extend(full_string.clone().into_iter());
 
             assert_eq!(
-                (Cow::Owned(full_string), encoded.len()),
+                (Bytes::from(full_string), encoded.len()),
                 decode_string(&encoded).ok().unwrap()
             );
         }
