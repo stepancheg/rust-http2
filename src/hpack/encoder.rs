@@ -64,15 +64,15 @@ pub fn encode_integer(value: usize, prefix_size: u8) -> Vec<u8> {
 /// will use the context built by previous encode calls.
 ///
 /// This is the main API for performing HPACK encoding of headers.
-pub struct Encoder<'a> {
+pub struct Encoder {
     /// The header table represents the encoder's context
-    header_table: HeaderTable<'a>,
+    header_table: HeaderTable,
 }
 
-impl<'a> Encoder<'a> {
+impl Encoder {
     /// Creates a new `Encoder` with a default static table, as defined by the
     /// HPACK spec (Appendix A).
-    pub fn new() -> Encoder<'a> {
+    pub fn new() -> Encoder {
         Encoder {
             header_table: HeaderTable::with_static_table(STATIC_TABLE),
         }

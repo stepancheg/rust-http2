@@ -87,8 +87,8 @@ pub struct HttpConnTester {
     tcp: net::TcpStream,
     pub out_window_size: WindowSize,
     pub in_window_size: WindowSize,
-    pub decoder: hpack::Decoder<'static>,
-    pub encoder: hpack::Encoder<'static>,
+    pub decoder: hpack::Decoder,
+    pub encoder: hpack::Encoder,
     /// Last known peer settings
     pub peer_settings: HttpSettings,
     /// Last our settings acknowledged

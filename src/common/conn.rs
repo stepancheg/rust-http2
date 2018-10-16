@@ -89,11 +89,11 @@ pub struct Conn<T: Types> {
 
     pub framed_read: HttpFramedJoinContinuationRead<ReadHalf<T::Io>>,
     /// HPACK decoder used to decode incoming headers before passing them on to the session.
-    pub decoder: hpack::Decoder<'static>,
+    pub decoder: hpack::Decoder,
 
     pub queued_write: QueuedWrite<WriteHalf<T::Io>>,
     /// The HPACK encoder used to encode headers before sending them on this connection.
-    pub encoder: hpack::Encoder<'static>,
+    pub encoder: hpack::Encoder,
     pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
 
     /// Try flush outgoing connection if window allows it on the next write poll

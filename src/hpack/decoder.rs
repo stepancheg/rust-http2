@@ -205,18 +205,18 @@ pub type DecoderResult = Result<Vec<(Vec<u8>, Vec<u8>)>, DecoderError>;
 /// For now, incremental decoding is not supported, i.e. it is necessary
 /// to pass in the entire encoded representation of all headers to the
 /// decoder, rather than processing it piece-by-piece.
-pub struct Decoder<'a> {
+pub struct Decoder {
     // The dynamic table will own its own copy of headers
-    header_table: HeaderTable<'a>,
+    header_table: HeaderTable,
     // Max configured size
     max_size: u32,
 }
 
 /// Represents a decoder of HPACK encoded headers. Maintains the state
 /// necessary to correctly decode subsequent HPACK blocks.
-impl<'a> Decoder<'a> {
+impl Decoder {
     /// Creates a new `Decoder` with all settings set to default values.
-    pub fn new() -> Decoder<'a> {
+    pub fn new() -> Decoder {
         Decoder::with_static_table(STATIC_TABLE)
     }
 
@@ -229,7 +229,7 @@ impl<'a> Decoder<'a> {
     /// Note: in order for the final decoded content to match the encoding
     ///       (according to the standard, at least), this static table must be
     ///       the one defined in the HPACK spec.
-    fn with_static_table(static_table: StaticTable<'a>) -> Decoder<'a> {
+    fn with_static_table(static_table: StaticTable) -> Decoder {
         Decoder {
             header_table: HeaderTable::with_static_table(static_table),
             max_size: 4096,
@@ -299,7 +299,8 @@ impl<'a> Decoder<'a> {
                     // borrow on `self` that the `decode_literal` return value had. Since adding
                     // a header to the table requires a `&mut self`, it fails to compile.
                     // Manually separating it out here works around it...
-                    self.header_table.add_header(Bytes::from(name), Bytes::from(value));
+                    self.header_table
+                        .add_header(Bytes::from(name), Bytes::from(value));
 
                     consumed
                 }

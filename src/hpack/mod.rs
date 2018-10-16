@@ -195,7 +195,8 @@ impl DynamicTable {
 
     #[cfg(test)]
     fn to_vec_of_vec(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
-        self.to_vec_of_bytes().into_iter()
+        self.to_vec_of_bytes()
+            .into_iter()
             .map(|(k, v)| (k.to_vec(), v.to_vec()))
             .collect()
     }
@@ -214,32 +215,7 @@ impl fmt::Debug for DynamicTable {
 }
 
 /// Represents the type of the static table, as defined by the HPACK spec.
-type StaticTable<'a> = &'a [(&'a [u8], &'a [u8])];
-
-/// Implements an iterator through the entire `HeaderTable`.
-///
-/// Yields first the elements from the static table, followed by elements from
-/// the dynamic table, with each element being of type `(&[u8], &[u8])`.
-///
-/// This struct is tightly coupled to the implementation of the `HeaderTable`,
-/// but its clients are shielded from all that and have a convenient (and
-/// standardized) interface to iterate through all headers of the table.
-///
-/// The declaration of the inner iterator that is wrapped by this struct is a
-/// monstrosity, that is required because "abstract return types" don't exist
-/// yet ([https://github.com/rust-lang/rfcs/pull/105]).
-struct HeaderTableIter<'a> {
-    // Represents a chain of static-table -> dynamic-table elements.
-    // The mapper is required to transform the elements yielded from the static
-    // table to a type that matches the elements yielded from the dynamic table.
-    inner: iter::Chain<
-        iter::Map<
-            slice::Iter<'a, (&'a [u8], &'a [u8])>,
-            fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8]),
-        >,
-        DynamicTableIter<'a>,
-    >,
-}
+type StaticTable = &'static [(&'static [u8], &'static [u8])];
 
 impl<'a> Iterator for HeaderTableIter<'a> {
     type Item = (&'a [u8], &'a [u8]);
@@ -251,29 +227,18 @@ impl<'a> Iterator for HeaderTableIter<'a> {
     }
 }
 
-/// A helper function that maps a borrowed tuple containing two borrowed slices
-/// to just a tuple of two borrowed slices.
-///
-/// This helper function is needed because in order to define the type
-/// `HeaderTableIter` we need to be able to refer to a real type for the Fn
-/// template parameter, which means that when instantiating an instance, a
-/// closure cannot be passed, since it cannot be named.
-fn static_table_mapper<'a>(h: &'a (&'a [u8], &'a [u8])) -> (&'a [u8], &'a [u8]) {
-    *h
-}
-
 /// The struct represents the header table obtained by merging the static and
 /// dynamic tables into a single index address space, as described in section
 /// `2.3.3.` of the HPACK spec.
-struct HeaderTable<'a> {
-    static_table: StaticTable<'a>,
+struct HeaderTable {
+    static_table: StaticTable,
     dynamic_table: DynamicTable,
 }
 
-impl<'a> HeaderTable<'a> {
+impl HeaderTable {
     /// Creates a new header table where the static part is initialized with
     /// the given static table.
-    pub fn with_static_table(static_table: StaticTable<'a>) -> HeaderTable<'a> {
+    pub fn with_static_table(static_table: StaticTable) -> HeaderTable {
         HeaderTable {
             static_table: static_table,
             dynamic_table: DynamicTable::new(),
@@ -288,14 +253,11 @@ impl<'a> HeaderTable<'a> {
     ///
     /// The type yielded by the iterator is `(&[u8], &[u8])`, where the tuple
     /// corresponds to the header name, value pairs in the described order.
-    pub fn iter(&'a self) -> HeaderTableIter<'a> {
-        HeaderTableIter {
-            inner: self
-                .static_table
-                .iter()
-                .map(static_table_mapper as fn((&'a (&'a [u8], &'a [u8]))) -> (&'a [u8], &'a [u8]))
-                .chain(self.dynamic_table.iter()),
-        }
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a [u8], &'a [u8])> {
+        self.static_table
+            .iter()
+            .map(|h| *h)
+            .chain(self.dynamic_table.iter())
     }
 
     /// Adds the given header to the table. Of course, this means that the new
@@ -497,7 +459,10 @@ mod tests {
         // Resized?
         assert_eq!(32 + 6, table.get_size());
         // Only has the second header?
-        assert_eq!(table.to_vec_of_vec(), vec![(b"123".to_vec(), b"456".to_vec())]);
+        assert_eq!(
+            table.to_vec_of_vec(),
+            vec![(b"123".to_vec(), b"456".to_vec())]
+        );
     }
 
     /// Tests that when inserting a new header whose size is larger than the
