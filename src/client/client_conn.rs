@@ -84,7 +84,7 @@ where
 }
 
 pub struct ClientConnData {
-    callbacks: Box<ClientConnCallbacks>,
+    _callbacks: Box<ClientConnCallbacks>,
 }
 
 impl ConnSpecific for ClientConnData {}
@@ -224,7 +224,7 @@ impl ClientConn {
                 lh_copy,
                 CpuPoolOption::SingleThread,
                 ClientConnData {
-                    callbacks: Box::new(callbacks),
+                    _callbacks: Box::new(callbacks),
                 },
                 conf.common,
                 settings,
