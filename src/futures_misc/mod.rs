@@ -1,5 +1,3 @@
-mod task_data;
-
 mod stream_with_eof;
 mod shutdown_signal;
 
