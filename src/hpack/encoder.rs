@@ -217,6 +217,8 @@ impl Encoder {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
+
     use super::encode_integer;
     use super::Encoder;
 
@@ -242,10 +244,15 @@ mod tests {
     /// # Returns
     ///
     /// A `bool` indicating whether such a decoding can be performed.
-    fn is_decodable(buf: &Vec<u8>, headers: &Vec<(Vec<u8>, Vec<u8>)>) -> bool {
+    fn is_decodable(buf: &Vec<u8>, headers: &[(Vec<u8>, Vec<u8>)]) -> bool {
         let mut decoder = Decoder::new();
         match decoder.decode(buf).ok() {
-            Some(h) => h == *headers,
+            Some(h) => {
+                h == headers
+                    .iter()
+                    .map(|(k, v)| (Bytes::from(&(*k)[..]), Bytes::from(&(*v)[..])))
+                    .collect::<Vec<_>>()
+            }
             None => false,
         }
     }

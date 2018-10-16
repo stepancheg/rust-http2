@@ -197,7 +197,7 @@ pub enum DecoderError {
 }
 
 /// The result returned by the `decode` method of the `Decoder`.
-pub type DecoderResult = Result<Vec<(Vec<u8>, Vec<u8>)>, DecoderError>;
+pub type DecoderResult = Result<Vec<(Bytes, Bytes)>, DecoderError>;
 
 /// Decodes headers encoded using HPACK.
 ///
@@ -346,7 +346,7 @@ impl Decoder {
     pub fn decode(&mut self, buf: &[u8]) -> DecoderResult {
         let mut header_list = Vec::new();
 
-        self.decode_with_cb(buf, |n, v| header_list.push((n.to_vec(), v.to_vec())))?;
+        self.decode_with_cb(buf, |n, v| header_list.push((n, v)))?;
 
         Ok(header_list)
     }
@@ -417,7 +417,7 @@ impl Decoder {
     ///
     /// Returns the number of octets consumed from the given buffer.
     fn update_max_dynamic_size(&mut self, buf: &[u8]) -> Result<usize, DecoderError> {
-        let (new_size, consumed) = decode_integer(buf, 5).ok().unwrap();
+        let (new_size, consumed) = decode_integer(buf, 5).unwrap();
 
         if new_size > self.max_size as usize {
             return Err(DecoderError::InvalidMaxDynamicSize(
@@ -455,24 +455,18 @@ mod tests {
     /// Tests that valid integer encodings are properly decoded.
     #[test]
     fn test_decode_integer() {
-        assert_eq!((10, 1), decode_integer(&[10], 5).ok().unwrap());
-        assert_eq!((1337, 3), decode_integer(&[31, 154, 10], 5).ok().unwrap());
+        assert_eq!((10, 1), decode_integer(&[10], 5).unwrap());
+        assert_eq!((1337, 3), decode_integer(&[31, 154, 10], 5).unwrap());
+        assert_eq!((1337, 3), decode_integer(&[31 + 32, 154, 10], 5).unwrap());
+        assert_eq!((1337, 3), decode_integer(&[31 + 64, 154, 10], 5).unwrap());
         assert_eq!(
             (1337, 3),
-            decode_integer(&[31 + 32, 154, 10], 5).ok().unwrap()
-        );
-        assert_eq!(
-            (1337, 3),
-            decode_integer(&[31 + 64, 154, 10], 5).ok().unwrap()
-        );
-        assert_eq!(
-            (1337, 3),
-            decode_integer(&[31, 154, 10, 111, 22], 5).ok().unwrap()
+            decode_integer(&[31, 154, 10, 111, 22], 5).unwrap()
         );
 
-        assert_eq!((127, 2), decode_integer(&[255, 0], 7).ok().unwrap());
-        assert_eq!((127, 2), decode_integer(&[127, 0], 7).ok().unwrap());
-        assert_eq!((255, 3), decode_integer(&[127, 128, 1], 7).ok().unwrap());
+        assert_eq!((127, 2), decode_integer(&[255, 0], 7).unwrap());
+        assert_eq!((127, 2), decode_integer(&[127, 0], 7).unwrap());
+        assert_eq!((255, 3), decode_integer(&[127, 128, 1], 7).unwrap());
         assert_eq!((255, 2), decode_integer(&[255, 0], 8).unwrap());
         assert_eq!((254, 1), decode_integer(&[254], 8).unwrap());
         assert_eq!((1, 1), decode_integer(&[1], 8).unwrap());
@@ -618,28 +612,28 @@ mod tests {
     fn test_decode_string_no_huffman() {
         assert_eq!(
             (Bytes::from(&b"abc"[..]), 4),
-            decode_string(&[3, b'a', b'b', b'c']).ok().unwrap()
+            decode_string(&[3, b'a', b'b', b'c']).unwrap()
         );
         assert_eq!(
             (Bytes::from(&b"a"[..]), 2),
-            decode_string(&[1, b'a']).ok().unwrap()
+            decode_string(&[1, b'a']).unwrap()
         );
         assert_eq!(
             (Bytes::from(&b""[..]), 1),
-            decode_string(&[0, b'a']).ok().unwrap()
+            decode_string(&[0, b'a']).unwrap()
         );
 
         assert_eq!(
             (Bytes::from(&b"abc"[..]), 4),
-            decode_string(&[3, b'a', b'b', b'c']).ok().unwrap(),
+            decode_string(&[3, b'a', b'b', b'c']).unwrap(),
         );
         assert_eq!(
             (Bytes::from(&b"a"[..]), 2),
-            decode_string(&[1, b'a']).ok().unwrap()
+            decode_string(&[1, b'a']).unwrap()
         );
         assert_eq!(
             (Bytes::from(&b""[..]), 1),
-            decode_string(&[0, b'a']).ok().unwrap()
+            decode_string(&[0, b'a']).unwrap()
         );
 
         // Buffer smaller than advertised string length
@@ -663,7 +657,7 @@ mod tests {
 
             assert_eq!(
                 (Bytes::from(full_string), encoded.len()),
-                decode_string(&encoded).ok().unwrap()
+                decode_string(&encoded).unwrap()
             );
         }
         {
@@ -673,7 +667,7 @@ mod tests {
 
             assert_eq!(
                 (Bytes::from(full_string), encoded.len()),
-                decode_string(&encoded).ok().unwrap()
+                decode_string(&encoded).unwrap()
             );
         }
     }
@@ -685,23 +679,26 @@ mod tests {
     fn test_decode_fully_in_static_table() {
         let mut decoder = Decoder::new();
 
-        let header_list = decoder.decode(&[0x82]).ok().unwrap();
+        let header_list = decoder.decode(&[0x82]).unwrap();
 
-        assert_eq!(vec![(b":method".to_vec(), b"GET".to_vec())], header_list);
+        assert_eq!(
+            vec![(Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..]))],
+            header_list
+        );
     }
 
     #[test]
     fn test_decode_multiple_fully_in_static_table() {
         let mut decoder = Decoder::new();
 
-        let header_list = decoder.decode(&[0x82, 0x86, 0x84]).ok().unwrap();
+        let header_list = decoder.decode(&[0x82, 0x86, 0x84]).unwrap();
 
         assert_eq!(
             header_list,
             [
-                (b":method".to_vec(), b"GET".to_vec()),
-                (b":scheme".to_vec(), b"http".to_vec()),
-                (b":path".to_vec(), b"/".to_vec()),
+                (Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..])),
+                (Bytes::from(&b":scheme"[..]), Bytes::from(&b"http"[..])),
+                (Bytes::from(&b":path"[..]), Bytes::from(&b"/"[..])),
             ]
         );
     }
@@ -716,11 +713,14 @@ mod tests {
             0x04, 0x0c, 0x2f, 0x73, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2f, 0x70, 0x61, 0x74, 0x68,
         ];
 
-        let header_list = decoder.decode(&hex_dump).ok().unwrap();
+        let header_list = decoder.decode(&hex_dump).unwrap();
 
         assert_eq!(
             header_list,
-            [(b":path".to_vec(), b"/sample/path".to_vec()),]
+            [(
+                Bytes::from(&b":path"[..]),
+                Bytes::from(&b"/sample/path"[..])
+            ),]
         );
         // Nothing was added to the dynamic table
         assert_eq!(decoder.header_table.dynamic_table.len(), 0);
@@ -737,11 +737,14 @@ mod tests {
             0x75, 0x73, 0x74, 0x6f, 0x6d, 0x2d, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
         ];
 
-        let header_list = decoder.decode(&hex_dump).ok().unwrap();
+        let header_list = decoder.decode(&hex_dump).unwrap();
 
         assert_eq!(
             header_list,
-            [(b"custom-key".to_vec(), b"custom-header".to_vec()),]
+            [(
+                Bytes::from(&b"custom-key"[..]),
+                Bytes::from(&b"custom-header"[..])
+            ),]
         );
         // The entry got added to the dynamic table?
         assert_eq!(decoder.header_table.dynamic_table.len(), 1);
@@ -762,11 +765,14 @@ mod tests {
                 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x2d, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
-                [(b"custom-key".to_vec(), b"custom-header".to_vec()),]
+                [(
+                    Bytes::from(&b"custom-key"[..]),
+                    Bytes::from(&b"custom-header"[..])
+                ),]
             );
             // The entry got added to the dynamic table?
             assert_eq!(decoder.header_table.dynamic_table.len(), 1);
@@ -794,11 +800,14 @@ mod tests {
                 0x2d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
-                [(b"custom-key".to_vec(), b"custom-header-".to_vec()),]
+                [(
+                    Bytes::from(&b"custom-key"[..]),
+                    Bytes::from(&b"custom-header-"[..])
+                ),]
             );
             // The entry got added to the dynamic table, so now we have two?
             assert_eq!(decoder.header_table.dynamic_table.len(), 2);
@@ -822,9 +831,12 @@ mod tests {
             0x72, 0x65, 0x74,
         ];
 
-        let header_list = decoder.decode(&hex_dump).ok().unwrap();
+        let header_list = decoder.decode(&hex_dump).unwrap();
 
-        assert_eq!(header_list, [(b"password".to_vec(), b"secret".to_vec()),]);
+        assert_eq!(
+            header_list,
+            [(Bytes::from(&b"password"[..]), Bytes::from(&b"secret"[..])),]
+        );
         // Nothing was added to the dynamic table
         assert_eq!(decoder.header_table.dynamic_table.len(), 0);
     }
@@ -842,15 +854,18 @@ mod tests {
                 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":method".to_vec(), b"GET".to_vec()),
-                    (b":scheme".to_vec(), b"http".to_vec()),
-                    (b":path".to_vec(), b"/".to_vec()),
-                    (b":authority".to_vec(), b"www.example.com".to_vec()),
+                    (Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..])),
+                    (Bytes::from(&b":scheme"[..]), Bytes::from(&b"http"[..])),
+                    (Bytes::from(&b":path"[..]), Bytes::from(&b"/"[..])),
+                    (
+                        Bytes::from(&b":authority"[..]),
+                        Bytes::from(&b"www.example.com"[..])
+                    ),
                 ]
             );
             // Only one entry got added to the dynamic table?
@@ -865,16 +880,22 @@ mod tests {
                 0x82, 0x86, 0x84, 0xbe, 0x58, 0x08, 0x6e, 0x6f, 0x2d, 0x63, 0x61, 0x63, 0x68, 0x65,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":method".to_vec(), b"GET".to_vec()),
-                    (b":scheme".to_vec(), b"http".to_vec()),
-                    (b":path".to_vec(), b"/".to_vec()),
-                    (b":authority".to_vec(), b"www.example.com".to_vec()),
-                    (b"cache-control".to_vec(), b"no-cache".to_vec()),
+                    (Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..])),
+                    (Bytes::from(&b":scheme"[..]), Bytes::from(&b"http"[..])),
+                    (Bytes::from(&b":path"[..]), Bytes::from(&b"/"[..])),
+                    (
+                        Bytes::from(&b":authority"[..]),
+                        Bytes::from(&b"www.example.com"[..])
+                    ),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"no-cache"[..])
+                    ),
                 ]
             );
             // One entry got added to the dynamic table, so we have two?
@@ -893,16 +914,22 @@ mod tests {
                 0x65,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":method".to_vec(), b"GET".to_vec()),
-                    (b":scheme".to_vec(), b"https".to_vec()),
-                    (b":path".to_vec(), b"/index.html".to_vec()),
-                    (b":authority".to_vec(), b"www.example.com".to_vec()),
-                    (b"custom-key".to_vec(), b"custom-value".to_vec()),
+                    (Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..])),
+                    (Bytes::from(&b":scheme"[..]), Bytes::from(&b"https"[..])),
+                    (Bytes::from(&b":path"[..]), Bytes::from(&b"/index.html"[..])),
+                    (
+                        Bytes::from(&b":authority"[..]),
+                        Bytes::from(&b"www.example.com"[..])
+                    ),
+                    (
+                        Bytes::from(&b"custom-key"[..]),
+                        Bytes::from(&b"custom-value"[..])
+                    ),
                 ]
             );
             // One entry got added to the dynamic table, so we have three at
@@ -935,15 +962,24 @@ mod tests {
                 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":status".to_vec(), b"302".to_vec()),
-                    (b"cache-control".to_vec(), b"private".to_vec()),
-                    (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
-                    (b"location".to_vec(), b"https://www.example.com".to_vec()),
+                    (Bytes::from(&b":status"[..]), Bytes::from(&b"302"[..])),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"private"[..])
+                    ),
+                    (
+                        Bytes::from(&b"date"[..]),
+                        Bytes::from(&b"Mon, 21 Oct 2013 20:13:21 GMT"[..])
+                    ),
+                    (
+                        Bytes::from(&b"location"[..]),
+                        Bytes::from(&b"https://www.example.com"[..])
+                    ),
                 ]
             );
             // All entries in the dynamic table too?
@@ -960,15 +996,24 @@ mod tests {
             // Second Response (C.5.2.)
             let hex_dump = [0x48, 0x03, 0x33, 0x30, 0x37, 0xc1, 0xc0, 0xbf];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":status".to_vec(), b"307".to_vec()),
-                    (b"cache-control".to_vec(), b"private".to_vec()),
-                    (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
-                    (b"location".to_vec(), b"https://www.example.com".to_vec()),
+                    (Bytes::from(&b":status"[..]), Bytes::from(&b"307"[..])),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"private"[..])
+                    ),
+                    (
+                        Bytes::from(&b"date"[..]),
+                        Bytes::from(&b"Mon, 21 Oct 2013 20:13:21 GMT"[..])
+                    ),
+                    (
+                        Bytes::from(&b"location"[..]),
+                        Bytes::from(&b"https://www.example.com"[..])
+                    ),
                 ]
             );
             // The new status replaces the old status in the table, since it
@@ -994,17 +1039,29 @@ mod tests {
                 0x36, 0x30, 0x30, 0x3b, 0x20, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x3d, 0x31,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             let expected_header_list = [
-                (b":status".to_vec(), b"200".to_vec()),
-                (b"cache-control".to_vec(), b"private".to_vec()),
-                (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:22 GMT".to_vec()),
-                (b"location".to_vec(), b"https://www.example.com".to_vec()),
-                (b"content-encoding".to_vec(), b"gzip".to_vec()),
+                (Bytes::from(&b":status"[..]), Bytes::from(&b"200"[..])),
                 (
-                    b"set-cookie".to_vec(),
-                    b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1".to_vec(),
+                    Bytes::from(&b"cache-control"[..]),
+                    Bytes::from(&b"private"[..]),
+                ),
+                (
+                    Bytes::from(&b"date"[..]),
+                    Bytes::from(&b"Mon, 21 Oct 2013 20:13:22 GMT"[..]),
+                ),
+                (
+                    Bytes::from(&b"location"[..]),
+                    Bytes::from(&b"https://www.example.com"[..]),
+                ),
+                (
+                    Bytes::from(&b"content-encoding"[..]),
+                    Bytes::from(&b"gzip"[..]),
+                ),
+                (
+                    Bytes::from(&b"set-cookie"[..]),
+                    Bytes::from(&b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..]),
                 ),
             ];
             assert_eq!(header_list, expected_header_list);
@@ -1038,15 +1095,24 @@ mod tests {
                 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":status".to_vec(), b"302".to_vec()),
-                    (b"cache-control".to_vec(), b"private".to_vec()),
-                    (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
-                    (b"location".to_vec(), b"https://www.example.com".to_vec()),
+                    (Bytes::from(&b":status"[..]), Bytes::from(&b"302"[..])),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"private"[..])
+                    ),
+                    (
+                        Bytes::from(&b"date"[..]),
+                        Bytes::from(&b"Mon, 21 Oct 2013 20:13:21 GMT"[..])
+                    ),
+                    (
+                        Bytes::from(&b"location"[..]),
+                        Bytes::from(&b"https://www.example.com"[..])
+                    ),
                 ]
             );
             // All entries in the dynamic table too?
@@ -1068,16 +1134,25 @@ mod tests {
                 0x20,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             // Headers have been correctly decoded...
             assert_eq!(
                 header_list,
                 [
-                    (b":status".to_vec(), b"307".to_vec()),
-                    (b"cache-control".to_vec(), b"private".to_vec()),
-                    (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
-                    (b"location".to_vec(), b"https://www.example.com".to_vec()),
+                    (Bytes::from(&b":status"[..]), Bytes::from(&b"307"[..])),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"private"[..])
+                    ),
+                    (
+                        Bytes::from(&b"date"[..]),
+                        Bytes::from(&b"Mon, 21 Oct 2013 20:13:21 GMT"[..])
+                    ),
+                    (
+                        Bytes::from(&b"location"[..]),
+                        Bytes::from(&b"https://www.example.com"[..])
+                    ),
                 ]
             );
             // Expect an empty table!
@@ -1101,15 +1176,18 @@ mod tests {
                 0x90, 0xf4, 0xff,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":method".to_vec(), b"GET".to_vec()),
-                    (b":scheme".to_vec(), b"http".to_vec()),
-                    (b":path".to_vec(), b"/".to_vec()),
-                    (b":authority".to_vec(), b"www.example.com".to_vec()),
+                    (Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..])),
+                    (Bytes::from(&b":scheme"[..]), Bytes::from(&b"http"[..])),
+                    (Bytes::from(&b":path"[..]), Bytes::from(&b"/"[..])),
+                    (
+                        Bytes::from(&b":authority"[..]),
+                        Bytes::from(&b"www.example.com"[..])
+                    ),
                 ]
             );
             // Only one entry got added to the dynamic table?
@@ -1124,16 +1202,22 @@ mod tests {
                 0x82, 0x86, 0x84, 0xbe, 0x58, 0x86, 0xa8, 0xeb, 0x10, 0x64, 0x9c, 0xbf,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":method".to_vec(), b"GET".to_vec()),
-                    (b":scheme".to_vec(), b"http".to_vec()),
-                    (b":path".to_vec(), b"/".to_vec()),
-                    (b":authority".to_vec(), b"www.example.com".to_vec()),
-                    (b"cache-control".to_vec(), b"no-cache".to_vec()),
+                    (Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..])),
+                    (Bytes::from(&b":scheme"[..]), Bytes::from(&b"http"[..])),
+                    (Bytes::from(&b":path"[..]), Bytes::from(&b"/"[..])),
+                    (
+                        Bytes::from(&b":authority"[..]),
+                        Bytes::from(&b"www.example.com"[..])
+                    ),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"no-cache"[..])
+                    ),
                 ]
             );
             // One entry got added to the dynamic table, so we have two?
@@ -1151,16 +1235,22 @@ mod tests {
                 0x89, 0x25, 0xa8, 0x49, 0xe9, 0x5b, 0xb8, 0xe8, 0xb4, 0xbf,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":method".to_vec(), b"GET".to_vec()),
-                    (b":scheme".to_vec(), b"https".to_vec()),
-                    (b":path".to_vec(), b"/index.html".to_vec()),
-                    (b":authority".to_vec(), b"www.example.com".to_vec()),
-                    (b"custom-key".to_vec(), b"custom-value".to_vec()),
+                    (Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..])),
+                    (Bytes::from(&b":scheme"[..]), Bytes::from(&b"https"[..])),
+                    (Bytes::from(&b":path"[..]), Bytes::from(&b"/index.html"[..])),
+                    (
+                        Bytes::from(&b":authority"[..]),
+                        Bytes::from(&b"www.example.com"[..])
+                    ),
+                    (
+                        Bytes::from(&b"custom-key"[..]),
+                        Bytes::from(&b"custom-value"[..])
+                    ),
                 ]
             );
             // One entry got added to the dynamic table, so we have three at
@@ -1192,15 +1282,24 @@ mod tests {
                 0x63, 0xc7, 0x8f, 0x0b, 0x97, 0xc8, 0xe9, 0xae, 0x82, 0xae, 0x43, 0xd3,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":status".to_vec(), b"302".to_vec()),
-                    (b"cache-control".to_vec(), b"private".to_vec()),
-                    (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
-                    (b"location".to_vec(), b"https://www.example.com".to_vec()),
+                    (Bytes::from(&b":status"[..]), Bytes::from(&b"302"[..])),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"private"[..])
+                    ),
+                    (
+                        Bytes::from(&b"date"[..]),
+                        Bytes::from(&b"Mon, 21 Oct 2013 20:13:21 GMT"[..])
+                    ),
+                    (
+                        Bytes::from(&b"location"[..]),
+                        Bytes::from(&b"https://www.example.com"[..])
+                    ),
                 ]
             );
             // All entries in the dynamic table too?
@@ -1217,15 +1316,24 @@ mod tests {
             // Second Response (C.6.2.)
             let hex_dump = [0x48, 0x83, 0x64, 0x0e, 0xff, 0xc1, 0xc0, 0xbf];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
                 [
-                    (b":status".to_vec(), b"307".to_vec()),
-                    (b"cache-control".to_vec(), b"private".to_vec()),
-                    (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
-                    (b"location".to_vec(), b"https://www.example.com".to_vec()),
+                    (Bytes::from(&b":status"[..]), Bytes::from(&b"307"[..])),
+                    (
+                        Bytes::from(&b"cache-control"[..]),
+                        Bytes::from(&b"private"[..])
+                    ),
+                    (
+                        Bytes::from(&b"date"[..]),
+                        Bytes::from(&b"Mon, 21 Oct 2013 20:13:21 GMT"[..])
+                    ),
+                    (
+                        Bytes::from(&b"location"[..]),
+                        Bytes::from(&b"https://www.example.com"[..])
+                    ),
                 ]
             );
             // The new status replaces the old status in the table, since it
@@ -1250,17 +1358,29 @@ mod tests {
                 0x03, 0xed, 0x4e, 0xe5, 0xb1, 0x06, 0x3d, 0x50, 0x07,
             ];
 
-            let header_list = decoder.decode(&hex_dump).ok().unwrap();
+            let header_list = decoder.decode(&hex_dump).unwrap();
 
             let expected_header_list = [
-                (b":status".to_vec(), b"200".to_vec()),
-                (b"cache-control".to_vec(), b"private".to_vec()),
-                (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:22 GMT".to_vec()),
-                (b"location".to_vec(), b"https://www.example.com".to_vec()),
-                (b"content-encoding".to_vec(), b"gzip".to_vec()),
+                (Bytes::from(&b":status"[..]), Bytes::from(&b"200"[..])),
                 (
-                    b"set-cookie".to_vec(),
-                    b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1".to_vec(),
+                    Bytes::from(&b"cache-control"[..]),
+                    Bytes::from(&b"private"[..]),
+                ),
+                (
+                    Bytes::from(&b"date"[..]),
+                    Bytes::from(&b"Mon, 21 Oct 2013 20:13:22 GMT"[..]),
+                ),
+                (
+                    Bytes::from(&b"location"[..]),
+                    Bytes::from(&b"https://www.example.com"[..]),
+                ),
+                (
+                    Bytes::from(&b"content-encoding"[..]),
+                    Bytes::from(&b"gzip"[..]),
+                ),
+                (
+                    Bytes::from(&b"set-cookie"[..]),
+                    Bytes::from(&b"foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1"[..]),
                 ),
             ];
             assert_eq!(header_list, expected_header_list);
