@@ -7,6 +7,8 @@
 use std::borrow::Cow;
 use std::num::Wrapping;
 
+use bytes::Bytes;
+
 use super::huffman::HuffmanDecoder;
 use super::huffman::HuffmanDecoderError;
 
@@ -297,7 +299,7 @@ impl<'a> Decoder<'a> {
                     // borrow on `self` that the `decode_literal` return value had. Since adding
                     // a header to the table requires a `&mut self`, it fails to compile.
                     // Manually separating it out here works around it...
-                    self.header_table.add_header(name, value);
+                    self.header_table.add_header(Bytes::from(name), Bytes::from(value));
 
                     consumed
                 }
@@ -756,7 +758,7 @@ mod tests {
         // The entry got added to the dynamic table?
         assert_eq!(decoder.header_table.dynamic_table.len(), 1);
         let expected_table = vec![(b"custom-key".to_vec(), b"custom-header".to_vec())];
-        let actual = decoder.header_table.dynamic_table.to_vec();
+        let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
         assert_eq!(actual, expected_table);
     }
 
@@ -781,7 +783,7 @@ mod tests {
             // The entry got added to the dynamic table?
             assert_eq!(decoder.header_table.dynamic_table.len(), 1);
             let expected_table = vec![(b"custom-key".to_vec(), b"custom-header".to_vec())];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -816,7 +818,7 @@ mod tests {
                 (b"custom-key".to_vec(), b"custom-header-".to_vec()),
                 (b"custom-key".to_vec(), b"custom-header".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
     }
@@ -866,7 +868,7 @@ mod tests {
             // Only one entry got added to the dynamic table?
             assert_eq!(decoder.header_table.dynamic_table.len(), 1);
             let expected_table = vec![(b":authority".to_vec(), b"www.example.com".to_vec())];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -892,7 +894,7 @@ mod tests {
                 (b"cache-control".to_vec(), b"no-cache".to_vec()),
                 (b":authority".to_vec(), b"www.example.com".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -922,7 +924,7 @@ mod tests {
                 (b"cache-control".to_vec(), b"no-cache".to_vec()),
                 (b":authority".to_vec(), b"www.example.com".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
     }
@@ -963,7 +965,7 @@ mod tests {
                 (b"cache-control".to_vec(), b"private".to_vec()),
                 (b":status".to_vec(), b"302".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -989,7 +991,7 @@ mod tests {
                 (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
                 (b"cache-control".to_vec(), b"private".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -1028,7 +1030,7 @@ mod tests {
                 (b"content-encoding".to_vec(), b"gzip".to_vec()),
                 (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:22 GMT".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
     }
@@ -1066,7 +1068,7 @@ mod tests {
                 (b"cache-control".to_vec(), b"private".to_vec()),
                 (b":status".to_vec(), b"302".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -1092,7 +1094,7 @@ mod tests {
             );
             // Expect an empty table!
             let expected_table = vec![];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
             assert_eq!(0, decoder.header_table.dynamic_table.get_max_table_size());
         }
@@ -1125,7 +1127,7 @@ mod tests {
             // Only one entry got added to the dynamic table?
             assert_eq!(decoder.header_table.dynamic_table.len(), 1);
             let expected_table = vec![(b":authority".to_vec(), b"www.example.com".to_vec())];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -1151,7 +1153,7 @@ mod tests {
                 (b"cache-control".to_vec(), b"no-cache".to_vec()),
                 (b":authority".to_vec(), b"www.example.com".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -1180,7 +1182,7 @@ mod tests {
                 (b"cache-control".to_vec(), b"no-cache".to_vec()),
                 (b":authority".to_vec(), b"www.example.com".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
     }
@@ -1220,7 +1222,7 @@ mod tests {
                 (b"cache-control".to_vec(), b"private".to_vec()),
                 (b":status".to_vec(), b"302".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -1246,7 +1248,7 @@ mod tests {
                 (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:21 GMT".to_vec()),
                 (b"cache-control".to_vec(), b"private".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
         {
@@ -1284,7 +1286,7 @@ mod tests {
                 (b"content-encoding".to_vec(), b"gzip".to_vec()),
                 (b"date".to_vec(), b"Mon, 21 Oct 2013 20:13:22 GMT".to_vec()),
             ];
-            let actual = decoder.header_table.dynamic_table.to_vec();
+            let actual = decoder.header_table.dynamic_table.to_vec_of_vec();
             assert_eq!(actual, expected_table);
         }
     }

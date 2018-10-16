@@ -6,6 +6,8 @@
 use std::io;
 use std::num::Wrapping;
 
+use bytes::Bytes;
+
 use super::HeaderTable;
 use super::STATIC_TABLE;
 
@@ -126,7 +128,7 @@ impl<'a> Encoder<'a> {
                 // it with both a literal name and value.
                 self.encode_literal(&header, true, writer)?;
                 self.header_table
-                    .add_header(header.0.to_vec(), header.1.to_vec());
+                    .add_header(Bytes::from(header.0), Bytes::from(header.1));
             }
             Some((index, false)) => {
                 // The name of the header is at the given index, but the
@@ -269,7 +271,7 @@ mod tests {
         let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
         assert!(is_decodable(&result, &headers));
         // The header is in the encoder's dynamic table.
-        assert_eq!(encoder.header_table.dynamic_table.to_vec(), headers);
+        assert_eq!(encoder.header_table.dynamic_table.to_vec_of_vec(), headers);
         // ...but also indicated as such in the output.
         assert!(0x40 == (0x40 & result[0]));
         debug!("{:?}", result);
@@ -289,7 +291,7 @@ mod tests {
         let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
         // The header is in the encoder's dynamic table.
-        assert_eq!(encoder.header_table.dynamic_table.to_vec(), headers);
+        assert_eq!(encoder.header_table.dynamic_table.to_vec_of_vec(), headers);
         // The output is a single index byte?
         assert_eq!(result.len(), 1);
         // The index is correctly encoded:
