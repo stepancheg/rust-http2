@@ -4,7 +4,6 @@
 
 #[macro_use]
 extern crate log;
-#[macro_use]
 extern crate futures;
 extern crate futures_cpupool;
 

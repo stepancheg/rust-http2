@@ -8,17 +8,17 @@
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::fmt;
-use std::iter;
-use std::slice;
 
 // Re-export the main HPACK API entry points.
 pub use self::decoder::Decoder;
 pub use self::encoder::Encoder;
 use bytes::Bytes;
+use hpack::static_table::StaticTable;
 
 pub mod decoder;
 pub mod encoder;
 pub mod huffman;
+mod static_table;
 
 /// An `Iterator` through elements of the `DynamicTable`.
 ///
@@ -214,19 +214,6 @@ impl fmt::Debug for DynamicTable {
     }
 }
 
-/// Represents the type of the static table, as defined by the HPACK spec.
-type StaticTable = &'static [(&'static [u8], &'static [u8])];
-
-impl<'a> Iterator for HeaderTableIter<'a> {
-    type Item = (&'a [u8], &'a [u8]);
-
-    fn next(&mut self) -> Option<(&'a [u8], &'a [u8])> {
-        // Simply delegates to the wrapped iterator that is constructed by the
-        // `HeaderTable` and passed into the `HeaderTableIter`.
-        self.inner.next()
-    }
-}
-
 /// The struct represents the header table obtained by merging the static and
 /// dynamic tables into a single index address space, as described in section
 /// `2.3.3.` of the HPACK spec.
@@ -253,10 +240,10 @@ impl HeaderTable {
     ///
     /// The type yielded by the iterator is `(&[u8], &[u8])`, where the tuple
     /// corresponds to the header name, value pairs in the described order.
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a [u8], &'a [u8])> {
+    pub fn iter(&self) -> impl Iterator<Item=(&[u8], &[u8])> {
         self.static_table
             .iter()
-            .map(|h| *h)
+            .map(|h| h)
             .chain(self.dynamic_table.iter())
     }
 
@@ -291,20 +278,18 @@ impl HeaderTable {
         // bounds.
         let real_index = if index > 0 { index - 1 } else { return None };
 
-        if real_index < self.static_table.len() {
-            // It is in the static table so just return that...
-            Some(self.static_table[real_index])
-        } else {
-            // Maybe it's in the dynamic table then?
-            let dynamic_index = real_index - self.static_table.len();
-            if dynamic_index < self.dynamic_table.len() {
-                match self.dynamic_table.get(dynamic_index) {
-                    Some(&(ref name, ref value)) => Some((name, value)),
-                    None => None,
+        match self.static_table.get_by_index(real_index as u32) {
+            Ok(header) => Some(header),
+            Err(dynamic_index) => {
+                if dynamic_index < self.dynamic_table.len() as u32 {
+                    match self.dynamic_table.get(dynamic_index as usize) {
+                        Some(&(ref name, ref value)) => Some((name, value)),
+                        None => None,
+                    }
+                } else {
+                    // Index out of bounds!
+                    None
                 }
-            } else {
-                // Index out of bounds!
-                None
             }
         }
     }
@@ -352,77 +337,12 @@ impl HeaderTable {
     }
 }
 
-/// The table represents the static header table defined by the HPACK spec.
-/// (HPACK, Appendix A)
-static STATIC_TABLE: &'static [(&'static [u8], &'static [u8])] = &[
-    (b":authority", b""),
-    (b":method", b"GET"),
-    (b":method", b"POST"),
-    (b":path", b"/"),
-    (b":path", b"/index.html"),
-    (b":scheme", b"http"),
-    (b":scheme", b"https"),
-    (b":status", b"200"),
-    (b":status", b"204"),
-    (b":status", b"206"),
-    (b":status", b"304"),
-    (b":status", b"400"),
-    (b":status", b"404"),
-    (b":status", b"500"),
-    (b"accept-", b""),
-    (b"accept-encoding", b"gzip, deflate"),
-    (b"accept-language", b""),
-    (b"accept-ranges", b""),
-    (b"accept", b""),
-    (b"access-control-allow-origin", b""),
-    (b"age", b""),
-    (b"allow", b""),
-    (b"authorization", b""),
-    (b"cache-control", b""),
-    (b"content-disposition", b""),
-    (b"content-encoding", b""),
-    (b"content-language", b""),
-    (b"content-length", b""),
-    (b"content-location", b""),
-    (b"content-range", b""),
-    (b"content-type", b""),
-    (b"cookie", b""),
-    (b"date", b""),
-    (b"etag", b""),
-    (b"expect", b""),
-    (b"expires", b""),
-    (b"from", b""),
-    (b"host", b""),
-    (b"if-match", b""),
-    (b"if-modified-since", b""),
-    (b"if-none-match", b""),
-    (b"if-range", b""),
-    (b"if-unmodified-since", b""),
-    (b"last-modified", b""),
-    (b"link", b""),
-    (b"location", b""),
-    (b"max-forwards", b""),
-    (b"proxy-authenticate", b""),
-    (b"proxy-authorization", b""),
-    (b"range", b""),
-    (b"referer", b""),
-    (b"refresh", b""),
-    (b"retry-after", b""),
-    (b"server", b""),
-    (b"set-cookie", b""),
-    (b"strict-transport-security", b""),
-    (b"transfer-encoding", b""),
-    (b"user-agent", b""),
-    (b"vary", b""),
-    (b"via", b""),
-    (b"www-authenticate", b""),
-];
-
 #[cfg(test)]
 mod tests {
     use super::DynamicTable;
     use super::HeaderTable;
-    use super::STATIC_TABLE;
+    use super::static_table::STATIC_TABLE;
+    use hpack::static_table::StaticTable;
 
     #[test]
     fn test_dynamic_table_size_calculation_simple() {
@@ -560,7 +480,7 @@ mod tests {
     /// entries found in the static table works.
     #[test]
     fn test_header_table_index_static() {
-        let table = HeaderTable::with_static_table(STATIC_TABLE);
+        let table = HeaderTable::with_static_table(StaticTable::new());
 
         for (index, entry) in STATIC_TABLE.iter().enumerate() {
             assert_eq!(table.get_from_table(index + 1).unwrap(), *entry);
@@ -571,7 +491,7 @@ mod tests {
     /// returns a `None`
     #[test]
     fn test_header_table_index_out_of_bounds() {
-        let table = HeaderTable::with_static_table(STATIC_TABLE);
+        let table = HeaderTable::with_static_table(StaticTable::new());
 
         assert!(table.get_from_table(0).is_none());
         assert!(table.get_from_table(STATIC_TABLE.len() + 1).is_none());
@@ -581,7 +501,7 @@ mod tests {
     /// `HeaderTable` interface works.
     #[test]
     fn test_header_table_add_to_dynamic() {
-        let mut table = HeaderTable::with_static_table(STATIC_TABLE);
+        let mut table = HeaderTable::with_static_table(StaticTable::new());
         let header = (b"a".to_vec(), b"b".to_vec());
 
         table.add_header_for_test(header.0.clone(), header.1.clone());
@@ -593,7 +513,7 @@ mod tests {
     /// entries found in the dynamic table works.
     #[test]
     fn test_header_table_index_dynamic() {
-        let mut table = HeaderTable::with_static_table(STATIC_TABLE);
+        let mut table = HeaderTable::with_static_table(StaticTable::new());
         let header = (b"a".to_vec(), b"b".to_vec());
 
         table.add_header_for_test(header.0.clone(), header.1.clone());
@@ -609,7 +529,7 @@ mod tests {
     /// tables both included)
     #[test]
     fn test_header_table_iter() {
-        let mut table = HeaderTable::with_static_table(STATIC_TABLE);
+        let mut table = HeaderTable::with_static_table(StaticTable::new());
         let headers: [(&[u8], &[u8]); 2] = [(b"a", b"b"), (b"c", b"d")];
         for header in headers.iter() {
             table.add_header_for_test(header.0.to_vec(), header.1.to_vec());
@@ -637,7 +557,7 @@ mod tests {
     /// fully in the static table (both name and value), works correctly.
     #[test]
     fn test_find_header_static_full() {
-        let table = HeaderTable::with_static_table(STATIC_TABLE);
+        let table = HeaderTable::with_static_table(StaticTable::new());
 
         for (i, h) in STATIC_TABLE.iter().enumerate() {
             assert_eq!(table.find_header(*h).unwrap(), (i + 1, true));
@@ -649,7 +569,7 @@ mod tests {
     #[test]
     fn test_find_header_static_partial() {
         {
-            let table = HeaderTable::with_static_table(STATIC_TABLE);
+            let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b":method", b"PUT");
 
             if let (index, false) = table.find_header(h).unwrap() {
@@ -661,7 +581,7 @@ mod tests {
             }
         }
         {
-            let table = HeaderTable::with_static_table(STATIC_TABLE);
+            let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b":status", b"333");
 
             if let (index, false) = table.find_header(h).unwrap() {
@@ -673,7 +593,7 @@ mod tests {
             }
         }
         {
-            let table = HeaderTable::with_static_table(STATIC_TABLE);
+            let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b":authority", b"example.com");
 
             if let (index, false) = table.find_header(h).unwrap() {
@@ -683,7 +603,7 @@ mod tests {
             }
         }
         {
-            let table = HeaderTable::with_static_table(STATIC_TABLE);
+            let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b"www-authenticate", b"asdf");
 
             if let (index, false) = table.find_header(h).unwrap() {
@@ -698,7 +618,7 @@ mod tests {
     /// fully in the dynamic table (both name and value), works correctly.
     #[test]
     fn test_find_header_dynamic_full() {
-        let mut table = HeaderTable::with_static_table(STATIC_TABLE);
+        let mut table = HeaderTable::with_static_table(StaticTable::new());
         let h: (&[u8], &[u8]) = (b":method", b"PUT");
         table.add_header_for_test(h.0.to_vec(), h.1.to_vec());
 
@@ -713,7 +633,7 @@ mod tests {
     /// only partially in the dynamic table (only the name), works correctly.
     #[test]
     fn test_find_header_dynamic_partial() {
-        let mut table = HeaderTable::with_static_table(STATIC_TABLE);
+        let mut table = HeaderTable::with_static_table(StaticTable::new());
         // First add it to the dynamic table
         {
             let h = (b"X-Custom-Header", b"stuff");

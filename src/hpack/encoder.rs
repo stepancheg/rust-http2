@@ -9,7 +9,7 @@ use std::num::Wrapping;
 use bytes::Bytes;
 
 use super::HeaderTable;
-use super::STATIC_TABLE;
+use hpack::static_table::StaticTable;
 
 /// Encode an integer to the representation defined by HPACK, writing it into the provider
 /// `io::Write` instance. Also allows the caller to specify the leading bits of the first
@@ -74,7 +74,7 @@ impl Encoder {
     /// HPACK spec (Appendix A).
     pub fn new() -> Encoder {
         Encoder {
-            header_table: HeaderTable::with_static_table(STATIC_TABLE),
+            header_table: HeaderTable::with_static_table(StaticTable::new()),
         }
     }
 

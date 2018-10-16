@@ -12,8 +12,8 @@ use bytes::Bytes;
 use super::huffman::HuffmanDecoder;
 use super::huffman::HuffmanDecoderError;
 
-use super::STATIC_TABLE;
-use super::{HeaderTable, StaticTable};
+use super::static_table::StaticTable;
+use super::HeaderTable;
 
 /// Decodes an integer encoded with a given prefix size (in bits).
 /// Assumes that the buffer `buf` contains the integer to be decoded,
@@ -217,7 +217,7 @@ pub struct Decoder {
 impl Decoder {
     /// Creates a new `Decoder` with all settings set to default values.
     pub fn new() -> Decoder {
-        Decoder::with_static_table(STATIC_TABLE)
+        Decoder::with_static_table(StaticTable::new())
     }
 
     /// Creates a new `Decoder` with the given slice serving as its static
