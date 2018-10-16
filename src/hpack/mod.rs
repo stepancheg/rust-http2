@@ -26,6 +26,12 @@ struct HeaderTable {
     dynamic_table: DynamicTable,
 }
 
+#[derive(Eq, PartialEq, Debug)]
+enum HeaderValueFound {
+    Found,
+    NameOnlyFound,
+}
+
 impl HeaderTable {
     /// Creates a new header table where the static part is initialized with
     /// the given static table.
@@ -101,7 +107,7 @@ impl HeaderTable {
     /// An `Option`, where `Some` corresponds to a tuple representing the index
     /// of the header in the header tables (the 1-based index that HPACK uses)
     /// and a `bool` indicating whether the value of the header also matched.
-    pub fn find_header(&self, header: (&[u8], &[u8])) -> Option<(usize, bool)> {
+    pub fn find_header(&self, header: (&[u8], &[u8])) -> Option<(usize, HeaderValueFound)> {
         // Just does a simple scan of the entire table, searching for a header
         // that matches both the name and the value of the given header.
         // If no such header is found, then any one of the headers that had a
@@ -116,7 +122,7 @@ impl HeaderTable {
             if header.0 == h.0 {
                 if header.1 == h.1 {
                     // Both name and value matched: returns it immediately
-                    return Some((i + 1, true));
+                    return Some((i + 1, HeaderValueFound::Found));
                 }
                 // If only the name was valid, we continue scanning, hoping to
                 // find one where both the name and value match. We remember
@@ -128,7 +134,7 @@ impl HeaderTable {
         // Finally, if there's no header with a matching name and value,
         // return one that matched only the name, if that *was* found.
         match matching_name {
-            Some(i) => Some((i, false)),
+            Some(i) => Some((i, HeaderValueFound::NameOnlyFound)),
             None => None,
         }
     }
@@ -139,6 +145,7 @@ mod tests {
     use super::static_table::STATIC_TABLE;
     use super::HeaderTable;
     use hpack::static_table::StaticTable;
+    use hpack::HeaderValueFound;
 
     /// Tests that indexing the header table with indices that correspond to
     /// entries found in the static table works.
@@ -224,7 +231,10 @@ mod tests {
         let table = HeaderTable::with_static_table(StaticTable::new());
 
         for (i, h) in STATIC_TABLE.iter().enumerate() {
-            assert_eq!(table.find_header(*h).unwrap(), (i + 1, true));
+            assert_eq!(
+                table.find_header(*h).unwrap(),
+                (i + 1, HeaderValueFound::Found)
+            );
         }
     }
 
@@ -236,7 +246,7 @@ mod tests {
             let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b":method", b"PUT");
 
-            if let (index, false) = table.find_header(h).unwrap() {
+            if let (index, HeaderValueFound::NameOnlyFound) = table.find_header(h).unwrap() {
                 assert_eq!(h.0, STATIC_TABLE[index - 1].0);
                 // The index is the last one with the corresponding name
                 assert_eq!(3, index);
@@ -248,7 +258,7 @@ mod tests {
             let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b":status", b"333");
 
-            if let (index, false) = table.find_header(h).unwrap() {
+            if let (index, HeaderValueFound::NameOnlyFound) = table.find_header(h).unwrap() {
                 assert_eq!(h.0, STATIC_TABLE[index - 1].0);
                 // The index is the last one with the corresponding name
                 assert_eq!(14, index);
@@ -260,7 +270,7 @@ mod tests {
             let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b":authority", b"example.com");
 
-            if let (index, false) = table.find_header(h).unwrap() {
+            if let (index, HeaderValueFound::NameOnlyFound) = table.find_header(h).unwrap() {
                 assert_eq!(h.0, STATIC_TABLE[index - 1].0);
             } else {
                 panic!("The header should have matched only partially");
@@ -270,7 +280,7 @@ mod tests {
             let table = HeaderTable::with_static_table(StaticTable::new());
             let h: (&[u8], &[u8]) = (b"www-authenticate", b"asdf");
 
-            if let (index, false) = table.find_header(h).unwrap() {
+            if let (index, HeaderValueFound::NameOnlyFound) = table.find_header(h).unwrap() {
                 assert_eq!(h.0, STATIC_TABLE[index - 1].0);
             } else {
                 panic!("The header should have matched only partially");
@@ -286,7 +296,7 @@ mod tests {
         let h: (&[u8], &[u8]) = (b":method", b"PUT");
         table.add_header_for_test(h.0.to_vec(), h.1.to_vec());
 
-        if let (index, true) = table.find_header(h).unwrap() {
+        if let (index, HeaderValueFound::Found) = table.find_header(h).unwrap() {
             assert_eq!(index, STATIC_TABLE.len() + 1);
         } else {
             panic!("The header should have matched fully");
@@ -307,7 +317,7 @@ mod tests {
         let h: (&[u8], &[u8]) = (b"X-Custom-Header", b"different-stuff");
 
         // It must match only partially
-        if let (index, false) = table.find_header(h).unwrap() {
+        if let (index, HeaderValueFound::NameOnlyFound) = table.find_header(h).unwrap() {
             // The index must be the first one in the dynamic table
             // segment of the header table.
             assert_eq!(index, STATIC_TABLE.len() + 1);

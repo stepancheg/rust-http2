@@ -10,6 +10,7 @@ use bytes::Bytes;
 
 use super::HeaderTable;
 use hpack::static_table::StaticTable;
+use hpack::HeaderValueFound;
 
 /// Encode an integer to the representation defined by HPACK, writing it into the provider
 /// `io::Write` instance. Also allows the caller to specify the leading bits of the first
@@ -130,13 +131,13 @@ impl Encoder {
                 self.header_table
                     .add_header(Bytes::from(header.0), Bytes::from(header.1));
             }
-            Some((index, false)) => {
+            Some((index, HeaderValueFound::NameOnlyFound)) => {
                 // The name of the header is at the given index, but the
                 // value does not match the current one: need to encode
                 // only the value as a literal.
                 self.encode_indexed_name((index, header.1), false, writer)?;
             }
-            Some((index, true)) => {
+            Some((index, HeaderValueFound::Found)) => {
                 // The full header was found in one of the tables, so we
                 // just encode the index.
                 self.encode_indexed(index, writer)?;
