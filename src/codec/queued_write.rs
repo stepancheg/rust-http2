@@ -16,6 +16,7 @@ enum HttpFrameOrBytes {
 pub struct QueuedWrite<W: AsyncWrite> {
     framed_write: HttpFramedWrite<W>,
     frames: VecDeque<HttpFrameOrBytes>,
+    // GOAWAY frame is added to the queue.
     goaway_queued: bool,
 }
 
