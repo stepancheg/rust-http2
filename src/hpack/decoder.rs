@@ -293,8 +293,7 @@ impl Decoder {
                     // borrow on `self` that the `decode_literal` return value had. Since adding
                     // a header to the table requires a `&mut self`, it fails to compile.
                     // Manually separating it out here works around it...
-                    self.header_table
-                        .add_header(Bytes::from(name), Bytes::from(value));
+                    self.header_table.add_header(name, value);
 
                     consumed
                 }
