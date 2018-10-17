@@ -45,3 +45,43 @@ impl<T: Hash + Eq + Clone> HashSetShallowClone<T> {
         self.set.iter()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::HashSetShallowClone;
+    use std::ops::Deref;
+
+    #[test]
+    fn insert_updates() {
+        let mut s = HashSetShallowClone::new();
+        s.insert(10);
+        let mut items = s.items().deref().clone();
+        items.sort();
+        assert_eq!(&[10], &items[..]);
+
+        s.insert(20);
+        let mut items = s.items().deref().clone();
+        items.sort();
+        assert_eq!(&[10, 20], &items[..]);
+    }
+
+    #[test]
+    fn remove_updates() {
+        let mut s = HashSetShallowClone::new();
+        s.insert(10);
+        let mut items = s.items().deref().clone();
+        items.sort();
+        assert_eq!(&[10], &items[..]);
+
+        s.insert(20);
+        let mut items = s.items().deref().clone();
+        items.sort();
+        assert_eq!(&[10, 20], &items[..]);
+
+        s.remove(&10);
+        let mut items = s.items().deref().clone();
+        items.sort();
+        assert_eq!(&[20], &items[..]);
+    }
+
+}
