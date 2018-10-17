@@ -159,8 +159,10 @@ impl ServicePaths {
 impl Service for ServicePaths {
     fn start_request(&self, headers: Headers, req: HttpStreamAfterHeaders) -> Response {
         if let Some(service) = self.find_service(headers.path()) {
+            debug!("invoking user callback for path {}", headers.path());
             service.start_request(headers, req)
         } else {
+            debug!("serving 404 for path {}", headers.path());
             Response::not_found_404()
         }
     }
