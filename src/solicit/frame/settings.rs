@@ -1,5 +1,6 @@
 //! The module contains the implementation of the `SETTINGS` frame and associated flags.
 
+use codec::write_buffer::WriteBuffer;
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
@@ -367,10 +368,10 @@ impl Frame for SettingsFrame {
 }
 
 impl FrameIR for SettingsFrame {
-    fn serialize_into(self, b: &mut FrameBuilder) {
+    fn serialize_into(self, b: &mut WriteBuffer) {
         b.write_header(self.get_header());
         for setting in &self.settings {
-            b.write_all(&setting.serialize());
+            b.extend_from_slice(&setting.serialize());
         }
     }
 }

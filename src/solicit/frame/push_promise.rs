@@ -14,6 +14,7 @@ use solicit::StreamId;
 
 use super::flags::Flag;
 use super::flags::Flags;
+use codec::write_buffer::WriteBuffer;
 
 pub const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
 
@@ -138,14 +139,14 @@ impl Frame for PushPromiseFrame {
 }
 
 impl FrameIR for PushPromiseFrame {
-    fn serialize_into(self, b: &mut FrameBuilder) {
+    fn serialize_into(self, b: &mut WriteBuffer) {
         b.write_header(self.get_header());
         let padded = self.flags.is_set(PushPromiseFlag::Padded);
         if padded {
-            b.write_all(&[self.padding_len]);
+            b.extend_from_slice(&[self.padding_len]);
         }
         // Now the actual headers fragment
-        b.write_all(&self.header_fragment);
+        b.extend_from_bytes(self.header_fragment);
         // Finally, add the trailing padding, if required
         if padded {
             b.write_padding(self.padding_len);

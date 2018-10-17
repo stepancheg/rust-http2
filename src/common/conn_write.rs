@@ -22,15 +22,12 @@ use solicit::frame::continuation::ContinuationFlag;
 use solicit::frame::ContinuationFrame;
 use solicit::frame::DataFlag;
 use solicit::frame::DataFrame;
-use solicit::frame::FrameBuilder;
-use solicit::frame::FrameIR;
 use solicit::frame::GoawayFrame;
 use solicit::frame::HeadersFlag;
 use solicit::frame::HeadersFrame;
 use solicit::frame::RstStreamFrame;
 use solicit::frame::SettingsFrame;
 use std::cmp;
-use std::mem;
 use ErrorCode;
 
 pub trait ConnWriteSideCustom {
@@ -49,16 +46,7 @@ where
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
 {
-    fn poll_flush(&mut self) -> Poll<(), error::Error> {
-        self.queued_write.poll()
-    }
-
-    fn write_part(
-        &mut self,
-        target: &mut FrameBuilder,
-        stream_id: StreamId,
-        part: HttpStreamCommand,
-    ) {
+    fn write_part(&mut self, stream_id: StreamId, part: HttpStreamCommand) {
         let max_frame_size = self.peer_settings.max_frame_size as usize;
 
         match part {
@@ -72,7 +60,8 @@ where
 
                     debug!("sending frame {:?}", frame);
 
-                    frame.serialize_into(target);
+                    self.queued_write.queue(frame);
+
                     return;
                 }
 
@@ -93,7 +82,7 @@ where
 
                     debug!("sending frame {:?}", frame);
 
-                    frame.serialize_into(target);
+                    self.queued_write.queue(frame);
 
                     pos = end;
                 }
@@ -121,7 +110,7 @@ where
 
                         debug!("sending frame {:?}", frame);
 
-                        frame.serialize_into(target);
+                        self.queued_write.queue(frame);
                     } else {
                         let mut frame = ContinuationFrame::new(chunk, stream_id);
 
@@ -131,7 +120,7 @@ where
 
                         debug!("sending frame {:?}", frame);
 
-                        frame.serialize_into(target);
+                        self.queued_write.queue(frame);
                     }
 
                     pos = end;
@@ -142,65 +131,58 @@ where
 
                 debug!("sending frame {:?}", frame);
 
-                frame.serialize_into(target);
+                self.queued_write.queue(frame);
             }
         }
     }
 
-    fn pop_outg_all_for_stream_bytes(&mut self, stream_id: StreamId) -> Vec<u8> {
-        let mut send = FrameBuilder::new();
-        for part in self.pop_outg_all_for_stream(stream_id) {
-            self.write_part(&mut send, stream_id, part);
-        }
-        send.0
+    fn has_write_buffer_capacity(&self) -> bool {
+        self.queued_write.remaining() < 0x8000
     }
 
-    fn pop_outg_all_for_conn_bytes(&mut self) -> Vec<u8> {
-        // TODO: maintain own limits of out window
-        let mut send = FrameBuilder::new();
-        for (stream_id, part) in self.pop_outg_all_for_conn() {
-            self.write_part(&mut send, stream_id, part);
-        }
-        send.0
-    }
-
-    fn pop_outg_all_for_stream(&mut self, stream_id: StreamId) -> Vec<HttpStreamCommand> {
-        if let Some(stream) = self.streams.get_mut(stream_id) {
-            stream.pop_outg_all_maybe_remove(&mut self.out_window_size)
-        } else {
-            Vec::new()
-        }
-    }
-
-    pub fn pop_outg_all_for_conn(&mut self) -> Vec<(StreamId, HttpStreamCommand)> {
-        let mut r = Vec::new();
-
-        // TODO: keep list of streams with data
-        for stream_id in self.streams.stream_ids() {
-            r.extend(
-                self.pop_outg_all_for_stream(stream_id)
-                    .into_iter()
-                    .map(|s| (stream_id, s)),
-            );
+    fn pop_outg_for_stream(
+        &mut self,
+        stream_id: StreamId,
+    ) -> Option<(StreamId, HttpStreamCommand, bool)> {
+        let stream = self.streams.get_mut(stream_id).unwrap();
+        if let (Some(command), stream) = stream.pop_outg_maybe_remove(&mut self.out_window_size) {
+            return Some((stream_id, command, stream.is_some()));
         }
 
-        r
+        None
     }
 
-    pub fn buffer_outg_stream(&mut self, stream_id: StreamId) -> result::Result<()> {
-        let bytes = self.pop_outg_all_for_stream_bytes(stream_id);
+    pub fn buffer_outg_conn(&mut self) -> result::Result<bool> {
+        let mut updated = false;
 
-        self.queued_write.queue_bytes(bytes);
+        // shortcut
+        if !self.has_write_buffer_capacity() {
+            return Ok(updated);
+        }
 
-        Ok(())
-    }
+        let writable_stream_ids = self.streams.writable_stream_ids();
 
-    fn buffer_outg_conn(&mut self) -> result::Result<()> {
-        let bytes = self.pop_outg_all_for_conn_bytes();
+        for &stream_id in &*writable_stream_ids {
+            loop {
+                if !self.has_write_buffer_capacity() {
+                    return Ok(updated);
+                }
 
-        self.queued_write.queue_bytes(bytes);
+                if let Some((stream_id, part, cont)) = self.pop_outg_for_stream(stream_id) {
+                    self.write_part(stream_id, part);
+                    updated = true;
 
-        Ok(())
+                    // Stream is removed from map, need to continue to the next stream
+                    if !cont {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        Ok(updated)
     }
 
     pub fn send_frame_and_notify<F: Into<HttpFrame>>(&mut self, frame: F) {
@@ -223,17 +205,9 @@ where
         stream_id: StreamId,
         error_code: ErrorCode,
     ) -> result::Result<()> {
-        let stream_id = {
-            let stream = self.streams.get_mut(stream_id);
-            if let Some(mut stream) = stream {
-                stream.stream().outgoing.close(error_code);
-                Some(stream_id)
-            } else {
-                None
-            }
-        };
-        if let Some(stream_id) = stream_id {
-            self.buffer_outg_stream(stream_id)?;
+        let stream = self.streams.get_mut(stream_id);
+        if let Some(mut stream) = stream {
+            stream.close_outgoing(error_code);
         }
         Ok(())
     }
@@ -243,17 +217,9 @@ where
         stream_id: StreamId,
         part: DataOrHeadersWithFlag,
     ) -> result::Result<()> {
-        let stream_id = {
-            let stream = self.streams.get_mut(stream_id);
-            if let Some(mut stream) = stream {
-                stream.stream().outgoing.push_back_part(part);
-                Some(stream_id)
-            } else {
-                None
-            }
-        };
-        if let Some(stream_id) = stream_id {
-            self.buffer_outg_stream(stream_id)?;
+        let stream = self.streams.get_mut(stream_id);
+        if let Some(mut stream) = stream {
+            stream.push_back_part(part);
         }
         Ok(())
     }
@@ -273,20 +239,6 @@ where
                 self.process_dump_state(sender)?;
             }
         }
-        Ok(())
-    }
-
-    fn process_flush_xxx_fields(&mut self) -> result::Result<()> {
-        if mem::replace(&mut self.flush_conn, false) {
-            self.buffer_outg_conn()?;
-        }
-
-        let stream_ids: Vec<StreamId> = self.flush_streams.iter().cloned().collect();
-        self.flush_streams.clear();
-        for stream_id in stream_ids {
-            self.buffer_outg_stream(stream_id)?;
-        }
-
         Ok(())
     }
 
@@ -323,14 +275,24 @@ where
         }
     }
 
-    pub fn poll_write(&mut self) -> Poll<(), error::Error> {
-        self.process_flush_xxx_fields()?;
+    fn poll_flush(&mut self) -> result::Result<()> {
+        self.buffer_outg_conn()?;
+        loop {
+            self.queued_write.poll()?;
+            let updated = self.buffer_outg_conn()?;
+            if !updated {
+                return Ok(());
+            }
+        }
+    }
 
+    pub fn poll_write(&mut self) -> Poll<(), error::Error> {
         if let Async::Ready(()) = self.process_write_queue()? {
             return Ok(Async::Ready(()));
         }
 
         self.poll_flush()?;
+
         Ok(Async::NotReady)
     }
 }

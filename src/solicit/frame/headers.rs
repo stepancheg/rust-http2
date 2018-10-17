@@ -2,6 +2,7 @@
 
 use bytes::Bytes;
 
+use codec::write_buffer::WriteBuffer;
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
@@ -303,11 +304,11 @@ impl Frame for HeadersFrame {
 }
 
 impl FrameIR for HeadersFrame {
-    fn serialize_into(self, b: &mut FrameBuilder) {
+    fn serialize_into(self, b: &mut WriteBuffer) {
         b.write_header(self.get_header());
         let padded = self.flags.is_set(HeadersFlag::Padded);
         if padded {
-            b.write_all(&[self.padding_len]);
+            b.extend_from_slice(&[self.padding_len]);
         }
         // The stream dependency fields follow, if the priority flag is set
         if self.flags.is_set(HeadersFlag::Priority) {
@@ -315,10 +316,10 @@ impl FrameIR for HeadersFrame {
                 Some(ref dep) => dep.serialize(),
                 None => panic!("Priority flag set, but no dependency information given"),
             };
-            b.write_all(&dep_buf);
+            b.extend_from_slice(&dep_buf);
         }
         // Now the actual headers fragment
-        b.write_all(&self.header_fragment);
+        b.extend_from_bytes(self.header_fragment);
         // Finally, add the trailing padding, if required
         if padded {
             b.write_padding(self.padding_len);

@@ -15,6 +15,7 @@
 //! `HttpConnection`) and the higher layers that handle these events and pass them on to the
 //! application.
 
+use codec::write_buffer::WriteBuffer;
 use solicit::frame;
 use solicit::frame::*;
 use solicit::StreamId;
@@ -135,7 +136,7 @@ impl HttpFrame {
 }
 
 impl FrameIR for HttpFrame {
-    fn serialize_into(self, builder: &mut FrameBuilder) {
+    fn serialize_into(self, builder: &mut WriteBuffer) {
         match self {
             HttpFrame::Data(f) => f.serialize_into(builder),
             HttpFrame::Headers(f) => f.serialize_into(builder),

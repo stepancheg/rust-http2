@@ -2,6 +2,7 @@
 
 use bytes::Bytes;
 
+use codec::write_buffer::WriteBuffer;
 use error::ErrorCode;
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
@@ -125,11 +126,11 @@ impl Frame for GoawayFrame {
 }
 
 impl FrameIR for GoawayFrame {
-    fn serialize_into(self, builder: &mut FrameBuilder) {
+    fn serialize_into(self, builder: &mut WriteBuffer) {
         builder.write_header(self.get_header());
         builder.write_u32(self.last_stream_id);
         builder.write_u32(self.raw_error_code);
-        builder.write_all(&self.debug_data);
+        builder.extend_from_bytes(self.debug_data);
     }
 }
 

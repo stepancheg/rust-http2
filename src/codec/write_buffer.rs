@@ -29,10 +29,18 @@ impl WriteBuffer {
         Default::default()
     }
 
-    pub fn extend_from_slice(&mut self, data: &[u8]) {
-        // Could do something smarter
+    pub fn reserve(&mut self, additional: usize) {
+        self.data.reserve(additional)
+    }
+
+    pub fn compact(&mut self) {
         self.data.drain(..self.position);
         self.position = 0;
+    }
+
+    pub fn extend_from_slice(&mut self, data: &[u8]) {
+        // Could do something smarter
+        self.compact();
         self.data.extend_from_slice(data);
     }
 
@@ -44,6 +52,30 @@ impl WriteBuffer {
     pub fn extend_from_bytes(&mut self, data: Bytes) {
         // TODO: reuse memory
         self.extend_from_slice(&data);
+    }
+
+    pub fn extend_from_bytes_ref(&mut self, data: &Bytes) {
+        // TODO: reuse memory
+        self.extend_from_slice(&*data);
+    }
+
+    pub fn extend_from_iter(&mut self, iter: impl Iterator<Item = u8>) {
+        // Could do something smarter
+        self.compact();
+        self.data.extend(iter);
+    }
+}
+
+impl Into<Vec<u8>> for WriteBuffer {
+    fn into(mut self) -> Vec<u8> {
+        self.compact();
+        self.data
+    }
+}
+
+impl Into<Bytes> for WriteBuffer {
+    fn into(self) -> Bytes {
+        Bytes::from(Into::<Vec<u8>>::into(self))
     }
 }
 

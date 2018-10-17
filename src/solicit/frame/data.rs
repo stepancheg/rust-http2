@@ -7,6 +7,7 @@ use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, Fra
 use solicit::StreamId;
 
 use bytes::Bytes;
+use codec::write_buffer::WriteBuffer;
 
 pub const DATA_FRAME_TYPE: u8 = 0x0;
 
@@ -194,15 +195,15 @@ impl Frame for DataFrame {
 }
 
 impl FrameIR for DataFrame {
-    fn serialize_into(self, b: &mut FrameBuilder) {
+    fn serialize_into(self, b: &mut WriteBuffer) {
         b.write_header(self.get_header());
         if self.is_padded() {
             let pad_len: u8 = self.padding_len;
-            b.write_all(&[pad_len]);
-            b.write_all(&self.data);
+            b.extend_from_slice(&[pad_len]);
+            b.extend_from_bytes(self.data);
             b.write_padding(pad_len);
         } else {
-            b.write_all(&self.data);
+            b.extend_from_bytes(self.data);
         }
     }
 }

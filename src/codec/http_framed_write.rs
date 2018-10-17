@@ -2,7 +2,6 @@ use error;
 use tokio_io::AsyncWrite;
 
 use bytes::Buf;
-use bytes::Bytes;
 use codec::write_buffer::WriteBuffer;
 use futures::Async;
 use futures::Poll;
@@ -27,15 +26,10 @@ impl<W: AsyncWrite> HttpFramedWrite<W> {
     }
 
     pub fn buffer_frame<F: Into<HttpFrame>>(&mut self, frame: F) {
-        let frame = frame.into();
+        let frame: HttpFrame = frame.into();
         debug!("send {:?}", frame);
 
-        self.buf.extend_from_vec(frame.serialize_into_vec());
-    }
-
-    pub fn buffer_bytes<B: Into<Bytes>>(&mut self, bytes: B) {
-        let bytes = bytes.into();
-        self.buf.extend_from_bytes(bytes);
+        frame.serialize_into(&mut self.buf);
     }
 
     pub fn poll_flush(&mut self) -> Poll<(), error::Error> {

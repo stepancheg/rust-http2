@@ -1,5 +1,6 @@
 //! Implements the `PING` HTTP/2 frame.
 
+use codec::write_buffer::WriteBuffer;
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
@@ -117,7 +118,7 @@ impl Frame for PingFrame {
 }
 
 impl FrameIR for PingFrame {
-    fn serialize_into(self, builder: &mut FrameBuilder) {
+    fn serialize_into(self, builder: &mut WriteBuffer) {
         builder.write_header(self.get_header());
         builder.write_u32((self.opaque_data >> 32) as u32);
         builder.write_u32(self.opaque_data as u32);

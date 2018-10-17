@@ -1,7 +1,7 @@
 use bytes::Buf;
 use bytes::IntoBuf;
 
-use solicit::frame::builder::FrameBuilder;
+use codec::write_buffer::WriteBuffer;
 use solicit::frame::flags::Flags;
 use solicit::frame::flags::NoFlag;
 use solicit::frame::Frame;
@@ -85,7 +85,7 @@ impl Frame for PriorityFrame {
 }
 
 impl FrameIR for PriorityFrame {
-    fn serialize_into(self, _builder: &mut FrameBuilder) {
+    fn serialize_into(self, _builder: &mut WriteBuffer) {
         unimplemented!()
     }
 }

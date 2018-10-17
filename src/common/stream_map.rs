@@ -9,23 +9,31 @@ use super::stream::HttpStreamCommand;
 use super::stream::HttpStreamCommon;
 use super::stream::HttpStreamStateSnapshot;
 use super::types::Types;
+use common::hash_set_shallow_clone::HashSetShallowClone;
+use data_or_headers::DataOrHeaders;
+use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use solicit::session::StreamState;
 use solicit::WindowSize;
+use std::rc::Rc;
 
 #[derive(Default)]
 pub struct StreamMap<T: Types> {
     pub map: HashMap<StreamId, HttpStreamCommon<T>>,
+    // This field must be kept in sync with stream state.
+    writable_streams: HashSetShallowClone<StreamId>,
 }
 
 /// Reference to a stream within `StreamMap`
 pub struct HttpStreamRef<'m, T: Types + 'm> {
     entry: OccupiedEntry<'m, StreamId, HttpStreamCommon<T>>,
+    writable_streams: &'m mut HashSetShallowClone<StreamId>,
 }
 
 impl<T: Types> StreamMap<T> {
     pub fn new() -> StreamMap<T> {
         StreamMap {
             map: HashMap::new(),
+            writable_streams: HashSetShallowClone::new(),
         }
     }
 
@@ -37,12 +45,17 @@ impl<T: Types> StreamMap<T> {
         };
 
         // unfortunately HashMap doesn't have an API to convert vacant entry into occupied
-        self.get_mut(id).unwrap()
+        let mut stream = self.get_mut(id).unwrap();
+        stream.sync_writable();
+        stream
     }
 
     pub fn get_mut(&mut self, id: StreamId) -> Option<HttpStreamRef<T>> {
         match self.map.entry(id) {
-            Entry::Occupied(e) => Some(HttpStreamRef { entry: e }),
+            Entry::Occupied(e) => Some(HttpStreamRef {
+                entry: e,
+                writable_streams: &mut self.writable_streams,
+            }),
             Entry::Vacant(_) => None,
         }
     }
@@ -80,8 +93,12 @@ impl<T: Types> StreamMap<T> {
         self.map.is_empty()
     }
 
-    pub fn stream_ids(&self) -> Vec<StreamId> {
+    pub fn _stream_ids(&self) -> Vec<StreamId> {
         self.map.keys().cloned().collect()
+    }
+
+    pub fn writable_stream_ids(&mut self) -> Rc<Vec<StreamId>> {
+        self.writable_streams.items()
     }
 
     pub fn snapshot(&self) -> HashMap<StreamId, HttpStreamStateSnapshot> {
@@ -90,12 +107,16 @@ impl<T: Types> StreamMap<T> {
 }
 
 impl<'m, T: Types + 'm> HttpStreamRef<'m, T> {
-    pub fn id(&self) -> StreamId {
-        *self.entry.key()
-    }
-
     pub fn stream(&mut self) -> &mut HttpStreamCommon<T> {
         self.entry.get_mut()
+    }
+
+    pub fn stream_ref(&self) -> &HttpStreamCommon<T> {
+        self.entry.get()
+    }
+
+    pub fn id(&self) -> StreamId {
+        *self.entry.key()
     }
 
     pub fn _into_stream(self) -> &'m mut HttpStreamCommon<T> {
@@ -103,34 +124,99 @@ impl<'m, T: Types + 'm> HttpStreamRef<'m, T> {
     }
 
     fn remove(self) {
-        debug!("removing stream {}", self.id());
+        let stream_id = self.id();
+        debug!("removing stream {}", stream_id);
+        self.writable_streams.remove(&stream_id);
         self.entry.remove();
     }
 
-    pub fn remove_if_closed(mut self) {
-        if self.stream().state == StreamState::Closed {
-            self.remove();
+    fn is_writable(&self) -> bool {
+        self.writable_streams.get(&self.id()).is_some()
+    }
+
+    fn check_state(&self) {
+        debug_assert_eq!(
+            self.stream_ref().is_writable(),
+            self.is_writable(),
+            "for stream {}",
+            self.id()
+        );
+    }
+
+    fn mark_writable(&mut self, writable: bool) {
+        let stream_id = self.id();
+        if writable {
+            self.writable_streams.insert(stream_id);
+        } else {
+            self.writable_streams.remove(&stream_id);
         }
     }
 
-    pub fn pop_outg_all_maybe_remove(
+    fn sync_writable(&mut self) {
+        let writable = self.stream().is_writable();
+        self.mark_writable(writable);
+    }
+
+    pub fn remove_if_closed(mut self) -> Option<Self> {
+        if self.stream().state == StreamState::Closed {
+            self.remove();
+            None
+        } else {
+            Some(self)
+        }
+    }
+
+    pub fn pop_outg_maybe_remove(
         mut self,
         conn_out_window_size: &mut WindowSize,
-    ) -> Vec<HttpStreamCommand> {
-        let mut r = Vec::new();
-        loop {
-            if let Some(c) = self.stream().pop_outg(conn_out_window_size) {
-                r.push(c);
-            } else {
-                self.remove_if_closed();
-                return r;
-            }
-        }
+    ) -> (Option<HttpStreamCommand>, Option<Self>) {
+        self.check_state();
+
+        let r = self.stream().pop_outg(conn_out_window_size);
+
+        self.sync_writable();
+
+        let stream = self.remove_if_closed();
+        (r, stream)
     }
 
     // Reset stream and remove it
     pub fn rst_received_remove(mut self, error_code: ErrorCode) {
         self.stream().rst_recvd(error_code);
         self.remove();
+    }
+
+    pub fn try_increase_window_size(&mut self, increment: u32) -> Result<(), ()> {
+        let old_window_size = self.stream().out_window_size.0;
+
+        self.stream().out_window_size.try_increase(increment)?;
+
+        let new_window_size = self.stream().out_window_size.0;
+
+        debug!(
+            "stream {} out window size change: {} -> {}",
+            self.id(),
+            old_window_size,
+            new_window_size
+        );
+
+        self.sync_writable();
+
+        Ok(())
+    }
+
+    pub fn push_back(&mut self, frame: DataOrHeaders) {
+        self.stream().outgoing.push_back(frame);
+        self.sync_writable();
+    }
+
+    pub fn push_back_part(&mut self, part: DataOrHeadersWithFlag) {
+        self.stream().outgoing.push_back_part(part);
+        self.sync_writable();
+    }
+
+    pub fn close_outgoing(&mut self, error_core: ErrorCode) {
+        self.stream().outgoing.close(error_core);
+        self.sync_writable();
     }
 }

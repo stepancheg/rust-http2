@@ -1,21 +1,13 @@
-use bytes::Bytes;
 use codec::http_framed_write::HttpFramedWrite;
 use error;
-use futures::Async;
 use futures::Poll;
 use solicit::connection::HttpFrame;
+use solicit::connection::HttpFrameType;
 use solicit::frame::GoawayFrame;
-use std::collections::VecDeque;
 use tokio_io::AsyncWrite;
-
-enum HttpFrameOrBytes {
-    Frame(HttpFrame),
-    Bytes(Bytes),
-}
 
 pub struct QueuedWrite<W: AsyncWrite> {
     framed_write: HttpFramedWrite<W>,
-    frames: VecDeque<HttpFrameOrBytes>,
     // GOAWAY frame is added to the queue.
     goaway_queued: bool,
 }
@@ -24,25 +16,23 @@ impl<W: AsyncWrite> QueuedWrite<W> {
     pub fn new(write: W) -> QueuedWrite<W> {
         QueuedWrite {
             framed_write: HttpFramedWrite::new(write),
-            frames: VecDeque::new(),
             goaway_queued: false,
         }
     }
 
-    fn queue_frame_or_bytes(&mut self, frame: HttpFrameOrBytes) {
+    pub fn remaining(&self) -> usize {
+        self.framed_write.remaining()
+    }
+
+    pub fn queue<F: Into<HttpFrame>>(&mut self, frame: F) {
         if self.goaway_queued {
             return;
         }
 
-        self.frames.push_back(frame);
-    }
+        let frame = frame.into();
 
-    pub fn queue<F: Into<HttpFrame>>(&mut self, frame: F) {
-        self.queue_frame_or_bytes(HttpFrameOrBytes::Frame(frame.into()));
-    }
-
-    pub fn queue_bytes<B: Into<Bytes>>(&mut self, frame: B) {
-        self.queue_frame_or_bytes(HttpFrameOrBytes::Bytes(frame.into()));
+        debug_assert!(frame.frame_type() != HttpFrameType::Goaway);
+        self.framed_write.buffer_frame(frame)
     }
 
     pub fn queue_goaway(&mut self, frame: GoawayFrame) {
@@ -52,28 +42,16 @@ impl<W: AsyncWrite> QueuedWrite<W> {
             return;
         }
         self.goaway_queued = true;
-        self.frames.clear();
 
         self.framed_write.buffer_frame(frame);
     }
 
     pub fn poll(&mut self) -> Poll<(), error::Error> {
-        loop {
-            match self.framed_write.poll_flush()? {
-                Async::Ready(()) => {}
-                Async::NotReady => return Ok(Async::NotReady),
-            }
-
-            match self.frames.pop_front() {
-                Some(HttpFrameOrBytes::Frame(frame)) => self.framed_write.buffer_frame(frame),
-                Some(HttpFrameOrBytes::Bytes(bytes)) => self.framed_write.buffer_bytes(bytes),
-                None => return Ok(Async::Ready(())),
-            }
-        }
+        self.framed_write.poll_flush()
     }
 
     pub fn remaining_empty(&self) -> bool {
-        self.framed_write.remaining() == 0 && self.frames.is_empty()
+        self.framed_write.remaining() == 0
     }
 
     pub fn goaway_queued(&self) -> bool {

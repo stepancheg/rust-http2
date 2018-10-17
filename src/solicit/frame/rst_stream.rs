@@ -6,6 +6,7 @@ use solicit::frame::ParseFrameResult;
 use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 use solicit::StreamId;
 
+use codec::write_buffer::WriteBuffer;
 use error::ErrorCode;
 
 /// The total allowed size for the `RST_STREAM` frame payload.
@@ -101,7 +102,7 @@ impl Frame for RstStreamFrame {
 }
 
 impl FrameIR for RstStreamFrame {
-    fn serialize_into(self, builder: &mut FrameBuilder) {
+    fn serialize_into(self, builder: &mut WriteBuffer) {
         builder.write_header(self.get_header());
         builder.write_u32(self.raw_error_code);
     }

@@ -6,6 +6,7 @@ mod conf;
 mod conn;
 mod conn_read;
 mod conn_write;
+mod hash_set_shallow_clone;
 mod iteration_exit;
 mod pump_stream_to_write_loop;
 mod stream;

@@ -55,6 +55,9 @@ pub enum InMessageStage {
     AfterTrailingHeaders,
 }
 
+/// All HTTP/2 stream state.
+/// Note the state must be kept in sync with other fields,
+/// thus sometimes this object must be manipulated with `HttpStreamRef`.
 pub struct HttpStreamCommon<T: Types> {
     pub specific: T::HttpStreamSpecific,
     pub state: StreamState,
@@ -122,7 +125,48 @@ impl<T: Types> HttpStreamCommon<T> {
         }
     }
 
+    /// Must be kept in sync with `pop_outg`.
+    pub fn is_writable(&self) -> bool {
+        match self.outgoing.front() {
+            Some(front) => match front {
+                DataOrHeaders::Headers(..) => true,
+                DataOrHeaders::Data(data) => data.len() == 0 || self.out_window_size.size() != 0,
+            },
+            None => {
+                if let Some(_error_code) = self.outgoing.end() {
+                    if !self.state.is_closed_local() {
+                        return true;
+                    }
+                };
+
+                false
+            }
+        }
+    }
+
+    #[cfg(debug_assertions)]
     pub fn pop_outg(&mut self, conn_out_window_size: &mut WindowSize) -> Option<HttpStreamCommand> {
+        let writable = self.is_writable();
+        let window_size_before = conn_out_window_size.0;
+
+        let command = self.pop_outg_impl(conn_out_window_size);
+        if command.is_some() {
+            assert!(writable);
+        } else {
+            assert!(!writable || window_size_before == 0);
+        }
+        command
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn pop_outg(&mut self, conn_out_window_size: &mut WindowSize) -> Option<HttpStreamCommand> {
+        self.pop_outg_impl(conn_out_window_size)
+    }
+
+    fn pop_outg_impl(
+        &mut self,
+        conn_out_window_size: &mut WindowSize,
+    ) -> Option<HttpStreamCommand> {
         if self.outgoing.is_empty() {
             return if let Some(error_code) = self.outgoing.end() {
                 if self.state.is_closed_local() {
@@ -192,17 +236,6 @@ impl<T: Types> HttpStreamCommon<T> {
             content: DataOrHeaders::Data(data),
             last: last,
         }))
-    }
-
-    pub fn _pop_outg_all(
-        &mut self,
-        conn_out_window_size: &mut WindowSize,
-    ) -> Vec<HttpStreamCommand> {
-        let mut r = Vec::new();
-        while let Some(p) = self.pop_outg(conn_out_window_size) {
-            r.push(p);
-        }
-        r
     }
 
     pub fn new_data_chunk(&mut self, data: Bytes, last: bool) {

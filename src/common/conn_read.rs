@@ -298,14 +298,6 @@ where
 
         // Work arout lexical lifetimes
 
-        let old_window_size = self
-            .streams
-            .get_mut(frame.stream_id)
-            .unwrap()
-            .stream()
-            .out_window_size
-            .0;
-
         // 6.9.1
         // A sender MUST NOT allow a flow-control window to exceed 2^31-1
         // octets.  If a sender receives a WINDOW_UPDATE that causes a flow-
@@ -318,9 +310,7 @@ where
             .streams
             .get_mut(frame.stream_id)
             .unwrap()
-            .stream()
-            .out_window_size
-            .try_increase(frame.increment)
+            .try_increase_window_size(frame.increment)
         {
             info!("failed to increment stream window: {}", frame.stream_id);
             self.send_rst_stream(frame.stream_id, ErrorCode::FlowControlError)?;
@@ -328,13 +318,6 @@ where
         }
 
         let mut stream = self.streams.get_mut(frame.stream_id).unwrap();
-
-        let new_window_size = stream.stream().out_window_size.0;
-
-        debug!(
-            "stream {} out window size change: {} -> {}",
-            frame.stream_id, old_window_size, new_window_size
-        );
 
         stream
             .stream()

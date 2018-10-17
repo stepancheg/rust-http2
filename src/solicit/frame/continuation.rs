@@ -11,6 +11,7 @@ use solicit::StreamId;
 
 use super::flags::Flag;
 use super::flags::Flags;
+use codec::write_buffer::WriteBuffer;
 
 pub const CONTINUATION_FRAME_TYPE: u8 = 0x9;
 
@@ -128,8 +129,8 @@ impl Frame for ContinuationFrame {
 }
 
 impl FrameIR for ContinuationFrame {
-    fn serialize_into(self, b: &mut FrameBuilder) {
+    fn serialize_into(self, b: &mut WriteBuffer) {
         b.write_header(self.get_header());
-        b.write_all(&self.header_fragment);
+        b.extend_from_bytes(self.header_fragment);
     }
 }

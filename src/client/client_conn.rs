@@ -143,36 +143,29 @@ where
             resp_tx,
         } = start;
 
-        let stream_id = {
-            let stream_id = self.next_local_stream_id();
+        let stream_id = self.next_local_stream_id();
 
-            let out_window = {
-                let (mut http_stream, resp_stream, out_window) = self.new_stream_data(
-                    stream_id,
-                    None,
-                    InMessageStage::Initial,
-                    ClientStreamData {},
-                );
+        let out_window = {
+            let (mut http_stream, resp_stream, out_window) = self.new_stream_data(
+                stream_id,
+                None,
+                InMessageStage::Initial,
+                ClientStreamData {},
+            );
 
-                if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
-                    warn!("caller died");
-                }
+            if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
+                warn!("caller died");
+            }
 
-                http_stream
-                    .stream()
-                    .outgoing
-                    .push_back(DataOrHeaders::Headers(headers));
+            http_stream.push_back(DataOrHeaders::Headers(headers));
 
-                out_window
-            };
-
-            self.pump_stream_to_write_loop(stream_id, body.into_part_stream(), out_window);
-
-            stream_id
+            out_window
         };
 
+        self.pump_stream_to_write_loop(stream_id, body.into_part_stream(), out_window);
+
         // Also opens latch if necessary
-        self.buffer_outg_stream(stream_id)?;
+        self.buffer_outg_conn()?;
         Ok(())
     }
 }

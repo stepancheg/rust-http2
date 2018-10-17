@@ -62,6 +62,7 @@ pub use self::push_promise::PushPromiseFrame;
 pub use self::rst_stream::RstStreamFrame;
 pub use self::settings::{HttpSetting, SettingsFlag, SettingsFrame};
 pub use self::window_update::WindowUpdateFrame;
+use codec::write_buffer::WriteBuffer;
 
 pub const FRAME_HEADER_LEN: usize = 9;
 
@@ -178,15 +179,15 @@ fn parse_padded_payload(payload: Bytes, flag: bool) -> ParseFrameResult<(Bytes, 
 /// representation.
 pub trait FrameIR {
     /// Write out the on-the-wire representation of the frame into the given `FrameBuilder`.
-    fn serialize_into(self, builder: &mut FrameBuilder);
+    fn serialize_into(self, builder: &mut WriteBuffer);
 
     fn serialize_into_vec(self) -> Vec<u8>
     where
         Self: Sized,
     {
-        let mut buf = FrameBuilder::new();
-        self.serialize_into(&mut buf);
-        buf.0
+        let mut builder = WriteBuffer::new();
+        self.serialize_into(&mut builder);
+        builder.into()
     }
 }
 
@@ -366,9 +367,9 @@ impl<'a> From<&'a [u8]> for RawFrame {
 
 /// `RawFrame`s can be serialized to an on-the-wire format.
 impl FrameIR for RawFrame {
-    fn serialize_into(self, b: &mut FrameBuilder) {
+    fn serialize_into(self, b: &mut WriteBuffer) {
         b.write_header(self.header());
-        b.write_all(&self.payload());
+        b.extend_from_bytes(self.payload());
     }
 }
 
