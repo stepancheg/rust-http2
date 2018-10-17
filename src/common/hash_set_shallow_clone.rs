@@ -30,15 +30,19 @@ impl<T: Hash + Eq + Clone> HashSetShallowClone<T> {
     }
 
     pub fn remove(&mut self, item: &T) -> bool {
-        // TODO: do not invalidate if nothing changed
-        self.items.take();
-        self.set.remove(item)
+        let removed = self.set.remove(item);
+        if removed {
+            self.items.take();
+        }
+        removed
     }
 
     pub fn insert(&mut self, value: T) -> bool {
-        // TODO: do not invalidate if nothing changed
-        self.items.take();
-        self.set.insert(value)
+        let inserted = self.set.insert(value);
+        if inserted {
+            self.items.take();
+        }
+        inserted
     }
 
     pub fn _iter(&self) -> hash_set::Iter<T> {
