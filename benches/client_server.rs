@@ -21,29 +21,29 @@ use test::Bencher;
 
 #[bench]
 fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
-    b.iter(|| {
-        struct Megabyte;
+    struct Megabyte;
 
-        impl Service for Megabyte {
-            fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-                Response::headers_and_bytes_stream(
-                    Headers::ok_200(),
-                    stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))),
-                )
-            }
+    impl Service for Megabyte {
+        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
+            Response::headers_and_bytes_stream(
+                Headers::ok_200(),
+                stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))),
+            )
         }
+    }
 
-        let mut server = ServerBuilder::new_plain();
-        server.set_port(0);
-        server.service.set_service("/", Arc::new(Megabyte));
-        let server = server.build().expect("server");
+    let mut server = ServerBuilder::new_plain();
+    server.set_port(0);
+    server.service.set_service("/", Arc::new(Megabyte));
+    let server = server.build().expect("server");
 
-        let client = Client::new_plain(
-            "127.0.0.1",
-            server.local_addr().port().unwrap(),
-            Default::default(),
-        ).expect("client");
+    let client = Client::new_plain(
+        "127.0.0.1",
+        server.local_addr().port().unwrap(),
+        Default::default(),
+    ).expect("client");
 
+    fn iter(client: &Client) {
         let (header, body) = client
             .start_get("/any", "localhost")
             .0
@@ -60,41 +60,46 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
         }
 
         assert_eq!(1024 * 1024, s);
+    }
+
+    // Warm-up
+    iter(&client);
+
+    b.iter(|| {
+        iter(&client)
     })
 }
 
 #[bench]
-fn hundred_small_requests(b: &mut Bencher) {
+fn small_requests(b: &mut Bencher) {
+    struct My;
+
+    impl Service for My {
+        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
+            Response::found_200_plain_text("hello there")
+        }
+    }
+
+    let mut server = ServerBuilder::new_plain();
+    server.set_port(0);
+    server.service.set_service("/", Arc::new(My));
+    let server = server.build().expect("server");
+
+    let client = Client::new_plain(
+        "127.0.0.1",
+        server.local_addr().port().unwrap(),
+        Default::default(),
+    ).expect("client");
+
     b.iter(|| {
-        struct My;
+        let (header, body) = client
+            .start_get("/any", "localhost")
+            .0
+            .wait()
+            .expect("headers");
+        assert_eq!(200, header.status());
 
-        impl Service for My {
-            fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-                Response::found_200_plain_text("hello there")
-            }
-        }
-
-        let mut server = ServerBuilder::new_plain();
-        server.set_port(0);
-        server.service.set_service("/", Arc::new(My));
-        let server = server.build().expect("server");
-
-        let client = Client::new_plain(
-            "127.0.0.1",
-            server.local_addr().port().unwrap(),
-            Default::default(),
-        ).expect("client");
-
-        for _i in 0..100 {
-            let (header, body) = client
-                .start_get("/any", "localhost")
-                .0
-                .wait()
-                .expect("headers");
-            assert_eq!(200, header.status());
-
-            // TODO: check content
-            body.collect().wait().expect("body");
-        }
+        // TODO: check content
+        body.collect().wait().expect("body")
     })
 }
