@@ -64,7 +64,7 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
 }
 
 #[bench]
-fn thousand_small_requests(b: &mut Bencher) {
+fn hundred_small_requests(b: &mut Bencher) {
     b.iter(|| {
         struct My;
 
@@ -85,7 +85,7 @@ fn thousand_small_requests(b: &mut Bencher) {
             Default::default(),
         ).expect("client");
 
-        for _i in 0..1000 {
+        for _i in 0..100 {
             let (header, body) = client
                 .start_get("/any", "localhost")
                 .0
