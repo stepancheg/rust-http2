@@ -84,11 +84,11 @@ impl<I> ServerStream<I>
 where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    fn set_headers(&mut self, headers: Headers, last: bool) {
+    fn trailers_recvd(&mut self, headers: Headers) {
         if let Some(ref mut sender) = self.peer_tx {
             let part = DataOrHeadersWithFlag {
                 content: DataOrHeaders::Headers(headers),
-                last,
+                last: true,
             };
             // TODO: reset on error
             sender.send(ResultOrEof::Item(part)).ok();
@@ -248,7 +248,7 @@ where
         let mut stream = self.streams.get_mut(stream_id).unwrap();
         stream
             .stream()
-            .set_headers(headers, end_stream == EndStream::Yes);
+            .trailers_recvd(headers);
         Ok(Some(stream))
     }
 }

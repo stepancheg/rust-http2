@@ -112,7 +112,7 @@ where
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
 
             let end_of_stream = frame.is_end_of_stream();
-            stream.stream().new_data_chunk(frame.data, end_of_stream);
+            stream.stream().data_recvd(frame.data, end_of_stream);
             break;
         }
 

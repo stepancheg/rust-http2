@@ -238,7 +238,7 @@ impl<T: Types> HttpStreamCommon<T> {
         }))
     }
 
-    pub fn new_data_chunk(&mut self, data: Bytes, last: bool) {
+    pub fn data_recvd(&mut self, data: Bytes, last: bool) {
         if let Some(ref mut response_handler) = self.peer_tx {
             // TODO: reset stream if rx is dead
             drop(

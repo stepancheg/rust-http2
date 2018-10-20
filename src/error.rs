@@ -135,6 +135,7 @@ pub enum Error {
     ParseFrameError(ParseFrameError),
     InternalError(String),
     NotImplemented(&'static str),
+    // TODO: replace with variants
     Other(&'static str),
     ClientDied(Option<Arc<Error>>),
     ClientPanicked(String),
