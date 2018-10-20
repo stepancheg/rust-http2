@@ -1,15 +1,15 @@
-extern crate httpbis;
 extern crate futures;
+extern crate httpbis;
 
-use httpbis::Response;
-use httpbis::Service;
-use httpbis::ServerBuilder;
+use futures::future::Future;
+use futures::stream::Stream;
 use httpbis::Client;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
+use httpbis::Response;
+use httpbis::ServerBuilder;
+use httpbis::Service;
 use std::sync::Arc;
-use futures::stream::Stream;
-use futures::future::Future;
 use std::time::Instant;
 
 fn main() {
@@ -61,5 +61,4 @@ fn main() {
         let us_per_iter = per_iter.as_secs() * 1_000_000 + per_iter.subsec_micros() as u64;
         println!("{}us per iter", us_per_iter);
     }
-
 }

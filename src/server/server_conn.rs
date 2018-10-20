@@ -246,9 +246,7 @@ where
         }
 
         let mut stream = self.streams.get_mut(stream_id).unwrap();
-        stream
-            .stream()
-            .trailers_recvd(headers);
+        stream.stream().trailers_recvd(headers);
         Ok(Some(stream))
     }
 }

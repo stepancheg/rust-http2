@@ -65,9 +65,7 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
     // Warm-up
     iter(&client);
 
-    b.iter(|| {
-        iter(&client)
-    })
+    b.iter(|| iter(&client))
 }
 
 #[bench]
