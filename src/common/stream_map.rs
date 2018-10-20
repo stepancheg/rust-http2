@@ -219,4 +219,9 @@ impl<'m, T: Types + 'm> HttpStreamRef<'m, T> {
         self.stream().outgoing.close(error_core);
         self.sync_writable();
     }
+
+    pub fn close_remote(mut self) {
+        self.stream().close_remote();
+        self.remove_if_closed();
+    }
 }

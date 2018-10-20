@@ -413,11 +413,10 @@ where
                 }
             };
 
-            if let Some(mut stream) = stream {
+            if let Some(stream) = stream {
                 if end_of_stream {
-                    stream.stream().close_remote();
+                    stream.close_remote();
                 }
-                stream.remove_if_closed();
             }
         }
 
