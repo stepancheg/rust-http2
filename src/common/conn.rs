@@ -38,6 +38,7 @@ use codec::http_framed_read::HttpFramedJoinContinuationRead;
 use codec::queued_write::QueuedWrite;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::ConnWriteSideCustom;
+use common::init_where::InitWhere;
 use common::iteration_exit::IterationExit;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use futures::future;
@@ -184,7 +185,7 @@ where
     /// Allocate stream id for locally initiated stream
     pub fn next_local_stream_id(&mut self) -> StreamId {
         let id = match self.last_local_stream_id {
-            0 => T::first_id(),
+            0 => T::CLIENT_OR_SERVER.first_stream_id(),
             n => n + 2,
         };
         self.last_local_stream_id = id;
@@ -307,10 +308,9 @@ where
     }
 
     fn stream_state_idle_or_closed(&self, stream_id: StreamId) -> StreamStateIdleOrClosed {
-        let last_stream_id = if T::is_init_locally(stream_id) {
-            self.last_local_stream_id
-        } else {
-            self.last_peer_stream_id
+        let last_stream_id = match T::init_where(stream_id) {
+            InitWhere::Locally => self.last_local_stream_id,
+            InitWhere::Peer => self.last_peer_stream_id,
         };
 
         if stream_id > last_stream_id {

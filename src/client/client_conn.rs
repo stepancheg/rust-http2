@@ -39,6 +39,7 @@ use data_or_trailers::*;
 use socket::*;
 
 use client_died_error_holder::ClientDiedErrorHolder;
+use common::client_or_server::ClientOrServer;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use headers_place::HeadersPlace;
@@ -61,13 +62,9 @@ where
     type ConnSpecific = ClientConnData;
     type ToWriteMessage = ClientToWriteMessage;
 
-    fn out_request_or_response() -> RequestOrResponse {
-        RequestOrResponse::Request
-    }
+    const OUT_REQUEST_OR_RESPONSE: RequestOrResponse = RequestOrResponse::Request;
 
-    fn first_id() -> StreamId {
-        1
-    }
+    const CLIENT_OR_SERVER: ClientOrServer = ClientOrServer::Client;
 }
 
 pub struct ClientStreamData {}

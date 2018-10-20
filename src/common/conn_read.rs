@@ -1,5 +1,6 @@
 use common::conn::Conn;
 use common::conn_write::ConnWriteSideCustom;
+use common::init_where::InitWhere;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use common::stream::InMessageStage;
@@ -389,7 +390,7 @@ where
         // Once sent, the sender will ignore frames sent on streams initiated by the receiver
         // if the stream has an identifier higher than the included last stream identifier.
         if let Some(ref f) = self.goaway_sent.as_ref() {
-            if !T::is_init_locally(stream_id) {
+            if T::init_where(stream_id) != InitWhere::Locally {
                 if stream_id > f.last_stream_id {
                     return Ok(());
                 }

@@ -1,6 +1,8 @@
 use solicit::StreamId;
 
 use super::*;
+use common::client_or_server::ClientOrServer;
+use common::init_where::InitWhere;
 use req_resp::RequestOrResponse;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
@@ -14,18 +16,19 @@ pub trait Types: 'static {
     // Message sent to write loop
     type ToWriteMessage: From<CommonToWriteMessage> + Send;
 
-    fn out_request_or_response() -> RequestOrResponse;
+    /// Runtime check if this type is constructed for client or server
+    const CLIENT_OR_SERVER: ClientOrServer;
 
-    fn in_request_or_response() -> RequestOrResponse {
-        Self::out_request_or_response().invert()
-    }
+    /// Outgoing messages are requests or responses
+    const OUT_REQUEST_OR_RESPONSE: RequestOrResponse;
 
-    /// First stream id used by either client or server
-    fn first_id() -> StreamId;
-
-    /// True if stream is initiated locally,
+    /// Is stream initiated locally or by peer?
     /// e. g. `is_init_locally(3)` returns `true` for client and `false` for server.
-    fn is_init_locally(stream_id: StreamId) -> bool {
-        (stream_id % 2) == (Self::first_id() % 2)
+    fn init_where(stream_id: StreamId) -> InitWhere {
+        let initiated_by_client_or_server = ClientOrServer::who_initiated_stream(stream_id);
+        match initiated_by_client_or_server == Self::CLIENT_OR_SERVER {
+            true => InitWhere::Locally,
+            false => InitWhere::Peer,
+        }
     }
 }

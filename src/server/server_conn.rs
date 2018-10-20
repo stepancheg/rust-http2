@@ -39,7 +39,10 @@ use solicit_async::*;
 
 use socket::StreamItem;
 
+use common::init_where::InitWhere;
+
 use client_died_error_holder::ClientDiedErrorHolder;
+use common::client_or_server::ClientOrServer;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use headers_place::HeadersPlace;
@@ -65,13 +68,8 @@ where
     type ConnSpecific = ServerConnData;
     type ToWriteMessage = ServerToWriteMessage;
 
-    fn out_request_or_response() -> RequestOrResponse {
-        RequestOrResponse::Response
-    }
-
-    fn first_id() -> StreamId {
-        2
-    }
+    const CLIENT_OR_SERVER: ClientOrServer = ClientOrServer::Server;
+    const OUT_REQUEST_OR_RESPONSE: RequestOrResponse = RequestOrResponse::Response;
 }
 
 pub struct ServerStreamData {}
@@ -121,7 +119,7 @@ where
         stream_id: StreamId,
         headers: Headers,
     ) -> result::Result<HttpStreamRef<ServerTypes<I>>> {
-        if ServerTypes::<I>::is_init_locally(stream_id) {
+        if ServerTypes::<I>::init_where(stream_id) == InitWhere::Locally {
             return Err(error::Error::Other(
                 "initiated stream with server id from client",
             ));

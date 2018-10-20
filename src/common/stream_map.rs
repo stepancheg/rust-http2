@@ -10,6 +10,7 @@ use super::stream::HttpStreamCommon;
 use super::stream::HttpStreamStateSnapshot;
 use super::types::Types;
 use common::hash_set_shallow_clone::HashSetShallowClone;
+use common::init_where::InitWhere;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use solicit::session::StreamState;
@@ -79,7 +80,7 @@ impl<T: Types> StreamMap<T> {
             .map
             .keys()
             .cloned()
-            .filter(|&s| s > id && T::is_init_locally(s))
+            .filter(|&s| s > id && T::init_where(s) == InitWhere::Locally)
             .collect();
 
         let mut r = Vec::new();
