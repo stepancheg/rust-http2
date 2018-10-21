@@ -3,14 +3,50 @@
 //!
 //! Clients should use the `Encoder` struct as the API for performing HPACK
 //! encoding.
-use std::io;
 use std::num::Wrapping;
 
 use bytes::Bytes;
 
 use super::HeaderTable;
+use bytes::BytesMut;
 use hpack::static_table::StaticTable;
 use hpack::HeaderValueFound;
+
+pub trait EncodeBuf {
+    fn write_all(&mut self, bytes: &[u8]);
+
+    fn reserve(&mut self, additional: usize) {
+        drop(additional);
+    }
+
+    fn write_u8(&mut self, b: u8) {
+        self.write_all(&[b]);
+    }
+}
+
+impl EncodeBuf for Vec<u8> {
+    fn write_all(&mut self, bytes: &[u8]) {
+        self.extend_from_slice(bytes);
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        self.reserve(additional);
+    }
+
+    fn write_u8(&mut self, byte: u8) {
+        self.push(byte);
+    }
+}
+
+impl EncodeBuf for BytesMut {
+    fn write_all(&mut self, bytes: &[u8]) {
+        self.extend_from_slice(bytes);
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        self.reserve(additional);
+    }
+}
 
 /// Encode an integer to the representation defined by HPACK, writing it into the provider
 /// `io::Write` instance. Also allows the caller to specify the leading bits of the first
@@ -18,12 +54,12 @@ use hpack::HeaderValueFound;
 /// and overwritten by the integer's representation (in other words, only the first
 /// `8 - prefix_size` bits from the `leading_bits` octet are reflected in the first octet
 /// emitted by the function.
-pub fn encode_integer_into<W: io::Write>(
+pub fn encode_integer_into<W: EncodeBuf>(
     mut value: usize,
     prefix_size: u8,
     leading_bits: u8,
     writer: &mut W,
-) -> io::Result<()> {
+) {
     let Wrapping(mask) = if prefix_size >= 8 {
         Wrapping(0xFF)
     } else {
@@ -34,18 +70,17 @@ pub fn encode_integer_into<W: io::Write>(
     let leading_bits = leading_bits & (!mask);
     let mask = mask as usize;
     if value < mask {
-        writer.write_all(&[leading_bits | value as u8])?;
-        return Ok(());
+        writer.write_u8(leading_bits | value as u8);
+        return;
     }
 
-    writer.write_all(&[leading_bits | mask as u8])?;
+    writer.write_u8(leading_bits | mask as u8);
     value -= mask;
     while value >= 128 {
-        writer.write_all(&[((value % 128) + 128) as u8])?;
+        writer.write_u8(((value % 128) + 128) as u8);
         value = value / 128;
     }
-    writer.write_all(&[value as u8])?;
-    Ok(())
+    writer.write_u8(value as u8);
 }
 
 /// Encode an integer to the representation defined by HPACK.
@@ -56,7 +91,7 @@ pub fn encode_integer_into<W: io::Write>(
 #[cfg(test)]
 pub fn encode_integer(value: usize, prefix_size: u8) -> Vec<u8> {
     let mut res = Vec::new();
-    encode_integer_into(value, prefix_size, 0, &mut res).unwrap();
+    encode_integer_into(value, prefix_size, 0, &mut res);
     res
 }
 
@@ -95,7 +130,7 @@ impl Encoder {
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
     {
         let mut encoded: Vec<u8> = Vec::new();
-        self.encode_into(headers, &mut encoded).unwrap();
+        self.encode_into(headers, &mut encoded);
         encoded
     }
 
@@ -103,41 +138,35 @@ impl Encoder {
     where
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
     {
-        let mut encoded: Vec<u8> = Vec::new();
-        self.encode_into(headers, &mut encoded).unwrap();
-        // TODO: encode right into bytes
-        Bytes::from(encoded)
+        let mut encoded = BytesMut::new();
+        self.encode_into(headers, &mut encoded);
+        encoded.freeze()
     }
 
     /// Encodes the given headers into the given `io::Write` instance. If the io::Write raises an
     /// Error at any point, this error is propagated out. Any changes to the internal state of the
     /// encoder will not be rolled back, though, so care should be taken to ensure that the paired
     /// decoder also ends up seeing the same state updates or that their pairing is cancelled.
-    pub fn encode_into<'b, I, W>(&mut self, headers: I, writer: &mut W) -> io::Result<()>
+    pub fn encode_into<'b, I, W>(&mut self, headers: I, writer: &mut W)
     where
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
-        W: io::Write,
+        W: EncodeBuf,
     {
         for header in headers {
-            self.encode_header_into(header, writer)?;
+            self.encode_header_into(header, writer);
         }
-        Ok(())
     }
 
     /// Encodes a single given header into the given `io::Write` instance.
     ///
     /// Any errors are propagated, similarly to the `encode_into` method, and it is the callers
     /// responsiblity to make sure that the paired encoder sees them too.
-    fn encode_header_into<W: io::Write>(
-        &mut self,
-        header: (&[u8], &[u8]),
-        writer: &mut W,
-    ) -> io::Result<()> {
+    fn encode_header_into<W: EncodeBuf>(&mut self, header: (&[u8], &[u8]), writer: &mut W) {
         match self.header_table.find_header(header) {
             None => {
                 // The name of the header is in no tables: need to encode
                 // it with both a literal name and value.
-                self.encode_literal(&header, true, writer)?;
+                self.encode_literal(&header, true, writer);
                 self.header_table
                     .add_header(Bytes::from(header.0), Bytes::from(header.1));
             }
@@ -145,15 +174,14 @@ impl Encoder {
                 // The name of the header is at the given index, but the
                 // value does not match the current one: need to encode
                 // only the value as a literal.
-                self.encode_indexed_name((index, header.1), false, writer)?;
+                self.encode_indexed_name((index, header.1), false, writer);
             }
             Some((index, HeaderValueFound::Found)) => {
                 // The full header was found in one of the tables, so we
                 // just encode the index.
-                self.encode_indexed(index, writer)?;
+                self.encode_indexed(index, writer);
             }
         };
-        Ok(())
     }
 
     /// Encodes a header as a literal (i.e. both the name and the value are
@@ -167,18 +195,17 @@ impl Encoder {
     ///                    inserted into the dynamic table
     /// - `buf` - The buffer into which the result is placed
     ///
-    fn encode_literal<W: io::Write>(
+    fn encode_literal<W: EncodeBuf>(
         &mut self,
         header: &(&[u8], &[u8]),
         should_index: bool,
         buf: &mut W,
-    ) -> io::Result<()> {
+    ) {
         let mask = if should_index { 0x40 } else { 0x0 };
 
-        buf.write_all(&[mask])?;
-        self.encode_string_literal(&header.0, buf)?;
-        self.encode_string_literal(&header.1, buf)?;
-        Ok(())
+        buf.write_u8(mask);
+        self.encode_string_literal(&header.0, buf);
+        self.encode_string_literal(&header.1, buf);
     }
 
     /// Encodes a string literal and places the result in the given buffer
@@ -187,41 +214,35 @@ impl Encoder {
     /// The function does not consider Huffman encoding for now, but always
     /// produces a string literal representations, according to the HPACK spec
     /// section 5.2.
-    fn encode_string_literal<W: io::Write>(
-        &mut self,
-        octet_str: &[u8],
-        buf: &mut W,
-    ) -> io::Result<()> {
-        encode_integer_into(octet_str.len(), 7, 0, buf)?;
-        buf.write_all(octet_str)?;
-        Ok(())
+    fn encode_string_literal<W: EncodeBuf>(&mut self, octet_str: &[u8], buf: &mut W) {
+        buf.reserve(octet_str.len() + 1);
+        encode_integer_into(octet_str.len(), 7, 0, buf);
+        buf.write_all(octet_str);
     }
 
     /// Encodes a header whose name is indexed and places the result in the
     /// given buffer `buf`.
-    fn encode_indexed_name<W: io::Write>(
+    fn encode_indexed_name<W: EncodeBuf>(
         &mut self,
         header: (usize, &[u8]),
         should_index: bool,
         buf: &mut W,
-    ) -> io::Result<()> {
+    ) {
         let (mask, prefix) = if should_index { (0x40, 6) } else { (0x0, 4) };
 
-        encode_integer_into(header.0, prefix, mask, buf)?;
+        encode_integer_into(header.0, prefix, mask, buf);
         // So far, we rely on just one strategy for encoding string literals.
-        self.encode_string_literal(&header.1, buf)?;
-        Ok(())
+        self.encode_string_literal(&header.1, buf);
     }
 
     /// Encodes an indexed header (a header that is fully in the header table)
     /// and places the result in the given buffer `buf`.
     ///
     /// The encoding is according to the rules of the HPACK spec, section 6.1.
-    fn encode_indexed<W: io::Write>(&self, index: usize, buf: &mut W) -> io::Result<()> {
+    fn encode_indexed<W: EncodeBuf>(&self, index: usize, buf: &mut W) {
         // We need to set the most significant bit, since the bit-pattern is
         // `1xxxxxxx` for indexed headers.
-        encode_integer_into(index, 7, 0x80, buf)?;
-        Ok(())
+        encode_integer_into(index, 7, 0x80, buf);
     }
 }
 
