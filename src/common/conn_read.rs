@@ -1,3 +1,4 @@
+use codec::http_decode_read::HttpFrameDecodedOrGoaway;
 use common::conn::Conn;
 use common::conn_write::ConnWriteSideCustom;
 use common::init_where::InitWhere;
@@ -10,13 +11,13 @@ use error;
 use futures::Async;
 use futures::Poll;
 use result;
-use solicit::connection::EndStream;
-use solicit::connection::HttpFrame;
-use solicit::connection::HttpFrameType;
+use solicit::end_stream::EndStream;
+use solicit::frame::headers::HeadersDecodedFrame;
 use solicit::frame::DataFrame;
 use solicit::frame::Frame;
 use solicit::frame::GoawayFrame;
-use solicit::frame::HeadersFrame;
+use solicit::frame::HttpFrameDecoded;
+use solicit::frame::HttpFrameType;
 use solicit::frame::HttpSetting;
 use solicit::frame::PingFrame;
 use solicit::frame::PriorityFrame;
@@ -30,7 +31,6 @@ use solicit_misc::HttpFrameClassified;
 use solicit_misc::HttpFrameConn;
 use solicit_misc::HttpFrameStream;
 use ErrorCode;
-use Header;
 use Headers;
 
 pub trait ConnReadSideCustom {
@@ -52,7 +52,7 @@ where
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
 {
     /// Recv a frame from the network
-    fn recv_http_frame(&mut self) -> Poll<HttpFrame, error::Error> {
+    fn recv_http_frame(&mut self) -> Poll<HttpFrameDecodedOrGoaway, error::Error> {
         let max_frame_size = self.our_settings_ack.max_frame_size;
 
         self.framed_read.poll_http_frame(max_frame_size)
@@ -174,26 +174,15 @@ where
 
     fn process_headers_frame(
         &mut self,
-        frame: HeadersFrame,
+        frame: HeadersDecodedFrame,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
-        let headers = match self.decoder.decode(&frame.header_fragment()) {
-            Err(e) => {
-                warn!("failed to decode headers: {:?}", e);
-                self.send_goaway(ErrorCode::CompressionError)?;
-                return Ok(None);
-            }
-            Ok(headers) => headers,
-        };
-
-        let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
-
         let end_stream = if frame.is_end_of_stream() {
             EndStream::Yes
         } else {
             EndStream::No
         };
 
-        self.process_headers(frame.stream_id, end_stream, headers)
+        self.process_headers(frame.stream_id, end_stream, frame.headers)
     }
 
     fn process_priority_frame(
@@ -409,9 +398,6 @@ where
                 HttpFrameStream::WindowUpdate(window_update) => {
                     self.process_stream_window_update_frame(window_update)?
                 }
-                HttpFrameStream::Continuation(_continuation) => {
-                    unreachable!("must be joined with HEADERS before that")
-                }
             };
 
             if let Some(stream) = stream {
@@ -428,8 +414,7 @@ where
         Ok(())
     }
 
-    fn process_http_frame(&mut self, frame: HttpFrame) -> result::Result<()> {
-        // TODO: decode headers
+    fn process_http_frame(&mut self, frame: HttpFrameDecoded) -> result::Result<()> {
         debug!("received frame: {:?}", frame);
         match HttpFrameClassified::from(frame) {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
@@ -450,7 +435,11 @@ where
             }
 
             let frame = match self.recv_http_frame()? {
-                Async::Ready(frame) => frame,
+                Async::Ready(HttpFrameDecodedOrGoaway::Frame(frame)) => frame,
+                Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(error_code)) => {
+                    self.send_goaway(error_code)?;
+                    return Ok(Async::NotReady);
+                }
                 Async::NotReady => return Ok(Async::NotReady),
             };
 

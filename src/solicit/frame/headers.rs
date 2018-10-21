@@ -8,6 +8,7 @@ use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 use solicit::StreamId;
+use Headers;
 
 pub const HEADERS_FRAME_TYPE: u8 = 0x1;
 
@@ -286,8 +287,6 @@ impl Frame for HeadersFrame {
     }
 
     /// Returns the `StreamId` of the stream to which the frame is associated.
-    ///
-    /// A `SettingsFrame` always has to be associated to stream `0`.
     fn get_stream_id(&self) -> StreamId {
         self.stream_id
     }
@@ -324,6 +323,31 @@ impl FrameIR for HeadersFrame {
         if padded {
             b.write_padding(self.padding_len);
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HeadersDecodedFrame {
+    /// The set of flags for the frame, packed into a single byte.
+    pub flags: Flags<HeadersFlag>,
+    /// The ID of the stream with which this frame is associated
+    pub stream_id: StreamId,
+    /// The header fragment bytes stored within the frame.
+    pub headers: Headers,
+    /// The stream dependency information, if any.
+    pub stream_dep: Option<StreamDependency>,
+    /// The length of the padding, if any.
+    pub padding_len: u8,
+}
+
+impl HeadersDecodedFrame {
+    /// Returns whther this frame ends the stream it is associated with.
+    pub fn is_end_of_stream(&self) -> bool {
+        self.flags.is_set(HeadersFlag::EndStream)
+    }
+
+    pub fn get_stream_id(&self) -> StreamId {
+        self.stream_id
     }
 }
 

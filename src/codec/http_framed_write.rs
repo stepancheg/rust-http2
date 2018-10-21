@@ -5,8 +5,8 @@ use bytes::Buf;
 use codec::write_buffer::WriteBuffer;
 use futures::Async;
 use futures::Poll;
-use solicit::connection::HttpFrame;
 use solicit::frame::FrameIR;
+use solicit::frame::HttpFrame;
 
 pub struct HttpFramedWrite<W: AsyncWrite> {
     write: W,

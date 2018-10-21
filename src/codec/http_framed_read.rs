@@ -3,11 +3,12 @@ use bytes::BytesMut;
 
 use error;
 use futures::Async;
-use solicit::connection::HttpFrame;
+use futures::Poll;
 use solicit::frame::headers::HeadersFlag;
 use solicit::frame::push_promise::PushPromiseFlag;
 use solicit::frame::unpack_header_from_slice;
 use solicit::frame::HeadersFrame;
+use solicit::frame::HttpFrame;
 use solicit::frame::PushPromiseFrame;
 use solicit::frame::RawFrame;
 use solicit::StreamId;
@@ -144,10 +145,7 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
         }
     }
 
-    pub fn poll_http_frame(
-        &mut self,
-        max_frame_size: u32,
-    ) -> Result<Async<HttpFrame>, error::Error> {
+    pub fn poll_http_frame(&mut self, max_frame_size: u32) -> Poll<HttpFrame, error::Error> {
         loop {
             let frame = match self.framed_read.poll_http_frame(max_frame_size)? {
                 Async::NotReady => return Ok(Async::NotReady),

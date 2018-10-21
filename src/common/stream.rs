@@ -4,7 +4,7 @@ use bytes::Bytes;
 
 use error;
 
-use solicit::connection::EndStream;
+use solicit::end_stream::EndStream;
 use solicit::header::Headers;
 use solicit::session::StreamState;
 use solicit::WindowSize;

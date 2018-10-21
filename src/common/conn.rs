@@ -11,7 +11,6 @@ use error;
 use error::ErrorCode;
 use result;
 
-use solicit::connection::HttpFrameType;
 use solicit::frame::settings::HttpSettings;
 use solicit::frame::*;
 use solicit::session::StreamState;
@@ -34,7 +33,7 @@ pub use resp::Response;
 
 use client_died_error_holder::ClientConnDiedType;
 use client_died_error_holder::ClientDiedErrorHolder;
-use codec::http_framed_read::HttpFramedJoinContinuationRead;
+use codec::http_decode_read::HttpDecodeRead;
 use codec::queued_write::QueuedWrite;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::ConnWriteSideCustom;
@@ -88,9 +87,7 @@ pub struct Conn<T: Types> {
     /// Tracks the size of the inbound flow control window
     pub in_window_size: WindowSize,
 
-    pub framed_read: HttpFramedJoinContinuationRead<ReadHalf<T::Io>>,
-    /// HPACK decoder used to decode incoming headers before passing them on to the session.
-    pub decoder: hpack::Decoder,
+    pub framed_read: HttpDecodeRead<ReadHalf<T::Io>>,
 
     pub queued_write: QueuedWrite<WriteHalf<T::Io>>,
     /// The HPACK encoder used to encode headers before sending them on this connection.
@@ -150,7 +147,7 @@ where
 
         let pump_window_size = window_size::ConnOutWindowSender::new(out_window_size.0 as u32);
 
-        let framed_read = HttpFramedJoinContinuationRead::new(read);
+        let framed_read = HttpDecodeRead::new(read);
         let queued_write = QueuedWrite::new(write);
 
         Conn {
@@ -171,7 +168,6 @@ where
             queued_write,
             write_rx,
             flush_conn: false,
-            decoder: hpack::Decoder::new(),
             encoder: hpack::Encoder::new(),
             in_window_size,
             out_window_size,

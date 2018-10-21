@@ -8,7 +8,7 @@ use data_or_trailers::DataOrTrailers;
 use error;
 use futures::Poll;
 use misc::any_to_string;
-use solicit::connection::EndStream;
+use solicit::end_stream::EndStream;
 use solicit::header::Headers;
 use solicit_async::HttpFutureStreamSend;
 use std::panic::AssertUnwindSafe;

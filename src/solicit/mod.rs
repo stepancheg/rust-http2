@@ -5,7 +5,7 @@ use std::u32;
 
 use self::frame::settings::HttpSettings;
 
-pub mod connection;
+pub mod end_stream;
 pub mod frame;
 pub mod header;
 pub mod session;

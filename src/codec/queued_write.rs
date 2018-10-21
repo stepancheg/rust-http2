@@ -1,9 +1,9 @@
 use codec::http_framed_write::HttpFramedWrite;
 use error;
 use futures::Poll;
-use solicit::connection::HttpFrame;
-use solicit::connection::HttpFrameType;
 use solicit::frame::GoawayFrame;
+use solicit::frame::HttpFrame;
+use solicit::frame::HttpFrameType;
 use tokio_io::AsyncWrite;
 
 pub struct QueuedWrite<W: AsyncWrite> {

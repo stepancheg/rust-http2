@@ -7,7 +7,7 @@ use result;
 
 use exec::CpuPoolOption;
 
-use solicit::connection::EndStream;
+use solicit::end_stream::EndStream;
 use solicit::frame::settings::*;
 use solicit::header::*;
 use solicit::StreamId;

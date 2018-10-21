@@ -16,7 +16,7 @@ use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use misc::any_to_string;
-use solicit::connection::EndStream;
+use solicit::end_stream::EndStream;
 
 /// Stream frame content after initial headers
 pub enum DataOrTrailers {

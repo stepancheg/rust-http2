@@ -63,6 +63,8 @@ pub use self::rst_stream::RstStreamFrame;
 pub use self::settings::{HttpSetting, SettingsFlag, SettingsFrame};
 pub use self::window_update::WindowUpdateFrame;
 use codec::write_buffer::WriteBuffer;
+use solicit::frame;
+use solicit::frame::headers::HeadersDecodedFrame;
 
 pub const FRAME_HEADER_LEN: usize = 9;
 
@@ -571,4 +573,211 @@ mod tests {
             assert_eq!(buf.len(), frame.len());
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum HttpFrameType {
+    Data,
+    Headers,
+    Priority,
+    RstStream,
+    Settings,
+    PushPromise,
+    Ping,
+    Goaway,
+    WindowUpdate,
+    Continuation,
+    Unknown(u8),
+}
+
+/// An enum representing all frame variants that can be returned by an `HttpConnection` can handle.
+///
+/// The variants wrap the appropriate `Frame` implementation, except for the `UnknownFrame`
+/// variant, which provides an owned representation of the underlying `RawFrame`
+#[derive(PartialEq, Debug, Clone)]
+pub enum HttpFrame {
+    Data(DataFrame),
+    Headers(HeadersFrame),
+    Priority(PriorityFrame),
+    RstStream(RstStreamFrame),
+    Settings(SettingsFrame),
+    PushPromise(PushPromiseFrame),
+    Ping(PingFrame),
+    Goaway(GoawayFrame),
+    WindowUpdate(WindowUpdateFrame),
+    Continuation(ContinuationFrame),
+    Unknown(RawFrame),
+}
+
+impl HttpFrame {
+    pub fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HttpFrame> {
+        let frame = match raw_frame.header().frame_type {
+            frame::data::DATA_FRAME_TYPE => HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),
+            frame::headers::HEADERS_FRAME_TYPE => {
+                HttpFrame::Headers(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::priority::PRIORITY_FRAME_TYPE => {
+                HttpFrame::Priority(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::rst_stream::RST_STREAM_FRAME_TYPE => {
+                HttpFrame::RstStream(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::settings::SETTINGS_FRAME_TYPE => {
+                HttpFrame::Settings(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::push_promise::PUSH_PROMISE_FRAME_TYPE => {
+                HttpFrame::PushPromise(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::ping::PING_FRAME_TYPE => HttpFrame::Ping(HttpFrame::parse_frame(&raw_frame)?),
+            frame::goaway::GOAWAY_FRAME_TYPE => {
+                HttpFrame::Goaway(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::window_update::WINDOW_UPDATE_FRAME_TYPE => {
+                HttpFrame::WindowUpdate(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            frame::continuation::CONTINUATION_FRAME_TYPE => {
+                HttpFrame::Continuation(HttpFrame::parse_frame(&raw_frame)?)
+            }
+            _ => HttpFrame::Unknown(raw_frame.as_ref().into()),
+        };
+
+        Ok(frame)
+    }
+
+    /// A helper method that parses the given `RawFrame` into the given `Frame`
+    /// implementation.
+    ///
+    /// # Returns
+    ///
+    /// Failing to decode the given `Frame` from the `raw_frame`, an
+    /// `HttpError::InvalidFrame` error is returned.
+    #[inline] // TODO: take by value
+    fn parse_frame<F: Frame>(raw_frame: &RawFrame) -> ParseFrameResult<F> {
+        Frame::from_raw(&raw_frame)
+    }
+
+    /// Get stream id, zero for special frames
+    pub fn get_stream_id(&self) -> StreamId {
+        match self {
+            &HttpFrame::Data(ref f) => f.get_stream_id(),
+            &HttpFrame::Headers(ref f) => f.get_stream_id(),
+            &HttpFrame::Priority(ref f) => f.get_stream_id(),
+            &HttpFrame::RstStream(ref f) => f.get_stream_id(),
+            &HttpFrame::Settings(ref f) => f.get_stream_id(),
+            &HttpFrame::PushPromise(ref f) => f.get_stream_id(),
+            &HttpFrame::Ping(ref f) => f.get_stream_id(),
+            &HttpFrame::Goaway(ref f) => f.get_stream_id(),
+            &HttpFrame::WindowUpdate(ref f) => f.get_stream_id(),
+            &HttpFrame::Continuation(ref f) => f.get_stream_id(),
+            &HttpFrame::Unknown(ref f) => f.get_stream_id(),
+        }
+    }
+
+    pub fn frame_type(&self) -> HttpFrameType {
+        match self {
+            &HttpFrame::Data(..) => HttpFrameType::Data,
+            &HttpFrame::Headers(..) => HttpFrameType::Headers,
+            &HttpFrame::Priority(..) => HttpFrameType::Priority,
+            &HttpFrame::RstStream(..) => HttpFrameType::RstStream,
+            &HttpFrame::Settings(..) => HttpFrameType::Settings,
+            &HttpFrame::PushPromise(..) => HttpFrameType::PushPromise,
+            &HttpFrame::Ping(..) => HttpFrameType::Ping,
+            &HttpFrame::Goaway(..) => HttpFrameType::Goaway,
+            &HttpFrame::WindowUpdate(..) => HttpFrameType::WindowUpdate,
+            &HttpFrame::Continuation(..) => HttpFrameType::Continuation,
+            &HttpFrame::Unknown(ref f) => HttpFrameType::Unknown(f.frame_type()),
+        }
+    }
+}
+
+impl FrameIR for HttpFrame {
+    fn serialize_into(self, builder: &mut WriteBuffer) {
+        match self {
+            HttpFrame::Data(f) => f.serialize_into(builder),
+            HttpFrame::Headers(f) => f.serialize_into(builder),
+            HttpFrame::Priority(f) => f.serialize_into(builder),
+            HttpFrame::RstStream(f) => f.serialize_into(builder),
+            HttpFrame::Settings(f) => f.serialize_into(builder),
+            HttpFrame::PushPromise(f) => f.serialize_into(builder),
+            HttpFrame::Ping(f) => f.serialize_into(builder),
+            HttpFrame::Goaway(f) => f.serialize_into(builder),
+            HttpFrame::WindowUpdate(f) => f.serialize_into(builder),
+            HttpFrame::Continuation(f) => f.serialize_into(builder),
+            HttpFrame::Unknown(f) => f.serialize_into(builder),
+        }
+    }
+}
+
+impl From<DataFrame> for HttpFrame {
+    fn from(frame: DataFrame) -> Self {
+        HttpFrame::Data(frame)
+    }
+}
+
+impl From<HeadersFrame> for HttpFrame {
+    fn from(frame: HeadersFrame) -> Self {
+        HttpFrame::Headers(frame)
+    }
+}
+
+impl From<PriorityFrame> for HttpFrame {
+    fn from(frame: PriorityFrame) -> Self {
+        HttpFrame::Priority(frame)
+    }
+}
+
+impl From<RstStreamFrame> for HttpFrame {
+    fn from(frame: RstStreamFrame) -> Self {
+        HttpFrame::RstStream(frame)
+    }
+}
+
+impl From<SettingsFrame> for HttpFrame {
+    fn from(frame: SettingsFrame) -> Self {
+        HttpFrame::Settings(frame)
+    }
+}
+
+impl From<PushPromiseFrame> for HttpFrame {
+    fn from(frame: PushPromiseFrame) -> Self {
+        HttpFrame::PushPromise(frame)
+    }
+}
+
+impl From<PingFrame> for HttpFrame {
+    fn from(frame: PingFrame) -> Self {
+        HttpFrame::Ping(frame)
+    }
+}
+
+impl From<GoawayFrame> for HttpFrame {
+    fn from(frame: GoawayFrame) -> Self {
+        HttpFrame::Goaway(frame)
+    }
+}
+
+impl From<WindowUpdateFrame> for HttpFrame {
+    fn from(frame: WindowUpdateFrame) -> Self {
+        HttpFrame::WindowUpdate(frame)
+    }
+}
+
+impl From<ContinuationFrame> for HttpFrame {
+    fn from(frame: ContinuationFrame) -> Self {
+        HttpFrame::Continuation(frame)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum HttpFrameDecoded {
+    Data(DataFrame),
+    Headers(HeadersDecodedFrame),
+    Priority(PriorityFrame),
+    RstStream(RstStreamFrame),
+    Settings(SettingsFrame),
+    PushPromise(PushPromiseFrame),
+    Ping(PingFrame),
+    Goaway(GoawayFrame),
+    WindowUpdate(WindowUpdateFrame),
+    Unknown(RawFrame),
 }

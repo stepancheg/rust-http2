@@ -12,7 +12,6 @@ use bytes::Bytes;
 
 use httpbis::for_test;
 use httpbis::for_test::hpack;
-use httpbis::for_test::solicit::connection::HttpFrame;
 use httpbis::for_test::solicit::frame::continuation::ContinuationFlag;
 use httpbis::for_test::solicit::frame::continuation::ContinuationFrame;
 use httpbis::for_test::solicit::frame::data::DataFlag;
@@ -24,6 +23,7 @@ use httpbis::for_test::solicit::frame::rst_stream::RstStreamFrame;
 use httpbis::for_test::solicit::frame::settings::SettingsFrame;
 use httpbis::for_test::solicit::frame::window_update::WindowUpdateFrame;
 use httpbis::for_test::solicit::frame::FrameIR;
+use httpbis::for_test::solicit::frame::HttpFrame;
 use httpbis::for_test::solicit::frame::RawFrame;
 use httpbis::for_test::solicit::header::*;
 use httpbis::for_test::solicit::StreamId;

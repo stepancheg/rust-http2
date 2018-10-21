@@ -1,5 +1,4 @@
-use result::Result;
-use solicit::connection::HttpFrame;
+use solicit::frame::headers::HeadersDecodedFrame;
 use solicit::frame::*;
 use solicit::StreamId;
 
@@ -7,25 +6,23 @@ use solicit::StreamId;
 #[derive(Debug)]
 pub enum HttpFrameStream {
     Data(DataFrame),
-    Headers(HeadersFrame),
+    Headers(HeadersDecodedFrame),
     Priority(PriorityFrame),
     RstStream(RstStreamFrame),
     PushPromise(PushPromiseFrame),
     WindowUpdate(WindowUpdateFrame),
-    Continuation(ContinuationFrame),
 }
 
 impl HttpFrameStream {
     #[allow(dead_code)]
-    pub fn into_frame(self) -> HttpFrame {
+    pub fn into_frame(self) -> HttpFrameDecoded {
         match self {
-            HttpFrameStream::Headers(f) => HttpFrame::Headers(f),
-            HttpFrameStream::Data(f) => HttpFrame::Data(f),
-            HttpFrameStream::Priority(f) => HttpFrame::Priority(f),
-            HttpFrameStream::WindowUpdate(f) => HttpFrame::WindowUpdate(f),
-            HttpFrameStream::RstStream(f) => HttpFrame::RstStream(f),
-            HttpFrameStream::PushPromise(f) => HttpFrame::PushPromise(f),
-            HttpFrameStream::Continuation(f) => HttpFrame::Continuation(f),
+            HttpFrameStream::Headers(f) => HttpFrameDecoded::Headers(f),
+            HttpFrameStream::Data(f) => HttpFrameDecoded::Data(f),
+            HttpFrameStream::Priority(f) => HttpFrameDecoded::Priority(f),
+            HttpFrameStream::WindowUpdate(f) => HttpFrameDecoded::WindowUpdate(f),
+            HttpFrameStream::RstStream(f) => HttpFrameDecoded::RstStream(f),
+            HttpFrameStream::PushPromise(f) => HttpFrameDecoded::PushPromise(f),
         }
     }
 
@@ -38,7 +35,6 @@ impl HttpFrameStream {
             &HttpFrameStream::WindowUpdate(ref f) => f.get_stream_id(),
             &HttpFrameStream::RstStream(ref f) => f.get_stream_id(),
             &HttpFrameStream::PushPromise(ref f) => f.get_stream_id(),
-            &HttpFrameStream::Continuation(ref f) => f.get_stream_id(),
         }
     }
 
@@ -51,7 +47,6 @@ impl HttpFrameStream {
             &HttpFrameStream::WindowUpdate(..) => false,
             &HttpFrameStream::RstStream(..) => true,
             &HttpFrameStream::PushPromise(..) => false,
-            &HttpFrameStream::Continuation(..) => panic!("end of stream is defined in HEADERS"),
         }
     }
 }
@@ -85,33 +80,32 @@ pub enum HttpFrameClassified {
 }
 
 impl HttpFrameClassified {
-    pub fn from(frame: HttpFrame) -> Self {
+    pub fn from(frame: HttpFrameDecoded) -> Self {
         match frame {
-            HttpFrame::Data(f) => HttpFrameClassified::Stream(HttpFrameStream::Data(f)),
-            HttpFrame::Headers(f) => HttpFrameClassified::Stream(HttpFrameStream::Headers(f)),
-            HttpFrame::Priority(f) => HttpFrameClassified::Stream(HttpFrameStream::Priority(f)),
-            HttpFrame::RstStream(f) => HttpFrameClassified::Stream(HttpFrameStream::RstStream(f)),
-            HttpFrame::Settings(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
-            HttpFrame::PushPromise(f) => {
+            HttpFrameDecoded::Data(f) => HttpFrameClassified::Stream(HttpFrameStream::Data(f)),
+            HttpFrameDecoded::Headers(f) => {
+                HttpFrameClassified::Stream(HttpFrameStream::Headers(f))
+            }
+            HttpFrameDecoded::Priority(f) => {
+                HttpFrameClassified::Stream(HttpFrameStream::Priority(f))
+            }
+            HttpFrameDecoded::RstStream(f) => {
+                HttpFrameClassified::Stream(HttpFrameStream::RstStream(f))
+            }
+            HttpFrameDecoded::Settings(f) => HttpFrameClassified::Conn(HttpFrameConn::Settings(f)),
+            HttpFrameDecoded::PushPromise(f) => {
                 HttpFrameClassified::Stream(HttpFrameStream::PushPromise(f))
             }
-            HttpFrame::Ping(f) => HttpFrameClassified::Conn(HttpFrameConn::Ping(f)),
-            HttpFrame::Goaway(f) => HttpFrameClassified::Conn(HttpFrameConn::Goaway(f)),
-            HttpFrame::WindowUpdate(f) => {
+            HttpFrameDecoded::Ping(f) => HttpFrameClassified::Conn(HttpFrameConn::Ping(f)),
+            HttpFrameDecoded::Goaway(f) => HttpFrameClassified::Conn(HttpFrameConn::Goaway(f)),
+            HttpFrameDecoded::WindowUpdate(f) => {
                 if f.get_stream_id() != 0 {
                     HttpFrameClassified::Stream(HttpFrameStream::WindowUpdate(f))
                 } else {
                     HttpFrameClassified::Conn(HttpFrameConn::WindowUpdate(f))
                 }
             }
-            HttpFrame::Continuation(f) => {
-                HttpFrameClassified::Stream(HttpFrameStream::Continuation(f))
-            }
-            HttpFrame::Unknown(f) => HttpFrameClassified::Unknown(f),
+            HttpFrameDecoded::Unknown(f) => HttpFrameClassified::Unknown(f),
         }
-    }
-
-    pub fn _from_raw(raw_frame: &RawFrame) -> Result<HttpFrameClassified> {
-        Ok(HttpFrameClassified::from(HttpFrame::from_raw(raw_frame)?))
     }
 }
