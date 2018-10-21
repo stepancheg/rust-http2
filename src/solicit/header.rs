@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::result;
@@ -15,13 +14,13 @@ use bytes::Bytes;
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum PseudoHeaderName {
     // 8.1.2.3 Request Pseudo-Header Fields
-    Method,
-    Scheme,
-    Authority,
-    Path,
+    Method = 0,
+    Scheme = 1,
+    Authority = 2,
+    Path = 3,
 
     // 8.1.2.4 Response Pseudo-Header Fields
-    Status,
+    Status = 4,
 }
 
 impl PseudoHeaderName {
@@ -83,6 +82,27 @@ impl PseudoHeaderName {
             PseudoHeaderName::Status,
         ];
         ALL_HEADERS
+    }
+}
+
+#[derive(Default)]
+struct PseudoHeaderNameSet {
+    headers_mask: u32,
+}
+
+impl PseudoHeaderNameSet {
+    fn new() -> PseudoHeaderNameSet {
+        Default::default()
+    }
+
+    fn insert(&mut self, value: PseudoHeaderName) -> bool {
+        let contains = self.contains(value);
+        self.headers_mask |= 1 << (value as u32);
+        !contains
+    }
+
+    fn contains(&self, value: PseudoHeaderName) -> bool {
+        self.headers_mask & (1 << (value as u32)) != 0
     }
 }
 
@@ -323,8 +343,7 @@ impl Headers {
     ) -> HeaderResult<()> {
         let mut saw_regular_header = false;
 
-        // TODO: array is enough
-        let mut pseudo_headers_met = HashSet::new();
+        let mut pseudo_headers_met = PseudoHeaderNameSet::new();
 
         for header in &self.0 {
             header.validate(req_or_resp)?;
@@ -358,32 +377,28 @@ impl Headers {
         }
 
         if headers_place == HeadersPlace::Initial {
-            match req_or_resp {
+            let required_headers = match req_or_resp {
                 // All HTTP/2 requests MUST include exactly one valid value for the
                 // ":method", ":scheme", and ":path" pseudo-header fields, unless it is
                 // a CONNECT request (Section 8.3).  An HTTP request that omits
                 // mandatory pseudo-header fields is malformed (Section 8.1.2.6).
                 RequestOrResponse::Request => {
-                    let required_headers = [
+                    &[
                         PseudoHeaderName::Method,
                         PseudoHeaderName::Scheme,
                         PseudoHeaderName::Path,
-                    ];
-                    for required in &required_headers {
-                        if pseudo_headers_met.get(required).is_none() {
-                            return Err(HeaderError::MissingPseudoHeader(*required));
-                        }
-                    }
+                    ][..]
                 }
                 // For HTTP/2 responses, a single ":status" pseudo-header field is
                 // defined that carries the HTTP status code field (see [RFC7231],
                 // Section 6).  This pseudo-header field MUST be included in all
                 // responses; otherwise, the response is malformed (Section 8.1.2.6).
-                RequestOrResponse::Response => {
-                    let required = PseudoHeaderName::Status;
-                    if pseudo_headers_met.get(&required).is_none() {
-                        return Err(HeaderError::MissingPseudoHeader(required));
-                    }
+                RequestOrResponse::Response => &[PseudoHeaderName::Status][..],
+            };
+
+            for &required in required_headers {
+                if !pseudo_headers_met.contains(required) {
+                    return Err(HeaderError::MissingPseudoHeader(required));
                 }
             }
         }
