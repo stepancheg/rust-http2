@@ -8,9 +8,6 @@ use std::str::FromStr;
 use headers_place::HeadersPlace;
 use req_resp::RequestOrResponse;
 
-use error::Error;
-use result::Result;
-
 use assert_types::*;
 
 use bytes::Bytes;
@@ -38,14 +35,14 @@ impl PseudoHeaderName {
         }
     }
 
-    pub fn parse(value: &[u8]) -> Result<PseudoHeaderName> {
+    pub fn parse(value: &[u8]) -> HeaderResult<PseudoHeaderName> {
         match value {
             b":method" => Ok(PseudoHeaderName::Method),
             b":scheme" => Ok(PseudoHeaderName::Scheme),
             b":authority" => Ok(PseudoHeaderName::Authority),
             b":path" => Ok(PseudoHeaderName::Path),
             b":status" => Ok(PseudoHeaderName::Status),
-            _ => Err(Error::Other("invalid pseudo header")),
+            _ => Err(HeaderError::UnknownPseudoHeader),
         }
     }
 
@@ -200,12 +197,7 @@ impl Header {
 
     pub fn pseudo_header_name(&self) -> HeaderResult<Option<PseudoHeaderName>> {
         if self.is_preudo_header() {
-            for &h in PseudoHeaderName::all_names() {
-                if self.name.as_ref() == h.name().as_bytes() {
-                    return Ok(Some(h));
-                }
-            }
-            Err(HeaderError::UnknownPseudoHeader)
+            PseudoHeaderName::parse(self.name()).map(Some)
         } else {
             Ok(None)
         }
