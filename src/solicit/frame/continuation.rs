@@ -50,12 +50,16 @@ pub struct ContinuationFrame {
 }
 
 impl ContinuationFrame {
-    pub fn new<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
+    pub fn new(fragment: Bytes, stream_id: StreamId) -> ContinuationFrame {
         ContinuationFrame {
-            header_fragment: fragment.into(),
+            header_fragment: fragment,
             stream_id: stream_id,
             flags: Flags::default(),
         }
+    }
+
+    pub fn new_conv<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
+        ContinuationFrame::new(fragment.into(), stream_id)
     }
 
     /// Returns the length of the payload of the current frame, including any

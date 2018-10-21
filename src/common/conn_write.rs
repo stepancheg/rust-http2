@@ -6,6 +6,7 @@ use solicit::StreamId;
 
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
+use bytes::Bytes;
 use common::conn::ConnStateSnapshot;
 use common::conn_read::ConnReadSideCustom;
 use common::iteration_exit::IterationExit;
@@ -54,8 +55,7 @@ where
                 // if client requested end of stream,
                 // we must send at least one frame with end stream flag
                 if end_stream == EndStream::Yes && data.len() == 0 {
-                    // probably should send RST_STREAM
-                    let mut frame = DataFrame::with_data(stream_id, Vec::new());
+                    let mut frame = DataFrame::with_data(stream_id, Bytes::new());
                     frame.set_flag(DataFlag::EndStream);
 
                     debug!("sending frame {:?}", frame);
@@ -96,7 +96,7 @@ where
                 while pos < headers_fragment.len() || pos == 0 {
                     let end = cmp::min(headers_fragment.len(), pos + max_frame_size);
 
-                    let chunk = &headers_fragment[pos..end];
+                    let chunk = headers_fragment.slice(pos, end);
 
                     if pos == 0 {
                         let mut frame = HeadersFrame::new(chunk, stream_id);

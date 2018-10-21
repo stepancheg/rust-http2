@@ -71,13 +71,17 @@ impl DataFrame {
     ///
     /// The chunk can be any type that can be converted into a `DataChunk` instance and, as such,
     /// can either pass ownership of the buffer to the DataFrame or provide a temporary borrow.
-    pub fn with_data<D: Into<Bytes>>(stream_id: StreamId, data: D) -> DataFrame {
+    pub fn with_data(stream_id: StreamId, data: Bytes) -> DataFrame {
         DataFrame {
             stream_id: stream_id,
             flags: Flags::default(),
-            data: data.into(),
+            data: data,
             padding_len: 0,
         }
+    }
+
+    pub fn with_data_conv<D: Into<Bytes>>(stream_id: StreamId, data: D) -> DataFrame {
+        DataFrame::with_data(stream_id, data.into())
     }
 
     /// Returns `true` if the DATA frame is padded, otherwise false.
@@ -407,7 +411,7 @@ mod tests {
     #[test]
     fn test_data_frame_serialize_no_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
-        let frame = DataFrame::with_data(1, &data[..]);
+        let frame = DataFrame::with_data_conv(1, &data[..]);
         let expected = {
             let headers = pack_header(&FrameHeader::new(6, 0, 0, 1));
             let mut res: Vec<u8> = Vec::new();
@@ -427,7 +431,7 @@ mod tests {
     #[test]
     fn test_data_frame_serialize_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
-        let mut frame = DataFrame::with_data(1, &data[..]);
+        let mut frame = DataFrame::with_data_conv(1, &data[..]);
         frame.set_padding(5);
         let expected = {
             let headers = pack_header(&FrameHeader::new(6 + 1 + 5, 0, 8, 1));
@@ -457,7 +461,7 @@ mod tests {
     fn test_data_frame_serialize_null_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
         let cloned = data.clone();
-        let mut frame = DataFrame::with_data(1, data);
+        let mut frame = DataFrame::with_data_conv(1, data);
         frame.set_flag(DataFlag::Padded);
         let expected = {
             let headers = pack_header(&FrameHeader::new(6 + 1, 0, 8, 1));

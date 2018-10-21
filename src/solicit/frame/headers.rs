@@ -139,14 +139,20 @@ pub struct HeadersFrame {
 impl HeadersFrame {
     /// Creates a new `HeadersFrame` with the given header fragment and stream
     /// ID. No padding, no stream dependency, and no flags are set.
-    pub fn new<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> HeadersFrame {
+    pub fn new(fragment: Bytes, stream_id: StreamId) -> HeadersFrame {
         HeadersFrame {
-            header_fragment: fragment.into(),
-            stream_id: stream_id,
+            header_fragment: fragment,
+            stream_id,
             stream_dep: None,
             padding_len: 0,
             flags: Flags::default(),
         }
+    }
+
+    /// Separate constructor from `new` to avoid accidental invocation with incorrect type
+    /// which may result in unnecessary memory allocation (e. g. `&Vec` instead of `Vec`)
+    pub fn new_conv<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> HeadersFrame {
+        HeadersFrame::new(fragment.into(), stream_id)
     }
 
     /// Creates a new `HeadersFrame` with the given header fragment, stream ID
@@ -568,7 +574,7 @@ mod tests {
 
             res
         };
-        let frame = HeadersFrame::new(data.to_vec(), 1);
+        let frame = HeadersFrame::new_conv(data.to_vec(), 1);
 
         let actual = frame.serialize_into_vec();
 
@@ -589,7 +595,7 @@ mod tests {
 
             res
         };
-        let mut frame = HeadersFrame::new(data.to_vec(), 1);
+        let mut frame = HeadersFrame::new_conv(data.to_vec(), 1);
         frame.set_padding(6);
 
         let actual = frame.serialize_into_vec();
@@ -660,7 +666,7 @@ mod tests {
     /// value depending on the `EndHeaders` flag being set or not.
     #[test]
     fn test_headers_frame_is_headers_end() {
-        let mut frame = HeadersFrame::new(vec![], 1);
+        let mut frame = HeadersFrame::new_conv(Vec::new(), 1);
         assert!(!frame.is_headers_end());
 
         frame.set_flag(HeadersFlag::EndHeaders);

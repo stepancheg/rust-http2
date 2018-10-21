@@ -90,13 +90,23 @@ impl Encoder {
     /// found either (i.e. there are never two header names with different
     /// values in the produced header table). Strings are always encoded as
     /// literals (Huffman encoding is not used).
-    pub fn encode<'b, I>(&mut self, headers: I) -> Vec<u8>
+    pub fn encode_for_test<'b, I>(&mut self, headers: I) -> Vec<u8>
     where
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
     {
         let mut encoded: Vec<u8> = Vec::new();
         self.encode_into(headers, &mut encoded).unwrap();
         encoded
+    }
+
+    pub fn encode<'b, I>(&mut self, headers: I) -> Bytes
+    where
+        I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
+    {
+        let mut encoded: Vec<u8> = Vec::new();
+        self.encode_into(headers, &mut encoded).unwrap();
+        // TODO: encode right into bytes
+        Bytes::from(encoded)
     }
 
     /// Encodes the given headers into the given `io::Write` instance. If the io::Write raises an
@@ -118,7 +128,7 @@ impl Encoder {
     ///
     /// Any errors are propagated, similarly to the `encode_into` method, and it is the callers
     /// responsiblity to make sure that the paired encoder sees them too.
-    pub fn encode_header_into<W: io::Write>(
+    fn encode_header_into<W: io::Write>(
         &mut self,
         header: (&[u8], &[u8]),
         writer: &mut W,
@@ -263,7 +273,7 @@ mod tests {
         let mut encoder: Encoder = Encoder::new();
         let headers = vec![(b":method".to_vec(), b"GET".to_vec())];
 
-        let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
+        let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
         debug!("{:?}", result);
         assert!(is_decodable(&result, &headers));
@@ -276,7 +286,7 @@ mod tests {
         let mut encoder: Encoder = Encoder::new();
         let headers = vec![(b"custom-key".to_vec(), b"custom-value".to_vec())];
 
-        let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
+        let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
         assert!(is_decodable(&result, &headers));
         // The header is in the encoder's dynamic table.
         assert_eq!(encoder.header_table.dynamic_table.to_vec_of_vec(), headers);
@@ -293,10 +303,10 @@ mod tests {
         let mut encoder: Encoder = Encoder::new();
         let headers = vec![(b"custom-key".to_vec(), b"custom-value".to_vec())];
         // First encoding...
-        let _ = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
+        let _ = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
         // Encode the same headers again!
-        let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
+        let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
         // The header is in the encoder's dynamic table.
         assert_eq!(encoder.header_table.dynamic_table.to_vec_of_vec(), headers);
@@ -325,7 +335,7 @@ mod tests {
             // `:method` is in the static table, but only for GET and POST
             let headers = vec![(b":method", b"PUT")];
 
-            let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
+            let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
             // The first byte represents the index in the header table: last
             // occurrence of `:method` is at index 3.
@@ -338,7 +348,7 @@ mod tests {
             // `:method` is in the static table, but only for GET and POST
             let headers = vec![(b":authority".to_vec(), b"example.com".to_vec())];
 
-            let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
+            let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
             assert_eq!(result[0], 1);
             // The rest of it correctly represents PUT?
@@ -360,7 +370,7 @@ mod tests {
             (b":path".to_vec(), b"/some/path".to_vec()),
         ];
 
-        let result = encoder.encode(headers.iter().map(|h| (&h.0[..], &h.1[..])));
+        let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
         assert!(is_decodable(&result, &headers));
     }
