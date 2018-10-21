@@ -7,9 +7,20 @@ use solicit::frame::FRAME_HEADER_LEN;
 
 /// A trait that provides additional methods for serializing HTTP/2 frames.
 pub trait FrameBuilder {
+    fn reserve(&mut self, _additional: usize) {}
+
+    fn write_slice(&mut self, bytes: &[u8]);
+
     /// Write the given frame header as the next octets (i.e. without moving the cursor to the
     /// beginning of the buffer).
-    fn write_header(&mut self, header: FrameHeader);
+    fn write_header(&mut self, header: FrameHeader) {
+        self.reserve(
+            FRAME_HEADER_LEN
+                .checked_add(header.length as usize)
+                .expect("overflow"),
+        );
+        self.write_slice(&pack_header(&header));
+    }
 
     /// Write the given number of padding octets.
     ///
@@ -19,33 +30,30 @@ pub trait FrameBuilder {
     /// Other `FrameBuilder` implementations could implement it more efficiently (e.g. if it is
     /// known that the `FrameBuilder` is backed by a zeroed buffer, there's no need to write
     /// anything, only increment a cursor/offset).
-    fn write_padding(&mut self, padding_length: u8);
+    fn write_padding(&mut self, padding_length: u8) {
+        for _ in 0..padding_length {
+            self.write_slice(&[0]);
+        }
+    }
 
     /// Write the given unsigned 32 bit integer to the underlying stream. The integer is written as
     /// four bytes in network endian style.
-    fn write_u32(&mut self, num: u32);
-}
-
-impl FrameBuilder for WriteBuffer {
-    fn write_header(&mut self, header: FrameHeader) {
-        self.reserve(
-            FRAME_HEADER_LEN
-                .checked_add(header.length as usize)
-                .expect("overflow"),
-        );
-        self.extend_from_slice(&pack_header(&header));
-    }
-
-    fn write_padding(&mut self, padding_length: u8) {
-        self.extend_from_iter((0..padding_length).map(|_| 0))
-    }
-
     fn write_u32(&mut self, num: u32) {
-        self.extend_from_slice(&[
+        self.write_slice(&[
             (((num >> 24) & 0x000000FF) as u8),
             (((num >> 16) & 0x000000FF) as u8),
             (((num >> 8) & 0x000000FF) as u8),
             (((num) & 0x000000FF) as u8),
         ])
+    }
+}
+
+impl FrameBuilder for WriteBuffer {
+    fn reserve(&mut self, additional: usize) {
+        self.reserve(additional);
+    }
+
+    fn write_slice(&mut self, bytes: &[u8]) {
+        self.extend_from_slice(bytes);
     }
 }
