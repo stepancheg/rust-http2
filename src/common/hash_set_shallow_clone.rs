@@ -1,7 +1,37 @@
 use std::collections::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
+use std::ops::Deref;
 use std::rc::Rc;
+use std::slice;
+
+pub struct HashSetShallowCloneItems<T> {
+    items: Option<Rc<Vec<T>>>,
+}
+
+impl<T> HashSetShallowCloneItems<T> {
+    pub fn to_vec(&self) -> Vec<T>
+    where
+        T: Clone,
+    {
+        match &self.items {
+            Some(items) => items.deref().clone(),
+            None => Vec::new(),
+        }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a HashSetShallowCloneItems<T> {
+    type Item = &'a T;
+    type IntoIter = slice::Iter<'a, T>;
+
+    fn into_iter(self) -> slice::Iter<'a, T> {
+        match self.items {
+            Some(ref vec) => vec.iter(),
+            None => [].iter(),
+        }
+    }
+}
 
 #[derive(Default, Debug, Eq, PartialEq)]
 pub struct HashSetShallowClone<T: Hash + Eq + Clone> {
@@ -17,12 +47,19 @@ impl<T: Hash + Eq + Clone> HashSetShallowClone<T> {
         }
     }
 
-    pub fn items(&mut self) -> Rc<Vec<T>> {
+    pub fn items(&mut self) -> HashSetShallowCloneItems<T> {
         // TODO: store delta and update shallow map
         if let None = self.items {
+            if self.set.is_empty() {
+                // Avoid allocation
+                return HashSetShallowCloneItems { items: None };
+            }
+
             self.items = Some(Rc::new(self.set.iter().cloned().collect()));
         }
-        self.items.as_mut().unwrap().clone()
+        HashSetShallowCloneItems {
+            items: Some(self.items.as_mut().unwrap().clone()),
+        }
     }
 
     pub fn get(&self, value: &T) -> Option<&T> {
@@ -53,18 +90,17 @@ impl<T: Hash + Eq + Clone> HashSetShallowClone<T> {
 #[cfg(test)]
 mod test {
     use super::HashSetShallowClone;
-    use std::ops::Deref;
 
     #[test]
     fn insert_updates() {
         let mut s = HashSetShallowClone::new();
         s.insert(10);
-        let mut items = s.items().deref().clone();
+        let mut items = s.items().to_vec();
         items.sort();
         assert_eq!(&[10], &items[..]);
 
         s.insert(20);
-        let mut items = s.items().deref().clone();
+        let mut items = s.items().to_vec();
         items.sort();
         assert_eq!(&[10, 20], &items[..]);
     }
@@ -73,17 +109,17 @@ mod test {
     fn remove_updates() {
         let mut s = HashSetShallowClone::new();
         s.insert(10);
-        let mut items = s.items().deref().clone();
+        let mut items = s.items().to_vec();
         items.sort();
         assert_eq!(&[10], &items[..]);
 
         s.insert(20);
-        let mut items = s.items().deref().clone();
+        let mut items = s.items().to_vec();
         items.sort();
         assert_eq!(&[10, 20], &items[..]);
 
         s.remove(&10);
-        let mut items = s.items().deref().clone();
+        let mut items = s.items().to_vec();
         items.sort();
         assert_eq!(&[20], &items[..]);
     }

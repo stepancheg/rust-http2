@@ -10,12 +10,12 @@ use super::stream::HttpStreamCommon;
 use super::stream::HttpStreamStateSnapshot;
 use super::types::Types;
 use common::hash_set_shallow_clone::HashSetShallowClone;
+use common::hash_set_shallow_clone::HashSetShallowCloneItems;
 use common::init_where::InitWhere;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use solicit::session::StreamState;
 use solicit::WindowSize;
-use std::rc::Rc;
 
 #[derive(Default)]
 pub struct StreamMap<T: Types> {
@@ -98,7 +98,7 @@ impl<T: Types> StreamMap<T> {
         self.map.keys().cloned().collect()
     }
 
-    pub fn writable_stream_ids(&mut self) -> Rc<Vec<StreamId>> {
+    pub fn writable_stream_ids(&mut self) -> HashSetShallowCloneItems<StreamId> {
         self.writable_streams.items()
     }
 

@@ -162,7 +162,7 @@ where
 
         let writable_stream_ids = self.streams.writable_stream_ids();
 
-        for &stream_id in &*writable_stream_ids {
+        for &stream_id in &writable_stream_ids {
             loop {
                 if !self.has_write_buffer_capacity() {
                     return Ok(updated);
