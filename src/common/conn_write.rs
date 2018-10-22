@@ -30,6 +30,7 @@ use solicit::frame::RstStreamFrame;
 use solicit::frame::SettingsFrame;
 use std::cmp;
 use ErrorCode;
+use Headers;
 
 pub trait ConnWriteSideCustom {
     type Types: Types;
@@ -47,91 +48,106 @@ where
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
 {
-    fn write_part(&mut self, stream_id: StreamId, part: HttpStreamCommand) {
+    fn write_part_data(&mut self, stream_id: StreamId, data: Bytes, end_stream: EndStream) {
         let max_frame_size = self.peer_settings.max_frame_size as usize;
 
-        match part {
-            HttpStreamCommand::Data(data, end_stream) => {
-                // if client requested end of stream,
-                // we must send at least one frame with end stream flag
-                if end_stream == EndStream::Yes && data.len() == 0 {
-                    let mut frame = DataFrame::with_data(stream_id, Bytes::new());
-                    frame.set_flag(DataFlag::EndStream);
+        // if client requested end of stream,
+        // we must send at least one frame with end stream flag
+        if end_stream == EndStream::Yes && data.len() == 0 {
+            let mut frame = DataFrame::with_data(stream_id, Bytes::new());
+            frame.set_flag(DataFlag::EndStream);
 
-                    debug!("sending frame {:?}", frame);
+            debug!("sending frame {:?}", frame);
 
-                    self.queued_write.queue(frame);
+            self.queued_write.queue(frame);
 
-                    return;
-                }
+            return;
+        }
 
-                let mut pos = 0;
-                while pos < data.len() {
-                    let end = cmp::min(data.len(), pos + max_frame_size);
+        let mut pos = 0;
+        while pos < data.len() {
+            let end = cmp::min(data.len(), pos + max_frame_size);
 
-                    let end_stream_in_frame = if end == data.len() && end_stream == EndStream::Yes {
-                        EndStream::Yes
-                    } else {
-                        EndStream::No
-                    };
+            let end_stream_in_frame = if end == data.len() && end_stream == EndStream::Yes {
+                EndStream::Yes
+            } else {
+                EndStream::No
+            };
 
-                    let mut frame = DataFrame::with_data(stream_id, data.slice(pos, end));
-                    if end_stream_in_frame == EndStream::Yes {
-                        frame.set_flag(DataFlag::EndStream);
-                    }
-
-                    debug!("sending frame {:?}", frame);
-
-                    self.queued_write.queue(frame);
-
-                    pos = end;
-                }
+            let mut frame = DataFrame::with_data(stream_id, data.slice(pos, end));
+            if end_stream_in_frame == EndStream::Yes {
+                frame.set_flag(DataFlag::EndStream);
             }
-            HttpStreamCommand::Headers(headers, end_stream) => {
-                let headers_fragment = self
-                    .encoder
-                    .encode(headers.0.iter().map(|h| (h.name(), h.value())));
 
-                let mut pos = 0;
-                while pos < headers_fragment.len() || pos == 0 {
-                    let end = cmp::min(headers_fragment.len(), pos + max_frame_size);
+            debug!("sending frame {:?}", frame);
 
-                    let chunk = headers_fragment.slice(pos, end);
+            self.queued_write.queue(frame);
 
-                    if pos == 0 {
-                        let mut frame = HeadersFrame::new(chunk, stream_id);
-                        if end_stream == EndStream::Yes {
-                            frame.set_flag(HeadersFlag::EndStream);
-                        }
+            pos = end;
+        }
+    }
 
-                        if end == headers_fragment.len() {
-                            frame.set_flag(HeadersFlag::EndHeaders);
-                        }
+    fn write_part_headers(&mut self, stream_id: StreamId, headers: Headers, end_stream: EndStream) {
+        let max_frame_size = self.peer_settings.max_frame_size as usize;
 
-                        debug!("sending frame {:?}", frame);
+        // TODO: avoid allocation
+        let headers_fragment = self
+            .encoder
+            .encode(headers.0.iter().map(|h| (h.name(), h.value())));
 
-                        self.queued_write.queue(frame);
-                    } else {
-                        let mut frame = ContinuationFrame::new(chunk, stream_id);
+        let mut pos = 0;
+        while pos < headers_fragment.len() || pos == 0 {
+            let end = cmp::min(headers_fragment.len(), pos + max_frame_size);
 
-                        if end == headers_fragment.len() {
-                            frame.set_flag(ContinuationFlag::EndHeaders);
-                        }
+            let chunk = headers_fragment.slice(pos, end);
 
-                        debug!("sending frame {:?}", frame);
-
-                        self.queued_write.queue(frame);
-                    }
-
-                    pos = end;
+            if pos == 0 {
+                let mut frame = HeadersFrame::new(chunk, stream_id);
+                if end_stream == EndStream::Yes {
+                    frame.set_flag(HeadersFlag::EndStream);
                 }
-            }
-            HttpStreamCommand::Rst(error_code) => {
-                let frame = RstStreamFrame::new(stream_id, error_code);
+
+                if end == headers_fragment.len() {
+                    frame.set_flag(HeadersFlag::EndHeaders);
+                }
 
                 debug!("sending frame {:?}", frame);
 
                 self.queued_write.queue(frame);
+            } else {
+                let mut frame = ContinuationFrame::new(chunk, stream_id);
+
+                if end == headers_fragment.len() {
+                    frame.set_flag(ContinuationFlag::EndHeaders);
+                }
+
+                debug!("sending frame {:?}", frame);
+
+                self.queued_write.queue(frame);
+            }
+
+            pos = end;
+        }
+    }
+
+    fn write_part_rst(&mut self, stream_id: StreamId, error_code: ErrorCode) {
+        let frame = RstStreamFrame::new(stream_id, error_code);
+
+        debug!("sending frame {:?}", frame);
+
+        self.queued_write.queue(frame);
+    }
+
+    fn write_part(&mut self, stream_id: StreamId, part: HttpStreamCommand) {
+        match part {
+            HttpStreamCommand::Data(data, end_stream) => {
+                self.write_part_data(stream_id, data, end_stream);
+            }
+            HttpStreamCommand::Headers(headers, end_stream) => {
+                self.write_part_headers(stream_id, headers, end_stream);
+            }
+            HttpStreamCommand::Rst(error_code) => {
+                self.write_part_rst(stream_id, error_code);
             }
         }
     }
