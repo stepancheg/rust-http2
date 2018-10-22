@@ -1,9 +1,8 @@
 use codec::http_framed_write::HttpFramedWrite;
 use error;
 use futures::Poll;
+use solicit::frame::FrameIR;
 use solicit::frame::GoawayFrame;
-use solicit::frame::HttpFrame;
-use solicit::frame::HttpFrameType;
 use tokio_io::AsyncWrite;
 
 pub struct QueuedWrite<W: AsyncWrite> {
@@ -28,14 +27,11 @@ impl<W: AsyncWrite> QueuedWrite<W> {
         self.queued_bytes_len() == 0
     }
 
-    pub fn queue<F: Into<HttpFrame>>(&mut self, frame: F) {
+    pub fn queue_not_goaway<F: FrameIR>(&mut self, frame: F) {
         if self.goaway_queued {
             return;
         }
 
-        let frame = frame.into();
-
-        debug_assert!(frame.frame_type() != HttpFrameType::Goaway);
         self.framed_write.buffer_frame(frame)
     }
 

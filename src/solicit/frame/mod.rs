@@ -65,6 +65,7 @@ pub use self::window_update::WindowUpdateFrame;
 use codec::write_buffer::WriteBuffer;
 use solicit::frame;
 use solicit::frame::headers::HeadersDecodedFrame;
+use std::fmt;
 
 pub const FRAME_HEADER_LEN: usize = 9;
 
@@ -179,7 +180,7 @@ fn parse_padded_payload(payload: Bytes, flag: bool) -> ParseFrameResult<(Bytes, 
 /// A trait that types that are an intermediate representation of HTTP/2 frames should implement.
 /// It allows us to generically serialize any intermediate representation into an on-the-wire
 /// representation.
-pub trait FrameIR {
+pub trait FrameIR: fmt::Debug {
     /// Write out the on-the-wire representation of the frame into the given `FrameBuilder`.
     fn serialize_into(self, builder: &mut WriteBuffer);
 

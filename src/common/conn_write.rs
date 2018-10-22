@@ -59,7 +59,7 @@ where
 
             debug!("sending frame {:?}", frame);
 
-            self.queued_write.queue(frame);
+            self.queued_write.queue_not_goaway(frame);
 
             return;
         }
@@ -79,9 +79,7 @@ where
                 frame.set_flag(DataFlag::EndStream);
             }
 
-            debug!("sending frame {:?}", frame);
-
-            self.queued_write.queue(frame);
+            self.queued_write.queue_not_goaway(frame);
 
             pos = end;
         }
@@ -111,9 +109,7 @@ where
                     frame.set_flag(HeadersFlag::EndHeaders);
                 }
 
-                debug!("sending frame {:?}", frame);
-
-                self.queued_write.queue(frame);
+                self.queued_write.queue_not_goaway(frame);
             } else {
                 let mut frame = ContinuationFrame::new(chunk, stream_id);
 
@@ -121,9 +117,7 @@ where
                     frame.set_flag(ContinuationFlag::EndHeaders);
                 }
 
-                debug!("sending frame {:?}", frame);
-
-                self.queued_write.queue(frame);
+                self.queued_write.queue_not_goaway(frame);
             }
 
             pos = end;
@@ -133,9 +127,7 @@ where
     fn write_part_rst(&mut self, stream_id: StreamId, error_code: ErrorCode) {
         let frame = RstStreamFrame::new(stream_id, error_code);
 
-        debug!("sending frame {:?}", frame);
-
-        self.queued_write.queue(frame);
+        self.queued_write.queue_not_goaway(frame);
     }
 
     fn write_part(&mut self, stream_id: StreamId, part: HttpStreamCommand) {
@@ -203,7 +195,7 @@ where
 
     pub fn send_frame_and_notify<F: Into<HttpFrame>>(&mut self, frame: F) {
         // TODO: some of frames should not be in front of GOAWAY
-        self.queued_write.queue(frame);
+        self.queued_write.queue_not_goaway(frame.into());
         // Notify the task to make sure write loop is called again
         // to flush the buffer
         task::current().notify();

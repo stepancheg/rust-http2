@@ -6,7 +6,6 @@ use codec::write_buffer::WriteBuffer;
 use futures::Async;
 use futures::Poll;
 use solicit::frame::FrameIR;
-use solicit::frame::HttpFrame;
 
 pub struct HttpFramedWrite<W: AsyncWrite> {
     write: W,
@@ -25,8 +24,7 @@ impl<W: AsyncWrite> HttpFramedWrite<W> {
         self.buf.remaining()
     }
 
-    pub fn buffer_frame<F: Into<HttpFrame>>(&mut self, frame: F) {
-        let frame: HttpFrame = frame.into();
+    pub fn buffer_frame<F: FrameIR>(&mut self, frame: F) {
         debug!("send {:?}", frame);
 
         frame.serialize_into(&mut self.buf);
