@@ -20,8 +20,12 @@ impl<W: AsyncWrite> QueuedWrite<W> {
         }
     }
 
-    pub fn remaining(&self) -> usize {
-        self.framed_write.remaining()
+    pub fn queued_bytes_len(&self) -> usize {
+        self.framed_write.data_len()
+    }
+
+    pub fn queued_empty(&self) -> bool {
+        self.queued_bytes_len() == 0
     }
 
     pub fn queue<F: Into<HttpFrame>>(&mut self, frame: F) {
@@ -48,10 +52,6 @@ impl<W: AsyncWrite> QueuedWrite<W> {
 
     pub fn poll(&mut self) -> Poll<(), error::Error> {
         self.framed_write.poll_flush()
-    }
-
-    pub fn remaining_empty(&self) -> bool {
-        self.framed_write.remaining() == 0
     }
 
     pub fn goaway_queued(&self) -> bool {

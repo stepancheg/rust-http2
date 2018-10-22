@@ -30,7 +30,11 @@ impl WriteBuffer {
     }
 
     pub fn reserve(&mut self, additional: usize) {
-        self.data.reserve(additional)
+        if self.remaining() >= additional {
+            return;
+        }
+        self.compact();
+        self.data.reserve(additional);
     }
 
     pub fn compact(&mut self) {
@@ -40,22 +44,19 @@ impl WriteBuffer {
 
     pub fn extend_from_slice(&mut self, data: &[u8]) {
         // Could do something smarter
-        self.compact();
+        self.reserve(data.len());
         self.data.extend_from_slice(data);
     }
 
     pub fn extend_from_vec(&mut self, data: Vec<u8>) {
-        // TODO: reuse memory
         self.extend_from_slice(&data);
     }
 
     pub fn extend_from_bytes(&mut self, data: Bytes) {
-        // TODO: reuse memory
         self.extend_from_slice(&data);
     }
 
     pub fn extend_from_bytes_ref(&mut self, data: &Bytes) {
-        // TODO: reuse memory
         self.extend_from_slice(&*data);
     }
 
@@ -84,7 +85,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test() {
+    fn remaining() {
         let mut buf = WriteBuffer::new();
         buf.extend_from_slice(b"abcd");
         assert_eq!(4, buf.remaining());

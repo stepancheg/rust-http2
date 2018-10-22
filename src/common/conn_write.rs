@@ -137,7 +137,7 @@ where
     }
 
     fn has_write_buffer_capacity(&self) -> bool {
-        self.queued_write.remaining() < 0x8000
+        self.queued_write.queued_bytes_len() < 0x8000
     }
 
     fn pop_outg_for_stream(
@@ -253,7 +253,7 @@ where
     pub fn process_goaway_state(&mut self) -> result::Result<IterationExit> {
         Ok(if self.queued_write.goaway_queued() {
             self.queued_write.poll()?;
-            if self.queued_write.remaining_empty() {
+            if self.queued_write.queued_empty() {
                 IterationExit::ExitEarly
             } else {
                 IterationExit::NotReady

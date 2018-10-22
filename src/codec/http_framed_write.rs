@@ -21,7 +21,7 @@ impl<W: AsyncWrite> HttpFramedWrite<W> {
         }
     }
 
-    pub fn remaining(&self) -> usize {
+    pub fn data_len(&self) -> usize {
         self.buf.remaining()
     }
 
@@ -34,7 +34,7 @@ impl<W: AsyncWrite> HttpFramedWrite<W> {
 
     pub fn poll_flush(&mut self) -> Poll<(), error::Error> {
         loop {
-            if self.buf.remaining() == 0 {
+            if !self.buf.has_remaining() {
                 return Ok(Async::Ready(()));
             }
 
