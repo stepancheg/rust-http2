@@ -78,12 +78,12 @@ impl Frame for GoawayFrame {
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
         } = raw_frame.header();
-        if length < GOAWAY_MIN_FRAME_LEN {
+        if payload_len < GOAWAY_MIN_FRAME_LEN {
             return Err(ParseFrameError::IncorrectPayloadLen);
         }
         if frame_type != GOAWAY_FRAME_TYPE {
@@ -117,7 +117,7 @@ impl Frame for GoawayFrame {
 
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: self.payload_len(),
+            payload_len: self.payload_len(),
             frame_type: GOAWAY_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: 0,

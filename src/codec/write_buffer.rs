@@ -9,6 +9,7 @@ pub struct WriteBuffer {
 }
 
 impl Buf for WriteBuffer {
+    /// Size of data in the buffer
     fn remaining(&self) -> usize {
         debug_assert!(self.position <= self.data.len());
         self.data.len() - self.position
@@ -46,6 +47,12 @@ impl WriteBuffer {
         // Could do something smarter
         self.reserve(data.len());
         self.data.extend_from_slice(data);
+    }
+
+    /// Pos is relative to "data"
+    pub fn patch_buf(&mut self, pos: usize, data: &[u8]) {
+        let patch_pos = self.position + pos;
+        (&mut self.data[patch_pos..patch_pos + data.len()]).copy_from_slice(data);
     }
 
     pub fn extend_from_vec(&mut self, data: Vec<u8>) {

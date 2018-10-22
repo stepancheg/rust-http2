@@ -72,7 +72,7 @@ impl Frame for PushPromiseFrame {
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<PushPromiseFrame> {
         // Unpack the header
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
@@ -85,7 +85,7 @@ impl Frame for PushPromiseFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (length as usize) != raw_frame.payload().len() {
+        if (payload_len as usize) != raw_frame.payload().len() {
             return Err(ParseFrameError::InternalError);
         }
 
@@ -109,7 +109,8 @@ impl Frame for PushPromiseFrame {
 
         let promised_stream_id = buf.get_u32_be();
 
-        let header_fragment = payload.slice((length as usize) - buf.remaining(), payload.len());
+        let header_fragment =
+            payload.slice((payload_len as usize) - buf.remaining(), payload.len());
 
         Ok(PushPromiseFrame {
             header_fragment,
@@ -130,7 +131,7 @@ impl Frame for PushPromiseFrame {
 
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: self.payload_len(),
+            payload_len: self.payload_len(),
             frame_type: PUSH_PROMISE_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,

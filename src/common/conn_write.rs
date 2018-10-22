@@ -18,13 +18,12 @@ use futures::Async;
 use futures::Poll;
 use result;
 use solicit::end_stream::EndStream;
-use solicit::frame::continuation::ContinuationFlag;
-use solicit::frame::ContinuationFrame;
+use solicit::frame::flags::Flags;
+use solicit::frame::headers::HeadersMultiFrame;
 use solicit::frame::DataFlag;
 use solicit::frame::DataFrame;
 use solicit::frame::GoawayFrame;
 use solicit::frame::HeadersFlag;
-use solicit::frame::HeadersFrame;
 use solicit::frame::HttpFrame;
 use solicit::frame::RstStreamFrame;
 use solicit::frame::SettingsFrame;
@@ -86,42 +85,19 @@ where
     }
 
     fn write_part_headers(&mut self, stream_id: StreamId, headers: Headers, end_stream: EndStream) {
-        let max_frame_size = self.peer_settings.max_frame_size as usize;
-
-        // TODO: avoid allocation
-        let headers_fragment = self
-            .encoder
-            .encode(headers.0.iter().map(|h| (h.name(), h.value())));
-
-        let mut pos = 0;
-        while pos < headers_fragment.len() || pos == 0 {
-            let end = cmp::min(headers_fragment.len(), pos + max_frame_size);
-
-            let chunk = headers_fragment.slice(pos, end);
-
-            if pos == 0 {
-                let mut frame = HeadersFrame::new(chunk, stream_id);
-                if end_stream == EndStream::Yes {
-                    frame.set_flag(HeadersFlag::EndStream);
-                }
-
-                if end == headers_fragment.len() {
-                    frame.set_flag(HeadersFlag::EndHeaders);
-                }
-
-                self.queued_write.queue_not_goaway(frame);
-            } else {
-                let mut frame = ContinuationFrame::new(chunk, stream_id);
-
-                if end == headers_fragment.len() {
-                    frame.set_flag(ContinuationFlag::EndHeaders);
-                }
-
-                self.queued_write.queue_not_goaway(frame);
-            }
-
-            pos = end;
+        let mut flags = Flags::new(0);
+        if end_stream == EndStream::Yes {
+            flags.set(HeadersFlag::EndStream);
         }
+        self.queued_write.queue_not_goaway(HeadersMultiFrame {
+            flags,
+            stream_id,
+            headers,
+            stream_dep: None,
+            padding_len: 0,
+            encoder: &mut self.encoder,
+            max_frame_size: self.peer_settings.max_frame_size,
+        });
     }
 
     fn write_part_rst(&mut self, stream_id: StreamId, error_code: ErrorCode) {

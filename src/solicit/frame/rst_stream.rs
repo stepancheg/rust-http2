@@ -59,12 +59,12 @@ impl Frame for RstStreamFrame {
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
         } = raw_frame.header();
-        if length != RST_STREAM_FRAME_LEN {
+        if payload_len != RST_STREAM_FRAME_LEN {
             return Err(ParseFrameError::InternalError);
         }
         if frame_type != RST_STREAM_FRAME_TYPE {
@@ -93,7 +93,7 @@ impl Frame for RstStreamFrame {
 
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: RST_STREAM_FRAME_LEN,
+            payload_len: RST_STREAM_FRAME_LEN,
             frame_type: RST_STREAM_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,

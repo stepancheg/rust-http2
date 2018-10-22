@@ -11,6 +11,7 @@ use solicit::frame::HeadersFrame;
 use solicit::frame::HttpFrame;
 use solicit::frame::PushPromiseFrame;
 use solicit::frame::RawFrame;
+use solicit::frame::FRAME_HEADER_LEN;
 use solicit::StreamId;
 use tokio_io::AsyncRead;
 use ErrorCode;
@@ -20,8 +21,6 @@ pub struct HttpFramedRead<R: AsyncRead> {
     read: R,
     buf: BytesMut,
 }
-
-pub const FRAME_HEADER_LEN: usize = 9;
 
 impl<R: AsyncRead> HttpFramedRead<R> {
     pub fn new(read: R) -> HttpFramedRead<R> {
@@ -62,15 +61,15 @@ impl<R: AsyncRead> HttpFramedRead<R> {
             unpack_header_from_slice(header)
         };
 
-        if header.length > max_frame_size {
+        if header.payload_len > max_frame_size {
             warn!(
                 "closing conn because peer sent frame with size: {}, max_frame_size: {}",
-                header.length, max_frame_size
+                header.payload_len, max_frame_size
             );
             return Err(error::Error::CodeError(ErrorCode::FrameSizeError));
         }
 
-        let total_len = FRAME_HEADER_LEN + header.length as usize;
+        let total_len = FRAME_HEADER_LEN + header.payload_len as usize;
 
         if let Async::NotReady = self.fill_buff_to_at_least(total_len)? {
             return Ok(Async::NotReady);

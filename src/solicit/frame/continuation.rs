@@ -87,7 +87,7 @@ impl Frame for ContinuationFrame {
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<ContinuationFrame> {
         // Unpack the header
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
@@ -99,7 +99,7 @@ impl Frame for ContinuationFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (length as usize) != raw_frame.payload().len() {
+        if (payload_len as usize) != raw_frame.payload().len() {
             return Err(ParseFrameError::InternalError);
         }
         // Check that the HEADERS frame is not associated to stream 0
@@ -124,7 +124,7 @@ impl Frame for ContinuationFrame {
 
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: self.payload_len(),
+            payload_len: self.payload_len(),
             frame_type: CONTINUATION_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,

@@ -28,13 +28,13 @@ impl Frame for PriorityFrame {
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
         } = raw_frame.header();
-        if length != 5 {
-            return Err(ParseFrameError::IncorrectFrameLength(length));
+        if payload_len != 5 {
+            return Err(ParseFrameError::IncorrectFrameLength(payload_len));
         }
         if frame_type != PRIORITY_FRAME_TYPE {
             return Err(ParseFrameError::InternalError);
@@ -76,7 +76,7 @@ impl Frame for PriorityFrame {
 
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: 5,
+            payload_len: 5,
             frame_type: PRIORITY_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,

@@ -143,7 +143,7 @@ impl Frame for DataFrame {
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<DataFrame> {
         // Unpack the header
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
@@ -155,7 +155,7 @@ impl Frame for DataFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (length as usize) != raw_frame.payload().len() {
+        if (payload_len as usize) != raw_frame.payload().len() {
             return Err(ParseFrameError::InternalError);
         }
         // A DATA frame cannot be associated to the connection itself.
@@ -190,7 +190,7 @@ impl Frame for DataFrame {
     /// Returns a `FrameHeader` based on the current state of the frame.
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: self.payload_len(),
+            payload_len: self.payload_len(),
             frame_type: DATA_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,

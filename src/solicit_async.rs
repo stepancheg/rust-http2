@@ -37,10 +37,10 @@ pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFr
     let mut header_buf = [0; FRAME_HEADER_LEN];
     read.read_exact(&mut header_buf)?;
     let header = unpack_header(&header_buf);
-    if header.length > max_frame_size {
+    if header.payload_len > max_frame_size {
         return Err(error::Error::Other("too large"));
     }
-    let total_length = FRAME_HEADER_LEN + header.length as usize;
+    let total_length = FRAME_HEADER_LEN + header.payload_len as usize;
     let mut raw_frame = Vec::with_capacity(total_length);
     raw_frame.extend(&header_buf);
     raw_frame.resize(total_length, 0);

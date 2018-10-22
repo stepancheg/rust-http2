@@ -40,7 +40,7 @@ fn parse_stream_id(buf: &[u8]) -> u32 {
 pub mod builder;
 pub mod continuation;
 pub mod data;
-mod flags;
+pub mod flags;
 pub mod goaway;
 pub mod headers;
 pub mod ping;
@@ -64,7 +64,17 @@ pub use self::settings::{HttpSetting, SettingsFlag, SettingsFrame};
 pub use self::window_update::WindowUpdateFrame;
 use codec::write_buffer::WriteBuffer;
 use solicit::frame;
+use solicit::frame::continuation::CONTINUATION_FRAME_TYPE;
+use solicit::frame::data::DATA_FRAME_TYPE;
+use solicit::frame::goaway::GOAWAY_FRAME_TYPE;
 use solicit::frame::headers::HeadersDecodedFrame;
+use solicit::frame::headers::HEADERS_FRAME_TYPE;
+use solicit::frame::ping::PING_FRAME_TYPE;
+use solicit::frame::priority::PRIORITY_FRAME_TYPE;
+use solicit::frame::push_promise::PUSH_PROMISE_FRAME_TYPE;
+use solicit::frame::rst_stream::RST_STREAM_FRAME_TYPE;
+use solicit::frame::settings::SETTINGS_FRAME_TYPE;
+use solicit::frame::window_update::WINDOW_UPDATE_FRAME_TYPE;
 use std::fmt;
 
 pub const FRAME_HEADER_LEN: usize = 9;
@@ -78,19 +88,19 @@ pub type FrameHeaderBuffer = [u8; FRAME_HEADER_LEN];
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct FrameHeader {
     /// payload length
-    pub length: u32,
+    pub payload_len: u32,
     pub frame_type: u8,
     pub flags: u8,
     pub stream_id: u32,
 }
 
 impl FrameHeader {
-    pub fn new(length: u32, frame_type: u8, flags: u8, stream_id: u32) -> FrameHeader {
+    pub fn new(payload_len: u32, frame_type: u8, flags: u8, stream_id: u32) -> FrameHeader {
         FrameHeader {
-            length: length,
-            frame_type: frame_type,
-            flags: flags,
-            stream_id: stream_id,
+            payload_len,
+            frame_type,
+            flags,
+            stream_id,
         }
     }
 }
@@ -99,17 +109,29 @@ impl FrameHeader {
 pub fn unpack_header_from_slice(header: &[u8]) -> FrameHeader {
     assert_eq!(FRAME_HEADER_LEN, header.len());
 
-    let length: u32 = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) | (header[2] as u32);
+    let payload_len: u32 =
+        ((header[0] as u32) << 16) | ((header[1] as u32) << 8) | (header[2] as u32);
     let frame_type = header[3];
     let flags = header[4];
     let stream_id = parse_stream_id(&header[5..]);
 
     FrameHeader {
-        length,
+        payload_len,
         frame_type,
         flags,
         stream_id,
     }
+}
+
+#[cfg(test)]
+pub fn unpack_frames_for_test(mut raw: &[u8]) -> Vec<HttpFrame> {
+    let mut r = Vec::new();
+    while !raw.is_empty() {
+        let raw_frame = RawFrame::parse(raw).unwrap();
+        raw = &raw[raw_frame.len()..];
+        r.push(HttpFrame::from_raw(&raw_frame).unwrap());
+    }
+    r
 }
 
 /// Deconstructs a `FrameHeader` into its corresponding 4 components,
@@ -124,16 +146,16 @@ pub fn unpack_header(header: &FrameHeaderBuffer) -> FrameHeader {
 /// Constructs a buffer of 9 bytes that represents the given `FrameHeader`.
 pub fn pack_header(header: &FrameHeader) -> FrameHeaderBuffer {
     let &FrameHeader {
-        length,
+        payload_len,
         frame_type,
         flags,
         stream_id,
     } = header;
 
     [
-        (((length >> 16) & 0x000000FF) as u8),
-        (((length >> 8) & 0x000000FF) as u8),
-        (((length) & 0x000000FF) as u8),
+        (((payload_len >> 16) & 0x000000FF) as u8),
+        (((payload_len >> 8) & 0x000000FF) as u8),
+        (((payload_len) & 0x000000FF) as u8),
         frame_type,
         flags,
         (((stream_id >> 24) & 0x000000FF) as u8),
@@ -286,7 +308,7 @@ impl RawFrame {
             mem::transmute(buf.as_ptr())
         });
 
-        let payload_len = header.length as usize;
+        let payload_len = header.payload_len as usize;
         if buf[9..].len() < payload_len {
             return Err(ParseFrameError::IncorrectPayloadLen);
         }
@@ -388,7 +410,7 @@ mod tests {
             let header = [0, 0, 1, 2, 3, 0, 0, 0, 4];
             assert_eq!(
                 FrameHeader {
-                    length: 1,
+                    payload_len: 1,
                     frame_type: 2,
                     flags: 3,
                     stream_id: 4
@@ -400,7 +422,7 @@ mod tests {
             let header = [0, 1, 0, 0, 0, 0, 0, 0, 0];
             assert_eq!(
                 FrameHeader {
-                    length: 256,
+                    payload_len: 256,
                     frame_type: 0,
                     flags: 0,
                     stream_id: 0
@@ -412,7 +434,7 @@ mod tests {
             let header = [1, 0, 0, 0, 0, 0, 0, 0, 0];
             assert_eq!(
                 FrameHeader {
-                    length: 256 * 256,
+                    payload_len: 256 * 256,
                     frame_type: 0,
                     flags: 0,
                     stream_id: 0
@@ -424,7 +446,7 @@ mod tests {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 1];
             assert_eq!(
                 FrameHeader {
-                    length: (1 << 24) - 1,
+                    payload_len: (1 << 24) - 1,
                     frame_type: 0,
                     flags: 0,
                     stream_id: 1
@@ -436,7 +458,7 @@ mod tests {
             let header = [0xFF, 0xFF, 0xFF, 0, 0, 1, 1, 1, 1];
             assert_eq!(
                 FrameHeader {
-                    length: (1 << 24) - 1,
+                    payload_len: (1 << 24) - 1,
                     frame_type: 0,
                     flags: 0,
                     stream_id: 1 + (1 << 8) + (1 << 16) + (1 << 24)
@@ -449,7 +471,7 @@ mod tests {
             let header = [0, 0, 1, 0, 0, 0x80, 0, 0, 1];
             assert_eq!(
                 FrameHeader {
-                    length: 1,
+                    payload_len: 1,
                     frame_type: 0,
                     flags: 0,
                     stream_id: 1
@@ -537,7 +559,7 @@ mod tests {
     fn test_raw_frame_serialize() {
         let data = b"123";
         let header = FrameHeader {
-            length: data.len() as u32,
+            payload_len: data.len() as u32,
             frame_type: 0x1,
             flags: 0,
             stream_id: 1,
@@ -591,6 +613,24 @@ pub enum HttpFrameType {
     Unknown(u8),
 }
 
+impl HttpFrameType {
+    pub fn frame_type(&self) -> u8 {
+        match self {
+            HttpFrameType::Data => DATA_FRAME_TYPE,
+            HttpFrameType::Headers => HEADERS_FRAME_TYPE,
+            HttpFrameType::Priority => PRIORITY_FRAME_TYPE,
+            HttpFrameType::RstStream => RST_STREAM_FRAME_TYPE,
+            HttpFrameType::Settings => SETTINGS_FRAME_TYPE,
+            HttpFrameType::PushPromise => PUSH_PROMISE_FRAME_TYPE,
+            HttpFrameType::Ping => PING_FRAME_TYPE,
+            HttpFrameType::Goaway => GOAWAY_FRAME_TYPE,
+            HttpFrameType::WindowUpdate => WINDOW_UPDATE_FRAME_TYPE,
+            HttpFrameType::Continuation => CONTINUATION_FRAME_TYPE,
+            HttpFrameType::Unknown(t) => *t,
+        }
+    }
+}
+
 /// An enum representing all frame variants that can be returned by an `HttpConnection` can handle.
 ///
 /// The variants wrap the appropriate `Frame` implementation, except for the `UnknownFrame`
@@ -611,6 +651,7 @@ pub enum HttpFrame {
 }
 
 impl HttpFrame {
+    // TODO: take by value
     pub fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HttpFrame> {
         let frame = match raw_frame.header().frame_type {
             frame::data::DATA_FRAME_TYPE => HttpFrame::Data(HttpFrame::parse_frame(&raw_frame)?),

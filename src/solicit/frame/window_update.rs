@@ -47,13 +47,13 @@ impl Frame for WindowUpdateFrame {
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
         } = raw_frame.header();
-        if length != WINDOW_UPDATE_FRAME_LEN {
-            return Err(ParseFrameError::IncorrectFrameLength(length));
+        if payload_len != WINDOW_UPDATE_FRAME_LEN {
+            return Err(ParseFrameError::IncorrectFrameLength(payload_len));
         }
         if frame_type != WINDOW_UPDATE_FRAME_TYPE {
             return Err(ParseFrameError::InternalError);
@@ -89,7 +89,7 @@ impl Frame for WindowUpdateFrame {
     }
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: WINDOW_UPDATE_FRAME_LEN,
+            payload_len: WINDOW_UPDATE_FRAME_LEN,
             frame_type: WINDOW_UPDATE_FRAME_TYPE,
             flags: 0,
             stream_id: self.stream_id,

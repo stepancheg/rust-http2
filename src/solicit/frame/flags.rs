@@ -53,6 +53,18 @@ impl<F: Flag> Flags<F> {
     pub fn clear(&mut self, flag: F) {
         self.0 &= !flag.bitmask();
     }
+
+    pub fn with(&self, flag: F) -> Flags<F> {
+        let mut flags = self.clone();
+        flags.set(flag);
+        flags
+    }
+
+    pub fn without(&self, flag: F) -> Flags<F> {
+        let mut flags = self.clone();
+        flags.clear(flag);
+        flags
+    }
 }
 
 impl<F: Flag> Default for Flags<F> {

@@ -16,7 +16,7 @@ pub trait FrameBuilder {
     fn write_header(&mut self, header: FrameHeader) {
         self.reserve(
             FRAME_HEADER_LEN
-                .checked_add(header.length as usize)
+                .checked_add(header.payload_len as usize)
                 .expect("overflow"),
         );
         self.write_slice(&pack_header(&header));

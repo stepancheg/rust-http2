@@ -1,13 +1,22 @@
 //! The module contains the implementation of the `HEADERS` frame and associated flags.
 
+use bytes::Buf;
 use bytes::Bytes;
 
 use codec::write_buffer::WriteBuffer;
+use hpack;
+use hpack::encoder::EncodeBuf;
+use solicit::frame::continuation::ContinuationFlag;
 use solicit::frame::flags::*;
+use solicit::frame::pack_header;
+use solicit::frame::HttpFrameType;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
+use solicit::frame::FRAME_HEADER_LEN;
 use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 use solicit::StreamId;
+use std::cmp;
+use std::fmt;
 use Headers;
 
 pub const HEADERS_FRAME_TYPE: u8 = 0x1;
@@ -234,7 +243,7 @@ impl Frame for HeadersFrame {
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HeadersFrame> {
         // Unpack the header
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
@@ -246,7 +255,7 @@ impl Frame for HeadersFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (length as usize) != raw_frame.payload().len() {
+        if (payload_len as usize) != raw_frame.payload().len() {
             return Err(ParseFrameError::InternalError);
         }
         // Check that the HEADERS frame is not associated to stream 0
@@ -300,7 +309,7 @@ impl Frame for HeadersFrame {
     /// Returns a `FrameHeader` based on the current state of the `Frame`.
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: self.payload_len(),
+            payload_len: self.payload_len(),
             frame_type: HEADERS_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: self.stream_id,
@@ -357,14 +366,177 @@ impl HeadersDecodedFrame {
     }
 }
 
+/// Encoder headers into multiple frame without additional allocations
+pub struct HeadersMultiFrame<'a> {
+    /// The set of flags for the frame, packed into a single byte.
+    pub flags: Flags<HeadersFlag>,
+    /// The ID of the stream with which this frame is associated
+    pub stream_id: StreamId,
+    /// The header fragment bytes stored within the frame.
+    pub headers: Headers,
+    /// The stream dependency information, if any.
+    pub stream_dep: Option<StreamDependency>,
+    /// The length of the padding, if any.
+    pub padding_len: u8,
+
+    // state
+    pub encoder: &'a mut hpack::Encoder,
+    pub max_frame_size: u32,
+}
+
+impl<'a> fmt::Debug for HeadersMultiFrame<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("HeadersMultiFrame")
+            .field("flags", &self.flags)
+            .field("stream_id", &self.stream_id)
+            .field("headers", &self.headers)
+            .field("stream_id", &self.stream_id)
+            .field("padding_len", &self.padding_len)
+            .field("max_frame_size", &self.max_frame_size)
+            .finish()
+    }
+}
+
+enum HeadersFrameType {
+    Headers,
+    Continuation,
+}
+
+impl HeadersFrameType {
+    fn frame_type(&self) -> HttpFrameType {
+        match self {
+            HeadersFrameType::Headers => HttpFrameType::Headers,
+            HeadersFrameType::Continuation => HttpFrameType::Continuation,
+        }
+    }
+
+    /// Make HEADERS or CONTINUATION flags from HEADERS flags
+    fn make_flags(&self, header_flags: Flags<HeadersFlag>, last: bool) -> u8 {
+        assert!(!header_flags.is_set(HeadersFlag::EndHeaders));
+        match self {
+            HeadersFrameType::Headers => {
+                match last {
+                    true => header_flags.with(HeadersFlag::EndHeaders),
+                    false => header_flags,
+                }.0
+            }
+            HeadersFrameType::Continuation => match last {
+                true => ContinuationFlag::EndHeaders.bitmask(),
+                false => 0,
+            },
+        }
+    }
+}
+
+struct EncodeBufForHeadersMultiFrame<'a> {
+    current_frame_type: HeadersFrameType,
+    current_frame_offset: usize,
+    stream_id: StreamId,
+    flags: Flags<HeadersFlag>,
+    builder: &'a mut WriteBuffer,
+    max_frame_size: u32,
+}
+
+impl<'a> EncodeBufForHeadersMultiFrame<'a> {
+    fn open_frame(&mut self) {
+        self.current_frame_offset = self.builder.remaining();
+        // Length is not known at the moment so write an empty head
+        // It will be patched later in `finish_frame`.
+        // Can be optimized a little by writing all fields except length here.
+        self.builder.extend_from_slice(&pack_header(&FrameHeader {
+            payload_len: 0,
+            frame_type: 0,
+            flags: 0,
+            stream_id: 0,
+        }));
+    }
+
+    fn finish_frame(&mut self, last: bool) {
+        let frame_length = (self.builder.remaining() - self.current_frame_offset) as u32;
+        debug_assert!(frame_length >= FRAME_HEADER_LEN as u32);
+        let length = frame_length - FRAME_HEADER_LEN as u32;
+        self.builder.patch_buf(
+            self.current_frame_offset,
+            &pack_header(&FrameHeader {
+                payload_len: length,
+                frame_type: self.current_frame_type.frame_type().frame_type(),
+                flags: self.current_frame_type.make_flags(self.flags, last),
+                stream_id: self.stream_id,
+            }),
+        );
+    }
+
+    /// How much payload can be written into the current frame.
+    fn rem_in_current_frame(&self) -> usize {
+        let current_frame_len = self.builder.remaining() - self.current_frame_offset;
+        debug_assert!(current_frame_len >= FRAME_HEADER_LEN);
+        let current_frame_payload_len = current_frame_len - FRAME_HEADER_LEN;
+        debug_assert!(current_frame_payload_len <= self.max_frame_size as usize);
+        self.max_frame_size as usize - current_frame_payload_len
+    }
+}
+
+impl<'a> EncodeBuf for EncodeBufForHeadersMultiFrame<'a> {
+    fn write_all(&mut self, mut bytes: &[u8]) {
+        loop {
+            let copy_here = cmp::min(bytes.len(), self.rem_in_current_frame());
+            self.builder.extend_from_slice(&bytes[..copy_here]);
+            bytes = &bytes[copy_here..];
+
+            if bytes.is_empty() {
+                return;
+            }
+
+            self.finish_frame(false);
+            self.open_frame();
+            self.current_frame_type = HeadersFrameType::Continuation;
+        }
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        // TODO: reserve better if spans frame boundaries
+        self.builder.reserve(additional);
+    }
+}
+
+impl<'a> FrameIR for HeadersMultiFrame<'a> {
+    fn serialize_into(self, builder: &mut WriteBuffer) {
+        assert!(!self.flags.is_set(HeadersFlag::EndHeaders));
+
+        let mut buf = EncodeBufForHeadersMultiFrame {
+            flags: self.flags,
+            stream_id: self.stream_id,
+            current_frame_type: HeadersFrameType::Headers,
+            current_frame_offset: builder.remaining(),
+            builder,
+            max_frame_size: self.max_frame_size,
+        };
+
+        buf.open_frame();
+
+        let headers = self.headers.0.iter().map(|h| (h.name(), h.value()));
+
+        self.encoder.encode_into(headers, &mut buf);
+
+        buf.finish_frame(true);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{HeadersFlag, HeadersFrame, StreamDependency};
+    use hpack;
+    use solicit::frame::continuation::ContinuationFlag;
+    use solicit::frame::flags::Flags;
+    use solicit::frame::headers::HeadersMultiFrame;
     use solicit::frame::tests::build_padded_frame_payload;
+    use solicit::frame::unpack_frames_for_test;
     use solicit::frame::FrameHeader;
     use solicit::frame::FrameIR;
+    use solicit::frame::HttpFrame;
     use solicit::frame::{pack_header, Frame};
     use solicit::tests::common::raw_frame_from_parts;
+    use Headers;
 
     /// Tests that a stream dependency structure can be correctly parsed by the
     /// `StreamDependency::parse` method.
@@ -671,5 +843,50 @@ mod tests {
 
         frame.set_flag(HeadersFlag::EndHeaders);
         assert!(frame.is_headers_end());
+    }
+
+    #[test]
+    fn test_headers_multi_frame() {
+        let mut encoder = hpack::Encoder::new();
+
+        let mut headers = Headers::ok_200();
+        for i in 0..1000 {
+            headers.add(&format!("h-{}", i), &format!("v-{}", i))
+        }
+
+        let max_frame_size = 1000;
+
+        let serialized = HeadersMultiFrame {
+            flags: Flags::new(0).with(HeadersFlag::EndStream),
+            stream_id: 2,
+            headers,
+            stream_dep: None,
+            padding_len: 0,
+            encoder: &mut encoder,
+            max_frame_size,
+        }.serialize_into_vec();
+
+        let frames = unpack_frames_for_test(&serialized);
+        assert!(frames.len() > 2);
+        for (i, f) in frames.iter().enumerate() {
+            match f {
+                HttpFrame::Headers(h) => {
+                    assert_eq!(0, i);
+                    assert_eq!(max_frame_size as usize, h.header_fragment.len());
+                    assert_eq!(Flags::new(0).with(HeadersFlag::EndStream), h.flags);
+                }
+                HttpFrame::Continuation(h) => {
+                    assert_ne!(0, i);
+                    let last = i == frames.len() - 1;
+                    if !last {
+                        assert_eq!(max_frame_size as usize, h.header_fragment.len());
+                        assert_eq!(Flags::new(0), h.flags);
+                    } else {
+                        assert_eq!(Flags::new(0).with(ContinuationFlag::EndHeaders), h.flags);
+                    }
+                }
+                _ => panic!("wrong frame type"),
+            }
+        }
     }
 }

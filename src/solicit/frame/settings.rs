@@ -305,7 +305,7 @@ impl Frame for SettingsFrame {
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<SettingsFrame> {
         // Unpack the header
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
@@ -317,7 +317,7 @@ impl Frame for SettingsFrame {
         // Check that the length given in the header matches the payload
         // length; if not, something went wrong and we do not consider this a
         // valid frame.
-        if (length as usize) != raw_frame.payload().len() {
+        if (payload_len as usize) != raw_frame.payload().len() {
             return Err(ParseFrameError::InternalError);
         }
         // Check that the SETTINGS frame is associated to stream 0
@@ -325,7 +325,7 @@ impl Frame for SettingsFrame {
             return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
         if (flags & SettingsFlag::Ack.bitmask()) != 0 {
-            return if length == 0 {
+            return if payload_len == 0 {
                 // Ack is set and there's no payload => just an Ack frame
                 Ok(SettingsFrame {
                     settings: Vec::new(),
@@ -359,7 +359,7 @@ impl Frame for SettingsFrame {
     /// Returns a `FrameHeader` based on the current state of the `Frame`.
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: self.payload_len(),
+            payload_len: self.payload_len(),
             frame_type: SETTINGS_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: 0,
@@ -500,7 +500,7 @@ mod tests {
     fn test_settings_frame_parse_ack_no_settings() {
         let payload = [];
         let header = FrameHeader {
-            length: payload.len() as u32,
+            payload_len: payload.len() as u32,
             frame_type: 4,
             flags: 1,
             stream_id: 0,
@@ -577,7 +577,7 @@ mod tests {
             let mut res: Vec<u8> = Vec::new();
             res.extend(
                 pack_header(&FrameHeader {
-                    length: 6,
+                    payload_len: 6,
                     frame_type: 4,
                     flags: 0,
                     stream_id: 0,
@@ -610,7 +610,7 @@ mod tests {
             let mut res: Vec<u8> = Vec::new();
             res.extend(
                 pack_header(&FrameHeader {
-                    length: 6 * 2,
+                    payload_len: 6 * 2,
                     frame_type: 4,
                     flags: 0,
                     stream_id: 0,
@@ -644,7 +644,7 @@ mod tests {
     fn test_settings_frame_serialize_ack() {
         let frame = SettingsFrame::new_ack();
         let expected = pack_header(&FrameHeader {
-            length: 0,
+            payload_len: 0,
             frame_type: 4,
             flags: 1,
             stream_id: 0,

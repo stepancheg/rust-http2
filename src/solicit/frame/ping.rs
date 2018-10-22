@@ -75,12 +75,12 @@ impl Frame for PingFrame {
 
     fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<Self> {
         let FrameHeader {
-            length,
+            payload_len,
             frame_type,
             flags,
             stream_id,
         } = raw_frame.header();
-        if length != PING_FRAME_LEN {
+        if payload_len != PING_FRAME_LEN {
             return Err(ParseFrameError::IncorrectPayloadLen);
         }
         if frame_type != PING_FRAME_TYPE {
@@ -109,7 +109,7 @@ impl Frame for PingFrame {
 
     fn get_header(&self) -> FrameHeader {
         FrameHeader {
-            length: PING_FRAME_LEN,
+            payload_len: PING_FRAME_LEN,
             frame_type: PING_FRAME_TYPE,
             flags: self.flags.0,
             stream_id: 0,
