@@ -15,6 +15,8 @@ use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use data_or_trailers::*;
+use error;
+use futures::Poll;
 
 /// Convenient wrapper around async HTTP response future/stream
 pub struct Response(pub HttpFutureSend<(Headers, HttpStreamAfterHeaders)>);
@@ -125,5 +127,14 @@ impl Response {
                     Ok::<_, Error>(c)
                 }),
         )
+    }
+}
+
+impl Future for Response {
+    type Item = (Headers, HttpStreamAfterHeaders);
+    type Error = error::Error;
+
+    fn poll(&mut self) -> Poll<(Headers, HttpStreamAfterHeaders), error::Error> {
+        self.0.poll()
     }
 }

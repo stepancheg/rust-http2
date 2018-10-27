@@ -11,6 +11,7 @@ use bytes::Bytes;
 
 use futures::future;
 use futures::future::Future;
+use futures::stream;
 use futures::stream::Stream;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedReceiver;
@@ -279,13 +280,22 @@ impl Client {
 
     /// Start HTTP/2 `POST` request.
     pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> Response {
+        self.start_post_stream(path, authority, stream::once(Ok(body)))
+    }
+
+    pub fn start_post_stream(
+        &self,
+        path: &str,
+        authority: &str,
+        body: impl Stream<Item = Bytes, Error = error::Error> + Send + 'static,
+    ) -> Response {
         let headers = Headers(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path.to_owned()),
             Header::new(":authority", authority.to_owned()),
             Header::new(":scheme", self.http_scheme.as_bytes()),
         ]);
-        self.start_request_simple(headers, body)
+        self.start_request(headers, HttpStreamAfterHeaders::bytes(body))
     }
 
     /// For tests

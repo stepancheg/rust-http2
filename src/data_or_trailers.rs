@@ -10,8 +10,6 @@ use error;
 
 use solicit::header::Headers;
 
-use solicit_async::*;
-
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
@@ -52,7 +50,9 @@ impl DataOrTrailers {
 ///
 /// Most users won't need anything except data, so this type provides
 /// convenient constructors and accessors.
-pub struct HttpStreamAfterHeaders(pub HttpFutureStreamSend<DataOrTrailers>);
+pub struct HttpStreamAfterHeaders(
+    pub Box<Stream<Item = DataOrTrailers, Error = error::Error> + Send + 'static>,
+);
 
 impl HttpStreamAfterHeaders {
     // constructors
