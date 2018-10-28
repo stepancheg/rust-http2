@@ -237,18 +237,12 @@ pub fn issue_89() {
     assert_eq!(2, resp1.next().unwrap().unwrap().len());
 
     // client does not send WINDOW_UPDATE on such small changes
-    assert_eq!(
-        (w - 2) as i32,
-        client.conn_state().in_window_size
-    );
+    assert_eq!((w - 2) as i32, client.conn_state().in_window_size);
 
     let _r3 = client.start_get("/r3", "localhost");
 
     // This is the cause of issue #89
-    assert_eq!(
-        w as i32,
-        client.stream_state(3).in_window_size
-    );
+    assert_eq!(w as i32, client.stream_state(3).in_window_size);
 
     // Cannot reliably check that stream actually resets
 }

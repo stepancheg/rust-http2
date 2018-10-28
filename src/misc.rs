@@ -19,7 +19,7 @@ impl<'a> fmt::Debug for BsDebug<'a> {
             write!(fmt, "{}*b\"", self.0.len())?;
             fmt_b(self.0[0], fmt)?;
             write!(fmt, "\"")?;
-            return Ok(())
+            return Ok(());
         }
 
         write!(fmt, "b\"")?;

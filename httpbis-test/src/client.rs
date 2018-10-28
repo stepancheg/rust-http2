@@ -1,9 +1,9 @@
 use futures::future::Future;
 
-use httpbis::Client;
 use httpbis::for_test::ConnStateSnapshot;
 use httpbis::for_test::HttpStreamStateSnapshot;
 use httpbis::for_test::StreamId;
+use httpbis::Client;
 
 pub trait ClientExt {
     fn conn_state(&self) -> ConnStateSnapshot;

@@ -8,8 +8,8 @@ use solicit::StreamId;
 
 use bytes::Bytes;
 use codec::write_buffer::WriteBuffer;
-use std::fmt;
 use misc::BsDebug;
+use std::fmt;
 
 pub const DATA_FRAME_TYPE: u8 = 0x0;
 

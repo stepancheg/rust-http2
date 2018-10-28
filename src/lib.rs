@@ -102,8 +102,8 @@ pub use result::Result;
 pub mod for_test {
     pub use common::ConnStateSnapshot;
     pub use common::HttpStreamStateSnapshot;
-    pub use solicit::StreamId;
     pub use server::server_conn::ServerConn;
+    pub use solicit::StreamId;
     pub use solicit_async::recv_raw_frame_sync;
 
     pub use solicit::frame::settings::HttpSettings;
