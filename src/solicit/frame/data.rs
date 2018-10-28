@@ -8,6 +8,8 @@ use solicit::StreamId;
 
 use bytes::Bytes;
 use codec::write_buffer::WriteBuffer;
+use std::fmt;
+use misc::BsDebug;
 
 pub const DATA_FRAME_TYPE: u8 = 0x0;
 
@@ -36,7 +38,7 @@ impl Flag for DataFlag {
 
 /// A struct representing the DATA frames of HTTP/2, as defined in the HTTP/2
 /// spec, section 6.1.
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone)]
 pub struct DataFrame {
     /// Represents the flags currently set on the `DataFrame`, packed into a
     /// single byte.
@@ -50,6 +52,17 @@ pub struct DataFrame {
     /// that the padding length is at most an unsigned integer value, we also
     /// keep a `u8`, instead of a `usize`.
     padding_len: u8,
+}
+
+impl fmt::Debug for DataFrame {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DataFrame")
+            .field("flags", &self.flags)
+            .field("stream_id", &self.stream_id)
+            .field("data", &BsDebug(&self.data[..]))
+            .field("padding_len", &self.padding_len)
+            .finish()
+    }
 }
 
 impl DataFrame {
