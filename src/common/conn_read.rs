@@ -2,6 +2,7 @@ use codec::http_decode_read::HttpFrameDecodedOrGoaway;
 use common::conn::Conn;
 use common::conn_write::ConnWriteSideCustom;
 use common::init_where::InitWhere;
+use common::stream::DroppedData;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use common::stream::InMessageStage;
@@ -351,10 +352,18 @@ where
         frame: RstStreamFrame,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
         let stream_id = frame.get_stream_id();
-        if let Some(stream) =
+        let dropped_data = if let Some(stream) =
             self.get_stream_maybe_send_error(stream_id, HttpFrameType::RstStream)?
         {
-            stream.rst_received_remove(frame.error_code());
+            stream.rst_received_remove(frame.error_code())
+        } else {
+            DroppedData { size: 0 }
+        };
+
+        {
+            let DroppedData { size } = dropped_data;
+            assert!(size <= u32::max_value() as usize);
+            self.pump_out_window_size.increase(size as u32);
         }
 
         self.peer_closed_streams.add(stream_id);

@@ -11,6 +11,7 @@ use common::conn::ConnStateSnapshot;
 use common::conn_read::ConnReadSideCustom;
 use common::iteration_exit::IterationExit;
 use common::stream::HttpStreamCommand;
+use data_or_headers::DataOrHeaders;
 use error;
 use futures::sync::oneshot;
 use futures::task;
@@ -30,7 +31,6 @@ use solicit::frame::SettingsFrame;
 use std::cmp;
 use ErrorCode;
 use Headers;
-use data_or_headers::DataOrHeaders;
 
 pub trait ConnWriteSideCustom {
     type Types: Types;

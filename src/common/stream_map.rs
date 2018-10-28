@@ -12,6 +12,7 @@ use super::types::Types;
 use common::hash_set_shallow_clone::HashSetShallowClone;
 use common::hash_set_shallow_clone::HashSetShallowCloneItems;
 use common::init_where::InitWhere;
+use common::stream::DroppedData;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use solicit::session::StreamState;
@@ -182,9 +183,10 @@ impl<'m, T: Types + 'm> HttpStreamRef<'m, T> {
     }
 
     // Reset stream and remove it
-    pub fn rst_received_remove(mut self, error_code: ErrorCode) {
-        self.stream().rst_recvd(error_code);
+    pub fn rst_received_remove(mut self, error_code: ErrorCode) -> DroppedData {
+        let r = self.stream().rst_recvd(error_code);
         self.remove();
+        r
     }
 
     pub fn try_increase_window_size(&mut self, increment: u32) -> Result<(), ()> {
