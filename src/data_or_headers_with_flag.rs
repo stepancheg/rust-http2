@@ -14,6 +14,7 @@ use solicit_async::HttpFutureStreamSend;
 use std::panic::AssertUnwindSafe;
 
 /// Stream frame content with END_STREAM flag
+#[derive(Debug)]
 pub struct DataOrHeadersWithFlag {
     pub content: DataOrHeaders,
     /// END_STREAM
