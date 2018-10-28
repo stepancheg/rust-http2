@@ -236,7 +236,7 @@ where
                             // and the old value.
                             // TODO: check for overflow
                             s.out_window_size.0 += delta;
-                            s.pump_out_window.increase(delta);
+                            s.pump_out_window.increase(delta as usize);
                         }
 
                         if !self.streams.map.is_empty() && delta > 0 {
@@ -313,7 +313,7 @@ where
         stream
             .stream()
             .pump_out_window
-            .increase(frame.increment as i32);
+            .increase(frame.increment as usize);
 
         Ok(Some(stream))
     }
@@ -342,7 +342,7 @@ where
             old_window_size, self.out_window_size
         );
 
-        self.pump_out_window_size.increase(frame.increment);
+        self.pump_out_window_size.increase(frame.increment as usize);
 
         self.out_window_increased(None)
     }
@@ -362,8 +362,7 @@ where
 
         {
             let DroppedData { size } = dropped_data;
-            assert!(size <= u32::max_value() as usize);
-            self.pump_out_window_size.increase(size as u32);
+            self.pump_out_window_size.increase(size);
         }
 
         self.peer_closed_streams.add(stream_id);

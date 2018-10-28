@@ -94,12 +94,13 @@ impl ConnOutWindowSender {
         self.shared.window_size.load(Ordering::SeqCst) as isize
     }
 
-    pub fn increase(&self, size: u32) {
+    pub fn increase(&self, size: usize) {
+        assert!(size <= isize::max_value() as usize);
         let old_size = self
             .shared
             .window_size
-            .fetch_add(size as isize, Ordering::SeqCst) as i32;
-        let new_size = old_size + size as i32;
+            .fetch_add(size as isize, Ordering::SeqCst);
+        let new_size = old_size + size as isize;
 
         if new_size > 0 {
             self.waker.wake_all();
@@ -108,12 +109,13 @@ impl ConnOutWindowSender {
 }
 
 impl StreamOutWindowSender {
-    pub fn increase(&self, size: i32) {
+    pub fn increase(&self, size: usize) {
+        assert!(size <= isize::max_value() as usize);
         let old_size = self
             .shared
             .window_size
-            .fetch_add(size as isize, Ordering::SeqCst) as i32;
-        let new_size = old_size + size;
+            .fetch_add(size as isize, Ordering::SeqCst);
+        let new_size = old_size + size as isize;
         if new_size > 0 {
             if let Some(task) = self.shared.task.swap_null(Ordering::SeqCst) {
                 task.notify();

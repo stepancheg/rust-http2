@@ -207,8 +207,7 @@ where
             stream.push_back_part(part);
         } else {
             if let DataOrHeaders::Data(data) = part.content {
-                // TODO: integer overflow
-                self.pump_out_window_size.increase(data.len() as u32);
+                self.pump_out_window_size.increase(data.len());
             }
         }
         Ok(())
