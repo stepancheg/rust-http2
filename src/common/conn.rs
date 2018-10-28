@@ -73,9 +73,6 @@ pub struct Conn<T: Types> {
     /// Last streams known to be closed by peer
     pub peer_closed_streams: ClosedStreams,
 
-    /// Window size from pumper point of view
-    pub pump_out_window_size: window_size::ConnOutWindowSender,
-
     pub last_local_stream_id: StreamId,
     pub last_peer_stream_id: StreamId,
     pub goaway_sent: Option<GoawayFrame>,
@@ -86,6 +83,9 @@ pub struct Conn<T: Types> {
     pub out_window_size: WindowSize,
     /// Tracks the size of the inbound flow control window
     pub in_window_size: WindowSize,
+
+    /// Window size from pumper point of view
+    pub pump_out_window_size: window_size::ConnOutWindowSender,
 
     pub framed_read: HttpDecodeRead<ReadHalf<T::Io>>,
 
