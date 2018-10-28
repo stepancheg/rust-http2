@@ -167,7 +167,6 @@ impl HttpConnTester {
     }
 
     pub fn send_window_update_stream(&mut self, stream_id: StreamId, increment: u32) {
-        self.in_window_size.try_increase(increment).unwrap();
         self.send_frame(WindowUpdateFrame::for_stream(stream_id, increment));
     }
 
