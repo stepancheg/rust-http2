@@ -131,6 +131,7 @@ impl StreamOutWindowSender {
 
 struct ConnDead;
 
+#[derive(Eq, PartialEq, Debug)]
 pub enum StreamDead {
     Stream,
     Conn,

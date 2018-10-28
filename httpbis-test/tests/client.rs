@@ -23,6 +23,9 @@ use futures::sync::oneshot;
 
 use tokio_core::reactor;
 
+use futures::executor;
+use futures::future;
+use futures::Async;
 use httpbis::for_test::solicit::DEFAULT_SETTINGS;
 use httpbis::for_test::*;
 use httpbis::ErrorCode;
@@ -218,8 +221,7 @@ pub fn issue_89() {
 
     let r1 = client.start_get("/r1", "localhost");
 
-    server_tester.recv_frame_headers_check(1, false);
-    assert!(server_tester.recv_frame_data_tail(1).is_empty());
+    server_tester.recv_frame_headers_check(1, true);
 
     server_tester.send_headers(1, Headers::ok_200(), false);
     let (_, resp1) = r1.0.wait().unwrap();
@@ -283,4 +285,148 @@ fn external_event_loop() {
     shutdown_tx.send(()).expect("send");
 
     t.join().expect("join");
+}
+
+#[test]
+pub fn sink_poll() {
+    init_logger();
+
+    let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
+
+    let (mut sender, _response) = client
+        .start_post_sink("/foo", "sink")
+        .wait()
+        .expect("start_post_sink");
+
+    server_tester.recv_frame_headers_check(1, false);
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(65535, client.conn_state().out_window_size);
+    assert_eq!(65535, client.conn_state().pump_out_window_size);
+    assert_eq!(65535, client.stream_state(1).in_window_size);
+    assert_eq!(65535, client.stream_state(1).pump_out_window_size);
+
+    assert_eq!(Ok(Async::Ready(())), sender.poll());
+
+    let b = Bytes::from(vec![1; 65_535]);
+    sender.send_data(b.clone()).expect("send_data");
+
+    assert_eq!(
+        b,
+        Bytes::from(server_tester.recv_frames_data_check(1, 16_384, 65_535, false))
+    );
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(0, client.conn_state().out_window_size);
+    assert_eq!(0, client.conn_state().pump_out_window_size);
+    assert_eq!(65535, client.stream_state(1).in_window_size);
+    assert_eq!(0, client.stream_state(1).out_window_size);
+    assert_eq!(0, client.stream_state(1).pump_out_window_size);
+
+    let mut sender = executor::spawn(future::lazy(move || {
+        assert_eq!(Ok(Async::NotReady), sender.poll());
+        future::ok::<_, ()>(sender)
+    })).wait_future()
+    .unwrap();
+
+    server_tester.send_window_update_conn(3);
+    server_tester.send_window_update_stream(1, 5);
+
+    sender.wait().unwrap();
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(3, client.conn_state().out_window_size);
+    assert_eq!(3, client.conn_state().pump_out_window_size);
+    assert_eq!(65535, client.stream_state(1).in_window_size);
+    assert_eq!(5, client.stream_state(1).out_window_size);
+    assert_eq!(5, client.stream_state(1).pump_out_window_size);
+
+    let b = Bytes::from(vec![11, 22]);
+    sender.send_data(b.clone()).expect("send_data");
+    assert_eq!(
+        b,
+        Bytes::from(server_tester.recv_frame_data_check(1, false))
+    );
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(1, client.conn_state().out_window_size);
+    assert_eq!(1, client.conn_state().pump_out_window_size);
+    assert_eq!(65535, client.stream_state(1).in_window_size);
+    assert_eq!(3, client.stream_state(1).out_window_size);
+    assert_eq!(3, client.stream_state(1).pump_out_window_size);
+
+    sender.wait().unwrap();
+
+    let b = Bytes::from(vec![33, 44]);
+    sender.send_data(b.clone()).expect("send_data");
+    assert_eq!(
+        b.slice(0, 1),
+        Bytes::from(server_tester.recv_frame_data_check(1, false))
+    );
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(0, client.conn_state().out_window_size);
+    assert_eq!(-1, client.conn_state().pump_out_window_size);
+    assert_eq!(65535, client.stream_state(1).in_window_size);
+    assert_eq!(2, client.stream_state(1).out_window_size);
+    assert_eq!(1, client.stream_state(1).pump_out_window_size);
+}
+
+#[test]
+fn sink_reset_by_peer() {
+    init_logger();
+
+    let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
+
+    let (mut sender, _response) = client
+        .start_post_sink("/foo", "sink")
+        .wait()
+        .expect("start_post_sink");
+
+    server_tester.recv_frame_headers_check(1, false);
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(65535, client.conn_state().out_window_size);
+    assert_eq!(65535, client.conn_state().pump_out_window_size);
+    assert_eq!(65535, client.stream_state(1).in_window_size);
+    assert_eq!(65535, client.stream_state(1).out_window_size);
+    assert_eq!(65535, client.stream_state(1).pump_out_window_size);
+
+    assert_eq!(Ok(Async::Ready(())), sender.poll());
+
+    let b = Bytes::from(vec![1; 65_535 * 2]);
+    sender.send_data(b.clone()).expect("send_data");
+
+    assert_eq!(
+        b.slice(0, 65_535),
+        Bytes::from(server_tester.recv_frames_data_check(1, 16_384, 65_535, false))
+    );
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(0, client.conn_state().out_window_size);
+    assert_eq!(-65535, client.conn_state().pump_out_window_size);
+    assert_eq!(65535, client.stream_state(1).in_window_size);
+    assert_eq!(0, client.stream_state(1).out_window_size);
+    assert_eq!(-65535, client.stream_state(1).pump_out_window_size);
+
+    server_tester.send_rst(1, ErrorCode::Cancel);
+
+    while client.conn_state().streams.len() != 0 {
+        // spin-wait
+    }
+
+    // pump out window must be reset to out window
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(0, client.conn_state().out_window_size);
+    assert_eq!(0, client.conn_state().pump_out_window_size);
+
+    // check that if more data is sent, pump_out_window_size is not exhausted
+
+    let b = Bytes::from(vec![1; 100_000]);
+    sender.send_data(b.clone()).expect("send_data");
+
+    assert_eq!(65535, client.conn_state().in_window_size);
+    assert_eq!(0, client.conn_state().out_window_size);
+    assert_eq!(0, client.conn_state().pump_out_window_size);
 }

@@ -20,7 +20,6 @@ use solicit::DEFAULT_SETTINGS;
 
 use super::closed_streams::*;
 use super::conf::*;
-use super::pump_stream_to_write_loop::PumpStreamToWrite;
 use super::stream::*;
 use super::stream_from_network::StreamFromNetwork;
 use super::stream_map::*;
@@ -39,7 +38,6 @@ use common::conn_read::ConnReadSideCustom;
 use common::conn_write::ConnWriteSideCustom;
 use common::init_where::InitWhere;
 use common::iteration_exit::IterationExit;
-use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use futures::future;
 use futures::sync::oneshot;
 use futures::task;
@@ -437,33 +435,6 @@ where
         let goaway = self.goaway_sent.is_some() || self.goaway_received.is_some();
         let no_streams = self.streams.is_empty();
         goaway && no_streams
-    }
-
-    pub fn new_pump_stream_to_write_loop(
-        &self,
-        stream_id: StreamId,
-        stream: DataOrHeadersWithFlagStream,
-        out_window: window_size::StreamOutWindowReceiver,
-    ) -> PumpStreamToWrite<T> {
-        let stream = stream.catch_unwind();
-        PumpStreamToWrite {
-            to_write_tx: self.to_write_tx.clone(),
-            stream_id: stream_id,
-            out_window: out_window,
-            stream: stream,
-        }
-    }
-
-    pub fn pump_stream_to_write_loop(
-        &self,
-        stream_id: StreamId,
-        stream: DataOrHeadersWithFlagStream,
-        out_window: window_size::StreamOutWindowReceiver,
-    ) {
-        let stream = stream.catch_unwind();
-        self.exec.execute(Box::new(
-            self.new_pump_stream_to_write_loop(stream_id, stream, out_window),
-        ));
     }
 
     pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {

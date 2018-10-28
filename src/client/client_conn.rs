@@ -16,8 +16,6 @@ use solicit::header::*;
 use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
-use service::Service;
-
 use futures::future::Future;
 use futures::stream::Stream;
 use futures::sync::mpsc::unbounded;
@@ -35,13 +33,16 @@ use tokio_tls_api;
 use solicit_async::*;
 
 use common::*;
-use data_or_trailers::*;
 use socket::*;
 
+use bytes::Bytes;
+use client::client_sender::ClientSender;
+use client::ClientInterface;
 use client_died_error_holder::ClientDiedErrorHolder;
 use common::client_or_server::ClientOrServer;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use futures::future;
 use headers_place::HeadersPlace;
 use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
@@ -94,12 +95,19 @@ unsafe impl Sync for ClientConn {}
 
 pub struct StartRequestMessage {
     pub headers: Headers,
-    pub body: HttpStreamAfterHeaders,
-    pub resp_tx: oneshot::Sender<Response>,
+    pub body: Option<Bytes>,
+    pub trailers: Option<Headers>,
+    pub end_stream: bool,
+    pub resp_tx: oneshot::Sender<result::Result<(ClientSender, Response)>>,
 }
 
-enum ClientToWriteMessage {
-    Start(StartRequestMessage),
+pub struct ClientStartRequestMessage {
+    start: StartRequestMessage,
+    write_tx: UnboundedSender<ClientToWriteMessage>,
+}
+
+pub(crate) enum ClientToWriteMessage {
+    Start(ClientStartRequestMessage),
     WaitForHandshake(oneshot::Sender<result::Result<()>>),
     Common(CommonToWriteMessage),
 }
@@ -133,16 +141,22 @@ impl<I> Conn<ClientTypes<I>>
 where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    fn process_start(&mut self, start: StartRequestMessage) -> result::Result<()> {
-        let StartRequestMessage {
-            headers,
-            body,
-            resp_tx,
+    fn process_start(&mut self, start: ClientStartRequestMessage) -> result::Result<()> {
+        let ClientStartRequestMessage {
+            start:
+                StartRequestMessage {
+                    headers,
+                    body,
+                    trailers,
+                    end_stream,
+                    resp_tx,
+                },
+            write_tx,
         } = start;
 
         let stream_id = self.next_local_stream_id();
 
-        let out_window = {
+        {
             let (mut http_stream, resp_stream, out_window) = self.new_stream_data(
                 stream_id,
                 None,
@@ -150,16 +164,30 @@ where
                 ClientStreamData {},
             );
 
-            if let Err(_) = resp_tx.send(Response::from_stream(resp_stream)) {
+            let r = Ok((
+                ClientSender {
+                    stream_id,
+                    write_tx,
+                    out_window,
+                },
+                Response::from_stream(resp_stream),
+            ));
+
+            if let Err(_) = resp_tx.send(r) {
                 warn!("caller died");
             }
 
             http_stream.push_back(DataOrHeaders::Headers(headers));
-
-            out_window
-        };
-
-        self.pump_stream_to_write_loop(stream_id, body.into_part_stream(), out_window);
+            if let Some(body) = body {
+                http_stream.push_back(DataOrHeaders::Data(body));
+            }
+            if let Some(trailers) = trailers {
+                http_stream.push_back(DataOrHeaders::Headers(trailers));
+            }
+            if end_stream {
+                http_stream.close_outgoing(ErrorCode::NoError);
+            }
+        }
 
         // Also opens latch if necessary
         self.buffer_outg_conn()?;
@@ -322,10 +350,15 @@ impl ClientConn {
         &self,
         start: StartRequestMessage,
     ) -> Result<(), StartRequestMessage> {
+        let client_start = ClientStartRequestMessage {
+            start,
+            write_tx: self.write_tx.clone(),
+        };
+
         self.write_tx
-            .unbounded_send(ClientToWriteMessage::Start(start))
+            .unbounded_send(ClientToWriteMessage::Start(client_start))
             .map_err(|send_error| match send_error.into_inner() {
-                ClientToWriteMessage::Start(start) => start,
+                ClientToWriteMessage::Start(start) => start.start,
                 _ => unreachable!(),
             })
     }
@@ -362,29 +395,35 @@ impl ClientConn {
     }
 }
 
-impl Service for ClientConn {
+impl ClientInterface for ClientConn {
     // TODO: copy-paste with Client::start_request
-    fn start_request(&self, headers: Headers, body: HttpStreamAfterHeaders) -> Response {
+    fn start_request(
+        &self,
+        headers: Headers,
+        body: Option<Bytes>,
+        trailers: Option<Headers>,
+        end_stream: bool,
+    ) -> HttpFutureSend<(ClientSender, Response)> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {
-            headers: headers,
-            body: body,
-            resp_tx: resp_tx,
+            headers,
+            body,
+            trailers,
+            end_stream,
+            resp_tx,
         };
 
         if let Err(_) = self.start_request_with_resp_sender(start) {
-            return Response::err(error::Error::Other("client died"));
+            return Box::new(future::err(error::Error::Other("client died")));
         }
 
         let resp_rx =
             resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
 
-        let resp_rx = resp_rx.map(|r| r.into_stream_flag());
+        let resp_rx = resp_rx.map_err(move |_| error::Error::Other("TODO"));
 
-        let resp_rx = resp_rx.flatten_stream();
-
-        Response::from_stream(resp_rx)
+        Box::new(resp_rx.flatten())
     }
 }
 

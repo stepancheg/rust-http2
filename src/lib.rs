@@ -77,9 +77,11 @@ pub use service_paths::ServicePaths;
 pub use exec::CpuPoolOption;
 
 pub use client::client_conf::ClientConf;
+pub use client::client_sender::ClientSender;
 pub use client::client_tls::ClientTlsOption;
 pub use client::Client;
 pub use client::ClientBuilder;
+pub use common::window_size::StreamDead;
 
 pub use server::server_conf::ServerAlpn;
 pub use server::server_conf::ServerConf;

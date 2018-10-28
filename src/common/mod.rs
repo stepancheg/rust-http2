@@ -6,7 +6,7 @@ mod closed_streams;
 mod conf;
 mod conn;
 mod conn_read;
-mod conn_write;
+pub mod conn_write;
 mod hash_set_shallow_clone;
 pub mod init_where;
 mod iteration_exit;
@@ -18,7 +18,7 @@ mod stream_queue;
 pub mod stream_queue_sync;
 mod types;
 pub mod waiters;
-mod window_size;
+pub mod window_size;
 
 pub use self::closed_streams::*;
 pub use self::conf::*;

@@ -413,6 +413,24 @@ impl HttpConnTester {
         assert!(data.is_empty());
     }
 
+    pub fn recv_frames_data_check(
+        &mut self,
+        stream_id: StreamId,
+        frame_size: usize,
+        total_size: usize,
+        end: bool,
+    ) -> Vec<u8> {
+        let mut r = Vec::new();
+        while r.len() != total_size {
+            let expect_frame_end = end && (r.len() + frame_size >= total_size);
+            let frame = self.recv_frame_data_check(stream_id, expect_frame_end);
+            assert!(frame.len() == frame_size || r.len() + frame.len() == total_size);
+            r.extend_from_slice(&frame[..]);
+        }
+        assert_eq!(total_size, r.len());
+        r
+    }
+
     /// Receive at most two frames till END_STREAM frame
     /// * if first frame has not END_STREAM, second must have empty payload
     pub fn recv_frame_data_tail(&mut self, stream_id: StreamId) -> Vec<u8> {

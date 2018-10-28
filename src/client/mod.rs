@@ -1,5 +1,6 @@
 pub mod client_conf;
 pub mod client_conn;
+pub mod client_sender;
 pub mod client_tls;
 
 use std::net::SocketAddr;
@@ -11,7 +12,6 @@ use bytes::Bytes;
 
 use futures::future;
 use futures::future::Future;
-use futures::stream;
 use futures::stream::Stream;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedReceiver;
@@ -39,8 +39,6 @@ use solicit_async::*;
 use client_died_error_holder::*;
 use common::*;
 
-use data_or_trailers::*;
-use service::Service;
 use socket::AnySocketAddr;
 use socket::ToClientStream;
 
@@ -48,6 +46,7 @@ use client::client_conf::ClientConf;
 use client::client_conn::ClientConn;
 use client::client_conn::ClientConnCallbacks;
 use client::client_conn::StartRequestMessage;
+use client::client_sender::ClientSender;
 pub use client::client_tls::ClientTlsOption;
 
 /// Builder for HTTP/2 client.
@@ -262,9 +261,16 @@ impl Client {
         client.build()
     }
 
-    /// Start HTTP/2 request.
-    pub fn start_request_simple(&self, headers: Headers, body: Bytes) -> Response {
-        self.start_request(headers, HttpStreamAfterHeaders::once_bytes(body))
+    pub fn start_request_end_stream(
+        &self,
+        headers: Headers,
+        body: Option<Bytes>,
+        trailers: Option<Headers>,
+    ) -> Response {
+        Response::new(
+            self.start_request(headers, body, trailers, true)
+                .and_then(move |(_sender, response)| response),
+        )
     }
 
     /// Start HTTP/2 `GET` request.
@@ -275,27 +281,32 @@ impl Client {
             Header::new(":authority", authority.to_owned()),
             Header::new(":scheme", self.http_scheme.as_bytes()),
         ]);
-        self.start_request_simple(headers, Bytes::new())
+        self.start_request_end_stream(headers, None, None)
     }
 
     /// Start HTTP/2 `POST` request.
     pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> Response {
-        self.start_post_stream(path, authority, stream::once(Ok(body)))
-    }
-
-    pub fn start_post_stream(
-        &self,
-        path: &str,
-        authority: &str,
-        body: impl Stream<Item = Bytes, Error = error::Error> + Send + 'static,
-    ) -> Response {
         let headers = Headers(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path.to_owned()),
             Header::new(":authority", authority.to_owned()),
             Header::new(":scheme", self.http_scheme.as_bytes()),
         ]);
-        self.start_request(headers, HttpStreamAfterHeaders::bytes(body))
+        self.start_request_end_stream(headers, Some(body), None)
+    }
+
+    pub fn start_post_sink(
+        &self,
+        path: &str,
+        authority: &str,
+    ) -> HttpFutureSend<(ClientSender, Response)> {
+        let headers = Headers(vec![
+            Header::new(":method", "POST"),
+            Header::new(":path", path.to_owned()),
+            Header::new(":authority", authority.to_owned()),
+            Header::new(":scheme", self.http_scheme.as_bytes()),
+        ]);
+        self.start_request(headers, None, None, false)
     }
 
     /// For tests
@@ -326,14 +337,33 @@ impl Client {
     }
 }
 
-impl Service for Client {
-    // TODO: copy-paste with ClientConnection::start_request
-    fn start_request(&self, headers: Headers, body: HttpStreamAfterHeaders) -> Response {
+pub trait ClientInterface {
+    /// Start HTTP/2 request.
+    fn start_request(
+        &self,
+        headers: Headers,
+        body: Option<Bytes>,
+        trailers: Option<Headers>,
+        end_stream: bool,
+    ) -> HttpFutureSend<(ClientSender, Response)>;
+}
+
+impl ClientInterface for Client {
+    // TODO: copy-paste with ClientConn::start_request
+    fn start_request(
+        &self,
+        headers: Headers,
+        body: Option<Bytes>,
+        trailers: Option<Headers>,
+        end_stream: bool,
+    ) -> HttpFutureSend<(ClientSender, Response)> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {
             headers,
             body,
+            trailers,
+            end_stream,
             resp_tx,
         };
 
@@ -341,17 +371,14 @@ impl Service for Client {
             .controller_tx
             .unbounded_send(ControllerCommand::StartRequest(start))
         {
-            return Response::err(error::Error::Other("client controller died"));
+            // TODO: named error
+            return Box::new(future::err(error::Error::Other("client controller died")));
         }
 
         let client_error = self.client_died_error_holder.clone();
         let resp_rx = resp_rx.map_err(move |oneshot::Canceled| client_error.error());
 
-        let resp_rx = resp_rx.map(|r| r.into_stream_flag());
-
-        let resp_rx = resp_rx.flatten_stream();
-
-        Response::from_stream(resp_rx)
+        Box::new(resp_rx.flatten())
     }
 }
 
@@ -398,7 +425,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                     if let Err(start) = self.conn.start_request_with_resp_sender(start) {
                         let err = error::Error::Other("client died and reconnect failed");
                         // ignore error
-                        if let Err(_) = start.resp_tx.send(Response::err(err)) {
+                        if let Err(_) = start.resp_tx.send(Err(err)) {
                             debug!("called likely died");
                         }
                     }

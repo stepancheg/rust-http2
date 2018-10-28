@@ -4,11 +4,7 @@ use solicit::header::Headers;
 
 /// Central HTTP/2 service interface.
 ///
-/// This trait is used by both client and server.
-///
-/// Client API simply implements this trait.
-///
-/// Server implementation calls implementation of this trait providede by user.
+/// This trait should be implemented by server.
 pub trait Service: Send + Sync + 'static {
     /// Start HTTP/2 request.
     ///

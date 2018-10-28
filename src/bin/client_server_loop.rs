@@ -5,7 +5,6 @@ extern crate httpbis;
 use bytes::Bytes;
 use futures::future::Future;
 use futures::stream::Stream;
-use futures::sync::mpsc;
 use httpbis::Client;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
@@ -95,19 +94,16 @@ fn ping_pong() {
         Default::default(),
     ).expect("client");
 
-    let (request_tx, request_rx) = mpsc::unbounded();
-
-    let (header, body) = client
-        .start_post_stream(
-            "/any",
-            "localhost",
-            request_rx.map_err(|()| httpbis::Error::Other("other")),
-        ).wait()
+    let (mut sender, response) = client
+        .start_post_sink("/any", "localhost")
+        .wait()
         .expect("request");
+
+    let (header, response) = response.wait().expect("response wait");
 
     assert_eq!(200, header.status());
 
-    let body = body.filter_data();
+    let body = response.filter_data();
     let mut body = body.wait();
 
     let mut i = 0u32;
@@ -115,9 +111,7 @@ fn ping_pong() {
         i = i.wrapping_add(1);
         let mut req = Vec::new();
         req.resize(BLOCK_SIZE, i as u8);
-        request_tx
-            .unbounded_send(Bytes::from(req))
-            .expect("send error");
+        sender.send_data(Bytes::from(req)).expect("send_data");
 
         let mut read = 0;
         while read < BLOCK_SIZE {

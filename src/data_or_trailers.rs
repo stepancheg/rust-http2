@@ -121,7 +121,8 @@ impl HttpStreamAfterHeaders {
         self.0.map(DataOrTrailers::into_part)
     }
 
-    pub(crate) fn into_part_stream(self) -> DataOrHeadersWithFlagStream {
+    // TODO: drop
+    pub(crate) fn _into_part_stream(self) -> DataOrHeadersWithFlagStream {
         DataOrHeadersWithFlagStream::new(self.into_flag_stream())
     }
 
