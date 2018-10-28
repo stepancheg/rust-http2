@@ -30,6 +30,7 @@ use solicit::frame::SettingsFrame;
 use std::cmp;
 use ErrorCode;
 use Headers;
+use data_or_headers::DataOrHeaders;
 
 pub trait ConnWriteSideCustom {
     type Types: Types;
@@ -204,6 +205,11 @@ where
         let stream = self.streams.get_mut(stream_id);
         if let Some(mut stream) = stream {
             stream.push_back_part(part);
+        } else {
+            if let DataOrHeaders::Data(data) = part.content {
+                // TODO: integer overflow
+                self.pump_out_window_size.increase(data.len() as u32);
+            }
         }
         Ok(())
     }
