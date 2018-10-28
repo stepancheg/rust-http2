@@ -34,8 +34,7 @@ fn stream_count() {
 
     let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
-    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
-    assert_eq!(0, state.streams.len());
+    assert_eq!(0, client.conn_state().streams.len());
 
     let req = client
         .start_post("/foobar", "localhost", Bytes::from(&b"xxyy"[..]))
@@ -57,7 +56,7 @@ fn stream_count() {
     let message = req.wait().expect("r");
     assert_eq!((b"aabb"[..]).to_owned(), message.body);
 
-    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.conn_state();
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -81,7 +80,7 @@ fn rst_is_error() {
         Err(e) => panic!("wrong error: {:?}", e),
     }
 
-    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.conn_state();
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -105,7 +104,7 @@ fn handle_1xx_headers() {
 
     req.wait().expect("Should be OK");
 
-    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.conn_state();
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -133,7 +132,7 @@ fn client_call_dropped() {
         assert_eq!(200, resp.headers.status());
     }
 
-    let state: ConnStateSnapshot = client.dump_state().wait().expect("state");
+    let state: ConnStateSnapshot = client.conn_state();
     assert_eq!(0, state.streams.len(), "{:?}", state);
 }
 
@@ -228,11 +227,11 @@ pub fn issue_89() {
 
     assert_eq!(
         server_tester.out_window_size.0,
-        client.dump_state().wait().unwrap().in_window_size
+        client.conn_state().in_window_size
     );
 
     let w = DEFAULT_SETTINGS.initial_window_size;
-    assert_eq!(w as i32, client.dump_state().wait().unwrap().in_window_size);
+    assert_eq!(w as i32, client.conn_state().in_window_size);
 
     server_tester.send_data(1, &[17, 19], false);
     assert_eq!(2, resp1.next().unwrap().unwrap().len());
@@ -240,7 +239,7 @@ pub fn issue_89() {
     // client does not send WINDOW_UPDATE on such small changes
     assert_eq!(
         (w - 2) as i32,
-        client.dump_state().wait().unwrap().in_window_size
+        client.conn_state().in_window_size
     );
 
     let _r3 = client.start_get("/r3", "localhost");
@@ -248,7 +247,7 @@ pub fn issue_89() {
     // This is the cause of issue #89
     assert_eq!(
         w as i32,
-        client.dump_state().wait().unwrap().streams[&3].in_window_size
+        client.stream_state(3).in_window_size
     );
 
     // Cannot reliably check that stream actually resets
