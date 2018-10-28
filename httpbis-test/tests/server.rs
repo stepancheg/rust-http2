@@ -310,8 +310,27 @@ fn stream_window_gt_conn_window() {
         w as i32,
         server_sn.single_conn().1.single_stream().1.out_window_size
     );
+    assert_eq!(
+        w as isize,
+        server_sn
+            .single_conn()
+            .1
+            .single_stream()
+            .1
+            .pump_out_window_size
+    );
+    assert_eq!(
+        0,
+        server_sn
+            .single_conn()
+            .1
+            .single_stream()
+            .1
+            .queued_out_data_size
+    );
 
-    tester.send_window_update_conn(w);
+    tester.send_window_update_conn(w + 1);
+    tester.send_window_update_stream(1, w + 1);
 
     assert_eq!(w as usize, tester.recv_frame_data_tail(1).len());
 }
@@ -363,6 +382,16 @@ fn do_not_poll_when_not_enough_window() {
 
     tester.send_get(1, "/fgfg");
     assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
+    assert_eq!(
+        DEFAULT_SETTINGS.initial_window_size as usize,
+        tester.recv_frame_data_check(1, false).len()
+    );
+
+    assert_eq!(1, polls.load(Ordering::SeqCst));
+
+    tester.send_window_update_conn(DEFAULT_SETTINGS.initial_window_size);
+    tester.send_window_update_stream(1, DEFAULT_SETTINGS.initial_window_size);
+
     assert_eq!(
         DEFAULT_SETTINGS.initial_window_size as usize,
         tester.recv_frame_data_check(1, false).len()

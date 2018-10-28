@@ -101,7 +101,7 @@ impl ConnOutWindowSender {
             .fetch_add(size as isize, Ordering::SeqCst) as i32;
         let new_size = old_size + size as i32;
 
-        if new_size >= 0 {
+        if new_size > 0 {
             self.waker.wake_all();
         }
     }
@@ -114,7 +114,7 @@ impl StreamOutWindowSender {
             .window_size
             .fetch_add(size as isize, Ordering::SeqCst) as i32;
         let new_size = old_size + size;
-        if new_size >= 0 {
+        if new_size > 0 {
             if let Some(task) = self.shared.task.swap_null(Ordering::SeqCst) {
                 task.notify();
             }
@@ -171,7 +171,7 @@ impl StreamOutWindowReceiver {
     fn poll_conn(&self) -> Poll<(), ConnDead> {
         self.check_conn_closed()?;
 
-        if self.shared.conn.window_size.load(Ordering::SeqCst) >= 0 {
+        if self.shared.conn.window_size.load(Ordering::SeqCst) > 0 {
             return Ok(Async::Ready(()));
         }
 
@@ -179,26 +179,24 @@ impl StreamOutWindowReceiver {
 
         self.check_conn_closed()?;
 
-        Ok(
-            if self.shared.conn.window_size.load(Ordering::SeqCst) >= 0 {
-                Async::Ready(())
-            } else {
-                Async::NotReady
-            },
-        )
+        Ok(if self.shared.conn.window_size.load(Ordering::SeqCst) > 0 {
+            Async::Ready(())
+        } else {
+            Async::NotReady
+        })
     }
 
     pub fn poll(&self) -> Poll<(), StreamDead> {
         self.check_stream_closed()?;
 
-        if self.shared.window_size.load(Ordering::SeqCst) < 0 {
+        if self.shared.window_size.load(Ordering::SeqCst) <= 0 {
             self.shared
                 .task
                 .store_box(Box::new(task::current()), Ordering::SeqCst);
 
             self.check_stream_closed()?;
 
-            if self.shared.window_size.load(Ordering::SeqCst) < 0 {
+            if self.shared.window_size.load(Ordering::SeqCst) <= 0 {
                 return Ok(Async::NotReady);
             }
         }

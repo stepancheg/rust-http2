@@ -46,6 +46,7 @@ pub struct HttpStreamStateSnapshot {
     pub out_window_size: i32,
     pub in_window_size: i32,
     pub pump_out_window_size: isize,
+    pub queued_out_data_size: usize,
     pub out_data_size: usize,
 }
 
@@ -102,6 +103,7 @@ impl<T: Types> HttpStreamCommon<T> {
             out_window_size: self.out_window_size.0,
             in_window_size: self.in_window_size.0,
             pump_out_window_size: self.pump_out_window.get(),
+            queued_out_data_size: self.outgoing.data_size(),
             out_data_size: self.outgoing.data_size(),
         }
     }

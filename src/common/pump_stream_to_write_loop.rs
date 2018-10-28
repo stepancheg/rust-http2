@@ -30,6 +30,8 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
 
     fn poll(&mut self) -> Poll<(), Void> {
         loop {
+            // Note poll returns Ready when window size is > 0,
+            // although HEADERS could be sent even when window size is zero or negative.
             match self.out_window.poll() {
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
                 Ok(Async::Ready(())) => {}
