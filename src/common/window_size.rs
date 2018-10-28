@@ -90,6 +90,10 @@ impl ConnOutWindowSender {
         (sender, receiver)
     }
 
+    pub fn get(&self) -> isize {
+        self.shared.window_size.load(Ordering::SeqCst) as isize
+    }
+
     pub fn increase(&self, size: u32) {
         let old_size = self
             .shared
@@ -115,6 +119,10 @@ impl StreamOutWindowSender {
                 task.notify();
             }
         }
+    }
+
+    pub fn get(&self) -> isize {
+        self.shared.window_size.load(Ordering::SeqCst) as isize
     }
 }
 
