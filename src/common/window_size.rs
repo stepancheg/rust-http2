@@ -109,8 +109,9 @@ impl ConnOutWindowSender {
 }
 
 impl StreamOutWindowSender {
-    pub fn increase(&self, size: usize) {
-        assert!(size <= isize::max_value() as usize);
+    /// `size` can be negative when INITIAL_WINDOW_SIZE
+    /// setting changes to lower value.
+    pub fn increase(&self, size: isize) {
         let old_size = self
             .shared
             .window_size

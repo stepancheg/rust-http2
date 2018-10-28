@@ -236,7 +236,7 @@ where
                             // and the old value.
                             // TODO: check for overflow
                             s.out_window_size.0 += delta;
-                            s.pump_out_window.increase(delta as usize);
+                            s.pump_out_window.increase(delta as isize);
                         }
 
                         if !self.streams.map.is_empty() && delta > 0 {
@@ -313,7 +313,7 @@ where
         stream
             .stream()
             .pump_out_window
-            .increase(frame.increment as usize);
+            .increase(frame.increment as isize);
 
         Ok(Some(stream))
     }
