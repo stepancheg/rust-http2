@@ -444,8 +444,11 @@ where
     ) -> result::Result<()> {
         if let Some(mut stream) = self.streams.get_mut(stream_id) {
             stream.close_outgoing(error_code);
-            task::current().notify();
+        } else {
+            self.queued_write
+                .queue_not_goaway(RstStreamFrame::new(stream_id, error_code));
         }
+        task::current().notify();
         Ok(())
     }
 

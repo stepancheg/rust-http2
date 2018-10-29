@@ -233,6 +233,7 @@ impl Header {
     }
 
     pub fn validate(&self, req_or_resp: RequestOrResponse) -> HeaderResult<()> {
+        // TODO: header must be valid
         if self.name.len() == 0 {
             return Err(HeaderError::EmptyName);
         }
@@ -413,6 +414,7 @@ impl Headers {
         }
 
         for header in self.regular_headers() {
+            header.validate(req_or_resp)?;
             debug_assert!(!header.is_preudo_header());
         }
 
