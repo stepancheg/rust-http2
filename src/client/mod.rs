@@ -275,7 +275,7 @@ impl Client {
 
     /// Start HTTP/2 `GET` request.
     pub fn start_get(&self, path: &str, authority: &str) -> Response {
-        let headers = Headers(vec![
+        let headers = Headers::from_vec(vec![
             Header::new(":method", "GET"),
             Header::new(":path", path.to_owned()),
             Header::new(":authority", authority.to_owned()),
@@ -286,7 +286,7 @@ impl Client {
 
     /// Start HTTP/2 `POST` request.
     pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> Response {
-        let headers = Headers(vec![
+        let headers = Headers::from_vec(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path.to_owned()),
             Header::new(":authority", authority.to_owned()),
@@ -300,7 +300,7 @@ impl Client {
         path: &str,
         authority: &str,
     ) -> HttpFutureSend<(ClientSender, Response)> {
-        let headers = Headers(vec![
+        let headers = Headers::from_vec(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path.to_owned()),
             Header::new(":authority", authority.to_owned()),

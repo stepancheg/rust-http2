@@ -6,6 +6,7 @@ use hpack;
 use solicit::frame::headers::HeadersDecodedFrame;
 use solicit::frame::HttpFrame;
 use solicit::frame::HttpFrameDecoded;
+use solicit::StreamId;
 use tokio_io::AsyncRead;
 use ErrorCode;
 use Header;
@@ -20,6 +21,7 @@ pub struct HttpDecodeRead<R: AsyncRead> {
 pub enum HttpFrameDecodedOrGoaway {
     Frame(HttpFrameDecoded),
     SendGoaway(ErrorCode),
+    SendRst(StreamId, ErrorCode),
 }
 
 impl<R: AsyncRead> HttpDecodeRead<R> {
@@ -51,7 +53,25 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
                     Ok(headers) => headers,
                 };
 
-                let headers = Headers(headers.into_iter().map(|h| Header::new(h.0, h.1)).collect());
+                let headers = match Headers::from_vec_pseudo_first(
+                    headers.into_iter().map(|h| Header::new(h.0, h.1)).collect(),
+                ) {
+                    Ok(headers) => headers,
+                    Err(e) => {
+                        // All pseudo-header fields MUST appear in the header block before
+                        // regular header fields. Any request or response that contains
+                        // a pseudo-header field that appears in a header block after
+                        // a regular header field MUST be treated as malformed (Section 8.1.2.6).
+                        warn!(
+                            "received incorrect headers in stream {}: {:?}",
+                            frame.stream_id, e
+                        );
+                        return Ok(Async::Ready(HttpFrameDecodedOrGoaway::SendRst(
+                            frame.stream_id,
+                            ErrorCode::ProtocolError,
+                        )));
+                    }
+                };
 
                 HttpFrameDecoded::Headers(HeadersDecodedFrame {
                     flags: frame.flags,

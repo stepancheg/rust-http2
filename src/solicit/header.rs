@@ -285,17 +285,61 @@ impl<N: Into<HeaderPart>, V: Into<HeaderPart>> From<(N, V)> for Header {
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct Headers(pub Vec<Header>);
+pub struct Headers {
+    // Pseudo-headers stored before regular headers
+    headers: Vec<Header>,
+    pseudo_count: usize,
+}
 
 impl Headers {
     pub fn new() -> Headers {
         Default::default()
     }
 
+    pub fn from_vec(mut headers: Vec<Header>) -> Headers {
+        headers.sort_by_key(|h| !h.is_preudo_header());
+        let pseudo_count = headers.iter().take_while(|h| h.is_preudo_header()).count();
+        Headers {
+            headers,
+            pseudo_count,
+        }
+    }
+
+    pub fn from_vec_pseudo_first(headers: Vec<Header>) -> Result<Headers, HeaderError> {
+        let mut saw_regular_header = false;
+        let mut pseudo_count = 0;
+        for header in &headers {
+            if header.is_preudo_header() {
+                if saw_regular_header {
+                    return Err(HeaderError::PseudoHeadersAfterRegularHeaders);
+                }
+                pseudo_count += 1;
+            } else {
+                saw_regular_header = true;
+            }
+        }
+        return Ok(Headers {
+            headers,
+            pseudo_count,
+        });
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Header> {
+        self.headers.iter()
+    }
+
+    fn pseudo_headers(&self) -> &[Header] {
+        &self.headers[..self.pseudo_count]
+    }
+
+    fn regular_headers(&self) -> &[Header] {
+        &self.headers[self.pseudo_count..]
+    }
+
     /// Multiline string
     pub fn dump(&self) -> String {
         let mut r = String::new();
-        for h in &self.0 {
+        for h in &self.headers {
             r.push_str(&h.format());
             r.push_str("\n");
         }
@@ -303,21 +347,21 @@ impl Headers {
     }
 
     pub fn new_get(path: &str) -> Headers {
-        Headers(vec![
+        Headers::from_vec(vec![
             Header::new(":method", "GET"),
             Header::new(":path", path),
         ])
     }
 
     pub fn new_post(path: &str) -> Headers {
-        Headers(vec![
+        Headers::from_vec(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path),
         ])
     }
 
     pub fn from_status(code: u32) -> Headers {
-        Headers(vec![Header::new(":status", format!("{}", code))])
+        Headers::from_vec(vec![Header::new(":status", format!("{}", code))])
     }
 
     pub fn ok_200() -> Headers {
@@ -338,48 +382,37 @@ impl Headers {
         headers
     }
 
-    pub fn contains_preudo_headers(&self) -> bool {
-        self.0.iter().any(|h| h.is_preudo_header())
-    }
-
     pub fn validate(
         &self,
         req_or_resp: RequestOrResponse,
         headers_place: HeadersPlace,
     ) -> HeaderResult<()> {
-        let mut saw_regular_header = false;
-
         let mut pseudo_headers_met = PseudoHeaderNameSet::new();
 
-        for header in &self.0 {
+        for header in self.pseudo_headers() {
+            debug_assert!(header.is_preudo_header());
+
             header.validate(req_or_resp)?;
 
-            // 8.1.2.1.  Pseudo-Header Fields
-            // All pseudo-header fields MUST appear in the header block before
-            // regular header fields.  Any request or response that contains a
-            // pseudo-header field that appears in a header block after a regular
-            // header field MUST be treated as malformed (Section 8.1.2.6).
-            if let Some(header_name) = header.pseudo_header_name()? {
-                if headers_place == HeadersPlace::Trailing {
-                    return Err(HeaderError::PseudoHeadersInTrailers);
-                }
+            let header_name = header.pseudo_header_name()?.unwrap();
 
-                if saw_regular_header {
-                    return Err(HeaderError::PseudoHeadersAfterRegularHeaders);
-                }
-
-                if !pseudo_headers_met.insert(header_name) {
-                    return Err(HeaderError::MoreThanOnePseudoHeader(header_name));
-                }
-
-                if header_name == PseudoHeaderName::Path {
-                    if header.value.is_empty() {
-                        return Err(HeaderError::EmptyValue(header_name));
-                    }
-                }
-            } else {
-                saw_regular_header = true;
+            if headers_place == HeadersPlace::Trailing {
+                return Err(HeaderError::PseudoHeadersInTrailers);
             }
+
+            if !pseudo_headers_met.insert(header_name) {
+                return Err(HeaderError::MoreThanOnePseudoHeader(header_name));
+            }
+
+            if header_name == PseudoHeaderName::Path {
+                if header.value.is_empty() {
+                    return Err(HeaderError::EmptyValue(header_name));
+                }
+            }
+        }
+
+        for header in self.regular_headers() {
+            debug_assert!(!header.is_preudo_header());
         }
 
         if headers_place == HeadersPlace::Initial {
@@ -413,7 +446,12 @@ impl Headers {
     }
 
     pub fn get_opt<'a>(&'a self, name: &str) -> Option<&'a str> {
-        self.0
+        let headers = if name.starts_with(':') {
+            self.pseudo_headers()
+        } else {
+            self.regular_headers()
+        };
+        headers
             .iter()
             .find(|h| h.name() == name.as_bytes())
             .and_then(|h| str::from_utf8(h.value()).ok())
@@ -447,17 +485,30 @@ impl Headers {
     }
 
     pub fn add(&mut self, name: &str, value: &str) {
-        self.0.push(Header::new(name, value));
+        self.add_header(Header::new(name, value));
+    }
+
+    pub fn add_header(&mut self, header: Header) {
+        if header.is_preudo_header() {
+            let pseudo_count = self.pseudo_count;
+            self.headers.insert(pseudo_count, header);
+            self.pseudo_count += 1;
+        } else {
+            self.headers.push(header);
+        }
     }
 
     pub fn extend(&mut self, headers: Headers) {
-        self.0.extend(headers.0);
+        self.headers.reserve(headers.headers.len());
+        for h in headers.headers {
+            self.add_header(h);
+        }
     }
 }
 
 impl FromIterator<Header> for Headers {
     fn from_iter<T: IntoIterator<Item = Header>>(iter: T) -> Headers {
-        Headers(iter.into_iter().collect())
+        Headers::from_vec(iter.into_iter().collect())
     }
 }
 

@@ -9,6 +9,7 @@ use common::stream::InMessageStage;
 use common::stream_map::HttpStreamRef;
 use common::types::Types;
 use error;
+use futures::task;
 use futures::Async;
 use futures::Poll;
 use result;
@@ -435,6 +436,19 @@ where
         }
     }
 
+    /// Send `RST_STREAM` when received incorrect stream frame
+    fn process_stream_error(
+        &mut self,
+        stream_id: StreamId,
+        error_code: ErrorCode,
+    ) -> result::Result<()> {
+        if let Some(mut stream) = self.streams.get_mut(stream_id) {
+            stream.close_outgoing(error_code);
+            task::current().notify();
+        }
+        Ok(())
+    }
+
     /// Loop forever, never return `Ready`
     pub fn read_process_frame(&mut self) -> Poll<(), error::Error> {
         loop {
@@ -442,16 +456,19 @@ where
                 return Err(error::Error::Other("GOAWAY"));
             }
 
-            let frame = match self.recv_http_frame()? {
-                Async::Ready(HttpFrameDecodedOrGoaway::Frame(frame)) => frame,
+            match self.recv_http_frame()? {
+                Async::Ready(HttpFrameDecodedOrGoaway::Frame(frame)) => {
+                    self.process_http_frame(frame)?;
+                }
+                Async::Ready(HttpFrameDecodedOrGoaway::SendRst(stream_id, error_code)) => {
+                    self.process_stream_error(stream_id, error_code)?;
+                }
                 Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(error_code)) => {
                     self.send_goaway(error_code)?;
                     return Ok(Async::NotReady);
                 }
                 Async::NotReady => return Ok(Async::NotReady),
             };
-
-            self.process_http_frame(frame)?;
         }
     }
 }
