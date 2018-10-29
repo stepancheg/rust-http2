@@ -187,6 +187,7 @@ impl Header {
     ///
     /// The name and value need to be convertible into a `HeaderPart`.
     pub fn new<N: Into<HeaderPart>, V: Into<HeaderPart>>(name: N, value: V) -> Header {
+        // TODO: convert name to lower case
         Header {
             name: name.into().0,
             value: value.into().0,
