@@ -72,6 +72,8 @@ pub use solicit::header::Headers;
 pub use solicit::HttpScheme;
 
 pub use service::Service;
+pub use service::ServiceContext;
+
 pub use service_paths::ServicePaths;
 
 pub use exec::CpuPoolOption;
@@ -85,6 +87,7 @@ pub use common::window_size::StreamDead;
 
 pub use server::server_conf::ServerAlpn;
 pub use server::server_conf::ServerConf;
+pub use server::server_sender::ServerSender;
 pub use server::server_tls::ServerTlsOption;
 pub use server::Server;
 pub use server::ServerBuilder;

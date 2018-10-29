@@ -57,6 +57,13 @@ impl SimpleHttpMessage {
         }
     }
 
+    pub fn redirect_302(location: &str) -> SimpleHttpMessage {
+        SimpleHttpMessage {
+            headers: Headers::redirect_302(location),
+            body: Bytes::new(),
+        }
+    }
+
     pub fn add(&mut self, part: DataOrHeaders) {
         match part {
             DataOrHeaders::Headers(headers) => {

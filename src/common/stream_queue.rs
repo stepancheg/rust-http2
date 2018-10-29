@@ -74,7 +74,7 @@ impl StreamQueue {
     }
 
     pub fn close(&mut self, error_code: ErrorCode) {
-        if None == self.end || Some(ErrorCode::NoError) == self.end {
+        if None == self.end {
             self.end = Some(error_code);
         }
     }

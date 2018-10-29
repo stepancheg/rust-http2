@@ -1,10 +1,11 @@
 //! Tests for server.
 
 extern crate bytes;
+#[macro_use]
+extern crate log;
 extern crate env_logger;
 extern crate futures;
 extern crate httpbis;
-extern crate log;
 extern crate regex;
 extern crate tokio_core;
 extern crate tokio_tls_api;
@@ -52,8 +53,10 @@ use unix_socket::UnixStream;
 fn simple_new() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |_headers, req| {
-        Response::headers_and_stream(Headers::ok_200(), req)
+    let server = ServerOneConn::new_fn(0, |_, _headers, req, mut resp| {
+        resp.send_headers(Headers::ok_200())?;
+        resp.pull_from_stream(req)?;
+        Ok(())
     });
 
     let mut tester = HttpConnTester::connect(server.port());
@@ -80,11 +83,12 @@ fn simple_new() {
 fn panic_in_handler() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |headers, _req| {
+    let server = ServerOneConn::new_fn(0, |_, headers, _req, mut resp| {
         if headers.path() == "/panic" {
             panic!("requested");
         } else {
-            Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hi there"))
+            resp.send_found_200_plain_text("hi there")?;
+            Ok(())
         }
     });
 
@@ -92,16 +96,22 @@ fn panic_in_handler() {
     tester.send_preface();
     tester.settings_xchg();
 
+    info!("test /hello");
+
     {
         let resp = tester.get(1, "/hello");
         assert_eq!(200, resp.headers.status());
         assert_eq!(&b"hi there"[..], &resp.body[..]);
     }
 
+    info!("test /panic");
+
     {
-        let resp = tester.get(3, "/panic");
-        assert_eq!(500, resp.headers.status());
+        tester.send_get(3, "/panic");
+        tester.recv_rst_frame_check(3, ErrorCode::InternalError);
     }
+
+    info!("test /world");
 
     {
         let resp = tester.get(5, "/world");
@@ -116,20 +126,24 @@ fn panic_in_handler() {
 fn panic_in_stream() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |headers, _req| {
+    let server = ServerOneConn::new_fn(0, |_, headers, _req, mut resp| {
         if headers.path() == "/panic" {
             let stream = HttpStreamAfterHeaders::new(stream::iter_ok((0..2).map(|_| {
                 panic!("should reset stream");
             })));
-            Response::headers_and_stream(Headers::ok_200(), stream)
+            resp.send_headers(Headers::ok_200())?;
+            resp.pull_from_stream(stream)?;
         } else {
-            Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hi there"))
+            resp.send_found_200_plain_text("hi there")?;
         }
+        Ok(())
     });
 
     let mut tester = HttpConnTester::connect(server.port());
     tester.send_preface();
     tester.settings_xchg();
+
+    info!("test /hello");
 
     {
         let resp = tester.get(1, "/hello");
@@ -137,11 +151,15 @@ fn panic_in_stream() {
         assert_eq!(&b"hi there"[..], &resp.body[..]);
     }
 
+    info!("test /panic");
+
     {
         tester.send_get(3, "/panic");
         tester.recv_frame_headers_check(3, false);
         tester.recv_rst_frame();
     }
+
+    info!("test /world");
 
     {
         let resp = tester.get(5, "/world");
@@ -167,8 +185,12 @@ fn response_large() {
 
     let large_resp_copy = large_resp.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_headers, _req| {
-        Response::headers_and_bytes(Headers::ok_200(), Bytes::from(large_resp_copy.clone()))
+    let server = ServerOneConn::new_fn(0, move |_, _headers, _req, mut resp| {
+        resp.send_message(SimpleHttpMessage {
+            headers: Headers::ok_200(),
+            body: Bytes::from(large_resp_copy.clone()),
+        })?;
+        Ok(())
     });
 
     // TODO: rewrite with TCP
@@ -342,7 +364,7 @@ fn do_not_poll_when_not_enough_window() {
     let polls = Arc::new(AtomicUsize::new(0));
     let polls_copy = polls.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_, _| {
+    let server = ServerOneConn::new_fn(0, move |_, _, _, mut resp| {
         struct StreamImpl {
             polls: Arc<AtomicUsize>,
         }
@@ -364,12 +386,12 @@ fn do_not_poll_when_not_enough_window() {
             }
         }
 
-        Response::headers_and_bytes_stream(
-            Headers::ok_200(),
-            StreamImpl {
-                polls: polls_copy.clone(),
-            },
-        )
+        resp.send_headers(Headers::ok_200())?;
+        resp.pull_bytes_from_stream(StreamImpl {
+            polls: polls_copy.clone(),
+        })?;
+
+        Ok(())
     });
 
     let mut tester = HttpConnTester::connect(server.port());
@@ -414,8 +436,12 @@ pub fn server_sends_continuation_frame() {
 
     let headers_copy = headers.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_headers, _req| {
-        Response::headers_and_bytes(headers_copy.clone(), "there")
+    let server = ServerOneConn::new_fn(0, move |_, _headers, _req, mut resp| {
+        resp.send_message(SimpleHttpMessage {
+            headers: headers_copy.clone(),
+            body: Bytes::from("there"),
+        })?;
+        Ok(())
     });
 
     let mut tester = HttpConnTester::connect(server.port());
@@ -487,8 +513,9 @@ fn external_event_loop() {
             let mut server = ServerBuilder::new_plain();
             server.event_loop = Some(core.remote());
             server.set_port(0);
-            server.service.set_service_fn("/", |_, _| {
-                Response::headers_and_bytes(Headers::ok_200(), "aabb")
+            server.service.set_service_fn("/", |_, _, _, mut resp| {
+                resp.send_found_200_plain_text("aabb")?;
+                Ok(())
             });
             servers.push(server.build().expect("server"));
         }

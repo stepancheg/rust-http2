@@ -4,6 +4,8 @@ extern crate tls_api_openssl;
 
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
+use httpbis::ServerSender;
+use httpbis::ServiceContext;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -24,14 +26,16 @@ impl ServiceImpl {
 impl httpbis::Service for ServiceImpl {
     fn start_request(
         &self,
+        _context: ServiceContext,
         req_headers: httpbis::Headers,
         _req: httpbis::HttpStreamAfterHeaders,
-    ) -> httpbis::Response {
+        mut resp: ServerSender,
+    ) -> httpbis::Result<()> {
         println!("starting request: {:?}", req_headers);
 
         if req_headers.method() == "POST" {
             self.counter.fetch_add(1, Ordering::Relaxed);
-            httpbis::Response::redirect_302("/")
+            resp.send_redirect_302("/")?;
         } else {
             let mut resp_headers = httpbis::Headers::ok_200();
             resp_headers.add("content-type", "text/html; charset=utf-8");
@@ -56,8 +60,11 @@ impl httpbis::Service for ServiceImpl {
                 self.counter.load(Ordering::Relaxed)
             );
 
-            httpbis::Response::headers_and_bytes(resp_headers, page)
+            resp.send_headers(resp_headers)?;
+            resp.send_data_end_of_stream(page.into())?
         }
+
+        Ok(())
     }
 }
 

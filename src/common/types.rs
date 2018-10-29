@@ -8,6 +8,7 @@ use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 
 /// Client or server type names for connection and stream
+// TODO: make Types without Io
 pub trait Types: 'static {
     type Io: AsyncWrite + AsyncRead + Send + 'static;
     type HttpStreamData: HttpStreamData;

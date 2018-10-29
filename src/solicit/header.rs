@@ -332,6 +332,12 @@ impl Headers {
         Headers::from_status(500)
     }
 
+    pub fn redirect_302(location: &str) -> Headers {
+        let mut headers = Headers::from_status(302);
+        headers.add("location", location);
+        headers
+    }
+
     pub fn contains_preudo_headers(&self) -> bool {
         self.0.iter().any(|h| h.is_preudo_header())
     }

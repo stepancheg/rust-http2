@@ -1,21 +1,22 @@
 use bytes::Bytes;
-use client::client_conn::ClientToWriteMessage;
 use common::common_sender::CommonSender;
 use common::common_sender::SendError;
-use common::window_size::StreamDead;
 use error;
 use futures::Poll;
 use futures::Stream;
+use server::server_conn::ServerToWriteMessage;
 use DataOrTrailers;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
+use SimpleHttpMessage;
+use StreamDead;
 
-pub struct ClientSender {
-    pub(crate) common: CommonSender<ClientToWriteMessage>,
+pub struct ServerSender {
+    pub(crate) common: CommonSender<ServerToWriteMessage>,
 }
 
-impl ClientSender {
+impl ServerSender {
     pub fn poll(&mut self) -> Poll<(), StreamDead> {
         self.common.poll()
     }
@@ -24,8 +25,11 @@ impl ClientSender {
         self.common.wait()
     }
 
+    pub fn send_headers(&mut self, headers: Headers) -> Result<(), SendError> {
+        self.common.send_headers(headers)
+    }
+
     pub fn send_data(&mut self, data: Bytes) -> Result<(), SendError> {
-        // TODO: check state
         self.common.send_data(data)
     }
 
@@ -35,6 +39,13 @@ impl ClientSender {
 
     pub fn send_trailers(&mut self, trailers: Headers) -> Result<(), SendError> {
         self.common.send_trailers(trailers)
+    }
+
+    pub fn send_data_or_trailers(
+        &mut self,
+        data_or_trailers: DataOrTrailers,
+    ) -> Result<(), SendError> {
+        self.common.send_data_or_trailers(data_or_trailers)
     }
 
     pub fn pull_from_stream(&mut self, stream: HttpStreamAfterHeaders) -> Result<(), SendError> {
@@ -48,11 +59,22 @@ impl ClientSender {
         self.common.pull_bytes_from_stream(stream)
     }
 
-    pub fn send_data_or_trailers(
-        &mut self,
-        data_or_trailers: DataOrTrailers,
-    ) -> Result<(), SendError> {
-        self.common.send_data_or_trailers(data_or_trailers)
+    pub fn send_message(&mut self, message: SimpleHttpMessage) -> Result<(), SendError> {
+        self.send_headers(message.headers)?;
+        self.send_data_end_of_stream(message.body)?;
+        Ok(())
+    }
+
+    pub fn send_found_200_plain_text(&mut self, body: &str) -> Result<(), SendError> {
+        self.send_message(SimpleHttpMessage::found_200_plain_text(body))
+    }
+
+    pub fn send_redirect_302(&mut self, location: &str) -> Result<(), SendError> {
+        self.send_message(SimpleHttpMessage::redirect_302(location))
+    }
+
+    pub fn send_not_found_404(&mut self, message: &str) -> Result<(), SendError> {
+        self.send_message(SimpleHttpMessage::not_found_404(message))
     }
 
     pub fn reset(&mut self, error_code: ErrorCode) -> Result<(), SendError> {

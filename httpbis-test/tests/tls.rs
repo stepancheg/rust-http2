@@ -13,8 +13,6 @@ extern crate tokio_tls_api;
 extern crate httpbis_test;
 use httpbis_test::*;
 
-use bytes::Bytes;
-
 use std::sync::Arc;
 
 use futures::future::Future;
@@ -57,8 +55,15 @@ fn tls() {
     struct ServiceImpl {}
 
     impl Service for ServiceImpl {
-        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-            Response::headers_and_bytes(Headers::ok_200(), Bytes::from("hello"))
+        fn start_request(
+            &self,
+            _context: ServiceContext,
+            _headers: Headers,
+            _req: HttpStreamAfterHeaders,
+            mut resp: ServerSender,
+        ) -> httpbis::Result<()> {
+            resp.send_found_200_plain_text("hello")?;
+            Ok(())
         }
     }
 

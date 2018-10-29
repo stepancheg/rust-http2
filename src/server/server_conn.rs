@@ -13,11 +13,8 @@ use solicit::header::*;
 use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
-use bytes::Bytes;
-
 use futures::future;
 use futures::future::Future;
-use futures::stream;
 use futures::stream::Stream;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
@@ -43,15 +40,18 @@ use common::init_where::InitWhere;
 
 use client_died_error_holder::ClientDiedErrorHolder;
 use common::client_or_server::ClientOrServer;
+use common::common_sender::CommonSender;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use headers_place::HeadersPlace;
 use misc::any_to_string;
 use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
+use service::ServiceContext;
 use std::marker;
 use ErrorCode;
 use ServerConf;
+use ServerSender;
 use ServerTlsOption;
 
 struct ServerTypes<I>(marker::PhantomData<I>)
@@ -146,44 +146,38 @@ where
 
         let factory = self.specific.factory.clone();
 
-        let to_write_tx = self.to_write_tx.clone();
+        let sender = ServerSender {
+            common: CommonSender::new(stream_id, self.to_write_tx.clone(), out_window, false),
+        };
+
+        let context = ServiceContext {
+            loop_handle: self.loop_handle.remote().clone(),
+        };
 
         self.exec.execute(Box::new(future::lazy(move || {
-            let response = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            let invoke_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
                 // TODO: do start request in executor
-                factory.start_request(headers, req_stream)
+                factory.start_request(context, headers, req_stream, sender)
             }));
 
-            let response = response.unwrap_or_else(|e| {
+            let result: result::Result<()> = invoke_result.unwrap_or_else(|e| {
                 let e = any_to_string(e);
                 warn!("handler panicked: {}", e);
-
-                let headers = Headers::internal_error_500();
-                Response::from_stream(stream::iter_ok(vec![
-                    DataOrHeadersWithFlag::intermediate_headers(headers),
-                    DataOrHeadersWithFlag::last_data(Bytes::from(format!(
-                        "handler panicked: {}",
-                        e
-                    ))),
-                ]))
+                Ok(())
             });
 
-            let response = response.into_part_stream();
-            let response = response.catch_unwind();
-
-            PumpStreamToWrite::<ServerTypes<I>> {
-                to_write_tx,
-                stream_id,
-                out_window,
-                stream: response,
+            if let Err(e) = result {
+                warn!("handler returned error: {:?}", e);
             }
+
+            Ok(())
         })));
 
         Ok(self.streams.get_mut(stream_id).expect("get stream"))
     }
 }
 
-enum ServerToWriteMessage {
+pub enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
 }
 
@@ -364,16 +358,29 @@ impl ServerConn {
         f: F,
     ) -> (ServerConn, HttpFuture<()>)
     where
-        F: Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
+        F: Fn(ServiceContext, Headers, HttpStreamAfterHeaders, ServerSender) -> result::Result<()>
+            + Send
+            + Sync
+            + 'static,
     {
         struct HttpServiceFn<F>(F);
 
         impl<F> Service for HttpServiceFn<F>
         where
-            F: Fn(Headers, HttpStreamAfterHeaders) -> Response + Send + Sync + 'static,
+            F: Fn(ServiceContext, Headers, HttpStreamAfterHeaders, ServerSender)
+                    -> result::Result<()>
+                + Send
+                + Sync
+                + 'static,
         {
-            fn start_request(&self, headers: Headers, req: HttpStreamAfterHeaders) -> Response {
-                (self.0)(headers, req)
+            fn start_request(
+                &self,
+                context: ServiceContext,
+                headers: Headers,
+                req: HttpStreamAfterHeaders,
+                resp: ServerSender,
+            ) -> result::Result<()> {
+                (self.0)(context, headers, req, resp)
             }
         }
 

@@ -40,6 +40,7 @@ use client::client_sender::ClientSender;
 use client::ClientInterface;
 use client_died_error_holder::ClientDiedErrorHolder;
 use common::client_or_server::ClientOrServer;
+use common::common_sender::CommonSender;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use futures::future;
@@ -51,7 +52,7 @@ use ClientConf;
 use ClientTlsOption;
 use ErrorCode;
 
-struct ClientTypes<I>(marker::PhantomData<I>);
+pub(crate) struct ClientTypes<I>(marker::PhantomData<I>);
 
 impl<I> Types for ClientTypes<I>
 where
@@ -166,9 +167,7 @@ where
 
             let r = Ok((
                 ClientSender {
-                    stream_id,
-                    write_tx,
-                    out_window,
+                    common: CommonSender::new(stream_id, write_tx, out_window, true),
                 },
                 Response::from_stream(resp_stream),
             ));

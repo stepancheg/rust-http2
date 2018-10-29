@@ -3,6 +3,7 @@
 pub mod atomic_box_option;
 pub mod client_or_server;
 mod closed_streams;
+pub(crate) mod common_sender;
 mod conf;
 mod conn;
 mod conn_read;
@@ -25,7 +26,6 @@ pub use self::conf::*;
 pub use self::conn::*;
 pub use self::conn_read::*;
 pub use self::conn_write::*;
-pub use self::pump_stream_to_write_loop::*;
 pub use self::stream::*;
 pub use self::stream_from_network::*;
 pub use self::stream_map::*;

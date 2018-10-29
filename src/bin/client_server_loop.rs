@@ -8,9 +8,10 @@ use futures::stream::Stream;
 use httpbis::Client;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
-use httpbis::Response;
 use httpbis::ServerBuilder;
+use httpbis::ServerSender;
 use httpbis::Service;
+use httpbis::ServiceContext;
 use std::env;
 use std::sync::Arc;
 use std::time::Instant;
@@ -43,8 +44,15 @@ fn request() {
     struct My;
 
     impl Service for My {
-        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-            Response::found_200_plain_text("hello there")
+        fn start_request(
+            &self,
+            _context: ServiceContext,
+            _headers: Headers,
+            _req: HttpStreamAfterHeaders,
+            mut resp: ServerSender,
+        ) -> httpbis::Result<()> {
+            resp.send_found_200_plain_text("hello there")?;
+            Ok(())
         }
     }
 
@@ -78,8 +86,16 @@ fn ping_pong() {
     struct Echo;
 
     impl Service for Echo {
-        fn start_request(&self, _headers: Headers, req: HttpStreamAfterHeaders) -> Response {
-            Response::headers_and_bytes_stream(Headers::ok_200(), req.filter_data())
+        fn start_request(
+            &self,
+            _context: ServiceContext,
+            _headers: Headers,
+            req: HttpStreamAfterHeaders,
+            mut resp: ServerSender,
+        ) -> httpbis::Result<()> {
+            resp.send_headers(Headers::ok_200())?;
+            resp.pull_from_stream(req)?;
+            Ok(())
         }
     }
 

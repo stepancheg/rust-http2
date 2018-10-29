@@ -62,6 +62,21 @@ impl DataOrHeadersWithFlag {
     }
 }
 
+impl From<DataOrTrailers> for DataOrHeadersWithFlag {
+    fn from(d: DataOrTrailers) -> Self {
+        match d {
+            DataOrTrailers::Data(data, end_stream) => DataOrHeadersWithFlag {
+                content: DataOrHeaders::Data(data),
+                last: end_stream == EndStream::Yes,
+            },
+            DataOrTrailers::Trailers(trailers) => DataOrHeadersWithFlag {
+                content: DataOrHeaders::Headers(trailers),
+                last: true,
+            },
+        }
+    }
+}
+
 /// Stream of DATA of HEADER frames
 pub struct DataOrHeadersWithFlagStream(pub HttpFutureStreamSend<DataOrHeadersWithFlag>);
 

@@ -10,7 +10,9 @@ use bytes::Bytes;
 use common::conn::ConnStateSnapshot;
 use common::conn_read::ConnReadSideCustom;
 use common::iteration_exit::IterationExit;
+use common::pump_stream_to_write_loop::PumpStreamToWrite;
 use common::stream::HttpStreamCommand;
+use common::window_size::StreamOutWindowReceiver;
 use data_or_headers::DataOrHeaders;
 use error;
 use futures::sync::oneshot;
@@ -31,6 +33,7 @@ use solicit::frame::SettingsFrame;
 use std::cmp;
 use ErrorCode;
 use Headers;
+use HttpStreamAfterHeaders;
 
 pub trait ConnWriteSideCustom {
     type Types: Types;
@@ -213,6 +216,21 @@ where
         Ok(())
     }
 
+    fn process_stream_pull(
+        &mut self,
+        stream_id: StreamId,
+        stream: HttpStreamAfterHeaders,
+        out_window: StreamOutWindowReceiver,
+    ) -> result::Result<()> {
+        self.exec.execute(Box::new(PumpStreamToWrite::<T> {
+            to_write_tx: self.to_write_tx.clone(),
+            stream_id,
+            out_window,
+            stream,
+        }));
+        Ok(())
+    }
+
     pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
         match common {
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
@@ -220,6 +238,9 @@ where
             }
             CommonToWriteMessage::StreamEnqueue(stream_id, part) => {
                 self.process_stream_enqueue(stream_id, part)?;
+            }
+            CommonToWriteMessage::Pull(stream_id, stream, out_window_receiver) => {
+                self.process_stream_pull(stream_id, stream, out_window_receiver)?;
             }
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
                 self.increase_in_window(stream_id, increase)?;
@@ -292,5 +313,6 @@ pub enum CommonToWriteMessage {
     IncreaseInWindow(StreamId, u32),
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),
     StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
+    Pull(StreamId, HttpStreamAfterHeaders, StreamOutWindowReceiver),
     DumpState(oneshot::Sender<ConnStateSnapshot>),
 }

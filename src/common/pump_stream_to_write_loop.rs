@@ -8,12 +8,14 @@ use void::Void;
 
 use solicit::StreamId;
 
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-
 use error::ErrorCode;
 
 use super::*;
+use misc::any_to_string;
+use std::panic;
+use std::panic::AssertUnwindSafe;
+use DataOrTrailers;
+use HttpStreamAfterHeaders;
 
 /// Poll the stream and enqueues frames
 pub struct PumpStreamToWrite<T: Types> {
@@ -21,7 +23,7 @@ pub struct PumpStreamToWrite<T: Types> {
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     pub stream_id: StreamId,
     pub out_window: window_size::StreamOutWindowReceiver,
-    pub stream: DataOrHeadersWithFlagStream,
+    pub stream: HttpStreamAfterHeaders,
 }
 
 impl<T: Types> Future for PumpStreamToWrite<T> {
@@ -45,7 +47,19 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
                 }
             }
 
-            let part_opt = match self.stream.poll() {
+            let poll = match panic::catch_unwind(AssertUnwindSafe(|| self.stream.poll())) {
+                Ok(poll) => poll,
+                Err(e) => {
+                    let e = any_to_string(e);
+                    warn!("stream panicked: {}", e);
+                    let rst =
+                        CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::InternalError);
+                    drop(self.to_write_tx.unbounded_send(rst.into()));
+                    return Ok(Async::Ready(()));
+                }
+            };
+
+            let part_opt = match poll {
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
                 Ok(Async::Ready(r)) => r,
                 Err(e) => {
@@ -64,14 +78,11 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
 
             match part_opt {
                 Some(part) => {
-                    match &part.content {
-                        &DataOrHeaders::Data(ref d) => {
-                            self.out_window.decrease(d.len());
-                        }
-                        &DataOrHeaders::Headers(_) => {}
+                    if let DataOrTrailers::Data(ref d, _) = part {
+                        self.out_window.decrease(d.len());
                     }
 
-                    let msg = CommonToWriteMessage::StreamEnqueue(self.stream_id, part);
+                    let msg = CommonToWriteMessage::StreamEnqueue(self.stream_id, part.into());
                     if let Err(e) = self.to_write_tx.unbounded_send(msg.into()) {
                         warn!(
                             "failed to write to channel, probably connection is closed: {:?}",

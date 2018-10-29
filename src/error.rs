@@ -11,6 +11,7 @@ use tls_api;
 
 use tokio_timer::TimeoutError;
 
+use common::common_sender::SendError;
 use solicit::frame::ParseFrameError;
 
 /// The enum represents an error code that are used in `RST_STREAM` and `GOAWAY` frames.
@@ -140,6 +141,7 @@ pub enum Error {
     ClientDied(Option<Arc<Error>>),
     ClientPanicked(String),
     ClientCompletedWithoutError,
+    SendError(SendError),
 }
 
 fn _assert_error_sync_send() {
@@ -173,6 +175,12 @@ impl From<ParseFrameError> for Error {
     }
 }
 
+impl From<SendError> for Error {
+    fn from(e: SendError) -> Self {
+        Error::SendError(e)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "HTTP/2 Error: {}", self.description())
@@ -200,6 +208,7 @@ impl StdError for Error {
             Error::ClientDied(_) => "Client died",
             Error::ClientPanicked(_) => "Client panicked",
             Error::ClientCompletedWithoutError => "Client completed without error",
+            Error::SendError(_) => "Failed to write message to stream",
             Error::Other(_) => "An unknown error",
         }
     }

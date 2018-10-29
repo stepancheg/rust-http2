@@ -156,6 +156,7 @@ impl HttpConnTester {
     }
 
     pub fn send_frame<F: FrameIR>(&mut self, frame: F) {
+        info!("sending {:?}", frame);
         self.tcp
             .write(&frame.serialize_into_vec())
             .expect("send_frame");

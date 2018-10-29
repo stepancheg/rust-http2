@@ -1,6 +1,19 @@
 use data_or_trailers::HttpStreamAfterHeaders;
-use resp::Response;
+use result;
 use solicit::header::Headers;
+use tokio_core::reactor::Remote;
+use ServerSender;
+
+pub struct ServiceContext {
+    pub(crate) loop_handle: Remote,
+}
+
+impl ServiceContext {
+    // TODO: provide access to executor if there's any
+    pub fn loop_remote(&self) -> Remote {
+        self.loop_handle.clone()
+    }
+}
 
 /// Central HTTP/2 service interface.
 ///
@@ -12,5 +25,12 @@ pub trait Service: Send + Sync + 'static {
     /// `req` param contains asynchronous stream of request content,
     /// stream of zero or more `DATA` frames followed by optional
     /// trailer `HEADERS` frame.
-    fn start_request(&self, headers: Headers, req: HttpStreamAfterHeaders) -> Response;
+    // TODO: add context parameter
+    fn start_request(
+        &self,
+        context: ServiceContext,
+        headers: Headers,
+        req: HttpStreamAfterHeaders,
+        resp: ServerSender,
+    ) -> result::Result<()>;
 }

@@ -24,9 +24,10 @@ use futures::sync::mpsc;
 use httpbis::Client;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
-use httpbis::Response;
 use httpbis::ServerBuilder;
+use httpbis::ServerSender;
 use httpbis::Service;
+use httpbis::ServiceContext;
 
 #[test]
 fn smoke() {
@@ -128,14 +129,23 @@ fn seq_slow() {
     }
 
     impl Service for Handler {
-        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
+        fn start_request(
+            &self,
+            _context: ServiceContext,
+            _headers: Headers,
+            _req: HttpStreamAfterHeaders,
+            mut resp: ServerSender,
+        ) -> httpbis::Result<()> {
             let rx = self
                 .rx
                 .lock()
                 .unwrap()
                 .take()
                 .expect("can be called only once");
-            Response::headers_and_bytes_stream(Headers::ok_200(), rx.map_err(|_| unreachable!()))
+            let rx = rx.map_err(|()| unreachable!());
+            resp.send_headers(Headers::ok_200())?;
+            resp.pull_bytes_from_stream(rx)?;
+            Ok(())
         }
     }
 
