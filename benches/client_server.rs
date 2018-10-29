@@ -24,11 +24,18 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
     struct Megabyte;
 
     impl Service for Megabyte {
-        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-            Response::headers_and_bytes_stream(
-                Headers::ok_200(),
-                stream::iter_ok((0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024]))),
-            )
+        fn start_request(
+            &self,
+            _context: ServiceContext,
+            _headers: Headers,
+            _req: HttpStreamAfterHeaders,
+            mut resp: ServerSender,
+        ) -> httpbis::Result<()> {
+            resp.send_headers(Headers::ok_200())?;
+            resp.pull_bytes_from_stream(stream::iter_ok(
+                (0..1024).map(|i| Bytes::from(vec![(i % 0xff) as u8; 1024])),
+            ))?;
+            Ok(())
         }
     }
 
@@ -73,8 +80,15 @@ fn small_requests(b: &mut Bencher) {
     struct My;
 
     impl Service for My {
-        fn start_request(&self, _headers: Headers, _req: HttpStreamAfterHeaders) -> Response {
-            Response::found_200_plain_text("hello there")
+        fn start_request(
+            &self,
+            _context: ServiceContext,
+            _headers: Headers,
+            _req: HttpStreamAfterHeaders,
+            mut resp: ServerSender,
+        ) -> httpbis::Result<()> {
+            resp.send_found_200_plain_text("hello there")?;
+            Ok(())
         }
     }
 
