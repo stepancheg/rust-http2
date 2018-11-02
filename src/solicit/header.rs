@@ -108,15 +108,6 @@ impl PseudoHeaderNameSet {
     }
 }
 
-#[allow(dead_code)]
-pub struct HeaderName(Bytes);
-
-impl<'a> From<&'a str> for HeaderName {
-    fn from(_name: &'a str) -> HeaderName {
-        unimplemented!()
-    }
-}
-
 /// A convenience struct representing a part of a header (either the name or the value).
 pub struct HeaderPart(Bytes);
 
