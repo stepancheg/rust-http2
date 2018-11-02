@@ -181,7 +181,7 @@ impl HttpConnTester {
     pub fn send_headers(&mut self, stream_id: StreamId, headers: Headers, end: bool) {
         let fragment = self
             .encoder
-            .encode_for_test(headers.iter().map(|h| (h.name(), h.value())));
+            .encode_for_test(headers.iter().map(|h| (h.name().as_bytes(), h.value())));
         let mut headers_frame = HeadersFrame::new_conv(fragment, stream_id);
         headers_frame.set_flag(HeadersFlag::EndHeaders);
         if end {

@@ -514,7 +514,10 @@ impl<'a> FrameIR for HeadersMultiFrame<'a> {
 
         buf.open_frame();
 
-        let headers = self.headers.iter().map(|h| (h.name(), h.value()));
+        let headers = self
+            .headers
+            .iter()
+            .map(|h| (h.name().as_bytes(), h.value()));
 
         self.encoder.encode_into(headers, &mut buf);
 

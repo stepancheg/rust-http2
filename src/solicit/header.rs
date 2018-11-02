@@ -9,6 +9,7 @@ use req_resp::RequestOrResponse;
 
 use assert_types::*;
 
+use ascii::Ascii;
 use bytes::Bytes;
 use bytes::BytesMut;
 use std::mem;
@@ -147,9 +148,80 @@ impl<'a> From<&'a str> for HeaderPart {
     }
 }
 
+#[derive(Eq, PartialEq, Clone)]
+enum HeaderName {
+    Pseudo(PseudoHeaderName),
+    Regular(Ascii),
+}
+
+impl HeaderName {
+    fn name(&self) -> &str {
+        match self {
+            HeaderName::Pseudo(p) => p.name(),
+            HeaderName::Regular(r) => r.as_str(),
+        }
+    }
+
+    fn new_validate(name: Bytes) -> Result<HeaderName, (HeaderError, Bytes)> {
+        if name.len() == 0 {
+            return Err((HeaderError::EmptyName, name));
+        }
+
+        Ok(if name[0] == b':' {
+            HeaderName::Pseudo(PseudoHeaderName::parse(&name).map_err(|e| (e, name))?)
+        } else {
+            // HTTP/2 does not use the Connection header field to indicate
+            // connection-specific header fields; in this protocol, connection-
+            // specific metadata is conveyed by other means.  An endpoint MUST NOT
+            // generate an HTTP/2 message containing connection-specific header
+            // fields; any message containing connection-specific header fields MUST
+            // be treated as malformed (Section 8.1.2.6).
+            let connection_specific_headers = [
+                "connection",
+                "keep-alive",
+                "proxy-connection",
+                "transfer-encoding",
+                "upgrade",
+            ];
+            for s in &connection_specific_headers {
+                if name == s.as_bytes() {
+                    return Err((HeaderError::ConnectionSpecificHeader(s), name));
+                }
+            }
+
+            for b in &name {
+                // TODO: restrict more
+                if b >= b'A' && b <= b'Z' {
+                    return Err((HeaderError::IncorrectCharInName, name.clone()));
+                }
+            }
+
+            let ascii =
+                Ascii::from_utf8(name).map_err(|(_, b)| (HeaderError::HeaderNameNotAscii, b))?;
+            HeaderName::Regular(ascii)
+        })
+    }
+
+    fn is_pseudo(&self) -> bool {
+        match self {
+            HeaderName::Pseudo(_) => true,
+            HeaderName::Regular(_) => false,
+        }
+    }
+}
+
+impl fmt::Debug for HeaderName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HeaderName::Pseudo(p) => fmt::Debug::fmt(p.name(), f),
+            HeaderName::Regular(r) => fmt::Debug::fmt(r, f),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Header {
-    pub name: Bytes,
+    name: HeaderName,
     pub value: Bytes,
 }
 
@@ -164,6 +236,7 @@ pub enum HeaderError {
     EmptyName,
     EmptyValue(PseudoHeaderName),
     IncorrectCharInName,
+    HeaderNameNotAscii,
     UnexpectedPseudoHeader(PseudoHeaderName),
     PseudoHeadersInTrailers,
     PseudoHeadersAfterRegularHeaders,
@@ -184,56 +257,13 @@ fn make_ascii_lowercase(bytes: &mut Bytes) {
     mem::replace(bytes, bytes_mut.freeze());
 }
 
-fn validate_header_name_char(b: u8) -> HeaderResult<()> {
-    // TODO: restrict more
-    if b >= b'A' && b <= b'Z' {
-        return Err(HeaderError::IncorrectCharInName);
-    }
-    Ok(())
-}
-
-fn validate_header_name(name: &[u8]) -> HeaderResult<()> {
-    if name.len() == 0 {
-        return Err(HeaderError::EmptyName);
-    }
-
-    if name[0] == b':' {
-        PseudoHeaderName::parse(name)?;
-    }
-
-    for &c in name {
-        validate_header_name_char(c)?;
-    }
-
-    // HTTP/2 does not use the Connection header field to indicate
-    // connection-specific header fields; in this protocol, connection-
-    // specific metadata is conveyed by other means.  An endpoint MUST NOT
-    // generate an HTTP/2 message containing connection-specific header
-    // fields; any message containing connection-specific header fields MUST
-    // be treated as malformed (Section 8.1.2.6).
-    let connection_specific_headers = [
-        "connection",
-        "keep-alive",
-        "proxy-connection",
-        "transfer-encoding",
-        "upgrade",
-    ];
-    for s in &connection_specific_headers {
-        if name == s.as_bytes() {
-            return Err(HeaderError::ConnectionSpecificHeader(s));
-        }
-    }
-
-    return Ok(());
-}
-
 impl Header {
     /// Create a new `Header` object with exact values of `name` and `value`.
     ///
     /// This function performs header validation, in particular,
     /// header name must be lower case.
     pub fn new_validate(name: Bytes, value: Bytes) -> HeaderResult<Header> {
-        validate_header_name(&name)?;
+        let name = HeaderName::new_validate(name).map_err(|(e, _)| e)?;
         Ok(Header { name, value })
     }
 
@@ -246,9 +276,12 @@ impl Header {
     pub fn new<N: Into<HeaderPart>, V: Into<HeaderPart>>(name: N, value: V) -> Header {
         let mut name = name.into().0;
         make_ascii_lowercase(&mut name);
-        if let Err(e) = validate_header_name(&name) {
-            panic!("incorrect header name: {:?}: {:?}", name, e);
-        }
+        let name = match HeaderName::new_validate(name) {
+            Ok(name) => name,
+            Err((e, name)) => {
+                panic!("incorrect header name: {:?}: {:?}", name, e);
+            }
+        };
         Header {
             name,
             value: value.into().0,
@@ -256,8 +289,8 @@ impl Header {
     }
 
     /// Return a borrowed representation of the `Header` name.
-    pub fn name(&self) -> &[u8] {
-        &self.name
+    pub fn name(&self) -> &str {
+        self.name.name()
     }
     /// Return a borrowed representation of the `Header` value.
     pub fn value(&self) -> &[u8] {
@@ -266,33 +299,28 @@ impl Header {
 
     /// name: value
     pub fn format(&self) -> String {
-        format!(
-            "{}: {}",
-            String::from_utf8_lossy(&self.name),
-            String::from_utf8_lossy(&self.value)
-        )
+        format!("{}: {}", self.name(), String::from_utf8_lossy(&self.value))
     }
 
     pub fn is_preudo_header(&self) -> bool {
-        self.name.len() != 0 && self.name[0] == b':'
+        self.name.is_pseudo()
     }
 
-    pub fn pseudo_header_name(&self) -> HeaderResult<Option<PseudoHeaderName>> {
-        if self.is_preudo_header() {
-            PseudoHeaderName::parse(self.name()).map(Some)
-        } else {
-            Ok(None)
+    pub fn pseudo_header_name(&self) -> Option<PseudoHeaderName> {
+        match &self.name {
+            HeaderName::Pseudo(p) => Some(*p),
+            HeaderName::Regular(_) => None,
         }
     }
 
     pub fn validate(&self, req_or_resp: RequestOrResponse) -> HeaderResult<()> {
-        if let Some(h) = self.pseudo_header_name()? {
+        if let Some(h) = self.pseudo_header_name() {
             if h.req_or_resp() != req_or_resp {
                 return Err(HeaderError::UnexpectedPseudoHeader(h));
             }
         }
 
-        if req_or_resp == RequestOrResponse::Request && self.name.as_ref() == b"te" {
+        if req_or_resp == RequestOrResponse::Request && self.name() == "te" {
             // The only exception to this is the TE header field, which MAY be
             // present in an HTTP/2 request; when it is, it MUST NOT contain any
             // value other than "trailers".
@@ -421,7 +449,7 @@ impl Headers {
 
             header.validate(req_or_resp)?;
 
-            let header_name = header.pseudo_header_name()?.unwrap();
+            let header_name = header.pseudo_header_name().unwrap();
 
             if headers_place == HeadersPlace::Trailing {
                 return Err(HeaderError::PseudoHeadersInTrailers);
@@ -481,7 +509,7 @@ impl Headers {
         };
         headers
             .iter()
-            .find(|h| h.name() == name.as_bytes())
+            .find(|h| h.name() == name)
             .and_then(|h| str::from_utf8(h.value()).ok())
     }
 
@@ -542,7 +570,11 @@ impl FromIterator<Header> for Headers {
 
 #[cfg(test)]
 mod test {
+    use ascii::Ascii;
+    use bytes::Bytes;
     use solicit::header::Header;
+    use solicit::header::HeaderName;
+    use solicit::header::PseudoHeaderName;
 
     #[test]
     fn test_partial_eq_of_headers() {
@@ -550,19 +582,34 @@ mod test {
         let static_name = Header::new(&b":method"[..], b"GET".to_vec());
         let other = Header::new(&b":path"[..], &b"/"[..]);
 
-        assert!(fully_static == static_name);
-        assert!(fully_static != other);
-        assert!(static_name != other);
+        assert_eq!(fully_static, static_name);
+        assert_ne!(fully_static, other);
+        assert_ne!(static_name, other);
+    }
+
+    #[test]
+    fn test_header_name_debug() {
+        assert_eq!(
+            "\":method\"",
+            format!("{:?}", HeaderName::Pseudo(PseudoHeaderName::Method))
+        );
+        assert_eq!(
+            "\"x-fgfg\"",
+            format!(
+                "{:?}",
+                HeaderName::Regular(Ascii::from_utf8(Bytes::from("x-fgfg")).unwrap())
+            )
+        );
     }
 
     #[test]
     fn test_debug() {
         assert_eq!(
-            "Header { name: b\":method\", value: b\"GET\" }",
+            "Header { name: \":method\", value: b\"GET\" }",
             format!("{:?}", Header::new(&b":method"[..], &b"GET"[..]))
         );
         assert_eq!(
-            "Header { name: b\":method\", value: b\"\\xcd\" }",
+            "Header { name: \":method\", value: b\"\\xcd\" }",
             format!("{:?}", Header::new(&b":method"[..], &b"\xcd"[..]))
         );
     }
