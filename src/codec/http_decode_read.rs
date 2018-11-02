@@ -53,9 +53,12 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
                     Ok(headers) => headers,
                 };
 
-                let headers = match Headers::from_vec_pseudo_first(
-                    headers.into_iter().map(|h| Header::new(h.0, h.1)).collect(),
-                ) {
+                let headers = match headers
+                    .into_iter()
+                    .map(|h| Header::new_validate(h.0, h.1))
+                    .collect::<Result<Vec<_>, _>>()
+                    .and_then(Headers::from_vec_pseudo_first)
+                {
                     Ok(headers) => headers,
                     Err(e) => {
                         // All pseudo-header fields MUST appear in the header block before

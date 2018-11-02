@@ -10,6 +10,8 @@ use req_resp::RequestOrResponse;
 use assert_types::*;
 
 use bytes::Bytes;
+use bytes::BytesMut;
+use std::mem;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum PseudoHeaderName {
@@ -182,14 +184,82 @@ pub enum HeaderError {
 
 pub type HeaderResult<T> = result::Result<T, HeaderError>;
 
+fn make_ascii_lowercase(bytes: &mut Bytes) {
+    if bytes.as_ref().iter().all(|c| c.is_ascii_lowercase()) {
+        return;
+    }
+    let mut bytes_mut = BytesMut::from(mem::replace(bytes, Bytes::new()));
+    bytes_mut.as_mut().make_ascii_lowercase();
+    mem::replace(bytes, bytes_mut.freeze());
+}
+
+fn validate_header_name_char(b: u8) -> HeaderResult<()> {
+    // TODO: restrict more
+    if b >= b'A' && b <= b'Z' {
+        return Err(HeaderError::IncorrectCharInName);
+    }
+    Ok(())
+}
+
+fn validate_header_name(name: &[u8]) -> HeaderResult<()> {
+    if name.len() == 0 {
+        return Err(HeaderError::EmptyName);
+    }
+
+    if name[0] == b':' {
+        PseudoHeaderName::parse(name)?;
+    }
+
+    for &c in name {
+        validate_header_name_char(c)?;
+    }
+
+    // HTTP/2 does not use the Connection header field to indicate
+    // connection-specific header fields; in this protocol, connection-
+    // specific metadata is conveyed by other means.  An endpoint MUST NOT
+    // generate an HTTP/2 message containing connection-specific header
+    // fields; any message containing connection-specific header fields MUST
+    // be treated as malformed (Section 8.1.2.6).
+    let connection_specific_headers = [
+        "connection",
+        "keep-alive",
+        "proxy-connection",
+        "transfer-encoding",
+        "upgrade",
+    ];
+    for s in &connection_specific_headers {
+        if name == s.as_bytes() {
+            return Err(HeaderError::ConnectionSpecificHeader(s));
+        }
+    }
+
+    return Ok(());
+}
+
 impl Header {
+    /// Create a new `Header` object with exact values of `name` and `value`.
+    ///
+    /// This function performs header validation, in particular,
+    /// header name must be lower case.
+    pub fn new_validate(name: Bytes, value: Bytes) -> HeaderResult<Header> {
+        validate_header_name(&name)?;
+        Ok(Header { name, value })
+    }
+
     /// Creates a new `Header` with the given name and value.
     ///
     /// The name and value need to be convertible into a `HeaderPart`.
+    ///
+    /// Header name is converted to lower case.
+    /// This function panics if header name is not valid.
     pub fn new<N: Into<HeaderPart>, V: Into<HeaderPart>>(name: N, value: V) -> Header {
-        // TODO: convert name to lower case
+        let mut name = name.into().0;
+        make_ascii_lowercase(&mut name);
+        if let Err(e) = validate_header_name(&name) {
+            panic!("incorrect header name: {:?}: {:?}", name, e);
+        }
         Header {
-            name: name.into().0,
+            name,
             value: value.into().0,
         }
     }
@@ -224,50 +294,14 @@ impl Header {
         }
     }
 
-    fn validate_header_name_char(b: u8) -> HeaderResult<()> {
-        // TODO: restrict more
-        if b >= b'A' && b <= b'Z' {
-            return Err(HeaderError::IncorrectCharInName);
-        }
-        Ok(())
-    }
-
     pub fn validate(&self, req_or_resp: RequestOrResponse) -> HeaderResult<()> {
-        // TODO: header must be valid
-        if self.name.len() == 0 {
-            return Err(HeaderError::EmptyName);
-        }
-
         if let Some(h) = self.pseudo_header_name()? {
             if h.req_or_resp() != req_or_resp {
                 return Err(HeaderError::UnexpectedPseudoHeader(h));
             }
         }
 
-        for c in &self.name {
-            Header::validate_header_name_char(c)?;
-        }
-
-        // HTTP/2 does not use the Connection header field to indicate
-        // connection-specific header fields; in this protocol, connection-
-        // specific metadata is conveyed by other means.  An endpoint MUST NOT
-        // generate an HTTP/2 message containing connection-specific header
-        // fields; any message containing connection-specific header fields MUST
-        // be treated as malformed (Section 8.1.2.6).
-        let connection_specific_headers = [
-            "connection",
-            "keep-alive",
-            "proxy-connection",
-            "transfer-encoding",
-            "upgrade",
-        ];
-        for s in &connection_specific_headers {
-            if self.name == s.as_bytes() {
-                return Err(HeaderError::ConnectionSpecificHeader(s));
-            }
-        }
-
-        if self.name.as_ref() == b"te" {
+        if req_or_resp == RequestOrResponse::Request && self.name.as_ref() == b"te" {
             // The only exception to this is the TE header field, which MAY be
             // present in an HTTP/2 request; when it is, it MUST NOT contain any
             // value other than "trailers".
