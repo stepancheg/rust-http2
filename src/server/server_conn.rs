@@ -31,7 +31,6 @@ use tls_api_stub;
 
 use common::*;
 use data_or_trailers::*;
-use service::Service;
 use solicit_async::*;
 
 use socket::StreamItem;
@@ -47,7 +46,8 @@ use headers_place::HeadersPlace;
 use misc::any_to_string;
 use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
-use service::ServiceContext;
+use server::handler::ServerHandler;
+use server::handler::ServerHandlerContext;
 use std::marker;
 use ErrorCode;
 use ServerConf;
@@ -102,7 +102,7 @@ where
 }
 
 struct ServerConnData {
-    factory: Arc<Service>,
+    factory: Arc<ServerHandler>,
 }
 
 impl ConnSpecific for ServerConnData {}
@@ -150,7 +150,7 @@ where
             common: CommonSender::new(stream_id, self.to_write_tx.clone(), out_window, false),
         };
 
-        let context = ServiceContext {
+        let context = ServerHandlerContext {
             loop_handle: self.loop_handle.remote().clone(),
         };
 
@@ -256,7 +256,7 @@ impl ServerConn {
         service: Arc<F>,
     ) -> (ServerConn, HttpFuture<()>)
     where
-        F: Service,
+        F: ServerHandler,
         I: AsyncRead + AsyncWrite + Send + 'static,
     {
         let lh = lh.clone();
@@ -314,7 +314,7 @@ impl ServerConn {
         service: Arc<S>,
     ) -> (ServerConn, HttpFuture<()>)
     where
-        S: Service,
+        S: ServerHandler,
         A: TlsAcceptor,
     {
         match tls {
@@ -338,7 +338,7 @@ impl ServerConn {
         service: Arc<S>,
     ) -> (ServerConn, HttpFuture<()>)
     where
-        S: Service,
+        S: ServerHandler,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
         ServerConn::new(
@@ -358,16 +358,17 @@ impl ServerConn {
         f: F,
     ) -> (ServerConn, HttpFuture<()>)
     where
-        F: Fn(ServiceContext, Headers, HttpStreamAfterHeaders, ServerSender) -> result::Result<()>
+        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
+                -> result::Result<()>
             + Send
             + Sync
             + 'static,
     {
         struct HttpServiceFn<F>(F);
 
-        impl<F> Service for HttpServiceFn<F>
+        impl<F> ServerHandler for HttpServiceFn<F>
         where
-            F: Fn(ServiceContext, Headers, HttpStreamAfterHeaders, ServerSender)
+            F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
                     -> result::Result<()>
                 + Send
                 + Sync
@@ -375,7 +376,7 @@ impl ServerConn {
         {
             fn start_request(
                 &self,
-                context: ServiceContext,
+                context: ServerHandlerContext,
                 headers: Headers,
                 req: HttpStreamAfterHeaders,
                 resp: ServerSender,

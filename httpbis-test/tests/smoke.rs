@@ -25,9 +25,9 @@ use httpbis::Client;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
+use httpbis::ServerHandler;
+use httpbis::ServerHandlerContext;
 use httpbis::ServerSender;
-use httpbis::Service;
-use httpbis::ServiceContext;
 
 #[test]
 fn smoke() {
@@ -128,10 +128,10 @@ fn seq_slow() {
         rx: Mutex<Option<mpsc::UnboundedReceiver<Bytes>>>,
     }
 
-    impl Service for Handler {
+    impl ServerHandler for Handler {
         fn start_request(
             &self,
-            _context: ServiceContext,
+            _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
             mut resp: ServerSender,

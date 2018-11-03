@@ -9,9 +9,9 @@ use httpbis::Client;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
+use httpbis::ServerHandler;
+use httpbis::ServerHandlerContext;
 use httpbis::ServerSender;
-use httpbis::Service;
-use httpbis::ServiceContext;
 use std::env;
 use std::sync::Arc;
 use std::time::Instant;
@@ -43,10 +43,10 @@ fn forever(mut cb: impl FnMut()) {
 fn request() {
     struct My;
 
-    impl Service for My {
+    impl ServerHandler for My {
         fn start_request(
             &self,
-            _context: ServiceContext,
+            _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
             mut resp: ServerSender,
@@ -85,10 +85,10 @@ fn ping_pong() {
 
     struct Echo;
 
-    impl Service for Echo {
+    impl ServerHandler for Echo {
         fn start_request(
             &self,
-            _context: ServiceContext,
+            _context: ServerHandlerContext,
             _headers: Headers,
             req: HttpStreamAfterHeaders,
             mut resp: ServerSender,

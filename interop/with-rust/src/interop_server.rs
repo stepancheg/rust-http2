@@ -25,17 +25,17 @@ use tls_api_openssl::TlsAcceptorBuilder;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
+use httpbis::ServerHandler;
+use httpbis::ServerHandlerContext;
 use httpbis::ServerSender;
-use httpbis::Service;
-use httpbis::ServiceContext;
 use httpbis_interop::PORT;
 
 struct Found200 {}
 
-impl Service for Found200 {
+impl ServerHandler for Found200 {
     fn start_request(
         &self,
-        _context: ServiceContext,
+        _context: ServerHandlerContext,
         _headers: Headers,
         _req: HttpStreamAfterHeaders,
         mut resp: ServerSender,
@@ -47,10 +47,10 @@ impl Service for Found200 {
 
 struct Blocks {}
 
-impl Service for Blocks {
+impl ServerHandler for Blocks {
     fn start_request(
         &self,
-        _context: ServiceContext,
+        _context: ServerHandlerContext,
         headers: Headers,
         _req: HttpStreamAfterHeaders,
         mut resp: ServerSender,

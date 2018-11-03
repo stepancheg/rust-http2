@@ -4,8 +4,8 @@ extern crate tls_api_openssl;
 
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
+use httpbis::ServerHandlerContext;
 use httpbis::ServerSender;
-use httpbis::ServiceContext;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -23,10 +23,10 @@ impl ServiceImpl {
     }
 }
 
-impl httpbis::Service for ServiceImpl {
+impl httpbis::ServerHandler for ServiceImpl {
     fn start_request(
         &self,
-        _context: ServiceContext,
+        _context: ServerHandlerContext,
         req_headers: httpbis::Headers,
         _req: httpbis::HttpStreamAfterHeaders,
         mut resp: ServerSender,

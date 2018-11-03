@@ -9,11 +9,11 @@ use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
 use httpbis::Server;
 use httpbis::ServerBuilder;
-use httpbis::Service;
+use httpbis::ServerHandler;
 
 use futures::stream;
+use httpbis::ServerHandlerContext;
 use httpbis::ServerSender;
-use httpbis::ServiceContext;
 use regex::Regex;
 
 /// HTTP/2 server used by tests
@@ -24,10 +24,10 @@ pub struct ServerTest {
 
 struct Blocks {}
 
-impl Service for Blocks {
+impl ServerHandler for Blocks {
     fn start_request(
         &self,
-        _context: ServiceContext,
+        _context: ServerHandlerContext,
         headers: Headers,
         _req: HttpStreamAfterHeaders,
         mut resp: ServerSender,
@@ -52,10 +52,10 @@ impl Service for Blocks {
 
 struct Echo {}
 
-impl Service for Echo {
+impl ServerHandler for Echo {
     fn start_request(
         &self,
-        _context: ServiceContext,
+        _context: ServerHandlerContext,
         _headers: Headers,
         req: HttpStreamAfterHeaders,
         mut resp: ServerSender,

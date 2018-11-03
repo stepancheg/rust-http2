@@ -28,8 +28,6 @@ mod result_or_eof;
 mod client;
 mod codec;
 mod server;
-mod service;
-mod service_paths;
 mod socket;
 mod socket_tcp;
 
@@ -74,11 +72,6 @@ pub use solicit::header::Headers;
 pub use solicit::header::PseudoHeaderName;
 pub use solicit::HttpScheme;
 
-pub use service::Service;
-pub use service::ServiceContext;
-
-pub use service_paths::ServicePaths;
-
 pub use exec::CpuPoolOption;
 
 pub use client::client_conf::ClientConf;
@@ -88,8 +81,11 @@ pub use client::Client;
 pub use client::ClientBuilder;
 pub use common::window_size::StreamDead;
 
-pub use server::server_conf::ServerAlpn;
-pub use server::server_conf::ServerConf;
+pub use server::conf::ServerAlpn;
+pub use server::conf::ServerConf;
+pub use server::handler::ServerHandler;
+pub use server::handler::ServerHandlerContext;
+pub use server::handler_paths::ServerHandlerPaths;
 pub use server::server_sender::ServerSender;
 pub use server::server_tls::ServerTlsOption;
 pub use server::Server;

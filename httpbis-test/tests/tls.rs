@@ -54,10 +54,10 @@ fn tls() {
 
     struct ServiceImpl {}
 
-    impl Service for ServiceImpl {
+    impl ServerHandler for ServiceImpl {
         fn start_request(
             &self,
-            _context: ServiceContext,
+            _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
             mut resp: ServerSender,

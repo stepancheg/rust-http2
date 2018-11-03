@@ -23,10 +23,10 @@ use test::Bencher;
 fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
     struct Megabyte;
 
-    impl Service for Megabyte {
+    impl ServerHandler for Megabyte {
         fn start_request(
             &self,
-            _context: ServiceContext,
+            _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
             mut resp: ServerSender,
@@ -79,10 +79,10 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
 fn small_requests(b: &mut Bencher) {
     struct My;
 
-    impl Service for My {
+    impl ServerHandler for My {
         fn start_request(
             &self,
-            _context: ServiceContext,
+            _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
             mut resp: ServerSender,

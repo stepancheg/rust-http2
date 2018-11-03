@@ -1,4 +1,6 @@
-pub mod server_conf;
+pub mod conf;
+pub mod handler;
+pub mod handler_paths;
 pub mod server_conn;
 pub mod server_sender;
 pub mod server_tls;
@@ -38,15 +40,14 @@ use tls_api_stub;
 
 use super::common::*;
 
-use service::Service;
-use service_paths::ServicePaths;
-
 use socket::AnySocketAddr;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
 
 pub use self::server_tls::ServerTlsOption;
-pub use server::server_conf::ServerConf;
+pub use server::conf::ServerConf;
+use server::handler::ServerHandler;
+use server::handler_paths::ServerHandlerPaths;
 pub use server::server_conn::ServerConn;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
@@ -57,7 +58,7 @@ pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     /// Event loop to spawn server.
     /// If not specified, builder will create new event loop in a new thread.
     pub event_loop: Option<reactor::Remote>,
-    pub service: ServicePaths,
+    pub service: ServerHandlerPaths,
 }
 
 impl ServerBuilder<tls_api_stub::TlsAcceptor> {
@@ -123,7 +124,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
             tls: ServerTlsOption::Plain,
             addr: None,
             event_loop: None,
-            service: ServicePaths::new(),
+            service: ServerHandlerPaths::new(),
         }
     }
 
@@ -274,7 +275,7 @@ fn spawn_server_event_loop<S, A>(
     _alive_tx: mpsc::Sender<()>,
 ) -> oneshot::Receiver<()>
 where
-    S: Service,
+    S: ServerHandler,
     A: TlsAcceptor,
 {
     let service = Arc::new(service);

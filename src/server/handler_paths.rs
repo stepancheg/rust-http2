@@ -4,19 +4,19 @@ use std::sync::Arc;
 
 use data_or_trailers::HttpStreamAfterHeaders;
 use result;
-use service::Service;
-use service::ServiceContext;
+use server::handler::ServerHandler;
+use server::handler::ServerHandlerContext;
 use solicit::header::Headers;
 use ServerSender;
 
 #[derive(Default)]
 struct Node {
-    service: Option<Arc<Service>>,
+    service: Option<Arc<ServerHandler>>,
     children: HashMap<String, Node>,
 }
 
 impl Node {
-    fn add_service(&mut self, path: &str, service: Arc<Service>) {
+    fn add_service(&mut self, path: &str, service: Arc<ServerHandler>) {
         match split_path(path) {
             None => {
                 self.service = Some(service);
@@ -34,7 +34,7 @@ impl Node {
         }
     }
 
-    fn remove_service(&mut self, path: &str) -> Option<Arc<Service>> {
+    fn remove_service(&mut self, path: &str) -> Option<Arc<ServerHandler>> {
         match split_path(path) {
             None => self.service.take(),
             Some((first, rem)) => match self.children.get_mut(first) {
@@ -44,7 +44,7 @@ impl Node {
         }
     }
 
-    fn find_service(&self, path: &str) -> Option<&Service> {
+    fn find_service(&self, path: &str) -> Option<&ServerHandler> {
         if let Some((first, rem)) = split_path(path) {
             if let Some(node) = self.children.get(first) {
                 if let Some(service) = node.find_service(rem) {
@@ -91,17 +91,17 @@ fn test_split_path() {
     );
 }
 
-/// Convient implementation of `Service` which allows delegation to
-/// multiple `Service` implementations provided by user.
+/// Convient implementation of `ServerHandler` which allows delegation to
+/// multiple `ServerHandler` implementations provided by user.
 #[derive(Default)]
-pub struct ServicePaths {
+pub struct ServerHandlerPaths {
     root: Node,
 }
 
-impl ServicePaths {
+impl ServerHandlerPaths {
     /// Create a new `Service` implementation which returns `404`
     /// on all requests by default.
-    pub fn new() -> ServicePaths {
+    pub fn new() -> ServerHandlerPaths {
         Default::default()
     }
 
@@ -109,21 +109,21 @@ impl ServicePaths {
     ///
     /// ```
     /// # use std::sync::Arc;
-    /// use httpbis::*;
-    /// use httpbis;
+    /// # use httpbis::*;
+    /// # use httpbis;
     ///
     /// struct Root {}
     /// struct Files {}
     ///
-    /// impl Service for Root {
-    ///     fn start_request(&self, _context: ServiceContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerSender) -> httpbis::Result<()> {
+    /// impl ServerHandler for Root {
+    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerSender) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is root page")?;
     ///         Ok(())
     ///     }
     /// }
     ///
-    /// impl Service for Files {
-    ///     fn start_request(&self, _context: ServiceContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerSender) -> httpbis::Result<()> {
+    /// impl ServerHandler for Files {
+    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerSender) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is files")?;
     ///         Ok(())
     ///     }
@@ -133,29 +133,30 @@ impl ServicePaths {
     /// server.service.set_service("/", Arc::new(Root{}));
     /// server.service.set_service("/files", Arc::new(Files{}));
     /// ```
-    pub fn set_service(&mut self, path: &str, service: Arc<Service>) {
+    pub fn set_service(&mut self, path: &str, service: Arc<ServerHandler>) {
         assert!(path.starts_with("/"));
         self.root.add_service(path, service);
     }
 
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
     where
-        F: Fn(ServiceContext, Headers, HttpStreamAfterHeaders, ServerSender) -> result::Result<()>
+        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
+                -> result::Result<()>
             + Send
             + Sync
             + 'static,
     {
         impl<
-                F: Fn(ServiceContext, Headers, HttpStreamAfterHeaders, ServerSender)
+                F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
                         -> result::Result<()>
                     + Send
                     + Sync
                     + 'static,
-            > Service for F
+            > ServerHandler for F
         {
             fn start_request(
                 &self,
-                context: ServiceContext,
+                context: ServerHandlerContext,
                 headers: Headers,
                 req: HttpStreamAfterHeaders,
                 resp: ServerSender,
@@ -167,20 +168,20 @@ impl ServicePaths {
         self.set_service(path, Arc::new(service))
     }
 
-    pub fn remove_service(&mut self, path: &str) -> Option<Arc<Service>> {
+    pub fn remove_service(&mut self, path: &str) -> Option<Arc<ServerHandler>> {
         assert!(path.starts_with("/"));
         self.root.remove_service(path)
     }
 
-    fn find_service(&self, path: &str) -> Option<&Service> {
+    fn find_service(&self, path: &str) -> Option<&ServerHandler> {
         self.root.find_service(path)
     }
 }
 
-impl Service for ServicePaths {
+impl ServerHandler for ServerHandlerPaths {
     fn start_request(
         &self,
-        context: ServiceContext,
+        context: ServerHandlerContext,
         headers: Headers,
         req: HttpStreamAfterHeaders,
         mut resp: ServerSender,
