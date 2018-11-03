@@ -4,8 +4,6 @@ use futures::sync::mpsc::UnboundedSender;
 
 use tokio_core::reactor;
 
-use exec::Executor;
-
 use error;
 use error::ErrorCode;
 use result;
@@ -63,9 +61,6 @@ pub struct Conn<T: Types> {
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     /// Reactor we are using
     pub loop_handle: reactor::Handle,
-    /// Executor which drives requests on client and responses on server
-    // TODO: currently hardcoded to Handle
-    pub exec: Box<Executor>,
     /// Known streams
     pub streams: StreamMap<T>,
     /// Last streams known to be closed by peer
@@ -155,7 +150,6 @@ where
             streams: StreamMap::new(),
             last_local_stream_id: 0,
             last_peer_stream_id: 0,
-            exec: Box::new(loop_handle.clone()),
             loop_handle,
             goaway_sent: None,
             goaway_received: None,

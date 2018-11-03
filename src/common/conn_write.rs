@@ -15,6 +15,7 @@ use common::stream::HttpStreamCommand;
 use common::window_size::StreamOutWindowReceiver;
 use data_or_headers::DataOrHeaders;
 use error;
+use futures::future::Future;
 use futures::sync::oneshot;
 use futures::task;
 use futures::Async;
@@ -222,13 +223,15 @@ where
         stream: HttpStreamAfterHeaders,
         out_window: StreamOutWindowReceiver,
     ) -> result::Result<()> {
-        // TODO: client should provide an executor
-        self.exec.execute(Box::new(PumpStreamToWrite::<T> {
-            to_write_tx: self.to_write_tx.clone(),
-            stream_id,
-            out_window,
-            stream,
-        }));
+        // TODO: spawn in handler
+        self.loop_handle.spawn(
+            PumpStreamToWrite::<T> {
+                to_write_tx: self.to_write_tx.clone(),
+                stream_id,
+                out_window,
+                stream,
+            }.map_err(|v| match v {}),
+        );
         Ok(())
     }
 
