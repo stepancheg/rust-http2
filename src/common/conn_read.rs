@@ -463,7 +463,7 @@ where
                 Async::Ready(HttpFrameDecodedOrGoaway::Frame(frame)) => {
                     self.process_http_frame(frame)?;
                 }
-                Async::Ready(HttpFrameDecodedOrGoaway::SendRst(stream_id, error_code)) => {
+                Async::Ready(HttpFrameDecodedOrGoaway::_SendRst(stream_id, error_code)) => {
                     self.process_stream_error(stream_id, error_code)?;
                 }
                 Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(error_code)) => {

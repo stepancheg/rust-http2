@@ -21,7 +21,7 @@ pub struct HttpDecodeRead<R: AsyncRead> {
 pub enum HttpFrameDecodedOrGoaway {
     Frame(HttpFrameDecoded),
     SendGoaway(ErrorCode),
-    SendRst(StreamId, ErrorCode),
+    _SendRst(StreamId, ErrorCode),
 }
 
 impl<R: AsyncRead> HttpDecodeRead<R> {
@@ -70,8 +70,7 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
                             frame.stream_id, e
                         );
                         // TODO: close connection, because decoder may be in incorrect state
-                        return Ok(Async::Ready(HttpFrameDecodedOrGoaway::SendRst(
-                            frame.stream_id,
+                        return Ok(Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(
                             ErrorCode::ProtocolError,
                         )));
                     }
