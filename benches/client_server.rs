@@ -29,7 +29,7 @@ fn download_megabyte_in_kb_chunks(b: &mut Bencher) {
             _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
-            mut resp: ServerSender,
+            mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_headers(Headers::ok_200())?;
             resp.pull_bytes_from_stream(stream::iter_ok(
@@ -85,7 +85,7 @@ fn small_requests(b: &mut Bencher) {
             _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
-            mut resp: ServerSender,
+            mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_found_200_plain_text("hello there")?;
             Ok(())

@@ -7,7 +7,7 @@ use result;
 use server::handler::ServerHandler;
 use server::handler::ServerHandlerContext;
 use solicit::header::Headers;
-use ServerSender;
+use ServerResponse;
 
 #[derive(Default)]
 struct Node {
@@ -116,14 +116,14 @@ impl ServerHandlerPaths {
     /// struct Files {}
     ///
     /// impl ServerHandler for Root {
-    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerSender) -> httpbis::Result<()> {
+    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerResponse) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is root page")?;
     ///         Ok(())
     ///     }
     /// }
     ///
     /// impl ServerHandler for Files {
-    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerSender) -> httpbis::Result<()> {
+    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerResponse) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is files")?;
     ///         Ok(())
     ///     }
@@ -140,14 +140,14 @@ impl ServerHandlerPaths {
 
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
     where
-        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
+        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
                 -> result::Result<()>
             + Send
             + Sync
             + 'static,
     {
         impl<
-                F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
+                F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
                         -> result::Result<()>
                     + Send
                     + Sync
@@ -159,7 +159,7 @@ impl ServerHandlerPaths {
                 context: ServerHandlerContext,
                 headers: Headers,
                 req: HttpStreamAfterHeaders,
-                resp: ServerSender,
+                resp: ServerResponse,
             ) -> result::Result<()> {
                 self(context, headers, req, resp)
             }
@@ -184,7 +184,7 @@ impl ServerHandler for ServerHandlerPaths {
         context: ServerHandlerContext,
         headers: Headers,
         req: HttpStreamAfterHeaders,
-        mut resp: ServerSender,
+        mut resp: ServerResponse,
     ) -> result::Result<()> {
         if let Some(service) = self.find_service(headers.path()) {
             debug!("invoking user callback for path {}", headers.path());

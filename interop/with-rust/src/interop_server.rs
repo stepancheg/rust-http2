@@ -27,7 +27,7 @@ use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
-use httpbis::ServerSender;
+use httpbis::ServerResponse;
 use httpbis_interop::PORT;
 
 struct Found200 {}
@@ -38,7 +38,7 @@ impl ServerHandler for Found200 {
         _context: ServerHandlerContext,
         _headers: Headers,
         _req: HttpStreamAfterHeaders,
-        mut resp: ServerSender,
+        mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         resp.send_found_200_plain_text("200 200 200")?;
         Ok(())
@@ -53,7 +53,7 @@ impl ServerHandler for Blocks {
         _context: ServerHandlerContext,
         headers: Headers,
         _req: HttpStreamAfterHeaders,
-        mut resp: ServerSender,
+        mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 

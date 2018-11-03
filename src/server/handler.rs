@@ -2,7 +2,7 @@ use data_or_trailers::HttpStreamAfterHeaders;
 use result;
 use solicit::header::Headers;
 use tokio_core::reactor::Remote;
-use ServerSender;
+use ServerResponse;
 
 pub struct ServerHandlerContext {
     pub(crate) loop_handle: Remote,
@@ -30,6 +30,6 @@ pub trait ServerHandler: Send + Sync + 'static {
         context: ServerHandlerContext,
         headers: Headers,
         req: HttpStreamAfterHeaders,
-        resp: ServerSender,
+        resp: ServerResponse,
     ) -> result::Result<()>;
 }

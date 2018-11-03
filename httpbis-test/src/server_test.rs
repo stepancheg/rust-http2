@@ -13,7 +13,7 @@ use httpbis::ServerHandler;
 
 use futures::stream;
 use httpbis::ServerHandlerContext;
-use httpbis::ServerSender;
+use httpbis::ServerResponse;
 use regex::Regex;
 
 /// HTTP/2 server used by tests
@@ -30,7 +30,7 @@ impl ServerHandler for Blocks {
         _context: ServerHandlerContext,
         headers: Headers,
         _req: HttpStreamAfterHeaders,
-        mut resp: ServerSender,
+        mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
@@ -58,7 +58,7 @@ impl ServerHandler for Echo {
         _context: ServerHandlerContext,
         _headers: Headers,
         req: HttpStreamAfterHeaders,
-        mut resp: ServerSender,
+        mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         resp.send_headers(Headers::ok_200())?;
         resp.pull_from_stream(req)?;

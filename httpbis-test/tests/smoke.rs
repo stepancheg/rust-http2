@@ -27,7 +27,7 @@ use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
-use httpbis::ServerSender;
+use httpbis::ServerResponse;
 
 #[test]
 fn smoke() {
@@ -134,7 +134,7 @@ fn seq_slow() {
             _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
-            mut resp: ServerSender,
+            mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             let rx = self
                 .rx

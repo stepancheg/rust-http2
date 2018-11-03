@@ -11,7 +11,7 @@ use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
-use httpbis::ServerSender;
+use httpbis::ServerResponse;
 use std::env;
 use std::sync::Arc;
 use std::time::Instant;
@@ -49,7 +49,7 @@ fn request() {
             _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
-            mut resp: ServerSender,
+            mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_found_200_plain_text("hello there")?;
             Ok(())
@@ -91,7 +91,7 @@ fn ping_pong() {
             _context: ServerHandlerContext,
             _headers: Headers,
             req: HttpStreamAfterHeaders,
-            mut resp: ServerSender,
+            mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_headers(Headers::ok_200())?;
             resp.pull_from_stream(req)?;

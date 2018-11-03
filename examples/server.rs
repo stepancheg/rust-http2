@@ -5,7 +5,7 @@ extern crate tls_api_openssl;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
 use httpbis::ServerHandlerContext;
-use httpbis::ServerSender;
+use httpbis::ServerResponse;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -29,7 +29,7 @@ impl httpbis::ServerHandler for ServiceImpl {
         _context: ServerHandlerContext,
         req_headers: httpbis::Headers,
         _req: httpbis::HttpStreamAfterHeaders,
-        mut resp: ServerSender,
+        mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         println!("starting request: {:?}", req_headers);
 

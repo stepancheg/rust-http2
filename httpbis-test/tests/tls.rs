@@ -60,7 +60,7 @@ fn tls() {
             _context: ServerHandlerContext,
             _headers: Headers,
             _req: HttpStreamAfterHeaders,
-            mut resp: ServerSender,
+            mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_found_200_plain_text("hello")?;
             Ok(())

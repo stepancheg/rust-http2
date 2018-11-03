@@ -51,7 +51,7 @@ use server::handler::ServerHandlerContext;
 use std::marker;
 use ErrorCode;
 use ServerConf;
-use ServerSender;
+use ServerResponse;
 use ServerTlsOption;
 
 struct ServerTypes<I>(marker::PhantomData<I>)
@@ -146,7 +146,7 @@ where
 
         let factory = self.specific.factory.clone();
 
-        let sender = ServerSender {
+        let sender = ServerResponse {
             common: CommonSender::new(stream_id, self.to_write_tx.clone(), out_window, false),
         };
 
@@ -358,7 +358,7 @@ impl ServerConn {
         f: F,
     ) -> (ServerConn, HttpFuture<()>)
     where
-        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
+        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
                 -> result::Result<()>
             + Send
             + Sync
@@ -368,7 +368,7 @@ impl ServerConn {
 
         impl<F> ServerHandler for HttpServiceFn<F>
         where
-            F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerSender)
+            F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
                     -> result::Result<()>
                 + Send
                 + Sync
@@ -379,7 +379,7 @@ impl ServerConn {
                 context: ServerHandlerContext,
                 headers: Headers,
                 req: HttpStreamAfterHeaders,
-                resp: ServerSender,
+                resp: ServerResponse,
             ) -> result::Result<()> {
                 (self.0)(context, headers, req, resp)
             }
