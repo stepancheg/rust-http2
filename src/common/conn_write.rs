@@ -222,6 +222,7 @@ where
         stream: HttpStreamAfterHeaders,
         out_window: StreamOutWindowReceiver,
     ) -> result::Result<()> {
+        // TODO: client should provide an executor
         self.exec.execute(Box::new(PumpStreamToWrite::<T> {
             to_write_tx: self.to_write_tx.clone(),
             stream_id,

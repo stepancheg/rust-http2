@@ -153,30 +153,31 @@ where
             loop_handle: self.loop_handle.remote().clone(),
         };
 
-        self.exec.execute(Box::new(future::lazy(move || {
-            let invoke_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                // TODO: do start request in executor
-                let req = ServerRequest {
-                    headers,
-                    stream: req_stream,
-                };
-                factory.start_request(context, req, sender)
-            }));
+        let req = ServerRequest {
+            headers,
+            stream: req_stream,
+        };
 
-            let result: result::Result<()> = invoke_result.unwrap_or_else(|e| {
+        let invoke_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            factory.start_request(context, req, sender)
+        }));
+
+        let mut stream = self.streams.get_mut(stream_id).expect("get stream");
+
+        match invoke_result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                warn!("handler returned error: {:?}", e);
+                stream.close_outgoing(ErrorCode::InternalError);
+            }
+            Err(e) => {
                 let e = any_to_string(e);
                 warn!("handler panicked: {}", e);
-                Ok(())
-            });
-
-            if let Err(e) = result {
-                warn!("handler returned error: {:?}", e);
+                stream.close_outgoing(ErrorCode::InternalError);
             }
+        }
 
-            Ok(())
-        })));
-
-        Ok(self.streams.get_mut(stream_id).expect("get stream"))
+        Ok(stream)
     }
 }
 
