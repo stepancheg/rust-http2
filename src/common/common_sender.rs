@@ -113,7 +113,11 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
                 content: DataOrHeaders::Data(data),
                 last,
             },
-        ))
+        ))?;
+        if last {
+            self.state.take();
+        }
+        Ok(())
     }
 
     pub fn send_data(&mut self, data: Bytes) -> Result<(), SendError> {
@@ -211,9 +215,10 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
 
 impl<M: From<CommonToWriteMessage>> Drop for CommonSender<M> {
     fn drop(&mut self) {
-        // TODO: not sure correct code
-        // TODO: warn if not called close or reset explicitly
         // TODO: different message if panicked
+        if self.state() != SenderState::Done {
+            warn!("Sender was not properly finished, sending RST_STREAM InternalError");
+        }
         drop(self.reset(ErrorCode::InternalError))
     }
 }
