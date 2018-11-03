@@ -154,7 +154,11 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
         // TODO: why done_tx is unused?
         let (_done_tx, done_rx) = oneshot::channel();
 
-        let listen = self.addr.unwrap().to_listener(&self.conf);
+        // TODO: return result
+        let listen = self
+            .addr
+            .expect("listen addr not specified")
+            .to_listener(&self.conf);
 
         let local_addr = listen.local_addr().unwrap();
         //let local_addr = local_addr.downcast_ref::<T>().expect("downcast socket_addr").clone();
