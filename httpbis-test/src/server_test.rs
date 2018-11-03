@@ -6,13 +6,13 @@ use bytes::Bytes;
 
 use httpbis;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::Server;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 
 use futures::stream;
 use httpbis::ServerHandlerContext;
+use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use regex::Regex;
 
@@ -28,13 +28,12 @@ impl ServerHandler for Blocks {
     fn start_request(
         &self,
         _context: ServerHandlerContext,
-        headers: Headers,
-        _req: HttpStreamAfterHeaders,
+        req: ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
-        if let Some(captures) = blocks_re.captures(headers.path()) {
+        if let Some(captures) = blocks_re.captures(req.headers.path()) {
             let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
             let count: u32 = captures.get(2).expect("2").as_str().parse().expect("parse");
             resp.send_headers(Headers::ok_200())?;
@@ -56,12 +55,11 @@ impl ServerHandler for Echo {
     fn start_request(
         &self,
         _context: ServerHandlerContext,
-        _headers: Headers,
-        req: HttpStreamAfterHeaders,
+        req: ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         resp.send_headers(Headers::ok_200())?;
-        resp.pull_from_stream(req)?;
+        resp.pull_from_stream(req.stream)?;
         Ok(())
     }
 }

@@ -34,8 +34,7 @@ struct FromLoop {
 impl ServerOneConn {
     pub fn new_fn<S>(port: u16, service: S) -> Self
     where
-        S: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
-                -> httpbis::Result<()>
+        S: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> httpbis::Result<()>
             + Send
             + Sync
             + 'static,
@@ -46,8 +45,7 @@ impl ServerOneConn {
     #[allow(dead_code)]
     fn new_fn_impl<S>(port: u16, service: S) -> Self
     where
-        S: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
-                -> httpbis::Result<()>
+        S: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> httpbis::Result<()>
             + Send
             + Sync
             + 'static,

@@ -48,6 +48,7 @@ use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
 use server::handler::ServerHandler;
 use server::handler::ServerHandlerContext;
+use server::req::ServerRequest;
 use std::marker;
 use ErrorCode;
 use ServerConf;
@@ -157,7 +158,11 @@ where
         self.exec.execute(Box::new(future::lazy(move || {
             let invoke_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
                 // TODO: do start request in executor
-                factory.start_request(context, headers, req_stream, sender)
+                let req = ServerRequest {
+                    headers,
+                    stream: req_stream,
+                };
+                factory.start_request(context, req, sender)
             }));
 
             let result: result::Result<()> = invoke_result.unwrap_or_else(|e| {
@@ -358,8 +363,7 @@ impl ServerConn {
         f: F,
     ) -> (ServerConn, HttpFuture<()>)
     where
-        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
-                -> result::Result<()>
+        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
             + Send
             + Sync
             + 'static,
@@ -368,8 +372,7 @@ impl ServerConn {
 
         impl<F> ServerHandler for HttpServiceFn<F>
         where
-            F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
-                    -> result::Result<()>
+            F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
                 + Send
                 + Sync
                 + 'static,
@@ -377,11 +380,10 @@ impl ServerConn {
             fn start_request(
                 &self,
                 context: ServerHandlerContext,
-                headers: Headers,
-                req: HttpStreamAfterHeaders,
+                req: ServerRequest,
                 resp: ServerResponse,
             ) -> result::Result<()> {
-                (self.0)(context, headers, req, resp)
+                (self.0)(context, req, resp)
             }
         }
 

@@ -1,6 +1,5 @@
-use data_or_trailers::HttpStreamAfterHeaders;
 use result;
-use solicit::header::Headers;
+use server::req::ServerRequest;
 use tokio_core::reactor::Remote;
 use ServerResponse;
 
@@ -28,8 +27,7 @@ pub trait ServerHandler: Send + Sync + 'static {
     fn start_request(
         &self,
         context: ServerHandlerContext,
-        headers: Headers,
-        req: HttpStreamAfterHeaders,
+        req: ServerRequest,
         resp: ServerResponse,
     ) -> result::Result<()>;
 }

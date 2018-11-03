@@ -17,7 +17,6 @@ use std::sync::Arc;
 
 use futures::future::Future;
 
-use httpbis::Headers;
 use httpbis::SimpleHttpMessage;
 use httpbis::*;
 
@@ -58,8 +57,7 @@ fn tls() {
         fn start_request(
             &self,
             _context: ServerHandlerContext,
-            _headers: Headers,
-            _req: HttpStreamAfterHeaders,
+            _req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_found_200_plain_text("hello")?;

@@ -86,6 +86,7 @@ pub use server::conf::ServerConf;
 pub use server::handler::ServerHandler;
 pub use server::handler::ServerHandlerContext;
 pub use server::handler_paths::ServerHandlerPaths;
+pub use server::req::ServerRequest;
 pub use server::resp::ServerResponse;
 pub use server::server_tls::ServerTlsOption;
 pub use server::Server;

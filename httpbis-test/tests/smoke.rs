@@ -23,10 +23,10 @@ use futures::sync::mpsc;
 
 use httpbis::Client;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
+use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 
 #[test]
@@ -132,8 +132,7 @@ fn seq_slow() {
         fn start_request(
             &self,
             _context: ServerHandlerContext,
-            _headers: Headers,
-            _req: HttpStreamAfterHeaders,
+            _req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             let rx = self

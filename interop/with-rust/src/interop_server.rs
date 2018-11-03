@@ -22,11 +22,10 @@ use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use tls_api_openssl::TlsAcceptor;
 use tls_api_openssl::TlsAcceptorBuilder;
 
-use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
+use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use httpbis_interop::PORT;
 
@@ -36,8 +35,7 @@ impl ServerHandler for Found200 {
     fn start_request(
         &self,
         _context: ServerHandlerContext,
-        _headers: Headers,
-        _req: HttpStreamAfterHeaders,
+        _req: ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         resp.send_found_200_plain_text("200 200 200")?;
@@ -51,13 +49,12 @@ impl ServerHandler for Blocks {
     fn start_request(
         &self,
         _context: ServerHandlerContext,
-        headers: Headers,
-        _req: HttpStreamAfterHeaders,
+        req: ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
-        if let Some(captures) = blocks_re.captures(headers.path()) {
+        if let Some(captures) = blocks_re.captures(req.headers.path()) {
             let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
             let count: u32 = captures.get(2).expect("2").as_str().parse().expect("parse");
             let stream = stream::iter_ok(

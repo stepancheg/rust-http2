@@ -1,9 +1,8 @@
 extern crate httpbis;
 
-use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
+use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use httpbis::SimpleHttpMessage;
 
@@ -14,8 +13,7 @@ impl ServerHandler for Ok200 {
     fn start_request(
         &self,
         _context: ServerHandlerContext,
-        _headers: Headers,
-        _req: HttpStreamAfterHeaders,
+        _req: ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         resp.send_message(SimpleHttpMessage::found_200_plain_text("found"))?;

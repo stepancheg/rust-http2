@@ -7,10 +7,10 @@ use futures::future::Future;
 use futures::stream::Stream;
 use httpbis::Client;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
+use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use std::env;
 use std::sync::Arc;
@@ -47,8 +47,7 @@ fn request() {
         fn start_request(
             &self,
             _context: ServerHandlerContext,
-            _headers: Headers,
-            _req: HttpStreamAfterHeaders,
+            _req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_found_200_plain_text("hello there")?;
@@ -89,12 +88,11 @@ fn ping_pong() {
         fn start_request(
             &self,
             _context: ServerHandlerContext,
-            _headers: Headers,
-            req: HttpStreamAfterHeaders,
+            req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_headers(Headers::ok_200())?;
-            resp.pull_from_stream(req)?;
+            resp.pull_from_stream(req.stream)?;
             Ok(())
         }
     }

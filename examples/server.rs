@@ -27,13 +27,12 @@ impl httpbis::ServerHandler for ServiceImpl {
     fn start_request(
         &self,
         _context: ServerHandlerContext,
-        req_headers: httpbis::Headers,
-        _req: httpbis::HttpStreamAfterHeaders,
+        req: httpbis::ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
-        println!("starting request: {:?}", req_headers);
+        println!("starting request: {:?}", req.headers);
 
-        if req_headers.method() == "POST" {
+        if req.headers.method() == "POST" {
             self.counter.fetch_add(1, Ordering::Relaxed);
             resp.send_redirect_302("/")?;
         } else {

@@ -2,10 +2,10 @@ use std::collections::hash_map;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use data_or_trailers::HttpStreamAfterHeaders;
 use result;
 use server::handler::ServerHandler;
 use server::handler::ServerHandlerContext;
+use server::req::ServerRequest;
 use solicit::header::Headers;
 use ServerResponse;
 
@@ -116,14 +116,14 @@ impl ServerHandlerPaths {
     /// struct Files {}
     ///
     /// impl ServerHandler for Root {
-    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerResponse) -> httpbis::Result<()> {
+    ///     fn start_request(&self, _context: ServerHandlerContext, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is root page")?;
     ///         Ok(())
     ///     }
     /// }
     ///
     /// impl ServerHandler for Files {
-    ///     fn start_request(&self, _context: ServerHandlerContext, _headers: Headers, _req: HttpStreamAfterHeaders, mut resp: ServerResponse) -> httpbis::Result<()> {
+    ///     fn start_request(&self, _context: ServerHandlerContext, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is files")?;
     ///         Ok(())
     ///     }
@@ -140,15 +140,13 @@ impl ServerHandlerPaths {
 
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
     where
-        F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
-                -> result::Result<()>
+        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
             + Send
             + Sync
             + 'static,
     {
         impl<
-                F: Fn(ServerHandlerContext, Headers, HttpStreamAfterHeaders, ServerResponse)
-                        -> result::Result<()>
+                F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
                     + Send
                     + Sync
                     + 'static,
@@ -157,11 +155,10 @@ impl ServerHandlerPaths {
             fn start_request(
                 &self,
                 context: ServerHandlerContext,
-                headers: Headers,
-                req: HttpStreamAfterHeaders,
+                req: ServerRequest,
                 resp: ServerResponse,
             ) -> result::Result<()> {
-                self(context, headers, req, resp)
+                self(context, req, resp)
             }
         }
 
@@ -182,15 +179,14 @@ impl ServerHandler for ServerHandlerPaths {
     fn start_request(
         &self,
         context: ServerHandlerContext,
-        headers: Headers,
-        req: HttpStreamAfterHeaders,
+        req: ServerRequest,
         mut resp: ServerResponse,
     ) -> result::Result<()> {
-        if let Some(service) = self.find_service(headers.path()) {
-            debug!("invoking user callback for path {}", headers.path());
-            service.start_request(context, headers, req, resp)
+        if let Some(service) = self.find_service(req.headers.path()) {
+            debug!("invoking user callback for path {}", req.headers.path());
+            service.start_request(context, req, resp)
         } else {
-            debug!("serving 404 for path {}", headers.path());
+            debug!("serving 404 for path {}", req.headers.path());
             drop(resp.send_headers(Headers::not_found_404()));
             drop(resp.close());
             Ok(())

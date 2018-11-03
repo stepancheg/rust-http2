@@ -24,43 +24,39 @@ use httpbis::*;
 
 fn new_server() -> Server {
     let mut server = ServerBuilder::new_plain();
-    server.service.set_service_fn("/200", |_, _, _, mut resp| {
+    server.service.set_service_fn("/200", |_, _, mut resp| {
         resp.send_found_200_plain_text("hi")?;
         Ok(())
     });
-    server
-        .service
-        .set_service_fn("/inf", |_, headers, _, mut resp| {
-            let re = Regex::new("/inf/(\\d+)").expect("regex");
-            let captures = re.captures(headers.path()).expect("captures");
-            let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
+    server.service.set_service_fn("/inf", |_, req, mut resp| {
+        let re = Regex::new("/inf/(\\d+)").expect("regex");
+        let captures = re.captures(req.headers.path()).expect("captures");
+        let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
 
-            resp.send_headers(Headers::ok_200())?;
-            resp.pull_bytes_from_stream(stream::repeat(Bytes::from(vec![17; size as usize])))?;
-            Ok(())
+        resp.send_headers(Headers::ok_200())?;
+        resp.pull_bytes_from_stream(stream::repeat(Bytes::from(vec![17; size as usize])))?;
+        Ok(())
+    });
+    server.service.set_service_fn("/bq", |_, req, mut resp| {
+        let re = Regex::new("/bq/(\\d+)").expect("regex");
+        let captures = re.captures(req.headers.path()).expect("captures");
+        let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
+
+        let (tx, rx) = mpsc::channel(1);
+
+        thread::spawn(move || {
+            let mut tx = tx;
+
+            let b = Bytes::from(vec![17; size as usize]);
+            loop {
+                tx = tx.send(b.clone()).wait().expect("send");
+            }
         });
-    server
-        .service
-        .set_service_fn("/bq", |_, headers, _, mut resp| {
-            let re = Regex::new("/bq/(\\d+)").expect("regex");
-            let captures = re.captures(headers.path()).expect("captures");
-            let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
 
-            let (tx, rx) = mpsc::channel(1);
-
-            thread::spawn(move || {
-                let mut tx = tx;
-
-                let b = Bytes::from(vec![17; size as usize]);
-                loop {
-                    tx = tx.send(b.clone()).wait().expect("send");
-                }
-            });
-
-            resp.send_headers(Headers::ok_200())?;
-            resp.pull_bytes_from_stream(rx.map_err(|_| unreachable!()))?;
-            Ok(())
-        });
+        resp.send_headers(Headers::ok_200())?;
+        resp.pull_bytes_from_stream(rx.map_err(|_| unreachable!()))?;
+        Ok(())
+    });
     server.set_port(0);
     server.build().expect("server")
 }
