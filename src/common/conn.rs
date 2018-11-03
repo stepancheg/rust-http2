@@ -4,7 +4,6 @@ use futures::sync::mpsc::UnboundedSender;
 
 use tokio_core::reactor;
 
-use exec::CpuPoolOption;
 use exec::Executor;
 
 use error;
@@ -65,6 +64,7 @@ pub struct Conn<T: Types> {
     /// Reactor we are using
     pub loop_handle: reactor::Handle,
     /// Executor which drives requests on client and responses on server
+    // TODO: currently hardcoded to Handle
     pub exec: Box<Executor>,
     /// Known streams
     pub streams: StreamMap<T>,
@@ -131,7 +131,6 @@ where
 {
     pub fn new(
         loop_handle: reactor::Handle,
-        exec: CpuPoolOption,
         specific: T::ConnSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
@@ -156,7 +155,7 @@ where
             streams: StreamMap::new(),
             last_local_stream_id: 0,
             last_peer_stream_id: 0,
-            exec: exec.make_executor(&loop_handle),
+            exec: Box::new(loop_handle.clone()),
             loop_handle,
             goaway_sent: None,
             goaway_received: None,

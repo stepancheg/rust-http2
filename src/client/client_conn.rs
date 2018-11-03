@@ -8,8 +8,6 @@ use error;
 use error::Error;
 use result;
 
-use exec::CpuPoolOption;
-
 use solicit::end_stream::EndStream;
 use solicit::frame::settings::*;
 use solicit::header::*;
@@ -239,7 +237,6 @@ impl ClientConn {
 
             let conn_data = Conn::<ClientTypes<_>>::new(
                 lh_copy,
-                CpuPoolOption::SingleThread,
                 ClientConnData {
                     _callbacks: Box::new(callbacks),
                 },

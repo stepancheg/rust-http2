@@ -5,8 +5,6 @@ use std::sync::Arc;
 use error;
 use result;
 
-use exec::CpuPoolOption;
-
 use solicit::end_stream::EndStream;
 use solicit::frame::settings::*;
 use solicit::header::*;
@@ -256,7 +254,6 @@ impl ServerConn {
     fn connected<F, I>(
         lh: &reactor::Handle,
         socket: HttpFutureSend<I>,
-        cpu_pool: CpuPoolOption,
         conf: ServerConf,
         service: Arc<F>,
     ) -> (ServerConn, HttpFuture<()>)
@@ -288,7 +285,6 @@ impl ServerConn {
 
             let conn_data = Conn::<ServerTypes<I>>::new(
                 lh,
-                cpu_pool,
                 ServerConnData { factory: service },
                 conf.common,
                 settings,
@@ -314,7 +310,6 @@ impl ServerConn {
         lh: &reactor::Handle,
         socket: Box<StreamItem>,
         tls: ServerTlsOption<A>,
-        exec: CpuPoolOption,
         conf: ServerConf,
         service: Arc<S>,
     ) -> (ServerConn, HttpFuture<()>)
@@ -325,13 +320,13 @@ impl ServerConn {
         match tls {
             ServerTlsOption::Plain => {
                 let socket = Box::new(future::finished(socket));
-                ServerConn::connected(lh, socket, exec, conf, service)
+                ServerConn::connected(lh, socket, conf, service)
             }
             ServerTlsOption::Tls(acceptor) => {
                 let socket = Box::new(
                     tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from),
                 );
-                ServerConn::connected(lh, socket, exec, conf, service)
+                ServerConn::connected(lh, socket, conf, service)
             }
         }
     }
@@ -346,14 +341,7 @@ impl ServerConn {
         S: ServerHandler,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        ServerConn::new(
-            lh,
-            Box::new(socket),
-            no_tls,
-            CpuPoolOption::SingleThread,
-            conf,
-            service,
-        )
+        ServerConn::new(lh, Box::new(socket), no_tls, conf, service)
     }
 
     pub fn new_plain_single_thread_fn<F>(

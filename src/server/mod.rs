@@ -25,10 +25,6 @@ use futures::stream;
 use futures::stream::Stream;
 use futures::sync::oneshot;
 
-use futures_cpupool;
-
-use exec::CpuPoolOption;
-
 use error::Error;
 use result::Result;
 
@@ -53,7 +49,6 @@ pub use server::server_conn::ServerConn;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
-    pub cpu_pool: CpuPoolOption,
     pub tls: ServerTlsOption<A>,
     pub addr: Option<AnySocketAddr>,
     /// Event loop to spawn server.
@@ -121,21 +116,11 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     pub fn new() -> ServerBuilder<A> {
         ServerBuilder {
             conf: ServerConf::new(),
-            cpu_pool: CpuPoolOption::SingleThread,
             tls: ServerTlsOption::Plain,
             addr: None,
             event_loop: None,
             service: ServerHandlerPaths::new(),
         }
-    }
-
-    /// Create a CPU pool, and use it in HTTP server
-    pub fn set_cpu_pool_threads(&mut self, threads: usize) {
-        let cpu_pool = futures_cpupool::Builder::new()
-            .pool_size(threads)
-            .name_prefix("httpbis-server-")
-            .create();
-        self.cpu_pool = CpuPoolOption::CpuPool(cpu_pool);
     }
 
     pub fn set_tls(&mut self, acceptor: A) {
@@ -165,7 +150,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
 
         let join = if let Some(remote) = self.event_loop {
             let tls = self.tls;
-            let cpu_pool = self.cpu_pool;
             let conf = self.conf;
             let service = self.service;
             remote.spawn(move |handle| {
@@ -174,7 +158,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                     state_copy,
                     tls,
                     listen,
-                    cpu_pool,
                     shutdown_future,
                     conf,
                     service,
@@ -185,7 +168,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
             Completion::Rx(done_rx)
         } else {
             let tls = self.tls;
-            let cpu_pool = self.cpu_pool;
             let conf = self.conf;
             let service = self.service;
             let join_handle = thread::Builder::new()
@@ -201,7 +183,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                         state_copy,
                         tls,
                         listen,
-                        cpu_pool,
                         shutdown_future,
                         conf,
                         service,
@@ -273,7 +254,6 @@ fn spawn_server_event_loop<S, A>(
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
     listen: Box<ToTokioListener + Send>,
-    exec: CpuPoolOption,
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
     service: S,
@@ -307,8 +287,7 @@ where
                         .expect("failed to set TCP_NODELAY");
                 }
 
-                let (conn, future) =
-                    ServerConn::new(&loop_handle, socket, tls, exec.clone(), conf, service);
+                let (conn, future) = ServerConn::new(&loop_handle, socket, tls, conf, service);
 
                 let conn_id = {
                     let mut g = state.lock().expect("lock");

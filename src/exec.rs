@@ -24,27 +24,27 @@ impl Executor for reactor::Handle {
 
 // Where execute requests on client and responses on server
 #[derive(Clone)]
-pub enum CpuPoolOption {
+pub enum _CpuPoolOption {
     // Execute in event loop
     SingleThread,
     // Execute in provided CpuPool
     CpuPool(CpuPool),
 }
 
-impl fmt::Debug for CpuPoolOption {
+impl fmt::Debug for _CpuPoolOption {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &CpuPoolOption::SingleThread => write!(f, "SingleThread"),
-            &CpuPoolOption::CpuPool(..) => write!(f, "CpuPool"),
+            &_CpuPoolOption::SingleThread => write!(f, "SingleThread"),
+            &_CpuPoolOption::CpuPool(..) => write!(f, "CpuPool"),
         }
     }
 }
 
-impl CpuPoolOption {
-    pub(crate) fn make_executor(&self, lh: &reactor::Handle) -> Box<Executor> {
+impl _CpuPoolOption {
+    pub(crate) fn _make_executor(&self, lh: &reactor::Handle) -> Box<Executor> {
         match self {
-            &CpuPoolOption::SingleThread => Box::new(lh.clone()),
-            &CpuPoolOption::CpuPool(ref pool) => Box::new(pool.clone()),
+            &_CpuPoolOption::SingleThread => Box::new(lh.clone()),
+            &_CpuPoolOption::CpuPool(ref pool) => Box::new(pool.clone()),
         }
     }
 }

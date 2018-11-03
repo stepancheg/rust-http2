@@ -172,6 +172,7 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
         }
     }
 
+    // TODO: explicit executor parameter
     pub fn pull_from_stream(&mut self, stream: HttpStreamAfterHeaders) -> Result<(), SendError> {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
             return Err(SendError::IncorrectState(self.state()));

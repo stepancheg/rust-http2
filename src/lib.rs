@@ -72,7 +72,7 @@ pub use solicit::header::Headers;
 pub use solicit::header::PseudoHeaderName;
 pub use solicit::HttpScheme;
 
-pub use exec::CpuPoolOption;
+pub use exec::_CpuPoolOption;
 
 pub use client::client_conf::ClientConf;
 pub use client::client_sender::ClientSender;
