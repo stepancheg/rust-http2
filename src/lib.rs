@@ -17,6 +17,7 @@ extern crate tokio_tls_api;
 
 extern crate bytes;
 extern crate net2;
+extern crate rand;
 extern crate void;
 
 mod solicit;

@@ -42,6 +42,8 @@ use socket::ToSocketListener;
 use socket::ToTokioListener;
 
 pub use self::server_tls::ServerTlsOption;
+use rand::thread_rng;
+use rand::Rng;
 pub use server::conf::ServerConf;
 use server::handler::ServerHandler;
 use server::handler_paths::ServerHandlerPaths;
@@ -54,6 +56,10 @@ pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     /// Event loop to spawn server.
     /// If not specified, builder will create new event loop in a new thread.
     pub event_loop: Option<reactor::Remote>,
+    /// Event loops used to run incoming connections.
+    /// If empty, listener event loop will be used.
+    // TODO: test it
+    pub conn_event_loops: Vec<reactor::Remote>,
     pub service: ServerHandlerPaths,
 }
 
@@ -119,6 +125,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
             tls: ServerTlsOption::Plain,
             addr: None,
             event_loop: None,
+            conn_event_loops: Vec::new(),
             service: ServerHandlerPaths::new(),
         }
     }
@@ -152,9 +159,11 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
             let tls = self.tls;
             let conf = self.conf;
             let service = self.service;
+            let conn_event_loops = self.conn_event_loops;
             remote.spawn(move |handle| {
                 drop(spawn_server_event_loop(
                     handle.clone(),
+                    conn_event_loops,
                     state_copy,
                     tls,
                     listen,
@@ -170,6 +179,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
             let tls = self.tls;
             let conf = self.conf;
             let service = self.service;
+            let conn_event_loops = self.conn_event_loops;
             let join_handle = thread::Builder::new()
                 .name(
                     conf.thread_name
@@ -180,6 +190,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                     let mut lp = reactor::Core::new().expect("http2server");
                     let done_rx = spawn_server_event_loop(
                         lp.handle(),
+                        conn_event_loops,
                         state_copy,
                         tls,
                         listen,
@@ -251,6 +262,7 @@ impl ServerStateSnapshot {
 
 fn spawn_server_event_loop<S, A>(
     handle: reactor::Handle,
+    mut conn_handles: Vec<reactor::Remote>,
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
     listen: Box<ToTokioListener + Send>,
@@ -267,14 +279,18 @@ where
 
     let tokio_listener = listen.to_tokio_listener(&handle);
 
-    let stuff = stream::repeat((handle.clone(), service, state, tls, conf));
+    if conn_handles.is_empty() {
+        conn_handles.push(handle.remote().clone());
+    }
+
+    let stuff = stream::repeat((conn_handles, service, state, tls, conf));
 
     let loop_run = tokio_listener
         .incoming()
         .map_err(Error::from)
         .zip(stuff)
         .for_each(
-            move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
+            move |((socket, peer_addr), (conn_handles, service, state, tls, conf))| {
                 if socket.is_tcp() {
                     info!(
                         "accepted connection from {}",
@@ -287,18 +303,20 @@ where
                         .expect("failed to set TCP_NODELAY");
                 }
 
-                let (conn, future) = ServerConn::new(&loop_handle, socket, tls, conf, service);
+                // TODO: implement smarter selection
+                let handle = conn_handles[thread_rng().gen_range(0, conn_handles.len())].clone();
+                handle.spawn(move |handle| {
+                    let (conn, future) = ServerConn::new(&handle, socket, tls, conf, service);
 
-                let conn_id = {
-                    let mut g = state.lock().expect("lock");
-                    g.last_conn_id += 1;
-                    let conn_id = g.last_conn_id;
-                    let prev = g.conns.insert(conn_id, conn);
-                    assert!(prev.is_none());
-                    conn_id
-                };
+                    let conn_id = {
+                        let mut g = state.lock().expect("lock");
+                        g.last_conn_id += 1;
+                        let conn_id = g.last_conn_id;
+                        let prev = g.conns.insert(conn_id, conn);
+                        assert!(prev.is_none());
+                        conn_id
+                    };
 
-                loop_handle.spawn(
                     future
                         .then(move |r| {
                             let mut g = state.lock().expect("lock");
@@ -308,8 +326,8 @@ where
                         }).map_err(|e| {
                             warn!("connection end: {:?}", e);
                             ()
-                        }),
-                );
+                        })
+                });
                 Ok(())
             },
         );

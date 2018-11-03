@@ -24,6 +24,7 @@ tls-api-stub    = "0.1"
 void            = "1"
 net2 = "0.2"
 bytes = "0.4"
+rand = "~0.5"
 
 [target.'cfg(unix)'.dependencies]
 tokio-uds       = "0.1"
