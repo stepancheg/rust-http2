@@ -5,6 +5,7 @@ extern crate bytes;
 extern crate log;
 extern crate env_logger;
 extern crate futures;
+extern crate futures_cpupool;
 extern crate httpbis;
 extern crate regex;
 extern crate tokio_core;
@@ -46,6 +47,7 @@ use std::sync::mpsc;
 extern crate tempdir;
 #[cfg(unix)]
 extern crate unix_socket;
+use futures_cpupool::CpuPool;
 #[cfg(unix)]
 use unix_socket::UnixStream;
 
@@ -545,4 +547,42 @@ fn external_event_loop() {
     shutdown_tx.send(()).expect("send");
 
     t.join().expect("thread join");
+}
+
+/// Example of moving heavy computation to CPU tool
+#[test]
+fn example_cpu_pool() {
+    init_logger();
+
+    let cpu_pool = CpuPool::new(2);
+
+    let mut server = ServerBuilder::new_plain();
+    server
+        .service
+        .set_service_fn("/foo", move |_, _, mut resp| {
+            cpu_pool
+                .spawn_fn(move || {
+                    if let Err(e) = resp.send_found_200_plain_text("hello") {
+                        warn!("failed to send response: {:?}", e);
+                    }
+                    Ok::<_, ()>(())
+                }).forget();
+            Ok(())
+        });
+    server.set_port(0);
+    let server = server.build().expect("server");
+
+    let client = Client::new_plain(
+        "127.0.0.1",
+        server.local_addr().port().unwrap(),
+        Default::default(),
+    ).expect("client");
+
+    let response = client
+        .start_get("/foo", "localhost")
+        .collect()
+        .wait()
+        .expect("get");
+    assert_eq!(200, response.headers.status());
+    assert_eq!(b"hello", response.body.as_ref());
 }

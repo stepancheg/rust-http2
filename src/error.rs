@@ -117,6 +117,7 @@ pub enum Error {
     IoError(io::Error),
     TlsError(tls_api::Error),
     CodeError(ErrorCode),
+    RstStreamReceived(ErrorCode),
     /// The HTTP/2 connection received an invalid HTTP/2 frame
     InvalidFrame(String),
     /// The HPACK decoder was unable to decode a header chunk and raised an error.
@@ -193,6 +194,7 @@ impl StdError for Error {
             Error::IoError(_) => "Encountered an IO error",
             Error::TlsError(_) => "Encountered TLS error",
             Error::CodeError(_) => "Encountered HTTP named error",
+            Error::RstStreamReceived(_) => "Received RST_STREAM from peer",
             Error::InvalidFrame(..) => "Encountered an invalid or unexpected HTTP/2 frame",
             Error::CompressionError(_) => "Encountered an error with HPACK compression",
             Error::WindowSizeOverflow => "The connection flow control window overflowed",

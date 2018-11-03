@@ -261,7 +261,11 @@ impl<T: Types> HttpStreamCommon<T> {
 
     pub fn rst_recvd(&mut self, error_code: ErrorCode) -> DroppedData {
         if let Some(ref mut response_handler) = self.peer_tx.take() {
-            drop(response_handler.send(ResultOrEof::Error(error::Error::CodeError(error_code))));
+            drop(
+                response_handler.send(ResultOrEof::Error(error::Error::RstStreamReceived(
+                    error_code,
+                ))),
+            );
         }
         DroppedData {
             size: self.outgoing.data_size(),

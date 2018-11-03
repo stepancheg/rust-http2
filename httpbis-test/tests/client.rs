@@ -79,7 +79,7 @@ fn rst_is_error() {
 
     match req.wait() {
         Ok(..) => panic!("expected error"),
-        Err(Error::CodeError(ErrorCode::InadequateSecurity)) => {}
+        Err(Error::RstStreamReceived(ErrorCode::InadequateSecurity)) => {}
         Err(e) => panic!("wrong error: {:?}", e),
     }
 
