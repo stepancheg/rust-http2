@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use client::client_conn::ClientToWriteMessage;
-use common::common_sender::CommonSender;
-use common::common_sender::SendError;
+use common::sender::CommonSender;
+use common::sender::SendError;
 use common::window_size::StreamDead;
 use error;
 use futures::Poll;

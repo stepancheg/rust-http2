@@ -40,7 +40,7 @@ use client::client_sender::ClientSender;
 use client::ClientInterface;
 use client_died_error_holder::ClientDiedErrorHolder;
 use common::client_or_server::ClientOrServer;
-use common::common_sender::CommonSender;
+use common::sender::CommonSender;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use futures::future;

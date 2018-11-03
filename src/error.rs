@@ -11,7 +11,7 @@ use tls_api;
 
 use tokio_timer::TimeoutError;
 
-use common::common_sender::SendError;
+use common::sender::SendError;
 use solicit::frame::ParseFrameError;
 
 /// The enum represents an error code that are used in `RST_STREAM` and `GOAWAY` frames.

@@ -1,6 +1,6 @@
 use bytes::Bytes;
-use common::common_sender::CommonSender;
-use common::common_sender::SendError;
+use common::sender::CommonSender;
+use common::sender::SendError;
 use error;
 use futures::Poll;
 use futures::Stream;
