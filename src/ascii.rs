@@ -8,7 +8,7 @@ use std::fmt;
 use std::str::Utf8Error;
 
 /// Bytes wrapper that guarantees that contained bytes are ASCII.
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Eq, PartialEq, Hash, Clone)]
 pub struct Ascii(Bytes);
 
 impl Ascii {

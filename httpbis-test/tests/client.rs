@@ -98,8 +98,8 @@ fn handle_1xx_headers() {
     let get = server_tester.recv_message(1);
     assert_eq!("GET", get.headers.method());
 
-    server_tester.send_headers(1, Headers::from_status(100), false);
-    server_tester.send_headers(1, Headers::from_status(100), false);
+    server_tester.send_headers(1, Headers::new_status(100), false);
+    server_tester.send_headers(1, Headers::new_status(100), false);
 
     server_tester.send_headers(1, Headers::ok_200(), false);
 

@@ -429,8 +429,8 @@ pub fn server_sends_continuation_frame() {
     let mut headers = Headers::ok_200();
     for i in 0..1000 {
         headers.add(
-            &format!("abcdefghijklmnop{}", i),
-            &format!("ABCDEFGHIJKLMNOP{}", i),
+            format!("abcdefghijklmnop{}", i),
+            format!("ABCDEFGHIJKLMNOP{}", i),
         );
     }
 

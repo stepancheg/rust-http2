@@ -69,6 +69,7 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
                             "received incorrect headers in stream {}: {:?}",
                             frame.stream_id, e
                         );
+                        // TODO: close connection, because decoder may be in incorrect state
                         return Ok(Async::Ready(HttpFrameDecodedOrGoaway::SendRst(
                             frame.stream_id,
                             ErrorCode::ProtocolError,

@@ -854,7 +854,7 @@ mod tests {
 
         let mut headers = Headers::ok_200();
         for i in 0..1000 {
-            headers.add(&format!("h-{}", i), &format!("v-{}", i))
+            headers.add(format!("h-{}", i), format!("v-{}", i))
         }
 
         let max_frame_size = 1000;

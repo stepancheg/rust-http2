@@ -109,66 +109,168 @@ impl PseudoHeaderNameSet {
     }
 }
 
-/// A convenience struct representing a part of a header (either the name or the value).
-pub struct HeaderPart(Bytes);
+/// A convenience struct representing a header value.
+pub struct HeaderValue(Bytes);
 
-impl fmt::Debug for HeaderPart {
+impl fmt::Debug for HeaderValue {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.0, fmt)
     }
 }
 
-impl From<Vec<u8>> for HeaderPart {
-    fn from(vec: Vec<u8>) -> HeaderPart {
-        HeaderPart(Bytes::from(vec))
+impl From<Vec<u8>> for HeaderValue {
+    fn from(vec: Vec<u8>) -> HeaderValue {
+        HeaderValue(Bytes::from(vec))
     }
 }
 
-impl From<Bytes> for HeaderPart {
-    fn from(bytes: Bytes) -> HeaderPart {
-        HeaderPart(bytes)
+impl From<Bytes> for HeaderValue {
+    fn from(bytes: Bytes) -> HeaderValue {
+        HeaderValue(bytes)
     }
 }
 
-impl<'a> From<&'a [u8]> for HeaderPart {
-    fn from(buf: &'a [u8]) -> HeaderPart {
-        HeaderPart(Bytes::from(buf))
+impl<'a> From<&'a [u8]> for HeaderValue {
+    fn from(buf: &'a [u8]) -> HeaderValue {
+        HeaderValue(Bytes::from(buf))
     }
 }
 
-impl From<String> for HeaderPart {
-    fn from(s: String) -> HeaderPart {
+impl From<String> for HeaderValue {
+    fn from(s: String) -> HeaderValue {
         From::from(s.into_bytes())
     }
 }
 
-impl<'a> From<&'a str> for HeaderPart {
-    fn from(s: &'a str) -> HeaderPart {
+impl<'a> From<&'a str> for HeaderValue {
+    fn from(s: &'a str) -> HeaderValue {
         From::from(s.as_bytes())
     }
 }
 
-#[derive(Eq, PartialEq, Clone)]
-enum HeaderName {
+/// Separate type to hide contents from rustdoc.
+#[derive(Eq, PartialEq, Hash, Clone)]
+enum HeaderNameEnum {
     Pseudo(PseudoHeaderName),
     Regular(Ascii),
 }
 
+/// Representation of header name
+///
+/// Contained value is guaranteed to contain a valid header name.
+///
+/// # Examples
+///
+/// ```
+/// # use httpbis::*;
+/// assert_eq!("content-type", HeaderName::new("Content-Type").name());
+/// assert_eq!(":method", HeaderName::pseudo(PseudoHeaderName::Method).name());
+/// ```
+#[derive(Eq, PartialEq, Hash, Clone)]
+pub struct HeaderName(HeaderNameEnum);
+
+impl From<PseudoHeaderName> for HeaderName {
+    fn from(p: PseudoHeaderName) -> Self {
+        HeaderName(HeaderNameEnum::Pseudo(p))
+    }
+}
+
+impl<'a> From<&'a str> for HeaderName {
+    fn from(s: &'a str) -> Self {
+        HeaderName::new(s)
+    }
+}
+
+impl<'a> From<&'a [u8]> for HeaderName {
+    fn from(s: &'a [u8]) -> Self {
+        HeaderName::new(s)
+    }
+}
+
+impl From<String> for HeaderName {
+    fn from(s: String) -> Self {
+        HeaderName::new(s)
+    }
+}
+
+impl From<Vec<u8>> for HeaderName {
+    fn from(s: Vec<u8>) -> Self {
+        HeaderName::new(s)
+    }
+}
+
+impl From<Bytes> for HeaderName {
+    fn from(s: Bytes) -> Self {
+        HeaderName::new(s)
+    }
+}
+
 impl HeaderName {
-    fn name(&self) -> &str {
-        match self {
-            HeaderName::Pseudo(p) => p.name(),
-            HeaderName::Regular(r) => r.as_str(),
+    /// Construct a pseudo header name.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use httpbis::*;
+    /// assert_eq!(":method", HeaderName::pseudo(PseudoHeaderName::Method).name());
+    /// ```
+    pub fn pseudo(name: PseudoHeaderName) -> HeaderName {
+        HeaderName(HeaderNameEnum::Pseudo(name))
+    }
+
+    /// Construct a header name from string
+    ///
+    /// # Example
+    ///
+    /// Default construction
+    ///
+    /// ```
+    /// # use httpbis::*;
+    /// assert_eq!("content-type", HeaderName::new("Content-Type").name());
+    /// assert_eq!(":method", HeaderName::new(":method").name());
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics on incorrect header name.
+    ///
+    /// ```should_panic
+    /// # use httpbis::*;
+    /// HeaderName::new("");
+    /// ```
+    pub fn new(name: impl Into<Bytes>) -> HeaderName {
+        let mut name = name.into();
+        make_ascii_lowercase(&mut name);
+        match HeaderName::new_validate(name) {
+            Ok(h) => h,
+            Err((e, name)) => panic!("incorrect header name: {:?}: {:?}", name, e),
         }
     }
 
-    fn new_validate(name: Bytes) -> Result<HeaderName, (HeaderError, Bytes)> {
+    /// Construct a header from given sequence of bytes
+    ///
+    /// Returns error if header name is not valid,
+    /// in particular if name is upper case.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate httpbis;
+    /// # extern crate bytes;
+    /// # use httpbis::*;
+    /// # use bytes::*;
+    /// assert!(HeaderName::new_validate(Bytes::from(":method")).is_ok());
+    /// assert!(HeaderName::new_validate(Bytes::from("Content-Type")).is_err());
+    /// ```
+    pub fn new_validate(name: Bytes) -> Result<HeaderName, (HeaderError, Bytes)> {
         if name.len() == 0 {
             return Err((HeaderError::EmptyName, name));
         }
 
         Ok(if name[0] == b':' {
-            HeaderName::Pseudo(PseudoHeaderName::parse(&name).map_err(|e| (e, name))?)
+            HeaderName(HeaderNameEnum::Pseudo(
+                PseudoHeaderName::parse(&name).map_err(|e| (e, name))?,
+            ))
         } else {
             // HTTP/2 does not use the Connection header field to indicate
             // connection-specific header fields; in this protocol, connection-
@@ -198,28 +300,37 @@ impl HeaderName {
 
             let ascii =
                 Ascii::from_utf8(name).map_err(|(_, b)| (HeaderError::HeaderNameNotAscii, b))?;
-            HeaderName::Regular(ascii)
+            HeaderName(HeaderNameEnum::Regular(ascii))
         })
     }
 
+    /// Return a header name as a string.
+    pub fn name(&self) -> &str {
+        match &self.0 {
+            HeaderNameEnum::Pseudo(p) => p.name(),
+            HeaderNameEnum::Regular(r) => r.as_str(),
+        }
+    }
+
     fn is_pseudo(&self) -> bool {
-        match self {
-            HeaderName::Pseudo(_) => true,
-            HeaderName::Regular(_) => false,
+        match self.0 {
+            HeaderNameEnum::Pseudo(_) => true,
+            HeaderNameEnum::Regular(_) => false,
         }
     }
 }
 
 impl fmt::Debug for HeaderName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            HeaderName::Pseudo(p) => fmt::Debug::fmt(p.name(), f),
-            HeaderName::Regular(r) => fmt::Debug::fmt(r, f),
+        match &self.0 {
+            HeaderNameEnum::Pseudo(p) => fmt::Debug::fmt(p.name(), f),
+            HeaderNameEnum::Regular(r) => fmt::Debug::fmt(r, f),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+/// HTTP/2 header, regular or pseudo-header
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Header {
     name: HeaderName,
     pub value: Bytes,
@@ -273,19 +384,26 @@ impl Header {
     ///
     /// Header name is converted to lower case.
     /// This function panics if header name is not valid.
-    pub fn new<N: Into<HeaderPart>, V: Into<HeaderPart>>(name: N, value: V) -> Header {
-        let mut name = name.into().0;
-        make_ascii_lowercase(&mut name);
-        let name = match HeaderName::new_validate(name) {
-            Ok(name) => name,
-            Err((e, name)) => {
-                panic!("incorrect header name: {:?}: {:?}", name, e);
-            }
-        };
+    pub fn new<N: Into<HeaderName>, V: Into<HeaderValue>>(name: N, value: V) -> Header {
         Header {
-            name,
+            name: name.into(),
             value: value.into().0,
         }
+    }
+
+    /// Construct a `:method` header
+    fn method(value: impl Into<HeaderValue>) -> Header {
+        Header::new(PseudoHeaderName::Method, value.into())
+    }
+
+    /// Construct a `:method` `GET` header
+    fn method_get() -> Header {
+        Header::method("GET".as_bytes())
+    }
+
+    /// Construct a `:path` header
+    fn path(path: impl Into<HeaderValue>) -> Header {
+        Header::new(PseudoHeaderName::Path, path.into())
     }
 
     /// Return a borrowed representation of the `Header` name.
@@ -307,9 +425,9 @@ impl Header {
     }
 
     pub fn pseudo_header_name(&self) -> Option<PseudoHeaderName> {
-        match &self.name {
-            HeaderName::Pseudo(p) => Some(*p),
-            HeaderName::Regular(_) => None,
+        match &self.name.0 {
+            HeaderNameEnum::Pseudo(p) => Some(*p),
+            HeaderNameEnum::Regular(_) => None,
         }
     }
 
@@ -333,12 +451,13 @@ impl Header {
     }
 }
 
-impl<N: Into<HeaderPart>, V: Into<HeaderPart>> From<(N, V)> for Header {
+impl<N: Into<HeaderName>, V: Into<HeaderValue>> From<(N, V)> for Header {
     fn from(p: (N, V)) -> Header {
         Header::new(p.0, p.1)
     }
 }
 
+/// HTTP message headers (or trailers)
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct Headers {
     // Pseudo-headers stored before regular headers
@@ -347,10 +466,12 @@ pub struct Headers {
 }
 
 impl Headers {
+    /// Construct empty headers
     pub fn new() -> Headers {
         Default::default()
     }
 
+    /// Construct headers from a vec of individual headers
     pub fn from_vec(mut headers: Vec<Header>) -> Headers {
         headers.sort_by_key(|h| !h.is_preudo_header());
         let pseudo_count = headers.iter().take_while(|h| h.is_preudo_header()).count();
@@ -360,7 +481,7 @@ impl Headers {
         }
     }
 
-    pub fn from_vec_pseudo_first(headers: Vec<Header>) -> Result<Headers, HeaderError> {
+    pub(crate) fn from_vec_pseudo_first(headers: Vec<Header>) -> Result<Headers, HeaderError> {
         let mut saw_regular_header = false;
         let mut pseudo_count = 0;
         for header in &headers {
@@ -379,6 +500,9 @@ impl Headers {
         });
     }
 
+    /// Return an iterator over headers.
+    ///
+    /// Pseudo headers returned first.
     pub fn iter(&self) -> impl Iterator<Item = &Header> {
         self.headers.iter()
     }
@@ -391,7 +515,7 @@ impl Headers {
         &self.headers[self.pseudo_count..]
     }
 
-    /// Multiline string
+    /// Dump all headers as multiline string.
     pub fn dump(&self) -> String {
         let mut r = String::new();
         for h in &self.headers {
@@ -401,43 +525,47 @@ impl Headers {
         r
     }
 
-    pub fn new_get(path: &str) -> Headers {
-        Headers::from_vec(vec![
-            Header::new(":method", "GET"),
-            Header::new(":path", path),
-        ])
+    /// Construct a `Headers` object with specified `:method` and `:path` headers
+    pub fn new_get(path: impl Into<HeaderValue>) -> Headers {
+        Headers::from_vec(vec![Header::method_get(), Header::path(path)])
     }
 
-    pub fn new_post(path: &str) -> Headers {
+    /// Construct a `Headers` object with specified `:method` and `:path` headers
+    pub fn new_post(path: impl Into<HeaderValue>) -> Headers {
         Headers::from_vec(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path),
         ])
     }
 
-    pub fn from_status(code: u32) -> Headers {
+    /// Construct a `Headers` object with single `:status` header
+    pub fn new_status(code: u32) -> Headers {
         Headers::from_vec(vec![Header::new(":status", format!("{}", code))])
     }
 
+    /// Construct `:status 200` headers
     pub fn ok_200() -> Headers {
-        Headers::from_status(200)
+        Headers::new_status(200)
     }
 
+    /// Construct `:status 404` headers
     pub fn not_found_404() -> Headers {
-        Headers::from_status(404)
+        Headers::new_status(404)
     }
 
+    /// Construct `:status 500` headers
     pub fn internal_error_500() -> Headers {
-        Headers::from_status(500)
+        Headers::new_status(500)
     }
 
-    pub fn redirect_302(location: &str) -> Headers {
-        let mut headers = Headers::from_status(302);
+    /// Construct `:status 302; location: <location>` headers
+    pub fn redirect_302(location: impl Into<HeaderValue>) -> Headers {
+        let mut headers = Headers::new_status(302);
         headers.add("location", location);
         headers
     }
 
-    pub fn validate(
+    pub(crate) fn validate(
         &self,
         req_or_resp: RequestOrResponse,
         headers_place: HeadersPlace,
@@ -540,10 +668,12 @@ impl Headers {
         }
     }
 
-    pub fn add(&mut self, name: &str, value: &str) {
+    /// Add a header
+    pub fn add(&mut self, name: impl Into<HeaderName>, value: impl Into<HeaderValue>) {
         self.add_header(Header::new(name, value));
     }
 
+    /// Add a header
     pub fn add_header(&mut self, header: Header) {
         if header.is_preudo_header() {
             let pseudo_count = self.pseudo_count;
@@ -554,6 +684,7 @@ impl Headers {
         }
     }
 
+    /// Add all headers
     pub fn extend(&mut self, headers: Headers) {
         self.headers.reserve(headers.headers.len());
         for h in headers.headers {
@@ -574,6 +705,7 @@ mod test {
     use bytes::Bytes;
     use solicit::header::Header;
     use solicit::header::HeaderName;
+    use solicit::header::HeaderNameEnum;
     use solicit::header::PseudoHeaderName;
 
     #[test]
@@ -591,13 +723,18 @@ mod test {
     fn test_header_name_debug() {
         assert_eq!(
             "\":method\"",
-            format!("{:?}", HeaderName::Pseudo(PseudoHeaderName::Method))
+            format!(
+                "{:?}",
+                HeaderName(HeaderNameEnum::Pseudo(PseudoHeaderName::Method))
+            )
         );
         assert_eq!(
             "\"x-fgfg\"",
             format!(
                 "{:?}",
-                HeaderName::Regular(Ascii::from_utf8(Bytes::from("x-fgfg")).unwrap())
+                HeaderName(HeaderNameEnum::Regular(
+                    Ascii::from_utf8(Bytes::from("x-fgfg")).unwrap()
+                ))
             )
         );
     }

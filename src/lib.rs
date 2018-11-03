@@ -68,7 +68,10 @@ mod exec;
 pub use socket::AnySocketAddr;
 
 pub use solicit::header::Header;
+pub use solicit::header::HeaderName;
+pub use solicit::header::HeaderValue;
 pub use solicit::header::Headers;
+pub use solicit::header::PseudoHeaderName;
 pub use solicit::HttpScheme;
 
 pub use service::Service;

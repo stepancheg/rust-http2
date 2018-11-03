@@ -65,7 +65,7 @@ impl Response {
     }
 
     pub fn redirect_302(location: &str) -> Response {
-        let mut headers = Headers::from_status(302);
+        let mut headers = Headers::new_status(302);
         headers.add("location", location);
         Response::headers(headers)
     }
