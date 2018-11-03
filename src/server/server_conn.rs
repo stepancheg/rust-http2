@@ -117,6 +117,7 @@ where
         &mut self,
         stream_id: StreamId,
         headers: Headers,
+        end_stream: EndStream,
     ) -> result::Result<HttpStreamRef<ServerTypes<I>>> {
         if ServerTypes::<I>::init_where(stream_id) == InitWhere::Locally {
             return Err(error::Error::Other(
@@ -155,6 +156,7 @@ where
 
         let req = ServerRequest {
             headers,
+            end_stream: end_stream == EndStream::Yes,
             stream: req_stream,
         };
 
@@ -232,7 +234,9 @@ where
         }
 
         if !existing_stream {
-            return self.new_stream_from_client(stream_id, headers).map(Some);
+            return self
+                .new_stream_from_client(stream_id, headers, end_stream)
+                .map(Some);
         }
 
         if end_stream == EndStream::No {
