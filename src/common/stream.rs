@@ -65,7 +65,7 @@ pub enum InMessageStage {
 /// All HTTP/2 stream state.
 /// Note the state must be kept in sync with other fields,
 /// thus sometimes this object must be manipulated with `HttpStreamRef`.
-pub struct HttpStreamCommon<T: Types> {
+pub(crate) struct HttpStreamCommon<T: Types> {
     pub specific: T::HttpStreamSpecific,
     pub state: StreamState,
     pub out_window_size: WindowSize,
@@ -282,8 +282,8 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 }
 
-pub trait HttpStreamDataSpecific {}
+pub(crate) trait HttpStreamDataSpecific {}
 
-pub trait HttpStreamData {
+pub(crate) trait HttpStreamData {
     type Types: Types;
 }

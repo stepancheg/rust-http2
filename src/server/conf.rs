@@ -1,4 +1,4 @@
-use common::CommonConf;
+use common::conf::CommonConf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerAlpn {

@@ -23,12 +23,11 @@ use tokio_core::reactor;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 use tokio_tls_api;
+use common::types::Types;
 
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
-use common::*;
-use data_or_trailers::*;
 use solicit_async::*;
 
 use socket::StreamItem;
@@ -36,7 +35,6 @@ use socket::StreamItem;
 use common::init_where::InitWhere;
 
 use client_died_error_holder::ClientDiedErrorHolder;
-use common::client_or_server::ClientOrServer;
 use common::sender::CommonSender;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
@@ -51,24 +49,25 @@ use ErrorCode;
 use ServerConf;
 use ServerResponse;
 use ServerTlsOption;
-
-struct ServerTypes;
-
-impl Types for ServerTypes {
-    type HttpStreamData = ServerStream;
-    type HttpStreamSpecific = ServerStreamData;
-    type ConnSpecific = ServerConnData;
-    type ToWriteMessage = ServerToWriteMessage;
-
-    const CLIENT_OR_SERVER: ClientOrServer = ClientOrServer::Server;
-    const OUT_REQUEST_OR_RESPONSE: RequestOrResponse = RequestOrResponse::Response;
-}
+use server::types::ServerTypes;
+use common::stream::InMessageStage;
+use common::conn_write::CommonToWriteMessage;
+use common::conn::ConnStateSnapshot;
+use common::stream::HttpStreamDataSpecific;
+use common::stream::HttpStreamCommon;
+use common::stream::HttpStreamData;
+use common::conn::ConnSpecific;
+use common::conn::Conn;
+use common::stream_map::HttpStreamRef;
+use common::conn_write::ConnWriteSideCustom;
+use common::conn_read::ConnReadSideCustom;
+use HttpStreamAfterHeaders;
 
 pub struct ServerStreamData {}
 
 impl HttpStreamDataSpecific for ServerStreamData {}
 
-type ServerStream = HttpStreamCommon<ServerTypes>;
+pub(crate) type ServerStream = HttpStreamCommon<ServerTypes>;
 
 impl ServerStream {
     fn trailers_recvd(&mut self, headers: Headers) {
@@ -87,7 +86,7 @@ impl HttpStreamData for ServerStream {
     type Types = ServerTypes;
 }
 
-struct ServerConnData {
+pub(crate) struct ServerConnData {
     factory: Arc<ServerHandler>,
 }
 

@@ -5,6 +5,7 @@ pub mod handler_paths;
 pub mod req;
 pub mod resp;
 pub mod tls;
+pub(crate) mod types;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -35,8 +36,6 @@ use futures_misc::*;
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
-use super::common::*;
-
 use socket::AnySocketAddr;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
@@ -48,6 +47,7 @@ pub use server::conf::ServerConf;
 pub use server::conn::ServerConn;
 use server::handler::ServerHandler;
 use server::handler_paths::ServerHandlerPaths;
+use common::conn::ConnStateSnapshot;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,

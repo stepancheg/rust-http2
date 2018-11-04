@@ -38,7 +38,7 @@ use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
 
-pub trait ConnWriteSideCustom {
+pub(crate) trait ConnWriteSideCustom {
     type Types: Types;
 
     fn process_message(

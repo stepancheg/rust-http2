@@ -37,7 +37,7 @@ use tokio_io::AsyncWrite;
 use ErrorCode;
 use Headers;
 
-pub trait ConnReadSideCustom {
+pub(crate) trait ConnReadSideCustom {
     type Types: Types;
 
     fn process_headers(

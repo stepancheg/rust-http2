@@ -19,14 +19,14 @@ use solicit::session::StreamState;
 use solicit::WindowSize;
 
 #[derive(Default)]
-pub struct StreamMap<T: Types> {
+pub(crate) struct StreamMap<T: Types> {
     pub map: HashMap<StreamId, HttpStreamCommon<T>>,
     // This field must be kept in sync with stream state.
     writable_streams: HashSetShallowClone<StreamId>,
 }
 
 /// Reference to a stream within `StreamMap`
-pub struct HttpStreamRef<'m, T: Types + 'm> {
+pub(crate) struct HttpStreamRef<'m, T: Types + 'm> {
     entry: OccupiedEntry<'m, StreamId, HttpStreamCommon<T>>,
     writable_streams: &'m mut HashSetShallowClone<StreamId>,
 }

@@ -1,7 +1,8 @@
-pub mod conf;
-pub mod conn;
-pub mod req;
-pub mod tls;
+pub(crate) mod conf;
+pub(crate) mod conn;
+pub(crate) mod req;
+pub(crate) mod tls;
+pub(crate) mod types;
 
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -36,9 +37,6 @@ use solicit::StreamId;
 
 use solicit_async::*;
 
-use client_died_error_holder::*;
-use common::*;
-
 use socket::AnySocketAddr;
 use socket::ToClientStream;
 
@@ -48,6 +46,10 @@ use client::conn::ClientConnCallbacks;
 use client::conn::StartRequestMessage;
 use client::req::ClientRequest;
 pub use client::tls::ClientTlsOption;
+use Response;
+use common::conn::ConnStateSnapshot;
+use client_died_error_holder::ClientDiedErrorHolder;
+use client_died_error_holder::ClientDiedType;
 
 /// Builder for HTTP/2 client.
 ///

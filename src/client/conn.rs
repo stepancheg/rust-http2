@@ -30,14 +30,10 @@ use tokio_tls_api;
 
 use solicit_async::*;
 
-use common::*;
-use socket::*;
-
 use bytes::Bytes;
 use client::req::ClientRequest;
 use client::ClientInterface;
 use client_died_error_holder::ClientDiedErrorHolder;
-use common::client_or_server::ClientOrServer;
 use common::sender::CommonSender;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
@@ -48,25 +44,27 @@ use result_or_eof::ResultOrEof;
 use ClientConf;
 use ClientTlsOption;
 use ErrorCode;
-
-pub(crate) struct ClientTypes;
-
-impl Types for ClientTypes {
-    type HttpStreamData = ClientStream;
-    type HttpStreamSpecific = ClientStreamData;
-    type ConnSpecific = ClientConnData;
-    type ToWriteMessage = ClientToWriteMessage;
-
-    const OUT_REQUEST_OR_RESPONSE: RequestOrResponse = RequestOrResponse::Request;
-
-    const CLIENT_OR_SERVER: ClientOrServer = ClientOrServer::Client;
-}
+use client::types::ClientTypes;
+use common::stream::InMessageStage;
+use Response;
+use common::conn_write::CommonToWriteMessage;
+use common::conn::ConnStateSnapshot;
+use common::conn_read::ConnReadSideCustom;
+use common::conn::Conn;
+use common::stream_map::HttpStreamRef;
+use common::stream::HttpStreamDataSpecific;
+use common::stream::HttpStreamData;
+use common::stream::HttpStreamCommon;
+use common::conn::ConnSpecific;
+use common::conn_write::ConnWriteSideCustom;
+use socket::ToClientStream;
+use socket::StreamItem;
 
 pub struct ClientStreamData {}
 
 impl HttpStreamDataSpecific for ClientStreamData {}
 
-type ClientStream = HttpStreamCommon<ClientTypes>;
+pub(crate) type ClientStream = HttpStreamCommon<ClientTypes>;
 
 impl HttpStreamData for ClientStream {
     type Types = ClientTypes;

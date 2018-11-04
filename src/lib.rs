@@ -109,8 +109,8 @@ pub use result::Result;
 /// Functions used in tests
 #[doc(hidden)]
 pub mod for_test {
-    pub use common::ConnStateSnapshot;
-    pub use common::HttpStreamStateSnapshot;
+    pub use common::conn::ConnStateSnapshot;
+    pub use common::stream::HttpStreamStateSnapshot;
     pub use server::conn::ServerConn;
     pub use solicit::StreamId;
     pub use solicit_async::recv_raw_frame_sync;

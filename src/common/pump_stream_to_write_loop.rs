@@ -16,9 +16,11 @@ use std::panic;
 use std::panic::AssertUnwindSafe;
 use DataOrTrailers;
 use HttpStreamAfterHeaders;
+use common::conn_write::CommonToWriteMessage;
+use common::types::Types;
 
 /// Poll the stream and enqueues frames
-pub struct PumpStreamToWrite<T: Types> {
+pub(crate) struct PumpStreamToWrite<T: Types> {
     // TODO: this is not thread-safe
     pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
     pub stream_id: StreamId,
