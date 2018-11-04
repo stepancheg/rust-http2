@@ -511,10 +511,12 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
     // or shutdown signal.
     let done = controller_future.join(shutdown_future);
 
-    let done = done.then(|_| {
+    let done = done.map(|((), ())| ());
+
+    let done = done.then(|r| {
         // OK to ignore error, because rx might be already dead
         drop(done_tx.send(()));
-        Ok(())
+        r
     });
 
     let done = client_died_error_holder.wrap_future(done);
