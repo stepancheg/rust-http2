@@ -5,6 +5,7 @@ pub(crate) mod client_or_server;
 pub(crate) mod closed_streams;
 pub(crate) mod conf;
 pub(crate) mod conn;
+pub(crate) mod conn_command_channel;
 pub(crate) mod conn_read;
 pub(crate) mod conn_write;
 pub(crate) mod hash_set_shallow_clone;

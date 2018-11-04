@@ -15,6 +15,7 @@ use common::window_size::StreamOutWindowReceiver;
 use data_or_headers::DataOrHeaders;
 use error;
 use futures::future::Future;
+use futures::stream::Stream;
 use futures::sync::oneshot;
 use futures::task;
 use futures::Async;

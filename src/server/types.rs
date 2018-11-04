@@ -6,7 +6,8 @@ use server::conn::ServerStream;
 use server::conn::ServerStreamData;
 use server::conn::ServerToWriteMessage;
 
-pub struct ServerTypes;
+#[derive(Clone)]
+pub(crate) struct ServerTypes;
 
 impl Types for ServerTypes {
     type HttpStreamData = ServerStream;

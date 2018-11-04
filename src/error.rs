@@ -14,6 +14,7 @@ use tokio_timer::TimeoutError;
 use common::sender::SendError;
 use solicit::error_code::ErrorCode;
 use solicit::frame::ParseFrameError;
+use void::Void;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
 /// connection.
@@ -85,6 +86,12 @@ impl From<ParseFrameError> for Error {
 impl From<SendError> for Error {
     fn from(e: SendError) -> Self {
         Error::SendError(e)
+    }
+}
+
+impl From<Void> for Error {
+    fn from(v: Void) -> Self {
+        match v {}
     }
 }
 

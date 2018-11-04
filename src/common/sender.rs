@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use common::conn_command_channel::ConnCommandSender;
 use common::conn_write::CommonToWriteMessage;
 use common::types::Types;
 use common::window_size::StreamOutWindowReceiver;
@@ -7,12 +8,11 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use error;
 use futures::future;
 use futures::future::Future;
-use futures::sync::mpsc;
-use futures::sync::mpsc::UnboundedSender;
 use futures::Async;
 use futures::Poll;
 use futures::Stream;
 use solicit::stream_id::StreamId;
+use std::sync::Arc;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
@@ -27,12 +27,12 @@ pub enum SenderState {
 
 #[derive(Debug)]
 pub enum SendError {
-    ConnectionDied, // TODO: reason
+    ConnectionDied(Arc<error::Error>),
     IncorrectState(SenderState),
 }
 
 struct CanSendData<T: Types> {
-    write_tx: UnboundedSender<T::ToWriteMessage>,
+    write_tx: ConnCommandSender<T>,
     out_window: StreamOutWindowReceiver,
     seen_headers: bool,
 }
@@ -46,7 +46,7 @@ pub(crate) struct CommonSender<T: Types> {
 impl<T: Types> CommonSender<T> {
     pub fn new(
         stream_id: StreamId,
-        write_tx: UnboundedSender<T::ToWriteMessage>,
+        write_tx: ConnCommandSender<T>,
         out_window: StreamOutWindowReceiver,
         seen_headers: bool,
     ) -> Self {
@@ -97,7 +97,7 @@ impl<T: Types> CommonSender<T> {
         self.get_can_send()?
             .write_tx
             .unbounded_send(message.into())
-            .map_err(|_: mpsc::SendError<_>| SendError::ConnectionDied)
+            .map_err(|e| SendError::ConnectionDied(Arc::new(e)))
     }
 
     fn send_data_impl(&mut self, data: Bytes, last: bool) -> Result<(), SendError> {
@@ -175,7 +175,7 @@ impl<T: Types> CommonSender<T> {
                 write_tx
                     .unbounded_send(
                         CommonToWriteMessage::Pull(self.stream_id, stream, out_window).into(),
-                    ).map_err(|_: mpsc::SendError<_>| SendError::ConnectionDied)
+                    ).map_err(|e| SendError::ConnectionDied(Arc::new(e)))
             }
             None => Err(SendError::IncorrectState(SenderState::Done)),
         }

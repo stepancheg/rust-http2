@@ -6,6 +6,7 @@ use common::client_or_server::ClientOrServer;
 use common::types::Types;
 use req_resp::RequestOrResponse;
 
+#[derive(Clone)]
 pub struct ClientTypes;
 
 impl Types for ClientTypes {

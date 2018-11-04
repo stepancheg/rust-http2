@@ -1,12 +1,12 @@
 use futures::future::Future;
 use futures::stream::Stream;
-use futures::sync::mpsc::UnboundedSender;
 use futures::Async;
 use futures::Poll;
 
 use void::Void;
 
 use super::*;
+use common::conn_command_channel::ConnCommandSender;
 use common::conn_write::CommonToWriteMessage;
 use common::types::Types;
 use misc::any_to_string;
@@ -20,7 +20,7 @@ use HttpStreamAfterHeaders;
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {
     // TODO: this is not thread-safe
-    pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
+    pub to_write_tx: ConnCommandSender<T>,
     pub stream_id: StreamId,
     pub out_window: window_size::StreamOutWindowReceiver,
     pub stream: HttpStreamAfterHeaders,

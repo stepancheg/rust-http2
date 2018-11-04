@@ -1,4 +1,3 @@
-use std::io;
 use std::panic;
 use std::sync::Arc;
 
@@ -12,9 +11,6 @@ use solicit::DEFAULT_SETTINGS;
 
 use futures::future;
 use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::mpsc::unbounded;
-use futures::sync::mpsc::UnboundedSender;
 use futures::sync::oneshot;
 
 use common::types::Types;
@@ -37,6 +33,8 @@ use client_died_error_holder::ClientDiedErrorHolder;
 use common::conn::Conn;
 use common::conn::ConnSpecific;
 use common::conn::ConnStateSnapshot;
+use common::conn_command_channel::conn_command_channel;
+use common::conn_command_channel::ConnCommandSender;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::CommonToWriteMessage;
 use common::conn_write::ConnWriteSideCustom;
@@ -245,7 +243,7 @@ where
 }
 
 pub struct ServerConn {
-    write_tx: UnboundedSender<ServerToWriteMessage>,
+    write_tx: ConnCommandSender<ServerTypes>,
 }
 
 impl ServerConn {
@@ -261,12 +259,9 @@ impl ServerConn {
     {
         let lh = lh.clone();
 
-        let (write_tx, write_rx) = unbounded::<ServerToWriteMessage>();
+        let conn_died_error_holder = ClientDiedErrorHolder::new();
 
-        let write_rx =
-            Box::new(write_rx.map_err(|()| {
-                error::Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))
-            }));
+        let (write_tx, write_rx) = conn_command_channel(conn_died_error_holder.clone());
 
         let settings_frame = SettingsFrame::from_settings(vec![HttpSetting::EnablePush(false)]);
         let mut settings = DEFAULT_SETTINGS;
@@ -277,8 +272,6 @@ impl ServerConn {
         let write_tx_copy = write_tx.clone();
 
         let run = handshake.and_then(move |conn| {
-            let conn_died_error_holder = ClientDiedErrorHolder::new();
-
             let (read, write) = conn.split();
 
             let conn_data = Conn::<ServerTypes, I>::new(

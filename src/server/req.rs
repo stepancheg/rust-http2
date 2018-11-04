@@ -1,12 +1,12 @@
 use client_died_error_holder::ClientConnDiedType;
 use client_died_error_holder::ClientDiedErrorHolder;
+use common::conn_command_channel::ConnCommandSender;
 use common::increase_in_window::IncreaseInWindow;
 use common::stream_from_network::StreamFromNetwork;
 use common::stream_handler::StreamHandler;
 use common::stream_queue_sync::stream_queue_sync;
-use futures::sync::mpsc::UnboundedSender;
-use server::conn::ServerToWriteMessage;
 use server::increase_in_window::ServerIncreaseInWindow;
+use server::types::ServerTypes;
 use Headers;
 use HttpStreamAfterHeaders;
 use StreamId;
@@ -21,7 +21,7 @@ pub struct ServerRequest<'a> {
     pub(crate) in_window_size: u32,
     pub(crate) stream_handler: &'a mut Option<Box<StreamHandler>>,
     pub(crate) conn_died_error_holder: &'a ClientDiedErrorHolder<ClientConnDiedType>,
-    pub(crate) to_write_tx: &'a UnboundedSender<ServerToWriteMessage>,
+    pub(crate) to_write_tx: &'a ConnCommandSender<ServerTypes>,
 }
 
 impl<'a> ServerRequest<'a> {

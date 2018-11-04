@@ -14,9 +14,6 @@ use solicit::header::*;
 use solicit::DEFAULT_SETTINGS;
 
 use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::mpsc::unbounded;
-use futures::sync::mpsc::UnboundedSender;
 use futures::sync::oneshot;
 
 use tls_api::TlsConnector;
@@ -37,6 +34,8 @@ use client_died_error_holder::ClientDiedErrorHolder;
 use common::conn::Conn;
 use common::conn::ConnSpecific;
 use common::conn::ConnStateSnapshot;
+use common::conn_command_channel::conn_command_channel;
+use common::conn_command_channel::ConnCommandSender;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::CommonToWriteMessage;
 use common::conn_write::ConnWriteSideCustom;
@@ -76,7 +75,7 @@ pub struct ClientConnData {
 impl ConnSpecific for ClientConnData {}
 
 pub struct ClientConn {
-    write_tx: UnboundedSender<ClientToWriteMessage>,
+    write_tx: ConnCommandSender<ClientTypes>,
 }
 
 unsafe impl Sync for ClientConn {}
@@ -91,7 +90,7 @@ pub struct StartRequestMessage {
 
 pub struct ClientStartRequestMessage {
     start: StartRequestMessage,
-    write_tx: UnboundedSender<ClientToWriteMessage>,
+    write_tx: ConnCommandSender<ClientTypes>,
 }
 
 pub(crate) enum ClientToWriteMessage {
@@ -214,12 +213,9 @@ impl ClientConn {
         I: AsyncWrite + AsyncRead + Send + 'static,
         C: ClientConnCallbacks,
     {
-        let (to_write_tx, to_write_rx) = unbounded();
+        let conn_died_error_holder = ClientDiedErrorHolder::new();
 
-        let to_write_rx = Box::new(
-            to_write_rx
-                .map_err(|()| Error::IoError(io::Error::new(io::ErrorKind::Other, "to_write"))),
-        );
+        let (to_write_tx, to_write_rx) = conn_command_channel(conn_died_error_holder.clone());
 
         let c = ClientConn {
             write_tx: to_write_tx.clone(),
@@ -231,7 +227,6 @@ impl ClientConn {
 
         let handshake = connect.and_then(|conn| client_handshake(conn, settings_frame));
 
-        let conn_died_error_holder = ClientDiedErrorHolder::new();
         let conn_died_error_holder_copy = conn_died_error_holder.clone();
 
         let lh_copy = lh.clone();
@@ -358,8 +353,8 @@ impl ClientConn {
         };
 
         self.write_tx
-            .unbounded_send(ClientToWriteMessage::Start(client_start))
-            .map_err(|send_error| match send_error.into_inner() {
+            .unbounded_send_recover(ClientToWriteMessage::Start(client_start))
+            .map_err(|send_error| match send_error {
                 ClientToWriteMessage::Start(start) => start.start,
                 _ => unreachable!(),
             })
@@ -389,8 +384,8 @@ impl ClientConn {
         tx: oneshot::Sender<result::Result<()>>,
     ) -> std_Result<(), oneshot::Sender<result::Result<()>>> {
         self.write_tx
-            .unbounded_send(ClientToWriteMessage::WaitForHandshake(tx))
-            .map_err(|send_error| match send_error.into_inner() {
+            .unbounded_send_recover(ClientToWriteMessage::WaitForHandshake(tx))
+            .map_err(|send_error| match send_error {
                 ClientToWriteMessage::WaitForHandshake(tx) => tx,
                 _ => unreachable!(),
             })

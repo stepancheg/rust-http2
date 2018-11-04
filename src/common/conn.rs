@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use futures::sync::mpsc::UnboundedSender;
-
 use tokio_core::reactor;
 
 use error;
@@ -28,6 +26,8 @@ use client_died_error_holder::ClientConnDiedType;
 use client_died_error_holder::ClientDiedErrorHolder;
 use codec::http_decode_read::HttpDecodeRead;
 use codec::queued_write::QueuedWrite;
+use common::conn_command_channel::ConnCommandReceiver;
+use common::conn_command_channel::ConnCommandSender;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::ConnWriteSideCustom;
 use common::increase_in_window::IncreaseInWindow;
@@ -42,7 +42,6 @@ use futures::Poll;
 use hpack;
 use solicit::stream_id::StreamId;
 use solicit::WindowSize;
-use solicit_async::HttpFutureStreamSend;
 use std::collections::HashSet;
 use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
@@ -60,7 +59,7 @@ pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
     /// Client or server specific data
     pub specific: T::ConnSpecific,
     /// Messages to be sent to write loop
-    pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
+    pub to_write_tx: ConnCommandSender<T>,
     /// Reactor we are using
     pub loop_handle: reactor::Handle,
     /// Known streams
@@ -87,7 +86,7 @@ pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
     pub queued_write: QueuedWrite<WriteHalf<I>>,
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder,
-    pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
+    pub write_rx: ConnCommandReceiver<T>,
 
     /// Try flush outgoing connection if window allows it on the next write poll
     pub flush_conn: bool,
@@ -132,8 +131,8 @@ where
         specific: T::ConnSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
-        to_write_tx: UnboundedSender<T::ToWriteMessage>,
-        write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
+        to_write_tx: ConnCommandSender<T>,
+        write_rx: ConnCommandReceiver<T>,
         read: ReadHalf<I>,
         write: WriteHalf<I>,
         conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
