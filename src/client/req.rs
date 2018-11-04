@@ -1,38 +1,47 @@
 use bytes::Bytes;
-use client::client_conn::ClientToWriteMessage;
+use client::conn::ClientToWriteMessage;
 use common::sender::CommonSender;
 use common::sender::SendError;
 use common::window_size::StreamDead;
 use error;
 use futures::Poll;
 use futures::Stream;
-use DataOrTrailers;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
 
-pub struct ClientSender {
+/// Reference to outgoing stream on the client side.
+pub struct ClientRequest {
     pub(crate) common: CommonSender<ClientToWriteMessage>,
 }
 
-impl ClientSender {
+impl ClientRequest {
+    /// Wait for stream to be ready to accept data.
     pub fn poll(&mut self) -> Poll<(), StreamDead> {
         self.common.poll()
     }
 
-    pub fn wait(&mut self) -> Result<(), StreamDead> {
-        self.common.wait()
+    /// Synchronously wait till outgoing stream has non-zero space
+    pub fn block_wait(&mut self) -> Result<(), StreamDead> {
+        self.common.block_wait()
     }
 
+    /// Enqueue data to outgoing stream
+    ///
+    /// This operation fails if stream is in incorrect state.
+    ///
+    /// The operation does not fail if stream or connection windows is not available,
+    /// in that case message will be queued until peer increases window.
     pub fn send_data(&mut self, data: Bytes) -> Result<(), SendError> {
-        // TODO: check state
         self.common.send_data(data)
     }
 
+    /// Send last `DATA` frame
     pub fn send_data_end_of_stream(&mut self, data: Bytes) -> Result<(), SendError> {
         self.common.send_data_end_of_stream(data)
     }
 
+    /// Send trailing headers
     pub fn send_trailers(&mut self, trailers: Headers) -> Result<(), SendError> {
         self.common.send_trailers(trailers)
     }
@@ -46,13 +55,6 @@ impl ClientSender {
         S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
     {
         self.common.pull_bytes_from_stream(stream)
-    }
-
-    pub fn send_data_or_trailers(
-        &mut self,
-        data_or_trailers: DataOrTrailers,
-    ) -> Result<(), SendError> {
-        self.common.send_data_or_trailers(data_or_trailers)
     }
 
     pub fn reset(&mut self, error_code: ErrorCode) -> Result<(), SendError> {

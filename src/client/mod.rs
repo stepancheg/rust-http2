@@ -1,7 +1,7 @@
-pub mod client_conf;
-pub mod client_conn;
-pub mod client_sender;
-pub mod client_tls;
+pub mod conf;
+pub mod conn;
+pub mod req;
+pub mod tls;
 
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -42,12 +42,12 @@ use common::*;
 use socket::AnySocketAddr;
 use socket::ToClientStream;
 
-use client::client_conf::ClientConf;
-use client::client_conn::ClientConn;
-use client::client_conn::ClientConnCallbacks;
-use client::client_conn::StartRequestMessage;
-use client::client_sender::ClientSender;
-pub use client::client_tls::ClientTlsOption;
+use client::conf::ClientConf;
+use client::conn::ClientConn;
+use client::conn::ClientConnCallbacks;
+use client::conn::StartRequestMessage;
+use client::req::ClientRequest;
+pub use client::tls::ClientTlsOption;
 
 /// Builder for HTTP/2 client.
 ///
@@ -299,7 +299,7 @@ impl Client {
         &self,
         path: &str,
         authority: &str,
-    ) -> HttpFutureSend<(ClientSender, Response)> {
+    ) -> HttpFutureSend<(ClientRequest, Response)> {
         let headers = Headers::from_vec(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path.to_owned()),
@@ -345,7 +345,7 @@ pub trait ClientInterface {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-    ) -> HttpFutureSend<(ClientSender, Response)>;
+    ) -> HttpFutureSend<(ClientRequest, Response)>;
 }
 
 impl ClientInterface for Client {
@@ -356,7 +356,7 @@ impl ClientInterface for Client {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-    ) -> HttpFutureSend<(ClientSender, Response)> {
+    ) -> HttpFutureSend<(ClientRequest, Response)> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {

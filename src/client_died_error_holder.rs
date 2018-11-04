@@ -30,7 +30,7 @@ impl DiedType for ClientConnDiedType {
 }
 
 #[derive(Default, Clone)]
-pub struct ClientDiedErrorHolder<D: DiedType> {
+pub(crate) struct ClientDiedErrorHolder<D: DiedType> {
     error: Arc<Mutex<Option<Arc<error::Error>>>>,
     _marker: marker::PhantomData<D>,
 }
@@ -40,9 +40,13 @@ impl<D: DiedType> ClientDiedErrorHolder<D> {
         Default::default()
     }
 
-    pub fn error(&self) -> error::Error {
+    pub fn client_died_error(&self) -> Option<Arc<error::Error>> {
         let lock = self.error.lock().unwrap();
-        error::Error::ClientDied((*lock).clone())
+        (*lock).clone()
+    }
+
+    pub fn error(&self) -> error::Error {
+        error::Error::ClientDied(self.client_died_error())
     }
 
     fn set_once(&self, error: error::Error) {

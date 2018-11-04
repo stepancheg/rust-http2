@@ -75,9 +75,9 @@ pub use solicit::HttpScheme;
 
 pub use exec::_CpuPoolOption;
 
-pub use client::client_conf::ClientConf;
-pub use client::client_sender::ClientSender;
-pub use client::client_tls::ClientTlsOption;
+pub use client::conf::ClientConf;
+pub use client::req::ClientRequest;
+pub use client::tls::ClientTlsOption;
 pub use client::Client;
 pub use client::ClientBuilder;
 pub use common::window_size::StreamDead;
@@ -89,7 +89,7 @@ pub use server::handler::ServerHandlerContext;
 pub use server::handler_paths::ServerHandlerPaths;
 pub use server::req::ServerRequest;
 pub use server::resp::ServerResponse;
-pub use server::server_tls::ServerTlsOption;
+pub use server::tls::ServerTlsOption;
 pub use server::Server;
 pub use server::ServerBuilder;
 
@@ -108,7 +108,7 @@ pub use result::Result;
 pub mod for_test {
     pub use common::ConnStateSnapshot;
     pub use common::HttpStreamStateSnapshot;
-    pub use server::server_conn::ServerConn;
+    pub use server::conn::ServerConn;
     pub use solicit::StreamId;
     pub use solicit_async::recv_raw_frame_sync;
 

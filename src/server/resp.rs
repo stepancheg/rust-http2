@@ -4,8 +4,7 @@ use common::sender::SendError;
 use error;
 use futures::Poll;
 use futures::Stream;
-use server::server_conn::ServerToWriteMessage;
-use DataOrTrailers;
+use server::conn::ServerToWriteMessage;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
@@ -21,8 +20,8 @@ impl ServerResponse {
         self.common.poll()
     }
 
-    pub fn wait(&mut self) -> Result<(), StreamDead> {
-        self.common.wait()
+    pub fn block_wait(&mut self) -> Result<(), StreamDead> {
+        self.common.block_wait()
     }
 
     pub fn send_headers(&mut self, headers: Headers) -> Result<(), SendError> {
@@ -39,13 +38,6 @@ impl ServerResponse {
 
     pub fn send_trailers(&mut self, trailers: Headers) -> Result<(), SendError> {
         self.common.send_trailers(trailers)
-    }
-
-    pub fn send_data_or_trailers(
-        &mut self,
-        data_or_trailers: DataOrTrailers,
-    ) -> Result<(), SendError> {
-        self.common.send_data_or_trailers(data_or_trailers)
     }
 
     pub fn pull_from_stream(&mut self, stream: HttpStreamAfterHeaders) -> Result<(), SendError> {

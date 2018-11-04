@@ -332,7 +332,7 @@ pub fn sink_poll() {
     server_tester.send_window_update_conn(3);
     server_tester.send_window_update_stream(1, 5);
 
-    sender.wait().unwrap();
+    sender.block_wait().unwrap();
 
     assert_eq!(65535, client.conn_state().in_window_size);
     assert_eq!(3, client.conn_state().out_window_size);
@@ -355,7 +355,7 @@ pub fn sink_poll() {
     assert_eq!(3, client.stream_state(1).out_window_size);
     assert_eq!(3, client.stream_state(1).pump_out_window_size);
 
-    sender.wait().unwrap();
+    sender.block_wait().unwrap();
 
     let b = Bytes::from(vec![33, 44]);
     sender.send_data(b.clone()).expect("send_data");

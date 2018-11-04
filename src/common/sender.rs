@@ -11,9 +11,7 @@ use futures::sync::mpsc::UnboundedSender;
 use futures::Async;
 use futures::Poll;
 use futures::Stream;
-use solicit::end_stream::EndStream;
 use solicit::StreamId;
-use DataOrTrailers;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
@@ -69,7 +67,7 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
         }
     }
 
-    pub fn wait(&mut self) -> Result<(), StreamDead> {
+    pub fn block_wait(&mut self) -> Result<(), StreamDead> {
         future::poll_fn(|| self.poll()).wait()
     }
 
@@ -158,18 +156,6 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
         ))?;
         self.state = None;
         Ok(())
-    }
-
-    pub fn send_data_or_trailers(
-        &mut self,
-        data_or_trailers: DataOrTrailers,
-    ) -> Result<(), SendError> {
-        match data_or_trailers {
-            DataOrTrailers::Data(data, end_stream) => {
-                self.send_data_impl(data, end_stream == EndStream::Yes)
-            }
-            DataOrTrailers::Trailers(trailers) => self.send_trailers(trailers),
-        }
     }
 
     // TODO: explicit executor parameter

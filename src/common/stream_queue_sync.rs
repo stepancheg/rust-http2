@@ -94,7 +94,7 @@ impl Stream for StreamQueueSyncReceiver {
     }
 }
 
-pub fn stream_queue_sync(
+pub(crate) fn stream_queue_sync(
     conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
 ) -> (StreamQueueSyncSender, StreamQueueSyncReceiver) {
     let shared = Arc::new(Shared {

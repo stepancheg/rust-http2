@@ -1,10 +1,10 @@
 pub mod conf;
+pub mod conn;
 pub mod handler;
 pub mod handler_paths;
 pub mod req;
 pub mod resp;
-pub mod server_conn;
-pub mod server_tls;
+pub mod tls;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -41,13 +41,13 @@ use socket::AnySocketAddr;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
 
-pub use self::server_tls::ServerTlsOption;
+pub use self::tls::ServerTlsOption;
 use rand::thread_rng;
 use rand::Rng;
 pub use server::conf::ServerConf;
+pub use server::conn::ServerConn;
 use server::handler::ServerHandler;
 use server::handler_paths::ServerHandlerPaths;
-pub use server::server_conn::ServerConn;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,

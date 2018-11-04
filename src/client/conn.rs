@@ -34,7 +34,7 @@ use common::*;
 use socket::*;
 
 use bytes::Bytes;
-use client::client_sender::ClientSender;
+use client::req::ClientRequest;
 use client::ClientInterface;
 use client_died_error_holder::ClientDiedErrorHolder;
 use common::client_or_server::ClientOrServer;
@@ -97,7 +97,7 @@ pub struct StartRequestMessage {
     pub body: Option<Bytes>,
     pub trailers: Option<Headers>,
     pub end_stream: bool,
-    pub resp_tx: oneshot::Sender<result::Result<(ClientSender, Response)>>,
+    pub resp_tx: oneshot::Sender<result::Result<(ClientRequest, Response)>>,
 }
 
 pub struct ClientStartRequestMessage {
@@ -164,7 +164,7 @@ where
             );
 
             let r = Ok((
-                ClientSender {
+                ClientRequest {
                     common: CommonSender::new(stream_id, write_tx, out_window, true),
                 },
                 Response::from_stream(resp_stream),
@@ -399,7 +399,7 @@ impl ClientInterface for ClientConn {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-    ) -> HttpFutureSend<(ClientSender, Response)> {
+    ) -> HttpFutureSend<(ClientRequest, Response)> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
         let start = StartRequestMessage {

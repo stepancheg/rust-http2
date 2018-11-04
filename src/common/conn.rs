@@ -52,7 +52,7 @@ use tokio_io::io::WriteHalf;
 pub trait ConnSpecific: 'static {}
 
 /// HTTP/2 connection state with socket and streams
-pub struct Conn<T: Types> {
+pub(crate) struct Conn<T: Types> {
     pub conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
 
     /// Client or server specific data
