@@ -78,7 +78,7 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
         }
     }
 
-    fn state(&self) -> SenderState {
+    pub fn state(&self) -> SenderState {
         match self.state {
             Some(CanSendData {
                 seen_headers: true, ..

@@ -10,12 +10,17 @@ use Headers;
 use HttpStreamAfterHeaders;
 use SimpleHttpMessage;
 use StreamDead;
+use SenderState;
 
 pub struct ServerResponse {
     pub(crate) common: CommonSender<ServerToWriteMessage>,
 }
 
 impl ServerResponse {
+    pub fn state(&self) -> SenderState {
+        self.common.state()
+    }
+
     pub fn poll(&mut self) -> Poll<(), StreamDead> {
         self.common.poll()
     }
