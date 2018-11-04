@@ -55,11 +55,11 @@ impl ServerHandler for Echo {
     fn start_request(
         &self,
         _context: ServerHandlerContext,
-        req: ServerRequest,
+        mut req: ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {
         resp.send_headers(Headers::ok_200())?;
-        resp.pull_from_stream(req.stream)?;
+        resp.pull_from_stream(req.make_stream())?;
         Ok(())
     }
 }

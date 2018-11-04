@@ -55,7 +55,6 @@ use server::req::ServerRequest;
 use server::types::ServerTypes;
 use solicit::stream_id::StreamId;
 use ErrorCode;
-use HttpStreamAfterHeaders;
 use ServerConf;
 use ServerResponse;
 use ServerTlsOption;
@@ -114,18 +113,20 @@ where
 
         debug!("new stream: {}", stream_id);
 
-        let (_, req_stream, out_window) = self.new_stream_data(
+        let (_, out_window) = self.new_stream_data(
             stream_id,
             headers.content_length(),
             InMessageStage::AfterInitialHeaders,
             ServerStreamData {},
         );
 
-        let req_stream = if end_stream == EndStream::No {
-            HttpStreamAfterHeaders::from_parts(req_stream)
-        } else {
-            HttpStreamAfterHeaders::empty()
-        };
+        let in_window_size = self
+            .streams
+            .get_mut(stream_id)
+            .unwrap()
+            .stream()
+            .in_window_size
+            .size() as u32;
 
         let factory = self.specific.factory.clone();
 
@@ -137,15 +138,22 @@ where
             loop_handle: self.loop_handle.remote().clone(),
         };
 
-        let req = ServerRequest {
-            headers,
-            end_stream: end_stream == EndStream::Yes,
-            stream: req_stream,
-        };
+        let mut stream_handler = None;
+        let invoke_result = {
+            let req = ServerRequest {
+                headers,
+                end_stream: end_stream == EndStream::Yes,
+                stream_id,
+                in_window_size,
+                stream_handler: &mut stream_handler,
+                conn_died_error_holder: &self.conn_died_error_holder,
+                to_write_tx: &self.to_write_tx,
+            };
 
-        let invoke_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            factory.start_request(context, req, sender)
-        }));
+            panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                factory.start_request(context, req, sender)
+            }))
+        };
 
         let mut stream = self.streams.get_mut(stream_id).expect("get stream");
 
@@ -161,6 +169,8 @@ where
                 stream.close_outgoing(ErrorCode::InternalError);
             }
         }
+
+        stream.stream().peer_tx = stream_handler;
 
         Ok(stream)
     }

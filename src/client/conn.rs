@@ -46,6 +46,7 @@ use common::stream::HttpStreamData;
 use common::stream::HttpStreamDataSpecific;
 use common::stream::InMessageStage;
 use common::stream_map::HttpStreamRef;
+use common::stream_queue_sync::stream_queue_sync;
 use data_or_headers::DataOrHeaders;
 use futures::future;
 use headers_place::HeadersPlace;
@@ -144,23 +145,40 @@ where
         let stream_id = self.next_local_stream_id();
 
         {
-            let (mut http_stream, resp_stream, out_window) = self.new_stream_data(
+            let (_, out_window) = self.new_stream_data(
                 stream_id,
                 None,
                 InMessageStage::Initial,
                 ClientStreamData {},
             );
 
+            let (inc_tx, inc_rx) = stream_queue_sync(self.conn_died_error_holder.clone());
+
+            self.streams.get_mut(stream_id).unwrap().stream().peer_tx = Some(Box::new(inc_tx));
+
+            let in_window_size = self
+                .streams
+                .get_mut(stream_id)
+                .unwrap()
+                .stream()
+                .in_window_size
+                .size() as u32;
+
+            let stream_from_network =
+                self.new_stream_from_network(inc_rx, stream_id, in_window_size);
+
             let r = Ok((
                 ClientRequest {
                     common: CommonSender::new(stream_id, write_tx, out_window, true),
                 },
-                Response::from_stream(resp_stream),
+                Response::from_stream(stream_from_network),
             ));
 
             if let Err(_) = resp_tx.send(r) {
                 warn!("caller died");
             }
+
+            let mut http_stream = self.streams.get_mut(stream_id).unwrap();
 
             http_stream.push_back(DataOrHeaders::Headers(headers));
             if let Some(body) = body {

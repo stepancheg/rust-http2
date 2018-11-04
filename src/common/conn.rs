@@ -18,7 +18,6 @@ use super::conf::*;
 use super::stream::*;
 use super::stream_from_network::StreamFromNetwork;
 use super::stream_map::*;
-use super::stream_queue_sync::stream_queue_sync;
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::*;
 use super::window_size;
@@ -31,6 +30,7 @@ use codec::http_decode_read::HttpDecodeRead;
 use codec::queued_write::QueuedWrite;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::ConnWriteSideCustom;
+use common::increase_in_window::IncreaseInWindow;
 use common::init_where::InitWhere;
 use common::iteration_exit::IterationExit;
 use futures::future;
@@ -189,25 +189,14 @@ where
         in_rem_content_length: Option<u64>,
         in_message_stage: InMessageStage,
         specific: T::HttpStreamSpecific,
-    ) -> (
-        HttpStreamRef<T>,
-        StreamFromNetwork<T>,
-        window_size::StreamOutWindowReceiver,
-    ) {
-        let (inc_tx, inc_rx) = stream_queue_sync(self.conn_died_error_holder.clone());
-
-        let in_window_size = self.our_settings_sent().initial_window_size;
-
-        let stream_from_network = self.new_stream_from_network(inc_rx, stream_id, in_window_size);
-
+    ) -> (HttpStreamRef<T>, window_size::StreamOutWindowReceiver) {
         let (out_window_sender, out_window_receiver) = self
             .pump_out_window_size
             .new_stream(self.peer_settings.initial_window_size as u32);
 
         let stream = HttpStreamCommon::new(
-            in_window_size,
+            self.our_settings_sent().initial_window_size,
             self.peer_settings.initial_window_size,
-            inc_tx,
             out_window_sender,
             in_rem_content_length,
             in_message_stage,
@@ -216,10 +205,10 @@ where
 
         let stream = self.streams.insert(stream_id, stream);
 
-        (stream, stream_from_network, out_window_receiver)
+        (stream, out_window_receiver)
     }
 
-    fn new_stream_from_network(
+    pub fn new_stream_from_network(
         &self,
         rx: StreamQueueSyncReceiver,
         stream_id: StreamId,
@@ -227,8 +216,10 @@ where
     ) -> StreamFromNetwork<T> {
         StreamFromNetwork {
             rx,
-            stream_id,
-            to_write_tx: self.to_write_tx.clone(),
+            increase_in_window: IncreaseInWindow {
+                stream_id,
+                to_write_tx: self.to_write_tx.clone(),
+            },
             in_window_size,
         }
     }

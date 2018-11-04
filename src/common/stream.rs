@@ -80,7 +80,6 @@ impl<T: Types> HttpStreamCommon<T> {
     pub fn new(
         in_window_size: u32,
         out_window_size: u32,
-        incoming: impl StreamHandler,
         pump_out_window: window_size::StreamOutWindowSender,
         in_rem_content_length: Option<u64>,
         in_message_stage: InMessageStage,
@@ -92,7 +91,7 @@ impl<T: Types> HttpStreamCommon<T> {
             in_window_size: WindowSize::new(in_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
-            peer_tx: Some(Box::new(incoming)),
+            peer_tx: None,
             pump_out_window,
             in_rem_content_length,
             in_message_stage,

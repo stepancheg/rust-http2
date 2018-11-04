@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use futures::stream::Stream;
-use futures::sync::mpsc::UnboundedSender;
 use futures::Async;
 use futures::Poll;
 
@@ -11,17 +10,15 @@ use error;
 
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::Types;
-use common::conn_write::CommonToWriteMessage;
+use common::increase_in_window::IncreaseInWindow;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use solicit::stream_id::StreamId;
 
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.
 pub(crate) struct StreamFromNetwork<T: Types> {
     pub rx: StreamQueueSyncReceiver,
-    pub stream_id: StreamId,
-    pub to_write_tx: UnboundedSender<T::ToWriteMessage>,
+    pub increase_in_window: IncreaseInWindow<T>,
     pub in_window_size: u32,
 }
 
@@ -49,10 +46,7 @@ impl<T: Types> Stream for StreamFromNetwork<T> {
             let edge = DEFAULT_SETTINGS.initial_window_size / 2;
             if self.in_window_size < edge {
                 let inc = DEFAULT_SETTINGS.initial_window_size;
-                let m = CommonToWriteMessage::IncreaseInWindow(self.stream_id, inc);
-                if let Err(_) = self.to_write_tx.unbounded_send(m.into()) {
-                    return Err(error::Error::Other("failed to send to conn; likely died"));
-                }
+                self.increase_in_window.increase_window(inc)?;
                 self.in_window_size += inc;
             }
         }
