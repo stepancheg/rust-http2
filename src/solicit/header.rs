@@ -653,6 +653,7 @@ impl Headers {
         self.get_opt_parse(":status").unwrap()
     }
 
+    // TODO: return bytes, because headers it not require to be valid UTF-8
     pub fn path(&self) -> &str {
         self.get(":path")
     }
