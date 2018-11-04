@@ -6,7 +6,7 @@ use common::stream_handler::StreamHandler;
 use common::stream_queue_sync::stream_queue_sync;
 use futures::sync::mpsc::UnboundedSender;
 use server::conn::ServerToWriteMessage;
-use server::types::ServerTypes;
+use server::increase_in_window::ServerIncreaseInWindow;
 use Headers;
 use HttpStreamAfterHeaders;
 use StreamId;
@@ -35,7 +35,7 @@ impl<'a> ServerRequest<'a> {
                 let (inc_tx, inc_rx) = stream_queue_sync(client_died_error_holder);
                 let stream_from_network = StreamFromNetwork {
                     rx: inc_rx,
-                    increase_in_window,
+                    increase_in_window: increase_in_window.0,
                     in_window_size,
                 };
 
@@ -49,14 +49,14 @@ impl<'a> ServerRequest<'a> {
 
     pub fn register_stream_handler<F, H, R>(&mut self, f: F) -> R
     where
-        F: FnOnce(IncreaseInWindow<ServerTypes>) -> (H, R),
+        F: FnOnce(ServerIncreaseInWindow) -> (H, R),
         H: StreamHandler,
     {
         assert!(self.stream_handler.is_none());
-        let increase_window = IncreaseInWindow {
+        let increase_window = ServerIncreaseInWindow(IncreaseInWindow {
             stream_id: self.stream_id,
             to_write_tx: self.to_write_tx.clone(),
-        };
+        });
         let (h, r) = f(increase_window);
         *self.stream_handler = Some(Box::new(h));
         r

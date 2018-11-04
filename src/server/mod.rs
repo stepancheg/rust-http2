@@ -2,6 +2,7 @@ pub mod conf;
 pub mod conn;
 pub mod handler;
 pub mod handler_paths;
+pub(crate) mod increase_in_window;
 pub mod req;
 pub mod resp;
 pub mod tls;
