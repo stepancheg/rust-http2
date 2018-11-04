@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use common::conn_write::CommonToWriteMessage;
+use common::types::Types;
 use common::window_size::StreamOutWindowReceiver;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
@@ -30,22 +31,22 @@ pub enum SendError {
     IncorrectState(SenderState),
 }
 
-struct CanSendData<M: From<CommonToWriteMessage>> {
-    write_tx: UnboundedSender<M>,
+struct CanSendData<T: Types> {
+    write_tx: UnboundedSender<T::ToWriteMessage>,
     out_window: StreamOutWindowReceiver,
     seen_headers: bool,
 }
 
 /// Shared implementation of sender for client and server
-pub(crate) struct CommonSender<M: From<CommonToWriteMessage>> {
-    state: Option<CanSendData<M>>,
+pub(crate) struct CommonSender<T: Types> {
+    state: Option<CanSendData<T>>,
     stream_id: StreamId,
 }
 
-impl<M: From<CommonToWriteMessage>> CommonSender<M> {
+impl<T: Types> CommonSender<T> {
     pub fn new(
         stream_id: StreamId,
-        write_tx: UnboundedSender<M>,
+        write_tx: UnboundedSender<T::ToWriteMessage>,
         out_window: StreamOutWindowReceiver,
         seen_headers: bool,
     ) -> Self {
@@ -71,7 +72,7 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
         future::poll_fn(|| self.poll()).wait()
     }
 
-    fn get_can_send(&mut self) -> Result<&mut CanSendData<M>, SendError> {
+    fn get_can_send(&mut self) -> Result<&mut CanSendData<T>, SendError> {
         match self.state {
             Some(ref mut state) => Ok(state),
             None => Err(SendError::IncorrectState(SenderState::Done)),
@@ -200,7 +201,7 @@ impl<M: From<CommonToWriteMessage>> CommonSender<M> {
     }
 }
 
-impl<M: From<CommonToWriteMessage>> Drop for CommonSender<M> {
+impl<T: Types> Drop for CommonSender<T> {
     fn drop(&mut self) {
         // TODO: different message if panicked
         if self.state() != SenderState::Done {

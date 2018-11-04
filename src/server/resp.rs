@@ -4,7 +4,7 @@ use common::sender::SendError;
 use error;
 use futures::Poll;
 use futures::Stream;
-use server::conn::ServerToWriteMessage;
+use server::types::ServerTypes;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
@@ -13,7 +13,7 @@ use SimpleHttpMessage;
 use StreamDead;
 
 pub struct ServerResponse {
-    pub(crate) common: CommonSender<ServerToWriteMessage>,
+    pub(crate) common: CommonSender<ServerTypes>,
 }
 
 impl ServerResponse {

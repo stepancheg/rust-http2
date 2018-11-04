@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use client::conn::ClientToWriteMessage;
+use client::types::ClientTypes;
 use common::sender::CommonSender;
 use common::sender::SendError;
 use common::window_size::StreamDead;
@@ -12,7 +12,7 @@ use HttpStreamAfterHeaders;
 
 /// Reference to outgoing stream on the client side.
 pub struct ClientRequest {
-    pub(crate) common: CommonSender<ClientToWriteMessage>,
+    pub(crate) common: CommonSender<ClientTypes>,
 }
 
 impl ClientRequest {
