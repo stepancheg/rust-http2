@@ -6,6 +6,7 @@ use solicit::frame::ParseFrameResult;
 use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 
 use codec::write_buffer::WriteBuffer;
+use solicit::error_code::ErrorCodeOrUnknown;
 use solicit::stream_id::StreamId;
 use ErrorCode;
 
@@ -17,7 +18,7 @@ pub const RST_STREAM_FRAME_TYPE: u8 = 0x3;
 /// The struct represents the `RST_STREAM` HTTP/2 frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RstStreamFrame {
-    raw_error_code: u32,
+    error_code: ErrorCodeOrUnknown,
     pub stream_id: StreamId,
     flags: Flags<NoFlag>,
 }
@@ -26,17 +27,17 @@ impl RstStreamFrame {
     /// Constructs a new `RstStreamFrame` with the given `ErrorCode`.
     pub fn new(stream_id: StreamId, error_code: ErrorCode) -> RstStreamFrame {
         RstStreamFrame {
-            raw_error_code: error_code.into(),
+            error_code: error_code.into(),
             stream_id: stream_id,
             flags: Flags::default(),
         }
     }
 
     /// Constructs a new `RstStreamFrame` that will use the given `raw_error_code` for its payload.
-    pub fn with_raw_error_code(stream_id: StreamId, raw_error_code: u32) -> RstStreamFrame {
+    pub fn with_raw_error_code(stream_id: StreamId, error_code: u32) -> RstStreamFrame {
         RstStreamFrame {
-            raw_error_code: raw_error_code,
-            stream_id: stream_id,
+            error_code: ErrorCodeOrUnknown(error_code),
+            stream_id,
             flags: Flags::default(),
         }
     }
@@ -44,13 +45,13 @@ impl RstStreamFrame {
     /// Returns the interpreted error code of the frame. Any unknown error codes are mapped into
     /// the `InternalError` variant of the enum.
     pub fn error_code(&self) -> ErrorCode {
-        self.raw_error_code.into()
+        self.error_code.into()
     }
 
     /// Returns the original raw error code of the frame. If the code is unknown, it will not be
     /// changed.
     pub fn raw_error_code(&self) -> u32 {
-        self.raw_error_code
+        self.error_code.0
     }
 }
 
@@ -77,7 +78,7 @@ impl Frame for RstStreamFrame {
         let error = unpack_octets_4!(raw_frame.payload(), 0, u32);
 
         Ok(RstStreamFrame {
-            raw_error_code: error,
+            error_code: ErrorCodeOrUnknown(error),
             stream_id,
             flags: Flags::new(flags),
         })
@@ -104,7 +105,7 @@ impl Frame for RstStreamFrame {
 impl FrameIR for RstStreamFrame {
     fn serialize_into(self, builder: &mut WriteBuffer) {
         builder.write_header(self.get_header());
-        builder.write_u32(self.raw_error_code);
+        builder.write_u32(self.error_code.0);
     }
 }
 

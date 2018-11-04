@@ -164,7 +164,7 @@ where
         }
 
         let last_stream_id = frame.last_stream_id;
-        let raw_error_code = frame.raw_error_code;
+        let raw_error_code = frame.error_code.0;
 
         self.goaway_received = Some(frame);
 

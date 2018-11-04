@@ -3,6 +3,7 @@
 use bytes::Bytes;
 
 use codec::write_buffer::WriteBuffer;
+use solicit::error_code::ErrorCodeOrUnknown;
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
@@ -20,7 +21,7 @@ pub const GOAWAY_FRAME_TYPE: u8 = 0x7;
 #[derive(Clone, Debug, PartialEq)]
 pub struct GoawayFrame {
     pub last_stream_id: StreamId,
-    pub raw_error_code: u32,
+    pub(crate) error_code: ErrorCodeOrUnknown,
     pub debug_data: Bytes,
     flags: Flags<NoFlag>,
 }
@@ -39,7 +40,7 @@ impl GoawayFrame {
     ) -> Self {
         GoawayFrame {
             last_stream_id: last_stream_id,
-            raw_error_code: error_code.into(),
+            error_code: error_code.into(),
             debug_data: debug_data,
             flags: Flags::default(),
         }
@@ -48,13 +49,13 @@ impl GoawayFrame {
     /// Returns the interpreted error code of the frame. Any unknown error codes are mapped into
     /// the `InternalError` variant of the enum.
     pub fn error_code(&self) -> ErrorCode {
-        self.raw_error_code.into()
+        self.error_code.into()
     }
 
     /// Returns the original raw error code of the frame. If the code is unknown, it will not be
     /// changed.
     pub fn raw_error_code(&self) -> u32 {
-        self.raw_error_code
+        self.error_code.0
     }
 
     /// Returns the associated last stream ID.
@@ -101,7 +102,7 @@ impl Frame for GoawayFrame {
 
         Ok(GoawayFrame {
             last_stream_id,
-            raw_error_code: error,
+            error_code: ErrorCodeOrUnknown(error),
             debug_data,
             flags: Flags::new(flags),
         })
@@ -129,7 +130,7 @@ impl FrameIR for GoawayFrame {
     fn serialize_into(self, builder: &mut WriteBuffer) {
         builder.write_header(self.get_header());
         builder.write_u32(self.last_stream_id);
-        builder.write_u32(self.raw_error_code);
+        builder.write_u32(self.error_code.0);
         builder.extend_from_bytes(self.debug_data);
     }
 }

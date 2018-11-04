@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// The enum represents an error code that are used in `RST_STREAM` and `GOAWAY` frames.
 /// These are defined in [Section 7](http://http2.github.io/http2-spec/#ErrorCodes) of the HTTP/2
 /// spec.
@@ -40,6 +42,30 @@ pub enum ErrorCode {
     Http11Required = 0xd,
 }
 
+impl ErrorCode {
+    fn try_from(error_code: u32) -> Result<ErrorCode, u32> {
+        Ok(match error_code {
+            0x0 => ErrorCode::NoError,
+            0x1 => ErrorCode::ProtocolError,
+            0x2 => ErrorCode::InternalError,
+            0x3 => ErrorCode::FlowControlError,
+            0x4 => ErrorCode::SettingsTimeout,
+            0x5 => ErrorCode::StreamClosed,
+            0x6 => ErrorCode::FrameSizeError,
+            0x7 => ErrorCode::RefusedStream,
+            0x8 => ErrorCode::Cancel,
+            0x9 => ErrorCode::CompressionError,
+            0xa => ErrorCode::ConnectError,
+            0xb => ErrorCode::EnhanceYourCalm,
+            0xc => ErrorCode::InadequateSecurity,
+            0xd => ErrorCode::Http11Required,
+            // According to the spec, unknown error codes MAY be treated as equivalent to
+            // INTERNAL_ERROR.
+            _ => return Err(error_code),
+        })
+    }
+}
+
 impl From<u32> for ErrorCode {
     /// Converts the given `u32` number to the appropriate `ErrorCode` variant.
     fn from(code: u32) -> ErrorCode {
@@ -62,6 +88,12 @@ impl From<u32> for ErrorCode {
             // INTERNAL_ERROR.
             _ => ErrorCode::InternalError,
         }
+    }
+}
+
+impl From<ErrorCodeOrUnknown> for ErrorCode {
+    fn from(e: ErrorCodeOrUnknown) -> Self {
+        ErrorCode::from(e.0)
     }
 }
 
@@ -90,5 +122,31 @@ impl Into<u32> for ErrorCode {
     #[inline]
     fn into(self) -> u32 {
         self as u32
+    }
+}
+
+/// Unknown error codes are valid in HTTP/2,
+/// this struct represents error code when it is unknown
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub(crate) struct ErrorCodeOrUnknown(pub(crate) u32);
+
+impl ErrorCodeOrUnknown {
+    pub fn to_error_code(&self) -> ErrorCode {
+        ErrorCode::from(self.0)
+    }
+}
+
+impl fmt::Debug for ErrorCodeOrUnknown {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match ErrorCode::try_from(self.0) {
+            Ok(error_code) => fmt::Debug::fmt(&error_code, f),
+            Err(error_code) => fmt::Debug::fmt(&error_code, f),
+        }
+    }
+}
+
+impl From<ErrorCode> for ErrorCodeOrUnknown {
+    fn from(e: ErrorCode) -> Self {
+        ErrorCodeOrUnknown(e.into())
     }
 }
