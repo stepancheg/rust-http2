@@ -8,9 +8,9 @@ use server::conn::ServerToWriteMessage;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
+use SenderState;
 use SimpleHttpMessage;
 use StreamDead;
-use SenderState;
 
 pub struct ServerResponse {
     pub(crate) common: CommonSender<ServerToWriteMessage>,

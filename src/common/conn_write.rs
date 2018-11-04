@@ -32,6 +32,8 @@ use solicit::frame::HttpFrame;
 use solicit::frame::RstStreamFrame;
 use solicit::frame::SettingsFrame;
 use std::cmp;
+use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
@@ -45,12 +47,13 @@ pub trait ConnWriteSideCustom {
     ) -> result::Result<()>;
 }
 
-impl<T> Conn<T>
+impl<T, I> Conn<T, I>
 where
     T: Types,
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     fn write_part_data(&mut self, stream_id: StreamId, data: Bytes, end_stream: EndStream) {
         let max_frame_size = self.peer_settings.max_frame_size as usize;

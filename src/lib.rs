@@ -79,11 +79,11 @@ pub use client::conf::ClientConf;
 pub use client::req::ClientRequest;
 pub use client::tls::ClientTlsOption;
 pub use client::Client;
-pub use client::ClientInterface;
 pub use client::ClientBuilder;
-pub use common::window_size::StreamDead;
+pub use client::ClientInterface;
 pub use common::sender::SendError;
 pub use common::sender::SenderState;
+pub use common::window_size::StreamDead;
 
 pub use server::conf::ServerAlpn;
 pub use server::conf::ServerConf;

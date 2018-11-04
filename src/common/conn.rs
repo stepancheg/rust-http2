@@ -47,12 +47,14 @@ use solicit_async::HttpFutureStreamSend;
 use std::collections::HashSet;
 use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
+use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 
 /// Client or server fields of connection
 pub trait ConnSpecific: 'static {}
 
 /// HTTP/2 connection state with socket and streams
-pub(crate) struct Conn<T: Types> {
+pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
     pub conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
 
     /// Client or server specific data
@@ -80,9 +82,9 @@ pub(crate) struct Conn<T: Types> {
     /// Window size from pumper point of view
     pub pump_out_window_size: window_size::ConnOutWindowSender,
 
-    pub framed_read: HttpDecodeRead<ReadHalf<T::Io>>,
+    pub framed_read: HttpDecodeRead<ReadHalf<I>>,
 
-    pub queued_write: QueuedWrite<WriteHalf<T::Io>>,
+    pub queued_write: QueuedWrite<WriteHalf<I>>,
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder,
     pub write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
@@ -117,12 +119,13 @@ impl ConnStateSnapshot {
     }
 }
 
-impl<T> Conn<T>
+impl<T, I> Conn<T, I>
 where
     T: Types,
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     pub fn new(
         loop_handle: reactor::Handle,
@@ -131,10 +134,10 @@ where
         sent_settings: HttpSettings,
         to_write_tx: UnboundedSender<T::ToWriteMessage>,
         write_rx: HttpFutureStreamSend<T::ToWriteMessage>,
-        read: ReadHalf<T::Io>,
-        write: WriteHalf<T::Io>,
+        read: ReadHalf<I>,
+        write: WriteHalf<I>,
         conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
-    ) -> Conn<T> {
+    ) -> Self {
         let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
         let out_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
 

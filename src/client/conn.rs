@@ -45,19 +45,14 @@ use futures::future;
 use headers_place::HeadersPlace;
 use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
-use std::marker;
 use ClientConf;
 use ClientTlsOption;
 use ErrorCode;
 
-pub(crate) struct ClientTypes<I>(marker::PhantomData<I>);
+pub(crate) struct ClientTypes;
 
-impl<I> Types for ClientTypes<I>
-where
-    I: AsyncWrite + AsyncRead + Send + 'static,
-{
-    type Io = I;
-    type HttpStreamData = ClientStream<I>;
+impl Types for ClientTypes {
+    type HttpStreamData = ClientStream;
     type HttpStreamSpecific = ClientStreamData;
     type ConnSpecific = ClientConnData;
     type ToWriteMessage = ClientToWriteMessage;
@@ -71,13 +66,10 @@ pub struct ClientStreamData {}
 
 impl HttpStreamDataSpecific for ClientStreamData {}
 
-type ClientStream<I> = HttpStreamCommon<ClientTypes<I>>;
+type ClientStream = HttpStreamCommon<ClientTypes>;
 
-impl<I> HttpStreamData for ClientStream<I>
-where
-    I: AsyncWrite + AsyncRead + Send + 'static,
-{
-    type Types = ClientTypes<I>;
+impl HttpStreamData for ClientStream {
+    type Types = ClientTypes;
 }
 
 pub struct ClientConnData {
@@ -117,11 +109,11 @@ impl From<CommonToWriteMessage> for ClientToWriteMessage {
     }
 }
 
-impl<I> ConnWriteSideCustom for Conn<ClientTypes<I>>
+impl<I> ConnWriteSideCustom for Conn<ClientTypes, I>
 where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    type Types = ClientTypes<I>;
+    type Types = ClientTypes;
 
     fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
         match message {
@@ -136,7 +128,7 @@ where
     }
 }
 
-impl<I> Conn<ClientTypes<I>>
+impl<I> Conn<ClientTypes, I>
 where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
@@ -235,7 +227,7 @@ impl ClientConn {
 
             let (read, write) = conn.split();
 
-            let conn_data = Conn::<ClientTypes<_>>::new(
+            let conn_data = Conn::<ClientTypes, _>::new(
                 lh_copy,
                 ClientConnData {
                     _callbacks: Box::new(callbacks),
@@ -423,18 +415,18 @@ impl ClientInterface for ClientConn {
     }
 }
 
-impl<I> ConnReadSideCustom for Conn<ClientTypes<I>>
+impl<I> ConnReadSideCustom for Conn<ClientTypes, I>
 where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    type Types = ClientTypes<I>;
+    type Types = ClientTypes;
 
     fn process_headers(
         &mut self,
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
-    ) -> result::Result<Option<HttpStreamRef<ClientTypes<I>>>> {
+    ) -> result::Result<Option<HttpStreamRef<ClientTypes>>> {
         let existing_stream = self
             .get_stream_for_headers_maybe_send_error(stream_id)?
             .is_some();

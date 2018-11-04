@@ -32,6 +32,8 @@ use solicit::MAX_WINDOW_SIZE;
 use solicit_misc::HttpFrameClassified;
 use solicit_misc::HttpFrameConn;
 use solicit_misc::HttpFrameStream;
+use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 use ErrorCode;
 use Headers;
 
@@ -46,12 +48,13 @@ pub trait ConnReadSideCustom {
     ) -> result::Result<Option<HttpStreamRef<Self::Types>>>;
 }
 
-impl<T> Conn<T>
+impl<T, I> Conn<T, I>
 where
     T: Types,
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
+    I: AsyncWrite + AsyncRead + Send + 'static,
 {
     /// Recv a frame from the network
     fn recv_http_frame(&mut self) -> Poll<HttpFrameDecodedOrGoaway, error::Error> {

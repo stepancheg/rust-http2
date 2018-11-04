@@ -47,22 +47,15 @@ use result_or_eof::ResultOrEof;
 use server::handler::ServerHandler;
 use server::handler::ServerHandlerContext;
 use server::req::ServerRequest;
-use std::marker;
 use ErrorCode;
 use ServerConf;
 use ServerResponse;
 use ServerTlsOption;
 
-struct ServerTypes<I>(marker::PhantomData<I>)
-where
-    I: AsyncWrite + AsyncRead + Send + 'static;
+struct ServerTypes;
 
-impl<I> Types for ServerTypes<I>
-where
-    I: AsyncWrite + AsyncRead + Send + 'static,
-{
-    type Io = I;
-    type HttpStreamData = ServerStream<I>;
+impl Types for ServerTypes {
+    type HttpStreamData = ServerStream;
     type HttpStreamSpecific = ServerStreamData;
     type ConnSpecific = ServerConnData;
     type ToWriteMessage = ServerToWriteMessage;
@@ -75,12 +68,9 @@ pub struct ServerStreamData {}
 
 impl HttpStreamDataSpecific for ServerStreamData {}
 
-type ServerStream<I> = HttpStreamCommon<ServerTypes<I>>;
+type ServerStream = HttpStreamCommon<ServerTypes>;
 
-impl<I> ServerStream<I>
-where
-    I: AsyncWrite + AsyncRead + Send + 'static,
-{
+impl ServerStream {
     fn trailers_recvd(&mut self, headers: Headers) {
         if let Some(ref mut sender) = self.peer_tx {
             let part = DataOrHeadersWithFlag {
@@ -93,11 +83,8 @@ where
     }
 }
 
-impl<I> HttpStreamData for ServerStream<I>
-where
-    I: AsyncWrite + AsyncRead + Send + 'static,
-{
-    type Types = ServerTypes<I>;
+impl HttpStreamData for ServerStream {
+    type Types = ServerTypes;
 }
 
 struct ServerConnData {
@@ -107,7 +94,7 @@ struct ServerConnData {
 impl ConnSpecific for ServerConnData {}
 
 #[allow(dead_code)] // https://github.com/rust-lang/rust/issues/42303
-type ServerInner<I> = Conn<ServerTypes<I>>;
+type ServerInner<I> = Conn<ServerTypes, I>;
 
 impl<I> ServerInner<I>
 where
@@ -118,8 +105,8 @@ where
         stream_id: StreamId,
         headers: Headers,
         end_stream: EndStream,
-    ) -> result::Result<HttpStreamRef<ServerTypes<I>>> {
-        if ServerTypes::<I>::init_where(stream_id) == InitWhere::Locally {
+    ) -> result::Result<HttpStreamRef<ServerTypes>> {
+        if ServerTypes::init_where(stream_id) == InitWhere::Locally {
             return Err(error::Error::Other(
                 "initiated stream with server id from client",
             ));
@@ -193,11 +180,11 @@ impl From<CommonToWriteMessage> for ServerToWriteMessage {
     }
 }
 
-impl<I: AsyncWrite + Send + 'static> ConnWriteSideCustom for Conn<ServerTypes<I>>
+impl<I> ConnWriteSideCustom for Conn<ServerTypes, I>
 where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    type Types = ServerTypes<I>;
+    type Types = ServerTypes;
 
     fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
         match message {
@@ -206,18 +193,18 @@ where
     }
 }
 
-impl<I> ConnReadSideCustom for Conn<ServerTypes<I>>
+impl<I> ConnReadSideCustom for Conn<ServerTypes, I>
 where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
-    type Types = ServerTypes<I>;
+    type Types = ServerTypes;
 
     fn process_headers(
         &mut self,
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
-    ) -> result::Result<Option<HttpStreamRef<ServerTypes<I>>>> {
+    ) -> result::Result<Option<HttpStreamRef<ServerTypes>>> {
         let existing_stream = self
             .get_stream_for_headers_maybe_send_error(stream_id)?
             .is_some();
@@ -288,7 +275,7 @@ impl ServerConn {
 
             let (read, write) = conn.split();
 
-            let conn_data = Conn::<ServerTypes<I>>::new(
+            let conn_data = Conn::<ServerTypes, I>::new(
                 lh,
                 ServerConnData { factory: service },
                 conf.common,
