@@ -10,11 +10,11 @@ use solicit::frame::FrameIR;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::RawFrame;
-use solicit::StreamId;
 
 use super::flags::Flag;
 use super::flags::Flags;
 use codec::write_buffer::WriteBuffer;
+use solicit::stream_id::StreamId;
 
 pub const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
 

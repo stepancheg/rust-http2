@@ -12,7 +12,7 @@ use solicit::frame::HttpFrame;
 use solicit::frame::PushPromiseFrame;
 use solicit::frame::RawFrame;
 use solicit::frame::FRAME_HEADER_LEN;
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 use tokio_io::AsyncRead;
 use ErrorCode;
 

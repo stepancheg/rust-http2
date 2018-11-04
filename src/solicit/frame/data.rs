@@ -4,11 +4,11 @@ use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::StreamId;
 
 use bytes::Bytes;
 use codec::write_buffer::WriteBuffer;
 use misc::BsDebug;
+use solicit::stream_id::StreamId;
 use std::fmt;
 
 pub const DATA_FRAME_TYPE: u8 = 0x0;

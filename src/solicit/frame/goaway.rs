@@ -8,7 +8,7 @@ use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{parse_stream_id, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 
 /// The minimum size for the `GOAWAY` frame payload.
 /// It is 8 octets, as the last stream id and error code are required parts of the GOAWAY frame.

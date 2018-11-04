@@ -6,7 +6,7 @@ use hpack;
 use solicit::frame::headers::HeadersDecodedFrame;
 use solicit::frame::HttpFrame;
 use solicit::frame::HttpFrameDecoded;
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 use tokio_io::AsyncRead;
 use ErrorCode;
 use Header;

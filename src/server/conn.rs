@@ -8,7 +8,6 @@ use result;
 use solicit::end_stream::EndStream;
 use solicit::frame::settings::*;
 use solicit::header::*;
-use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
 use futures::future;
@@ -57,6 +56,7 @@ use server::handler::ServerHandler;
 use server::handler::ServerHandlerContext;
 use server::req::ServerRequest;
 use server::types::ServerTypes;
+use solicit::stream_id::StreamId;
 use ErrorCode;
 use HttpStreamAfterHeaders;
 use ServerConf;

@@ -5,7 +5,7 @@ use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 
 /// The minimum size for the `WINDOW_UPDATE` frame payload.
 pub const WINDOW_UPDATE_FRAME_LEN: u32 = 4;

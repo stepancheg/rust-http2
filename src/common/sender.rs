@@ -11,7 +11,7 @@ use futures::sync::mpsc::UnboundedSender;
 use futures::Async;
 use futures::Poll;
 use futures::Stream;
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;

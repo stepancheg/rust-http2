@@ -5,7 +5,6 @@ use futures::sync::mpsc::UnboundedSender;
 use futures::Async;
 use futures::Poll;
 
-use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
 use error;
@@ -15,6 +14,7 @@ use super::types::Types;
 use common::conn_write::CommonToWriteMessage;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use solicit::stream_id::StreamId;
 
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.

@@ -10,7 +10,7 @@ use solicit::frame::FrameIR;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::RawFrame;
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct PriorityFrame {

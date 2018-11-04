@@ -2,7 +2,6 @@ use common::conn::Conn;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use common::types::Types;
-use solicit::StreamId;
 
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
@@ -31,6 +30,7 @@ use solicit::frame::HeadersFlag;
 use solicit::frame::HttpFrame;
 use solicit::frame::RstStreamFrame;
 use solicit::frame::SettingsFrame;
+use solicit::stream_id::StreamId;
 use std::cmp;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;

@@ -1,6 +1,6 @@
 use solicit::frame::headers::HeadersDecodedFrame;
 use solicit::frame::*;
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 
 /// Frames with stream
 #[derive(Debug)]

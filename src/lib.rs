@@ -71,6 +71,7 @@ pub use solicit::header::HeaderName;
 pub use solicit::header::HeaderValue;
 pub use solicit::header::Headers;
 pub use solicit::header::PseudoHeaderName;
+pub use solicit::stream_id::StreamId;
 pub use solicit::HttpScheme;
 
 pub use exec::_CpuPoolOption;
@@ -112,7 +113,6 @@ pub mod for_test {
     pub use common::conn::ConnStateSnapshot;
     pub use common::stream::HttpStreamStateSnapshot;
     pub use server::conn::ServerConn;
-    pub use solicit::StreamId;
     pub use solicit_async::recv_raw_frame_sync;
 
     pub use solicit::frame::settings::HttpSettings;

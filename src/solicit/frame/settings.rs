@@ -5,7 +5,7 @@ use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 use solicit::MAX_WINDOW_SIZE;
 
 pub const SETTINGS_FRAME_TYPE: u8 = 0x4;

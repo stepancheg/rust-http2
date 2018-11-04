@@ -9,6 +9,7 @@ pub mod end_stream;
 pub mod frame;
 pub mod header;
 pub mod session;
+pub(crate) mod stream_id;
 
 // 6.5.2 Defined SETTINGS Parameters
 pub const DEFAULT_SETTINGS: HttpSettings = HttpSettings {
@@ -19,9 +20,6 @@ pub const DEFAULT_SETTINGS: HttpSettings = HttpSettings {
     max_frame_size: 16_384,
     max_header_list_size: u32::MAX,
 };
-
-/// An alias for the type that represents the ID of an HTTP/2 stream
-pub type StreamId = u32;
 
 /// A set of protocol names that the library should use to indicate that HTTP/2
 /// is supported during protocol negotiation (NPN or ALPN).

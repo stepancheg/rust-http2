@@ -1,4 +1,4 @@
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 
 /// Runtime check if something is a client or a server.
 #[derive(Eq, PartialEq, Debug)]

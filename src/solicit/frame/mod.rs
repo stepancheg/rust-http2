@@ -5,7 +5,6 @@ use std::mem;
 use bytes::Bytes;
 
 use solicit::frame::flags::*;
-use solicit::StreamId;
 
 /// A helper macro that unpacks a sequence of 4 bytes found in the buffer with
 /// the given identifier, starting at the given offset, into the given integer
@@ -75,6 +74,7 @@ use solicit::frame::push_promise::PUSH_PROMISE_FRAME_TYPE;
 use solicit::frame::rst_stream::RST_STREAM_FRAME_TYPE;
 use solicit::frame::settings::SETTINGS_FRAME_TYPE;
 use solicit::frame::window_update::WINDOW_UPDATE_FRAME_TYPE;
+use solicit::stream_id::StreamId;
 use std::fmt;
 
 pub const FRAME_HEADER_LEN: usize = 9;

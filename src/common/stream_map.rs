@@ -1,4 +1,3 @@
-use solicit::StreamId;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::OccupiedEntry;
 use std::collections::HashMap;
@@ -16,6 +15,7 @@ use common::stream::DroppedData;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use solicit::session::StreamState;
+use solicit::stream_id::StreamId;
 use solicit::WindowSize;
 
 #[derive(Default)]

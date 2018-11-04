@@ -26,7 +26,7 @@ use solicit::frame::PriorityFrame;
 use solicit::frame::RstStreamFrame;
 use solicit::frame::SettingsFrame;
 use solicit::frame::WindowUpdateFrame;
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 use solicit::DEFAULT_SETTINGS;
 use solicit::MAX_WINDOW_SIZE;
 use solicit_misc::HttpFrameClassified;

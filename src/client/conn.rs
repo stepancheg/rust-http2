@@ -11,7 +11,6 @@ use result;
 use solicit::end_stream::EndStream;
 use solicit::frame::settings::*;
 use solicit::header::*;
-use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
 use futures::future::Future;
@@ -55,6 +54,7 @@ use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
 use socket::StreamItem;
 use socket::ToClientStream;
+use solicit::stream_id::StreamId;
 use ClientConf;
 use ClientTlsOption;
 use ErrorCode;

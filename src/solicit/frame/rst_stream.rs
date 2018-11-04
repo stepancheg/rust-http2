@@ -4,10 +4,10 @@ use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::StreamId;
 
 use codec::write_buffer::WriteBuffer;
 use error::ErrorCode;
+use solicit::stream_id::StreamId;
 
 /// The total allowed size for the `RST_STREAM` frame payload.
 pub const RST_STREAM_FRAME_LEN: u32 = 4;

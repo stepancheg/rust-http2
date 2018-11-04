@@ -6,14 +6,13 @@ use futures::Poll;
 
 use void::Void;
 
-use solicit::StreamId;
-
 use error::ErrorCode;
 
 use super::*;
 use common::conn_write::CommonToWriteMessage;
 use common::types::Types;
 use misc::any_to_string;
+use solicit::stream_id::StreamId;
 use std::panic;
 use std::panic::AssertUnwindSafe;
 use DataOrTrailers;

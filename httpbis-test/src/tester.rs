@@ -26,10 +26,10 @@ use httpbis::for_test::solicit::frame::FrameIR;
 use httpbis::for_test::solicit::frame::HttpFrame;
 use httpbis::for_test::solicit::frame::RawFrame;
 use httpbis::for_test::solicit::header::*;
-use httpbis::for_test::solicit::StreamId;
 use httpbis::Client;
 use httpbis::ErrorCode;
 use httpbis::SimpleHttpMessage;
+use httpbis::StreamId;
 
 use super::BIND_HOST;
 use httpbis::for_test::HttpSettings;

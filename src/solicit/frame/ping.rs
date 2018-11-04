@@ -5,7 +5,7 @@ use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 
 /// Ping frames are always 8 bytes
 pub const PING_FRAME_LEN: u32 = 8;

@@ -1,7 +1,6 @@
+use solicit::stream_id::StreamId;
 use std::collections::HashSet;
 use std::collections::VecDeque;
-
-use solicit::StreamId;
 
 /// HTTP/2 requires different behavior on closed streams depending on
 /// who closed the stream: we or peer.

@@ -33,7 +33,6 @@ use result::Result;
 
 use solicit::header::*;
 use solicit::HttpScheme;
-use solicit::StreamId;
 
 use solicit_async::*;
 
@@ -49,6 +48,7 @@ pub use client::tls::ClientTlsOption;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientDiedType;
 use common::conn::ConnStateSnapshot;
+use solicit::stream_id::StreamId;
 use Response;
 
 /// Builder for HTTP/2 client.

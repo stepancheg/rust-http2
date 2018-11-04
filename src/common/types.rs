@@ -1,5 +1,3 @@
-use solicit::StreamId;
-
 use common::client_or_server::ClientOrServer;
 use common::conn::ConnSpecific;
 use common::conn_write::CommonToWriteMessage;
@@ -7,6 +5,7 @@ use common::init_where::InitWhere;
 use common::stream::HttpStreamData;
 use common::stream::HttpStreamDataSpecific;
 use req_resp::RequestOrResponse;
+use solicit::stream_id::StreamId;
 
 /// Client or server type names for connection and stream
 pub(crate) trait Types: 'static {

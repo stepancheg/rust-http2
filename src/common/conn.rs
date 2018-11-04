@@ -12,7 +12,6 @@ use solicit::frame::settings::HttpSettings;
 use solicit::frame::*;
 use solicit::session::StreamState;
 use solicit::session::StreamStateIdleOrClosed;
-use solicit::StreamId;
 use solicit::DEFAULT_SETTINGS;
 
 use super::closed_streams::*;
@@ -42,6 +41,7 @@ use futures::Async;
 use futures::Future;
 use futures::Poll;
 use hpack;
+use solicit::stream_id::StreamId;
 use solicit::WindowSize;
 use solicit_async::HttpFutureStreamSend;
 use std::collections::HashSet;

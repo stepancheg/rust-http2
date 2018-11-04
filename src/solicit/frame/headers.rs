@@ -14,7 +14,7 @@ use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::FRAME_HEADER_LEN;
 use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::StreamId;
+use solicit::stream_id::StreamId;
 use std::cmp;
 use std::fmt;
 use Headers;

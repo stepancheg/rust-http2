@@ -7,11 +7,11 @@ use solicit::frame::FrameIR;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::RawFrame;
-use solicit::StreamId;
 
 use super::flags::Flag;
 use super::flags::Flags;
 use codec::write_buffer::WriteBuffer;
+use solicit::stream_id::StreamId;
 
 pub const CONTINUATION_FRAME_TYPE: u8 = 0x9;
 
