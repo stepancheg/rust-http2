@@ -3,12 +3,12 @@
 use bytes::Bytes;
 
 use codec::write_buffer::WriteBuffer;
-use error::ErrorCode;
 use solicit::frame::flags::*;
 use solicit::frame::ParseFrameError;
 use solicit::frame::ParseFrameResult;
 use solicit::frame::{parse_stream_id, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 use solicit::stream_id::StreamId;
+use ErrorCode;
 
 /// The minimum size for the `GOAWAY` frame payload.
 /// It is 8 octets, as the last stream id and error code are required parts of the GOAWAY frame.
@@ -138,13 +138,13 @@ impl FrameIR for GoawayFrame {
 mod tests {
     use super::GoawayFrame;
 
-    use error::ErrorCode;
     use solicit::frame::Frame;
     use solicit::frame::FrameHeader;
     use solicit::frame::FrameIR;
     use solicit::tests::common::raw_frame_from_parts;
 
     use bytes::Bytes;
+    use ErrorCode;
 
     #[test]
     fn test_parse_valid_no_debug_data() {

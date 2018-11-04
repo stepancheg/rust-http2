@@ -9,8 +9,6 @@ use solicit::header::Headers;
 use solicit::session::StreamState;
 use solicit::WindowSize;
 
-use error::ErrorCode;
-
 use super::types::Types;
 
 use super::stream_queue::StreamQueue;
@@ -18,6 +16,7 @@ use super::window_size;
 use common::stream_handler::StreamHandler;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use ErrorCode;
 
 pub enum HttpStreamCommand {
     Headers(Headers, EndStream),

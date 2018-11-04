@@ -2,8 +2,6 @@ use std::collections::hash_map::Entry;
 use std::collections::hash_map::OccupiedEntry;
 use std::collections::HashMap;
 
-use error::ErrorCode;
-
 use super::stream::HttpStreamCommand;
 use super::stream::HttpStreamCommon;
 use super::stream::HttpStreamStateSnapshot;
@@ -17,6 +15,7 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use solicit::session::StreamState;
 use solicit::stream_id::StreamId;
 use solicit::WindowSize;
+use ErrorCode;
 
 #[derive(Default)]
 pub(crate) struct StreamMap<T: Types> {

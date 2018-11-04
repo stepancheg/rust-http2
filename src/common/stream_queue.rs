@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use data_or_headers::DataOrHeaders;
 
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use error::ErrorCode;
+use solicit::error_code::ErrorCode;
 
 pub fn data_size(content: &DataOrHeaders) -> usize {
     match *content {

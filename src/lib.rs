@@ -65,6 +65,7 @@ mod exec;
 
 pub use socket::AnySocketAddr;
 
+pub use solicit::error_code::ErrorCode;
 pub use solicit::header::Header;
 pub use solicit::header::HeaderName;
 pub use solicit::header::HeaderValue;
@@ -103,7 +104,6 @@ pub use resp::Response;
 pub use message::SimpleHttpMessage;
 
 pub use error::Error;
-pub use error::ErrorCode;
 pub use result::Result;
 
 /// Functions used in tests

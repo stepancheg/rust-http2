@@ -6,8 +6,6 @@ use futures::Poll;
 
 use void::Void;
 
-use error::ErrorCode;
-
 use super::*;
 use common::conn_write::CommonToWriteMessage;
 use common::types::Types;
@@ -16,6 +14,7 @@ use solicit::stream_id::StreamId;
 use std::panic;
 use std::panic::AssertUnwindSafe;
 use DataOrTrailers;
+use ErrorCode;
 use HttpStreamAfterHeaders;
 
 /// Poll the stream and enqueues frames

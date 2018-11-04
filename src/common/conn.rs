@@ -5,7 +5,6 @@ use futures::sync::mpsc::UnboundedSender;
 use tokio_core::reactor;
 
 use error;
-use error::ErrorCode;
 use result;
 
 use solicit::frame::settings::HttpSettings;
@@ -49,6 +48,7 @@ use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
+use ErrorCode;
 
 /// Client or server fields of connection
 pub trait ConnSpecific: 'static {}

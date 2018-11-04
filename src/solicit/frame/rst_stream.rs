@@ -6,8 +6,8 @@ use solicit::frame::ParseFrameResult;
 use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 
 use codec::write_buffer::WriteBuffer;
-use error::ErrorCode;
 use solicit::stream_id::StreamId;
+use ErrorCode;
 
 /// The total allowed size for the `RST_STREAM` frame payload.
 pub const RST_STREAM_FRAME_LEN: u32 = 4;
@@ -112,9 +112,9 @@ impl FrameIR for RstStreamFrame {
 mod tests {
     use super::RstStreamFrame;
 
-    use error::ErrorCode;
     use solicit::frame::FrameIR;
     use solicit::frame::{pack_header, Frame, FrameHeader};
+    use ErrorCode;
 
     /// A helper function that creates a new Vec containing the serialized representation of the
     /// given `FrameHeader` followed by the raw provided payload.

@@ -6,6 +6,7 @@ use std::u32;
 use self::frame::settings::HttpSettings;
 
 pub mod end_stream;
+pub(crate) mod error_code;
 pub mod frame;
 pub mod header;
 pub mod session;
