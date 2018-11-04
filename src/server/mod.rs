@@ -5,6 +5,7 @@ pub mod handler_paths;
 pub(crate) mod increase_in_window;
 pub mod req;
 pub mod resp;
+pub(crate) mod stream_handler;
 pub mod tls;
 pub(crate) mod types;
 

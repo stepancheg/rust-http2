@@ -6,6 +6,7 @@ use common::stream_from_network::StreamFromNetwork;
 use common::stream_handler::StreamHandler;
 use common::stream_queue_sync::stream_queue_sync;
 use server::increase_in_window::ServerIncreaseInWindow;
+use server::stream_handler::ServerStreamHandler;
 use server::types::ServerTypes;
 use Headers;
 use HttpStreamAfterHeaders;
@@ -50,7 +51,7 @@ impl<'a> ServerRequest<'a> {
     pub fn register_stream_handler<F, H, R>(&mut self, f: F) -> R
     where
         F: FnOnce(ServerIncreaseInWindow) -> (H, R),
-        H: StreamHandler,
+        H: ServerStreamHandler,
     {
         assert!(self.stream_handler.is_none());
         let increase_window = ServerIncreaseInWindow(IncreaseInWindow {

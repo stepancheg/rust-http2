@@ -17,7 +17,7 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.
 pub(crate) struct StreamFromNetwork<T: Types> {
-    pub rx: StreamQueueSyncReceiver,
+    pub rx: StreamQueueSyncReceiver<T>,
     pub increase_in_window: IncreaseInWindow<T>,
     pub in_window_size: u32,
 }

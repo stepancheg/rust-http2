@@ -5,7 +5,7 @@ use ErrorCode;
 use Headers;
 
 /// Synchrnous callback of incoming data
-pub trait StreamHandler: 'static {
+pub(crate) trait StreamHandler: 'static {
     /// HEADERS frame received
     ///
     /// Invoked only on the client.

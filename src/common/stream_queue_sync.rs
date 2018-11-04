@@ -10,25 +10,32 @@ use futures::Poll;
 use error;
 
 use bytes::Bytes;
+use client::types::ClientTypes;
 use client_died_error_holder::*;
 use common::stream_handler::StreamHandler;
+use common::types::Types;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use result;
+use server::stream_handler::ServerStreamHandler;
+use server::types::ServerTypes;
+use std::marker;
 use ErrorCode;
 use Headers;
 
-pub struct StreamQueueSyncSender {
+pub(crate) struct StreamQueueSyncSender<T: Types> {
     sender: UnboundedSender<Result<DataOrHeadersWithFlag, error::Error>>,
+    _marker: marker::PhantomData<T>,
 }
 
-pub struct StreamQueueSyncReceiver {
+pub(crate) struct StreamQueueSyncReceiver<T: Types> {
     conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
     receiver: UnboundedReceiver<Result<DataOrHeadersWithFlag, error::Error>>,
     eof_received: bool,
+    _marker: marker::PhantomData<T>,
 }
 
-impl StreamQueueSyncSender {
+impl<T: Types> StreamQueueSyncSender<T> {
     fn send(&self, item: Result<DataOrHeadersWithFlag, error::Error>) -> result::Result<()> {
         if let Err(_send_error) = self.sender.unbounded_send(item) {
             // TODO: better error
@@ -39,7 +46,31 @@ impl StreamQueueSyncSender {
     }
 }
 
-impl StreamHandler for StreamQueueSyncSender {
+impl ServerStreamHandler for StreamQueueSyncSender<ServerTypes> {
+    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
+        self.send(Ok(DataOrHeadersWithFlag {
+            content: DataOrHeaders::Data(data),
+            last: end_stream,
+        }))
+    }
+
+    fn trailers(&mut self, trailers: Headers) -> result::Result<()> {
+        self.send(Ok(DataOrHeadersWithFlag {
+            content: DataOrHeaders::Headers(trailers),
+            last: true,
+        }))
+    }
+
+    fn rst(&mut self, error_code: ErrorCode) -> result::Result<()> {
+        self.send(Err(error::Error::RstStreamReceived(error_code)))
+    }
+
+    fn error(&mut self, error: error::Error) -> result::Result<()> {
+        self.send(Err(error))
+    }
+}
+
+impl StreamHandler for StreamQueueSyncSender<ClientTypes> {
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
@@ -70,7 +101,7 @@ impl StreamHandler for StreamQueueSyncSender {
     }
 }
 
-impl Stream for StreamQueueSyncReceiver {
+impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
     type Item = DataOrHeadersWithFlag;
     type Error = error::Error;
 
@@ -99,16 +130,20 @@ impl Stream for StreamQueueSyncReceiver {
     }
 }
 
-pub(crate) fn stream_queue_sync(
+pub(crate) fn stream_queue_sync<T: Types>(
     conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
-) -> (StreamQueueSyncSender, StreamQueueSyncReceiver) {
+) -> (StreamQueueSyncSender<T>, StreamQueueSyncReceiver<T>) {
     let (utx, urx) = unbounded();
 
-    let tx = StreamQueueSyncSender { sender: utx };
+    let tx = StreamQueueSyncSender {
+        sender: utx,
+        _marker: marker::PhantomData,
+    };
     let rx = StreamQueueSyncReceiver {
         conn_died_error_holder,
         receiver: urx,
         eof_received: false,
+        _marker: marker::PhantomData,
     };
 
     (tx, rx)

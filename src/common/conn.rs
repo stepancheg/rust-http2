@@ -209,7 +209,7 @@ where
 
     pub fn new_stream_from_network(
         &self,
-        rx: StreamQueueSyncReceiver,
+        rx: StreamQueueSyncReceiver<T>,
         stream_id: StreamId,
         in_window_size: u32,
     ) -> StreamFromNetwork<T> {
