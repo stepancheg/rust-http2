@@ -1,10 +1,10 @@
-use client::conn::ClientStreamData;
 use client::conn::ClientConnData;
+use client::conn::ClientStream;
+use client::conn::ClientStreamData;
 use client::conn::ClientToWriteMessage;
-use req_resp::RequestOrResponse;
 use common::client_or_server::ClientOrServer;
 use common::types::Types;
-use client::conn::ClientStream;
+use req_resp::RequestOrResponse;
 
 pub struct ClientTypes;
 

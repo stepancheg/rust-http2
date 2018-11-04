@@ -11,13 +11,13 @@ use solicit::StreamId;
 use error::ErrorCode;
 
 use super::*;
+use common::conn_write::CommonToWriteMessage;
+use common::types::Types;
 use misc::any_to_string;
 use std::panic;
 use std::panic::AssertUnwindSafe;
 use DataOrTrailers;
 use HttpStreamAfterHeaders;
-use common::conn_write::CommonToWriteMessage;
-use common::types::Types;
 
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {

@@ -41,13 +41,13 @@ use socket::ToSocketListener;
 use socket::ToTokioListener;
 
 pub use self::tls::ServerTlsOption;
+use common::conn::ConnStateSnapshot;
 use rand::thread_rng;
 use rand::Rng;
 pub use server::conf::ServerConf;
 pub use server::conn::ServerConn;
 use server::handler::ServerHandler;
 use server::handler_paths::ServerHandlerPaths;
-use common::conn::ConnStateSnapshot;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,

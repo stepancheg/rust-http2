@@ -18,12 +18,12 @@ use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedSender;
 use futures::sync::oneshot;
 
+use common::types::Types;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 use tokio_tls_api;
-use common::types::Types;
 
 use tls_api::TlsAcceptor;
 use tls_api_stub;
@@ -35,7 +35,18 @@ use socket::StreamItem;
 use common::init_where::InitWhere;
 
 use client_died_error_holder::ClientDiedErrorHolder;
+use common::conn::Conn;
+use common::conn::ConnSpecific;
+use common::conn::ConnStateSnapshot;
+use common::conn_read::ConnReadSideCustom;
+use common::conn_write::CommonToWriteMessage;
+use common::conn_write::ConnWriteSideCustom;
 use common::sender::CommonSender;
+use common::stream::HttpStreamCommon;
+use common::stream::HttpStreamData;
+use common::stream::HttpStreamDataSpecific;
+use common::stream::InMessageStage;
+use common::stream_map::HttpStreamRef;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use headers_place::HeadersPlace;
@@ -45,23 +56,12 @@ use result_or_eof::ResultOrEof;
 use server::handler::ServerHandler;
 use server::handler::ServerHandlerContext;
 use server::req::ServerRequest;
+use server::types::ServerTypes;
 use ErrorCode;
+use HttpStreamAfterHeaders;
 use ServerConf;
 use ServerResponse;
 use ServerTlsOption;
-use server::types::ServerTypes;
-use common::stream::InMessageStage;
-use common::conn_write::CommonToWriteMessage;
-use common::conn::ConnStateSnapshot;
-use common::stream::HttpStreamDataSpecific;
-use common::stream::HttpStreamCommon;
-use common::stream::HttpStreamData;
-use common::conn::ConnSpecific;
-use common::conn::Conn;
-use common::stream_map::HttpStreamRef;
-use common::conn_write::ConnWriteSideCustom;
-use common::conn_read::ConnReadSideCustom;
-use HttpStreamAfterHeaders;
 
 pub struct ServerStreamData {}
 

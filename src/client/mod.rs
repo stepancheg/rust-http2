@@ -46,10 +46,10 @@ use client::conn::ClientConnCallbacks;
 use client::conn::StartRequestMessage;
 use client::req::ClientRequest;
 pub use client::tls::ClientTlsOption;
-use Response;
-use common::conn::ConnStateSnapshot;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientDiedType;
+use common::conn::ConnStateSnapshot;
+use Response;
 
 /// Builder for HTTP/2 client.
 ///

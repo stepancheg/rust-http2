@@ -1,5 +1,5 @@
-use std::time::Duration;
 use common::conf::CommonConf;
+use std::time::Duration;
 
 #[derive(Default, Debug, Clone)]
 pub struct ClientConf {

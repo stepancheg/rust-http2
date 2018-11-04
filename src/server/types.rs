@@ -1,10 +1,10 @@
+use common::client_or_server::ClientOrServer;
+use common::types::Types;
+use req_resp::RequestOrResponse;
+use server::conn::ServerConnData;
+use server::conn::ServerStream;
 use server::conn::ServerStreamData;
 use server::conn::ServerToWriteMessage;
-use common::client_or_server::ClientOrServer;
-use req_resp::RequestOrResponse;
-use common::types::Types;
-use server::conn::ServerStream;
-use server::conn::ServerConnData;
 
 pub struct ServerTypes;
 

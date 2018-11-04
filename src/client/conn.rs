@@ -32,33 +32,33 @@ use solicit_async::*;
 
 use bytes::Bytes;
 use client::req::ClientRequest;
+use client::types::ClientTypes;
 use client::ClientInterface;
 use client_died_error_holder::ClientDiedErrorHolder;
+use common::conn::Conn;
+use common::conn::ConnSpecific;
+use common::conn::ConnStateSnapshot;
+use common::conn_read::ConnReadSideCustom;
+use common::conn_write::CommonToWriteMessage;
+use common::conn_write::ConnWriteSideCustom;
 use common::sender::CommonSender;
+use common::stream::HttpStreamCommon;
+use common::stream::HttpStreamData;
+use common::stream::HttpStreamDataSpecific;
+use common::stream::InMessageStage;
+use common::stream_map::HttpStreamRef;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use futures::future;
 use headers_place::HeadersPlace;
 use req_resp::RequestOrResponse;
 use result_or_eof::ResultOrEof;
+use socket::StreamItem;
+use socket::ToClientStream;
 use ClientConf;
 use ClientTlsOption;
 use ErrorCode;
-use client::types::ClientTypes;
-use common::stream::InMessageStage;
 use Response;
-use common::conn_write::CommonToWriteMessage;
-use common::conn::ConnStateSnapshot;
-use common::conn_read::ConnReadSideCustom;
-use common::conn::Conn;
-use common::stream_map::HttpStreamRef;
-use common::stream::HttpStreamDataSpecific;
-use common::stream::HttpStreamData;
-use common::stream::HttpStreamCommon;
-use common::conn::ConnSpecific;
-use common::conn_write::ConnWriteSideCustom;
-use socket::ToClientStream;
-use socket::StreamItem;
 
 pub struct ClientStreamData {}
 
