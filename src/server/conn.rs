@@ -46,12 +46,9 @@ use common::stream::HttpStreamData;
 use common::stream::HttpStreamDataSpecific;
 use common::stream::InMessageStage;
 use common::stream_map::HttpStreamRef;
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use headers_place::HeadersPlace;
 use misc::any_to_string;
 use req_resp::RequestOrResponse;
-use result_or_eof::ResultOrEof;
 use server::handler::ServerHandler;
 use server::handler::ServerHandlerContext;
 use server::req::ServerRequest;
@@ -72,12 +69,8 @@ pub(crate) type ServerStream = HttpStreamCommon<ServerTypes>;
 impl ServerStream {
     fn trailers_recvd(&mut self, headers: Headers) {
         if let Some(ref mut sender) = self.peer_tx {
-            let part = DataOrHeadersWithFlag {
-                content: DataOrHeaders::Headers(headers),
-                last: true,
-            };
             // TODO: reset on error
-            sender.send(ResultOrEof::Item(part)).ok();
+            sender.trailers(headers).ok();
         }
     }
 }
@@ -128,7 +121,11 @@ where
             ServerStreamData {},
         );
 
-        let req_stream = HttpStreamAfterHeaders::from_parts(req_stream);
+        let req_stream = if end_stream == EndStream::No {
+            HttpStreamAfterHeaders::from_parts(req_stream)
+        } else {
+            HttpStreamAfterHeaders::empty()
+        };
 
         let factory = self.specific.factory.clone();
 

@@ -9,15 +9,13 @@ use solicit::header::Headers;
 use solicit::session::StreamState;
 use solicit::WindowSize;
 
-use result_or_eof::ResultOrEof;
-
 use error::ErrorCode;
 
 use super::types::Types;
 
 use super::stream_queue::StreamQueue;
-use super::stream_queue_sync::StreamQueueSyncSender;
 use super::window_size;
+use common::stream_handler::StreamHandler;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
@@ -71,7 +69,7 @@ pub(crate) struct HttpStreamCommon<T: Types> {
     pub out_window_size: WindowSize,
     pub in_window_size: WindowSize,
     pub outgoing: StreamQueue,
-    pub peer_tx: Option<StreamQueueSyncSender>,
+    pub peer_tx: Option<Box<StreamHandler>>,
     // task waiting for window increase
     pub pump_out_window: window_size::StreamOutWindowSender,
     // Incoming remaining content-length
@@ -83,7 +81,7 @@ impl<T: Types> HttpStreamCommon<T> {
     pub fn new(
         in_window_size: u32,
         out_window_size: u32,
-        incoming: StreamQueueSyncSender,
+        incoming: impl StreamHandler,
         pump_out_window: window_size::StreamOutWindowSender,
         in_rem_content_length: Option<u64>,
         in_message_stage: InMessageStage,
@@ -95,7 +93,7 @@ impl<T: Types> HttpStreamCommon<T> {
             in_window_size: WindowSize::new(in_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
-            peer_tx: Some(incoming),
+            peer_tx: Some(Box::new(incoming)),
             pump_out_window,
             in_rem_content_length,
             in_message_stage,
@@ -127,11 +125,6 @@ impl<T: Types> HttpStreamCommon<T> {
             StreamState::Closed | StreamState::HalfClosedLocal => StreamState::Closed,
             _ => StreamState::HalfClosedRemote,
         };
-
-        if let Some(response_handler) = self.peer_tx.take() {
-            // TODO: reset on error
-            drop(response_handler.send(ResultOrEof::Eof));
-        }
     }
 
     /// Must be kept in sync with `pop_outg`.
@@ -250,22 +243,13 @@ impl<T: Types> HttpStreamCommon<T> {
     pub fn data_recvd(&mut self, data: Bytes, last: bool) {
         if let Some(ref mut response_handler) = self.peer_tx {
             // TODO: reset stream if rx is dead
-            drop(
-                response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
-                    content: DataOrHeaders::Data(data),
-                    last: last,
-                })),
-            );
+            drop(response_handler.data_frame(data, last));
         }
     }
 
     pub fn rst_recvd(&mut self, error_code: ErrorCode) -> DroppedData {
         if let Some(ref mut response_handler) = self.peer_tx.take() {
-            drop(
-                response_handler.send(ResultOrEof::Error(error::Error::RstStreamReceived(
-                    error_code,
-                ))),
-            );
+            drop(response_handler.rst(error_code));
         }
         DroppedData {
             size: self.outgoing.data_size(),
@@ -273,11 +257,9 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 
     pub fn goaway_recvd(&mut self, _raw_error_code: u32) {
-        if let Some(response_handler) = self.peer_tx.take() {
+        if let Some(mut response_handler) = self.peer_tx.take() {
             // it is OK to ignore error: handler may be already dead
-            drop(
-                response_handler.send(ResultOrEof::Error(error::Error::Other("peer sent GOAWAY"))),
-            );
+            drop(response_handler.error(error::Error::Other("peer sent GOAWAY")));
         }
     }
 }

@@ -47,11 +47,9 @@ use common::stream::HttpStreamDataSpecific;
 use common::stream::InMessageStage;
 use common::stream_map::HttpStreamRef;
 use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use futures::future;
 use headers_place::HeadersPlace;
 use req_resp::RequestOrResponse;
-use result_or_eof::ResultOrEof;
 use socket::StreamItem;
 use socket::ToClientStream;
 use solicit::stream_id::StreamId;
@@ -492,12 +490,15 @@ where
         if !status_1xx {
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
                 // TODO: reset stream on error
-                drop(
-                    response_handler.send(ResultOrEof::Item(DataOrHeadersWithFlag {
-                        content: DataOrHeaders::Headers(headers),
-                        last: end_stream == EndStream::Yes,
-                    })),
-                );
+                drop(match headers_place {
+                    HeadersPlace::Initial => {
+                        response_handler.headers(headers, end_stream == EndStream::Yes)
+                    }
+                    HeadersPlace::Trailing => {
+                        assert_eq!(EndStream::Yes, end_stream);
+                        response_handler.trailers(headers)
+                    }
+                });
             } else {
                 // TODO: reset stream
             }

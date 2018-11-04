@@ -148,7 +148,8 @@ impl HttpConnTester {
                     panic!("bad error");
                 }
             }
-        }
+        };
+        info!("EOF received");
     }
 
     pub fn send_preface(&mut self) {

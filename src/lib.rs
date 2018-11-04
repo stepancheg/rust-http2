@@ -24,7 +24,6 @@ mod solicit;
 
 mod error;
 mod result;
-mod result_or_eof;
 
 mod client;
 mod codec;

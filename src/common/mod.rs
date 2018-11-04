@@ -14,6 +14,7 @@ pub(crate) mod pump_stream_to_write_loop;
 pub(crate) mod sender;
 pub(crate) mod stream;
 pub(crate) mod stream_from_network;
+pub(crate) mod stream_handler;
 pub(crate) mod stream_map;
 pub(crate) mod stream_queue;
 pub(crate) mod stream_queue_sync;
