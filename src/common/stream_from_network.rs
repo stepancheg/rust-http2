@@ -47,7 +47,7 @@ impl<T: Types> Stream for StreamFromNetwork<T> {
             // TODO: use different
             // TODO: increment after process of the frame (i. e. on next poll)
             let edge = DEFAULT_SETTINGS.initial_window_size / 2;
-            if self.in_window_size + self.rx.data_size() < edge {
+            if self.in_window_size < edge {
                 let inc = DEFAULT_SETTINGS.initial_window_size;
                 let m = CommonToWriteMessage::IncreaseInWindow(self.stream_id, inc);
                 if let Err(_) = self.to_write_tx.unbounded_send(m.into()) {

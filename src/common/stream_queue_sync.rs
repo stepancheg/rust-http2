@@ -1,9 +1,5 @@
 #![allow(dead_code)]
 
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-
 use futures::stream::Stream;
 use futures::sync::mpsc::unbounded;
 use futures::sync::mpsc::UnboundedReceiver;
@@ -16,36 +12,19 @@ use result_or_eof::ResultOrEof;
 use error;
 
 use client_died_error_holder::*;
-use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 
-struct Shared {
-    data_size: AtomicUsize,
-}
-
 pub struct StreamQueueSyncSender {
-    shared: Arc<Shared>,
     sender: UnboundedSender<ResultOrEof<DataOrHeadersWithFlag, error::Error>>,
 }
 
 pub struct StreamQueueSyncReceiver {
     conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
-    shared: Arc<Shared>,
     receiver: UnboundedReceiver<ResultOrEof<DataOrHeadersWithFlag, error::Error>>,
 }
 
 impl StreamQueueSyncSender {
     pub fn send(&self, item: ResultOrEof<DataOrHeadersWithFlag, error::Error>) -> Result<(), ()> {
-        if let ResultOrEof::Item(ref part) = item {
-            if let &DataOrHeadersWithFlag {
-                content: DataOrHeaders::Data(ref b),
-                ..
-            } = part
-            {
-                self.shared.data_size.fetch_add(b.len(), Ordering::SeqCst);
-            }
-        }
-
         self.sender.unbounded_send(item).map_err(|_| ())
     }
 
@@ -62,11 +41,7 @@ impl StreamQueueSyncSender {
     }
 }
 
-impl StreamQueueSyncReceiver {
-    pub fn data_size(&self) -> u32 {
-        self.shared.data_size.load(Ordering::SeqCst) as u32
-    }
-}
+impl StreamQueueSyncReceiver {}
 
 impl Stream for StreamQueueSyncReceiver {
     type Item = DataOrHeadersWithFlag;
@@ -82,14 +57,6 @@ impl Stream for StreamQueueSyncReceiver {
             Ok(Async::Ready(Some(ResultOrEof::Item(part)))) => part,
         };
 
-        if let DataOrHeadersWithFlag {
-            content: DataOrHeaders::Data(ref b),
-            ..
-        } = part
-        {
-            self.shared.data_size.fetch_sub(b.len(), Ordering::SeqCst);
-        }
-
         Ok(Async::Ready(Some(part)))
     }
 }
@@ -97,19 +64,11 @@ impl Stream for StreamQueueSyncReceiver {
 pub(crate) fn stream_queue_sync(
     conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
 ) -> (StreamQueueSyncSender, StreamQueueSyncReceiver) {
-    let shared = Arc::new(Shared {
-        data_size: AtomicUsize::new(0),
-    });
-
     let (utx, urx) = unbounded();
 
-    let tx = StreamQueueSyncSender {
-        shared: shared.clone(),
-        sender: utx,
-    };
+    let tx = StreamQueueSyncSender { sender: utx };
     let rx = StreamQueueSyncReceiver {
         conn_died_error_holder,
-        shared,
         receiver: urx,
     };
 
