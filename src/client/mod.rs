@@ -45,15 +45,15 @@ use client::conn::ClientConn;
 use client::conn::ClientConnCallbacks;
 use client::conn::StartRequestMessage;
 use client::req::ClientRequest;
+use client::stream_handler::ClientStreamHandler;
 pub use client::tls::ClientTlsOption;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientDiedType;
 use common::conn::ConnStateSnapshot;
-use solicit::stream_id::StreamId;
-use Response;
-use client::stream_handler::ClientStreamHandler;
 use result;
+use solicit::stream_id::StreamId;
 use ErrorCode;
+use Response;
 
 /// Builder for HTTP/2 client.
 ///
@@ -274,11 +274,23 @@ impl Client {
         trailers: Option<Headers>,
         end_stream: bool,
     ) -> HttpFutureSend<(ClientRequest, Response)> {
-        struct Impl {}
+        let (tx, rx) = oneshot::channel();
+
+        struct Impl {
+            tx: Option<oneshot::Sender<(ClientRequest, Response)>>,
+        }
 
         impl ClientStreamHandler for Impl {
-            fn request_created(&mut self) -> result::Result<()> {
-                unimplemented!()
+            fn request_created(
+                &mut self,
+                req: ClientRequest,
+                resp: Response,
+            ) -> result::Result<()> {
+                let tx = self.tx.take().unwrap();
+                if let Err(_) = tx.send((req, resp)) {
+                    return Err(error::Error::CallerDied);
+                }
+                Ok(())
             }
 
             fn headers(&mut self, _headers: Headers, _end_stream: bool) -> result::Result<()> {
@@ -302,7 +314,20 @@ impl Client {
             }
         }
 
-        self.start_request_low_level(headers, body, trailers, end_stream, Box::new(Impl{}))
+        if let Err(e) = self.start_request_low_level(
+            headers,
+            body,
+            trailers,
+            end_stream,
+            Box::new(Impl { tx: Some(tx) }),
+        ) {
+            return Box::new(future::err(e));
+        }
+
+        let client_error = self.client_died_error_holder.clone();
+        let resp_rx = rx.map_err(move |oneshot::Canceled| client_error.error());
+
+        Box::new(resp_rx)
     }
 
     pub fn start_request_end_stream(
@@ -390,11 +415,10 @@ pub trait ClientInterface {
         trailers: Option<Headers>,
         end_stream: bool,
         stream_handler: Box<ClientStreamHandler>,
-    ) -> HttpFutureSend<(ClientRequest, Response)>;
+    ) -> result::Result<()>;
 }
 
 impl ClientInterface for Client {
-    // TODO: copy-paste with ClientConn::start_request
     fn start_request_low_level(
         &self,
         headers: Headers,
@@ -402,15 +426,12 @@ impl ClientInterface for Client {
         trailers: Option<Headers>,
         end_stream: bool,
         stream_handler: Box<ClientStreamHandler>,
-    ) -> HttpFutureSend<(ClientRequest, Response)> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-
+    ) -> result::Result<()> {
         let start = StartRequestMessage {
             headers,
             body,
             trailers,
             end_stream,
-            resp_tx,
             stream_handler,
         };
 
@@ -419,13 +440,10 @@ impl ClientInterface for Client {
             .unbounded_send(ControllerCommand::StartRequest(start))
         {
             // TODO: named error
-            return Box::new(future::err(error::Error::Other("client controller died")));
+            return Err(error::Error::Other("client controller died"));
         }
 
-        let client_error = self.client_died_error_holder.clone();
-        let resp_rx = resp_rx.map_err(move |oneshot::Canceled| client_error.error());
-
-        Box::new(resp_rx.flatten())
+        Ok(())
     }
 }
 
@@ -469,12 +487,9 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
             ControllerCommand::StartRequest(start) => {
                 if let Err(start) = self.conn.start_request_with_resp_sender(start) {
                     self.init_conn();
-                    if let Err(start) = self.conn.start_request_with_resp_sender(start) {
-                        let err = error::Error::Other("client died and reconnect failed");
-                        // ignore error
-                        if let Err(_) = start.resp_tx.send(Err(err)) {
-                            debug!("called likely died");
-                        }
+                    if let Err(_start) = self.conn.start_request_with_resp_sender(start) {
+                        warn!("client died and reconnect failed");
+                        // TODO: invoke a callback to report about the error
                     }
                 }
             }

@@ -28,6 +28,7 @@ use solicit_async::*;
 
 use bytes::Bytes;
 use client::req::ClientRequest;
+use client::stream_handler::ClientStreamHandler;
 use client::stream_handler::ClientStreamHandlerHolder;
 use client::types::ClientTypes;
 use client::ClientInterface;
@@ -49,7 +50,6 @@ use common::stream_handler::StreamHandlerInternal;
 use common::stream_map::HttpStreamRef;
 use common::stream_queue_sync::stream_queue_sync;
 use data_or_headers::DataOrHeaders;
-use futures::future;
 use headers_place::HeadersPlace;
 use req_resp::RequestOrResponse;
 use socket::StreamItem;
@@ -59,7 +59,6 @@ use ClientConf;
 use ClientTlsOption;
 use ErrorCode;
 use Response;
-use client::stream_handler::ClientStreamHandler;
 
 pub struct ClientStreamData {}
 
@@ -88,7 +87,6 @@ pub(crate) struct StartRequestMessage {
     pub body: Option<Bytes>,
     pub trailers: Option<Headers>,
     pub end_stream: bool,
-    pub resp_tx: oneshot::Sender<result::Result<(ClientRequest, Response)>>,
     pub stream_handler: Box<ClientStreamHandler>,
 }
 
@@ -140,7 +138,6 @@ where
                     body,
                     trailers,
                     end_stream,
-                    resp_tx,
                     mut stream_handler,
                 },
             write_tx,
@@ -173,16 +170,10 @@ where
             let stream_from_network =
                 self.new_stream_from_network(inc_rx, stream_id, in_window_size);
 
-            let r = Ok((
-                ClientRequest {
-                    common: CommonSender::new(stream_id, write_tx, out_window, true),
-                },
-                Response::from_stream(stream_from_network),
-            ));
-
-            if let Err(_) = resp_tx.send(r) {
-                warn!("caller died");
-            }
+            let req = ClientRequest {
+                common: CommonSender::new(stream_id, write_tx, out_window, true),
+            };
+            let resp = Response::from_stream(stream_from_network);
 
             let mut http_stream = self.streams.get_mut(stream_id).unwrap();
 
@@ -197,7 +188,7 @@ where
                 http_stream.close_outgoing(ErrorCode::NoError);
             }
 
-            if let Err(e) = stream_handler.request_created() {
+            if let Err(e) = stream_handler.request_created(req, resp) {
                 warn!("client cancelled request: {:?}", e);
                 http_stream.close_outgoing(ErrorCode::InternalError);
             }
@@ -405,7 +396,6 @@ impl ClientConn {
 }
 
 impl ClientInterface for ClientConn {
-    // TODO: copy-paste with Client::start_request
     fn start_request_low_level(
         &self,
         headers: Headers,
@@ -413,28 +403,20 @@ impl ClientInterface for ClientConn {
         trailers: Option<Headers>,
         end_stream: bool,
         stream_handler: Box<ClientStreamHandler>,
-    ) -> HttpFutureSend<(ClientRequest, Response)> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-
+    ) -> result::Result<()> {
         let start = StartRequestMessage {
             headers,
             body,
             trailers,
             end_stream,
-            resp_tx,
             stream_handler,
         };
 
         if let Err(_) = self.start_request_with_resp_sender(start) {
-            return Box::new(future::err(error::Error::Other("client died")));
+            return Err(error::Error::Other("client died"));
         }
 
-        let resp_rx =
-            resp_rx.map_err(|oneshot::Canceled| error::Error::Other("client likely died"));
-
-        let resp_rx = resp_rx.map_err(move |_| error::Error::Other("TODO"));
-
-        Box::new(resp_rx.flatten())
+        Ok(())
     }
 }
 

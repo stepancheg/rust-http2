@@ -50,6 +50,7 @@ pub enum Error {
     ClientPanicked(String),
     ClientCompletedWithoutError,
     SendError(SendError),
+    CallerDied,
 }
 
 fn _assert_error_sync_send() {
@@ -124,6 +125,7 @@ impl StdError for Error {
             Error::ClientPanicked(_) => "Client panicked",
             Error::ClientCompletedWithoutError => "Client completed without error",
             Error::SendError(_) => "Failed to write message to stream",
+            Error::CallerDied => "Request caller died",
             Error::Other(_) => "An unknown error",
         }
     }

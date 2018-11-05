@@ -2,12 +2,14 @@ use bytes::Bytes;
 use common::stream_handler::StreamHandlerInternal;
 use error;
 use result;
+use ClientRequest;
 use ErrorCode;
 use Headers;
+use Response;
 
 /// Synchrnous callback of incoming data
 pub trait ClientStreamHandler: Send + 'static {
-    fn request_created(&mut self) -> result::Result<()>;
+    fn request_created(&mut self, req: ClientRequest, resp: Response) -> result::Result<()>;
     /// Response HEADERS frame received
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()>;
     /// DATA frame received
