@@ -125,8 +125,8 @@ impl<T: Types> HttpStreamCommon<T> {
         };
     }
 
-    pub fn conn_died(self, error: error::Error) {
-        if let Some(mut handler) = self.peer_tx {
+    pub fn conn_died(mut self, error: error::Error) {
+        if let Some(mut handler) = self.peer_tx.take() {
             drop(handler.error(error));
         }
     }
