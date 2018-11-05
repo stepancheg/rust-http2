@@ -126,7 +126,7 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 
     pub fn conn_died(mut self, error: error::Error) {
-        if let Some(mut handler) = self.peer_tx.take() {
+        if let Some(handler) = self.peer_tx.take() {
             drop(handler.error(error));
         }
     }
@@ -252,7 +252,7 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 
     pub fn rst_recvd(&mut self, error_code: ErrorCode) -> DroppedData {
-        if let Some(ref mut response_handler) = self.peer_tx.take() {
+        if let Some(response_handler) = self.peer_tx.take() {
             drop(response_handler.rst(error_code));
         }
         DroppedData {
@@ -261,7 +261,7 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 
     pub fn goaway_recvd(&mut self, _raw_error_code: u32) {
-        if let Some(mut response_handler) = self.peer_tx.take() {
+        if let Some(response_handler) = self.peer_tx.take() {
             // it is OK to ignore error: handler may be already dead
             drop(response_handler.error(error::Error::Other("peer sent GOAWAY")));
         }

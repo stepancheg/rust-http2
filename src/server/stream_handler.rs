@@ -28,11 +28,11 @@ impl StreamHandlerInternal for ServerStreamHandlerHolder {
         self.0.trailers(trailers)
     }
 
-    fn rst(&mut self, error_code: ErrorCode) -> result::Result<()> {
+    fn rst(mut self, error_code: ErrorCode) -> result::Result<()> {
         self.0.rst(error_code)
     }
 
-    fn error(&mut self, error: error::Error) -> result::Result<()> {
+    fn error(mut self, error: error::Error) -> result::Result<()> {
         self.0.error(error)
     }
 }

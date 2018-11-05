@@ -11,7 +11,7 @@ pub(crate) trait StreamHandlerInternal: 'static {
     /// Trailers HEADERS received
     fn trailers(&mut self, trailers: Headers) -> result::Result<()>;
     /// RST_STREAM frame received
-    fn rst(&mut self, error_code: ErrorCode) -> result::Result<()>;
+    fn rst(self, error_code: ErrorCode) -> result::Result<()>;
     /// Any other error
-    fn error(&mut self, error: error::Error) -> result::Result<()>;
+    fn error(self, error: error::Error) -> result::Result<()>;
 }
