@@ -6,7 +6,7 @@ use ErrorCode;
 use Headers;
 
 /// Synchrnous callback of incoming data
-pub trait ClientStreamHandler: 'static {
+pub trait ClientStreamHandler: Send + 'static {
     fn request_created(&mut self) -> result::Result<()>;
     /// Response HEADERS frame received
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()>;

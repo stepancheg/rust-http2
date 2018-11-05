@@ -59,6 +59,7 @@ use ClientConf;
 use ClientTlsOption;
 use ErrorCode;
 use Response;
+use client::stream_handler::ClientStreamHandler;
 
 pub struct ClientStreamData {}
 
@@ -82,12 +83,13 @@ pub struct ClientConn {
 
 unsafe impl Sync for ClientConn {}
 
-pub struct StartRequestMessage {
+pub(crate) struct StartRequestMessage {
     pub headers: Headers,
     pub body: Option<Bytes>,
     pub trailers: Option<Headers>,
     pub end_stream: bool,
     pub resp_tx: oneshot::Sender<result::Result<(ClientRequest, Response)>>,
+    pub stream_handler: Box<ClientStreamHandler>,
 }
 
 pub struct ClientStartRequestMessage {
@@ -139,6 +141,7 @@ where
                     trailers,
                     end_stream,
                     resp_tx,
+                    mut stream_handler,
                 },
             write_tx,
         } = start;
@@ -192,6 +195,11 @@ where
             }
             if end_stream {
                 http_stream.close_outgoing(ErrorCode::NoError);
+            }
+
+            if let Err(e) = stream_handler.request_created() {
+                warn!("client cancelled request: {:?}", e);
+                http_stream.close_outgoing(ErrorCode::InternalError);
             }
         }
 
@@ -347,7 +355,7 @@ impl ClientConn {
         ClientConn::spawn_connected(lh, Box::new(tls_conn), conf, callbacks)
     }
 
-    pub fn start_request_with_resp_sender(
+    pub(crate) fn start_request_with_resp_sender(
         &self,
         start: StartRequestMessage,
     ) -> Result<(), StartRequestMessage> {
@@ -404,6 +412,7 @@ impl ClientInterface for ClientConn {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
+        stream_handler: Box<ClientStreamHandler>,
     ) -> HttpFutureSend<(ClientRequest, Response)> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
@@ -413,6 +422,7 @@ impl ClientInterface for ClientConn {
             trailers,
             end_stream,
             resp_tx,
+            stream_handler,
         };
 
         if let Err(_) = self.start_request_with_resp_sender(start) {

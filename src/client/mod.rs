@@ -51,6 +51,9 @@ use client_died_error_holder::ClientDiedType;
 use common::conn::ConnStateSnapshot;
 use solicit::stream_id::StreamId;
 use Response;
+use client::stream_handler::ClientStreamHandler;
+use result;
+use ErrorCode;
 
 /// Builder for HTTP/2 client.
 ///
@@ -264,6 +267,44 @@ impl Client {
         client.build()
     }
 
+    fn start_request(
+        &self,
+        headers: Headers,
+        body: Option<Bytes>,
+        trailers: Option<Headers>,
+        end_stream: bool,
+    ) -> HttpFutureSend<(ClientRequest, Response)> {
+        struct Impl {}
+
+        impl ClientStreamHandler for Impl {
+            fn request_created(&mut self) -> result::Result<()> {
+                unimplemented!()
+            }
+
+            fn headers(&mut self, _headers: Headers, _end_stream: bool) -> result::Result<()> {
+                unimplemented!()
+            }
+
+            fn data_frame(&mut self, _data: Bytes, _end_stream: bool) -> result::Result<()> {
+                unimplemented!()
+            }
+
+            fn trailers(&mut self, _trailers: Headers) -> result::Result<()> {
+                unimplemented!()
+            }
+
+            fn rst(&mut self, _error_code: ErrorCode) -> result::Result<()> {
+                unimplemented!()
+            }
+
+            fn error(&mut self, _error: Error) -> result::Result<()> {
+                unimplemented!()
+            }
+        }
+
+        self.start_request_low_level(headers, body, trailers, end_stream, Box::new(Impl{}))
+    }
+
     pub fn start_request_end_stream(
         &self,
         headers: Headers,
@@ -271,7 +312,7 @@ impl Client {
         trailers: Option<Headers>,
     ) -> Response {
         Response::new(
-            self.start_request_low_level(headers, body, trailers, true)
+            self.start_request(headers, body, trailers, true)
                 .and_then(move |(_sender, response)| response),
         )
     }
@@ -309,7 +350,7 @@ impl Client {
             Header::new(":authority", authority.to_owned()),
             Header::new(":scheme", self.http_scheme.as_bytes()),
         ]);
-        self.start_request_low_level(headers, None, None, false)
+        self.start_request(headers, None, None, false)
     }
 
     /// For tests
@@ -348,6 +389,7 @@ pub trait ClientInterface {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
+        stream_handler: Box<ClientStreamHandler>,
     ) -> HttpFutureSend<(ClientRequest, Response)>;
 }
 
@@ -359,6 +401,7 @@ impl ClientInterface for Client {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
+        stream_handler: Box<ClientStreamHandler>,
     ) -> HttpFutureSend<(ClientRequest, Response)> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
@@ -368,6 +411,7 @@ impl ClientInterface for Client {
             trailers,
             end_stream,
             resp_tx,
+            stream_handler,
         };
 
         if let Err(_) = self
