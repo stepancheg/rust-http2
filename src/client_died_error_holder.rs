@@ -15,7 +15,7 @@ pub trait DiedType: Default + Clone {
 #[derive(Copy, Clone, Default)]
 pub struct ClientDiedType;
 #[derive(Copy, Clone, Default)]
-pub struct ClientConnDiedType;
+pub struct ConnDiedType;
 
 impl DiedType for ClientDiedType {
     fn what() -> &'static str {
@@ -23,19 +23,19 @@ impl DiedType for ClientDiedType {
     }
 }
 
-impl DiedType for ClientConnDiedType {
+impl DiedType for ConnDiedType {
     fn what() -> &'static str {
-        "client connection"
+        "connection"
     }
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct ClientDiedErrorHolder<D: DiedType> {
+pub(crate) struct SomethingDiedErrorHolder<D: DiedType> {
     error: Arc<Mutex<Option<Arc<error::Error>>>>,
     _marker: marker::PhantomData<D>,
 }
 
-impl<D: DiedType> ClientDiedErrorHolder<D> {
+impl<D: DiedType> SomethingDiedErrorHolder<D> {
     pub fn new() -> Self {
         Default::default()
     }

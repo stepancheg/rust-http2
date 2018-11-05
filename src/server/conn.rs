@@ -29,7 +29,7 @@ use socket::StreamItem;
 
 use common::init_where::InitWhere;
 
-use client_died_error_holder::ClientDiedErrorHolder;
+use client_died_error_holder::SomethingDiedErrorHolder;
 use common::conn::Conn;
 use common::conn::ConnSpecific;
 use common::conn::ConnStateSnapshot;
@@ -259,7 +259,7 @@ impl ServerConn {
     {
         let lh = lh.clone();
 
-        let conn_died_error_holder = ClientDiedErrorHolder::new();
+        let conn_died_error_holder = SomethingDiedErrorHolder::new();
 
         let (write_tx, write_rx) = conn_command_channel(conn_died_error_holder.clone());
 

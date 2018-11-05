@@ -22,8 +22,8 @@ use super::window_size;
 
 pub use resp::Response;
 
-use client_died_error_holder::ClientConnDiedType;
-use client_died_error_holder::ClientDiedErrorHolder;
+use client_died_error_holder::ConnDiedType;
+use client_died_error_holder::SomethingDiedErrorHolder;
 use codec::http_decode_read::HttpDecodeRead;
 use codec::queued_write::QueuedWrite;
 use common::conn_command_channel::ConnCommandReceiver;
@@ -54,7 +54,7 @@ pub trait ConnSpecific: 'static {}
 
 /// HTTP/2 connection state with socket and streams
 pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
-    pub conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
+    pub conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 
     /// Client or server specific data
     pub specific: T::ConnSpecific,
@@ -143,7 +143,7 @@ where
         write_rx: ConnCommandReceiver<T>,
         read: ReadHalf<I>,
         write: WriteHalf<I>,
-        conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
+        conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
     ) -> Self {
         let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
         let out_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);

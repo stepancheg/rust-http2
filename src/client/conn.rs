@@ -32,7 +32,7 @@ use client::stream_handler::ClientStreamCreatedHandler;
 use client::stream_handler::ClientStreamHandlerHolder;
 use client::types::ClientTypes;
 use client::ClientInterface;
-use client_died_error_holder::ClientDiedErrorHolder;
+use client_died_error_holder::SomethingDiedErrorHolder;
 use common::conn::Conn;
 use common::conn::ConnSpecific;
 use common::conn::ConnStateSnapshot;
@@ -215,7 +215,7 @@ impl ClientConn {
         I: AsyncWrite + AsyncRead + Send + 'static,
         C: ClientConnCallbacks,
     {
-        let conn_died_error_holder = ClientDiedErrorHolder::new();
+        let conn_died_error_holder = SomethingDiedErrorHolder::new();
 
         let (to_write_tx, to_write_rx) = conn_command_channel(conn_died_error_holder.clone());
 

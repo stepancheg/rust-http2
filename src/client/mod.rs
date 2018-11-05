@@ -47,8 +47,8 @@ use client::conn::StartRequestMessage;
 use client::req::ClientRequest;
 use client::stream_handler::ClientStreamCreatedHandler;
 pub use client::tls::ClientTlsOption;
-use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientDiedType;
+use client_died_error_holder::SomethingDiedErrorHolder;
 use common::conn::ConnStateSnapshot;
 use result;
 use solicit::stream_id::StreamId;
@@ -133,7 +133,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
 
         let (done_tx, done_rx) = oneshot::channel();
 
-        let client_died_error_holder = ClientDiedErrorHolder::new();
+        let client_died_error_holder = SomethingDiedErrorHolder::new();
         let client_died_error_holder_copy = client_died_error_holder.clone();
 
         let join = if let Some(remote) = self.event_loop {
@@ -214,7 +214,7 @@ pub struct Client {
     http_scheme: HttpScheme,
     // used only once to send shutdown signal
     shutdown: ShutdownSignal,
-    client_died_error_holder: ClientDiedErrorHolder<ClientDiedType>,
+    client_died_error_holder: SomethingDiedErrorHolder<ClientDiedType>,
 }
 
 impl Client {
@@ -517,7 +517,7 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
     done_tx: oneshot::Sender<()>,
     controller_tx: UnboundedSender<ControllerCommand>,
     controller_rx: UnboundedReceiver<ControllerCommand>,
-    client_died_error_holder: ClientDiedErrorHolder<ClientDiedType>,
+    client_died_error_holder: SomethingDiedErrorHolder<ClientDiedType>,
 ) {
     let http_conn = ClientConn::spawn(
         handle.clone(),

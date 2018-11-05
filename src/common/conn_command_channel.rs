@@ -1,5 +1,5 @@
-use client_died_error_holder::ClientConnDiedType;
-use client_died_error_holder::ClientDiedErrorHolder;
+use client_died_error_holder::ConnDiedType;
+use client_died_error_holder::SomethingDiedErrorHolder;
 use common::types::Types;
 use futures::sync::mpsc;
 use futures::sync::mpsc::UnboundedReceiver;
@@ -11,7 +11,7 @@ use void::Void;
 
 pub(crate) struct ConnCommandSender<T: Types> {
     tx: UnboundedSender<T::ToWriteMessage>,
-    conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
+    conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
 
 impl<T: Types> Clone for ConnCommandSender<T> {
@@ -50,7 +50,7 @@ impl<T: Types> Stream for ConnCommandReceiver<T> {
 }
 
 pub(crate) fn conn_command_channel<T: Types>(
-    conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
+    conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 ) -> (ConnCommandSender<T>, ConnCommandReceiver<T>) {
     let (tx, rx) = mpsc::unbounded();
     let tx = ConnCommandSender {
