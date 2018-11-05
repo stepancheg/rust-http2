@@ -28,7 +28,7 @@ use solicit_async::*;
 
 use bytes::Bytes;
 use client::req::ClientRequest;
-use client::stream_handler::ClientStreamHandler;
+use client::stream_handler::ClientStreamCreatedHandler;
 use client::stream_handler::ClientStreamHandlerHolder;
 use client::types::ClientTypes;
 use client::ClientInterface;
@@ -87,7 +87,7 @@ pub(crate) struct StartRequestMessage {
     pub body: Option<Bytes>,
     pub trailers: Option<Headers>,
     pub end_stream: bool,
-    pub stream_handler: Box<ClientStreamHandler>,
+    pub stream_handler: Box<ClientStreamCreatedHandler>,
 }
 
 pub struct ClientStartRequestMessage {
@@ -402,7 +402,7 @@ impl ClientInterface for ClientConn {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<ClientStreamHandler>,
+        stream_handler: Box<ClientStreamCreatedHandler>,
     ) -> result::Result<()> {
         let start = StartRequestMessage {
             headers,

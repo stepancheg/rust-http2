@@ -7,9 +7,18 @@ use ErrorCode;
 use Headers;
 use Response;
 
+/// Called once when stream is created
+pub trait ClientStreamCreatedHandler: Send + 'static {
+    /// Called when stream is created
+    fn request_created(
+        &mut self,
+        req: ClientRequest,
+        resp: Response,
+    ) -> result::Result<() /*Box<ClientStreamHandler>*/>;
+}
+
 /// Synchrnous callback of incoming data
 pub trait ClientStreamHandler: Send + 'static {
-    fn request_created(&mut self, req: ClientRequest, resp: Response) -> result::Result<()>;
     /// Response HEADERS frame received
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()>;
     /// DATA frame received

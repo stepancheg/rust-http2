@@ -45,14 +45,13 @@ use client::conn::ClientConn;
 use client::conn::ClientConnCallbacks;
 use client::conn::StartRequestMessage;
 use client::req::ClientRequest;
-use client::stream_handler::ClientStreamHandler;
+use client::stream_handler::ClientStreamCreatedHandler;
 pub use client::tls::ClientTlsOption;
 use client_died_error_holder::ClientDiedErrorHolder;
 use client_died_error_holder::ClientDiedType;
 use common::conn::ConnStateSnapshot;
 use result;
 use solicit::stream_id::StreamId;
-use ErrorCode;
 use Response;
 
 /// Builder for HTTP/2 client.
@@ -280,7 +279,7 @@ impl Client {
             tx: Option<oneshot::Sender<(ClientRequest, Response)>>,
         }
 
-        impl ClientStreamHandler for Impl {
+        impl ClientStreamCreatedHandler for Impl {
             fn request_created(
                 &mut self,
                 req: ClientRequest,
@@ -291,26 +290,6 @@ impl Client {
                     return Err(error::Error::CallerDied);
                 }
                 Ok(())
-            }
-
-            fn headers(&mut self, _headers: Headers, _end_stream: bool) -> result::Result<()> {
-                unimplemented!()
-            }
-
-            fn data_frame(&mut self, _data: Bytes, _end_stream: bool) -> result::Result<()> {
-                unimplemented!()
-            }
-
-            fn trailers(&mut self, _trailers: Headers) -> result::Result<()> {
-                unimplemented!()
-            }
-
-            fn rst(&mut self, _error_code: ErrorCode) -> result::Result<()> {
-                unimplemented!()
-            }
-
-            fn error(&mut self, _error: Error) -> result::Result<()> {
-                unimplemented!()
             }
         }
 
@@ -414,7 +393,7 @@ pub trait ClientInterface {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<ClientStreamHandler>,
+        stream_handler: Box<ClientStreamCreatedHandler>,
     ) -> result::Result<()>;
 }
 
@@ -425,7 +404,7 @@ impl ClientInterface for Client {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<ClientStreamHandler>,
+        stream_handler: Box<ClientStreamCreatedHandler>,
     ) -> result::Result<()> {
         let start = StartRequestMessage {
             headers,

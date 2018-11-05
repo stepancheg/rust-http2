@@ -20,10 +20,8 @@ use result;
 use server::stream_handler::ServerStreamHandler;
 use server::types::ServerTypes;
 use std::marker;
-use ClientRequest;
 use ErrorCode;
 use Headers;
-use Response;
 
 pub(crate) struct StreamQueueSyncSender<T: Types> {
     sender: UnboundedSender<Result<DataOrHeadersWithFlag, error::Error>>,
@@ -73,10 +71,6 @@ impl ServerStreamHandler for StreamQueueSyncSender<ServerTypes> {
 }
 
 impl ClientStreamHandler for StreamQueueSyncSender<ClientTypes> {
-    fn request_created(&mut self, _req: ClientRequest, _resp: Response) -> result::Result<()> {
-        panic!("TODO")
-    }
-
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
