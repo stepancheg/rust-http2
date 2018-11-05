@@ -27,6 +27,7 @@ use tokio_tls_api;
 use solicit_async::*;
 
 use bytes::Bytes;
+use client::increase_in_window::ClientIncreaseInWindow;
 use client::req::ClientRequest;
 use client::stream_handler::ClientStreamCreatedHandler;
 use client::stream_handler::ClientStreamHandlerHolder;
@@ -41,6 +42,7 @@ use common::conn_command_channel::ConnCommandSender;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::CommonToWriteMessage;
 use common::conn_write::ConnWriteSideCustom;
+use common::increase_in_window::IncreaseInWindow;
 use common::sender::CommonSender;
 use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
@@ -48,7 +50,6 @@ use common::stream::HttpStreamDataSpecific;
 use common::stream::InMessageStage;
 use common::stream_handler::StreamHandlerInternal;
 use common::stream_map::HttpStreamRef;
-use common::stream_queue_sync::stream_queue_sync;
 use data_or_headers::DataOrHeaders;
 use headers_place::HeadersPlace;
 use req_resp::RequestOrResponse;
@@ -58,7 +59,6 @@ use solicit::stream_id::StreamId;
 use ClientConf;
 use ClientTlsOption;
 use ErrorCode;
-use Response;
 
 pub struct ClientStreamData {}
 
@@ -153,11 +153,6 @@ where
                 ClientStreamData {},
             );
 
-            let (inc_tx, inc_rx) = stream_queue_sync::<ClientTypes>();
-
-            self.streams.get_mut(stream_id).unwrap().stream().peer_tx =
-                Some(ClientStreamHandlerHolder(Box::new(inc_tx)));
-
             let in_window_size = self
                 .streams
                 .get_mut(stream_id)
@@ -166,31 +161,40 @@ where
                 .in_window_size
                 .size() as u32;
 
-            let stream_from_network =
-                self.new_stream_from_network(inc_rx, stream_id, in_window_size);
+            let increase_in_window = ClientIncreaseInWindow(IncreaseInWindow {
+                stream_id,
+                to_write_tx: self.to_write_tx.clone(),
+            });
 
             let req = ClientRequest {
                 common: CommonSender::new(stream_id, write_tx, out_window, true),
             };
-            let resp = Response::from_stream(stream_from_network);
 
-            let mut http_stream = self.streams.get_mut(stream_id).unwrap();
+            match stream_handler.request_created(req, in_window_size, increase_in_window) {
+                Err(e) => {
+                    warn!("client cancelled request: {:?}", e);
+                    // Should be fine to cancel before start, but TODO: check
+                    self.streams
+                        .get_mut(stream_id)
+                        .unwrap()
+                        .close_outgoing(ErrorCode::InternalError);
+                }
+                Ok(handler) => {
+                    let mut stream = self.streams.get_mut(stream_id).unwrap();
+                    stream.stream().peer_tx = Some(ClientStreamHandlerHolder(handler));
 
-            http_stream.push_back(DataOrHeaders::Headers(headers));
-            if let Some(body) = body {
-                http_stream.push_back(DataOrHeaders::Data(body));
-            }
-            if let Some(trailers) = trailers {
-                http_stream.push_back(DataOrHeaders::Headers(trailers));
-            }
-            if end_stream {
-                http_stream.close_outgoing(ErrorCode::NoError);
-            }
-
-            if let Err(e) = stream_handler.request_created(req, resp) {
-                warn!("client cancelled request: {:?}", e);
-                http_stream.close_outgoing(ErrorCode::InternalError);
-            }
+                    stream.push_back(DataOrHeaders::Headers(headers));
+                    if let Some(body) = body {
+                        stream.push_back(DataOrHeaders::Data(body));
+                    }
+                    if let Some(trailers) = trailers {
+                        stream.push_back(DataOrHeaders::Headers(trailers));
+                    }
+                    if end_stream {
+                        stream.close_outgoing(ErrorCode::NoError);
+                    }
+                }
+            };
         }
 
         // Also opens latch if necessary

@@ -1,11 +1,11 @@
 use bytes::Bytes;
+use client::increase_in_window::ClientIncreaseInWindow;
 use common::stream_handler::StreamHandlerInternal;
 use error;
 use result;
 use ClientRequest;
 use ErrorCode;
 use Headers;
-use Response;
 
 /// Called once when stream is created
 pub trait ClientStreamCreatedHandler: Send + 'static {
@@ -13,8 +13,9 @@ pub trait ClientStreamCreatedHandler: Send + 'static {
     fn request_created(
         &mut self,
         req: ClientRequest,
-        resp: Response,
-    ) -> result::Result<() /*Box<ClientStreamHandler>*/>;
+        in_window_size: u32,
+        increase_in_window: ClientIncreaseInWindow,
+    ) -> result::Result<Box<ClientStreamHandler>>;
 }
 
 /// Synchrnous callback of incoming data

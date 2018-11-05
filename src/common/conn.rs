@@ -14,9 +14,7 @@ use solicit::DEFAULT_SETTINGS;
 use super::closed_streams::*;
 use super::conf::*;
 use super::stream::*;
-use super::stream_from_network::StreamFromNetwork;
 use super::stream_map::*;
-use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::*;
 use super::window_size;
 
@@ -30,7 +28,6 @@ use common::conn_command_channel::ConnCommandReceiver;
 use common::conn_command_channel::ConnCommandSender;
 use common::conn_read::ConnReadSideCustom;
 use common::conn_write::ConnWriteSideCustom;
-use common::increase_in_window::IncreaseInWindow;
 use common::init_where::InitWhere;
 use common::iteration_exit::IterationExit;
 use futures::future;
@@ -213,22 +210,6 @@ where
         let stream = self.streams.insert(stream_id, stream);
 
         (stream, out_window_receiver)
-    }
-
-    pub fn new_stream_from_network(
-        &self,
-        rx: StreamQueueSyncReceiver<T>,
-        stream_id: StreamId,
-        in_window_size: u32,
-    ) -> StreamFromNetwork<T> {
-        StreamFromNetwork {
-            rx,
-            increase_in_window: IncreaseInWindow {
-                stream_id,
-                to_write_tx: self.to_write_tx.clone(),
-            },
-            in_window_size,
-        }
     }
 
     pub fn dump_state(&self) -> ConnStateSnapshot {

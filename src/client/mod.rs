@@ -1,5 +1,6 @@
 pub(crate) mod conf;
 pub(crate) mod conn;
+pub(crate) mod increase_in_window;
 pub(crate) mod req;
 pub(crate) mod stream_handler;
 pub(crate) mod tls;
@@ -9,6 +10,8 @@ use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::thread;
+
+use common::stream_queue_sync::stream_queue_sync;
 
 use bytes::Bytes;
 
@@ -44,12 +47,16 @@ use client::conf::ClientConf;
 use client::conn::ClientConn;
 use client::conn::ClientConnCallbacks;
 use client::conn::StartRequestMessage;
+use client::increase_in_window::ClientIncreaseInWindow;
 use client::req::ClientRequest;
 use client::stream_handler::ClientStreamCreatedHandler;
+use client::stream_handler::ClientStreamHandler;
 pub use client::tls::ClientTlsOption;
+use client::types::ClientTypes;
 use client_died_error_holder::ClientDiedType;
 use client_died_error_holder::SomethingDiedErrorHolder;
 use common::conn::ConnStateSnapshot;
+use common::stream_from_network::StreamFromNetwork;
 use result;
 use solicit::stream_id::StreamId;
 use Response;
@@ -283,13 +290,24 @@ impl Client {
             fn request_created(
                 &mut self,
                 req: ClientRequest,
-                resp: Response,
-            ) -> result::Result<()> {
+                in_window_size: u32,
+                increase_in_window: ClientIncreaseInWindow,
+            ) -> result::Result<Box<ClientStreamHandler>> {
                 let tx = self.tx.take().unwrap();
+
+                let (inc_tx, inc_rx) = stream_queue_sync::<ClientTypes>();
+
+                let stream_from_network = StreamFromNetwork {
+                    rx: inc_rx,
+                    increase_in_window: increase_in_window.0,
+                    in_window_size,
+                };
+                let resp = Response::from_stream(stream_from_network);
+
                 if let Err(_) = tx.send((req, resp)) {
                     return Err(error::Error::CallerDied);
                 }
-                Ok(())
+                Ok(Box::new(inc_tx))
             }
         }
 
