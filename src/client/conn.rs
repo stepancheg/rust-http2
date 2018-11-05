@@ -398,7 +398,7 @@ impl ClientConn {
 
 impl ClientInterface for ClientConn {
     // TODO: copy-paste with Client::start_request
-    fn start_request(
+    fn start_request_low_level(
         &self,
         headers: Headers,
         body: Option<Bytes>,

@@ -271,7 +271,7 @@ impl Client {
         trailers: Option<Headers>,
     ) -> Response {
         Response::new(
-            self.start_request(headers, body, trailers, true)
+            self.start_request_low_level(headers, body, trailers, true)
                 .and_then(move |(_sender, response)| response),
         )
     }
@@ -309,7 +309,7 @@ impl Client {
             Header::new(":authority", authority.to_owned()),
             Header::new(":scheme", self.http_scheme.as_bytes()),
         ]);
-        self.start_request(headers, None, None, false)
+        self.start_request_low_level(headers, None, None, false)
     }
 
     /// For tests
@@ -342,7 +342,7 @@ impl Client {
 
 pub trait ClientInterface {
     /// Start HTTP/2 request.
-    fn start_request(
+    fn start_request_low_level(
         &self,
         headers: Headers,
         body: Option<Bytes>,
@@ -353,7 +353,7 @@ pub trait ClientInterface {
 
 impl ClientInterface for Client {
     // TODO: copy-paste with ClientConn::start_request
-    fn start_request(
+    fn start_request_low_level(
         &self,
         headers: Headers,
         body: Option<Bytes>,
