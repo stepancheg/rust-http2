@@ -145,7 +145,6 @@ where
                 stream_id,
                 in_window_size,
                 stream_handler: &mut stream_handler,
-                conn_died_error_holder: &self.conn_died_error_holder,
                 to_write_tx: &self.to_write_tx,
             };
 

@@ -12,7 +12,6 @@ use error;
 use bytes::Bytes;
 use client::stream_handler::ClientStreamHandler;
 use client::types::ClientTypes;
-use client_died_error_holder::*;
 use common::types::Types;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
@@ -29,7 +28,6 @@ pub(crate) struct StreamQueueSyncSender<T: Types> {
 }
 
 pub(crate) struct StreamQueueSyncReceiver<T: Types> {
-    conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
     receiver: UnboundedReceiver<Result<DataOrHeadersWithFlag, error::Error>>,
     eof_received: bool,
     _marker: marker::PhantomData<T>,
@@ -113,7 +111,12 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
         let part = match self.receiver.poll() {
             Err(()) => unreachable!(),
             Ok(Async::NotReady) => return Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => return Err(self.conn_died_error_holder.error()),
+            Ok(Async::Ready(None)) => {
+                // should be impossible, because
+                // callbacks are notified of client death in
+                // `HttpStreamCommon::conn_died`
+                return Err(error::Error::Other("internal error: unexpected EOF"));
+            }
             Ok(Async::Ready(Some(Err(e)))) => {
                 self.eof_received = true;
                 return Err(e);
@@ -130,9 +133,8 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
     }
 }
 
-pub(crate) fn stream_queue_sync<T: Types>(
-    conn_died_error_holder: ClientDiedErrorHolder<ClientConnDiedType>,
-) -> (StreamQueueSyncSender<T>, StreamQueueSyncReceiver<T>) {
+pub(crate) fn stream_queue_sync<T: Types>() -> (StreamQueueSyncSender<T>, StreamQueueSyncReceiver<T>)
+{
     let (utx, urx) = unbounded();
 
     let tx = StreamQueueSyncSender {
@@ -140,7 +142,6 @@ pub(crate) fn stream_queue_sync<T: Types>(
         _marker: marker::PhantomData,
     };
     let rx = StreamQueueSyncReceiver {
-        conn_died_error_holder,
         receiver: urx,
         eof_received: false,
         _marker: marker::PhantomData,

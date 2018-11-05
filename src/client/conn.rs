@@ -153,8 +153,7 @@ where
                 ClientStreamData {},
             );
 
-            let (inc_tx, inc_rx) =
-                stream_queue_sync::<ClientTypes>(self.conn_died_error_holder.clone());
+            let (inc_tx, inc_rx) = stream_queue_sync::<ClientTypes>();
 
             self.streams.get_mut(stream_id).unwrap().stream().peer_tx =
                 Some(ClientStreamHandlerHolder(Box::new(inc_tx)));

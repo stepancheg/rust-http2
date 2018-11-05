@@ -101,6 +101,14 @@ pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
     pub our_settings_sent: Option<HttpSettings>,
 }
 
+impl<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> Drop for Conn<T, I> {
+    fn drop(&mut self) {
+        for (_, stream) in self.streams.map.drain() {
+            stream.conn_died(self.conn_died_error_holder.error());
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ConnStateSnapshot {
     pub in_window_size: i32,

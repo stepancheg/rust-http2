@@ -1,5 +1,3 @@
-use client_died_error_holder::ClientConnDiedType;
-use client_died_error_holder::ClientDiedErrorHolder;
 use common::conn_command_channel::ConnCommandSender;
 use common::increase_in_window::IncreaseInWindow;
 use common::stream_from_network::StreamFromNetwork;
@@ -21,7 +19,6 @@ pub struct ServerRequest<'a> {
     /// Stream in window size at the moment of request start
     pub(crate) in_window_size: u32,
     pub(crate) stream_handler: &'a mut Option<ServerStreamHandlerHolder>,
-    pub(crate) conn_died_error_holder: &'a ClientDiedErrorHolder<ClientConnDiedType>,
     pub(crate) to_write_tx: &'a ConnCommandSender<ServerTypes>,
 }
 
@@ -30,9 +27,8 @@ impl<'a> ServerRequest<'a> {
         if self.end_stream {
             HttpStreamAfterHeaders::empty()
         } else {
-            let client_died_error_holder = self.conn_died_error_holder.clone();
             self.register_stream_handler(|increase_in_window, in_window_size| {
-                let (inc_tx, inc_rx) = stream_queue_sync(client_died_error_holder);
+                let (inc_tx, inc_rx) = stream_queue_sync();
                 let stream_from_network = StreamFromNetwork {
                     rx: inc_rx,
                     increase_in_window: increase_in_window.0,

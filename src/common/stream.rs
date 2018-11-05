@@ -125,6 +125,12 @@ impl<T: Types> HttpStreamCommon<T> {
         };
     }
 
+    pub fn conn_died(self, error: error::Error) {
+        if let Some(mut handler) = self.peer_tx {
+            drop(handler.error(error));
+        }
+    }
+
     /// Must be kept in sync with `pop_outg`.
     pub fn is_writable(&self) -> bool {
         match self.outgoing.front() {
