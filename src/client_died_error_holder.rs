@@ -8,14 +8,14 @@ use error;
 use misc::any_to_string;
 use std::panic::AssertUnwindSafe;
 
-pub trait DiedType: Default + Clone {
+pub(crate) trait DiedType: Default + Clone {
     fn what() -> &'static str;
 }
 
 #[derive(Copy, Clone, Default)]
-pub struct ClientDiedType;
+pub(crate) struct ClientDiedType;
 #[derive(Copy, Clone, Default)]
-pub struct ConnDiedType;
+pub(crate) struct ConnDiedType;
 
 impl DiedType for ClientDiedType {
     fn what() -> &'static str {
