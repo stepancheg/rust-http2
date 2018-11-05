@@ -6,7 +6,10 @@ use ErrorCode;
 use Headers;
 
 /// Synchrnous callback of incoming data
-pub trait ServerStreamHandler: 'static {
+pub trait ClientStreamHandler: 'static {
+    fn request_created(&mut self) -> result::Result<()>;
+    /// Response HEADERS frame received
+    fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()>;
     /// DATA frame received
     fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()>;
     /// Trailers HEADERS received
@@ -17,9 +20,9 @@ pub trait ServerStreamHandler: 'static {
     fn error(&mut self, error: error::Error) -> result::Result<()>;
 }
 
-pub(crate) struct ServerStreamHandlerHolder(pub(crate) Box<ServerStreamHandler>);
+pub(crate) struct ClientStreamHandlerHolder(pub(crate) Box<ClientStreamHandler>);
 
-impl StreamHandlerInternal for ServerStreamHandlerHolder {
+impl StreamHandlerInternal for ClientStreamHandlerHolder {
     fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
         self.0.data_frame(data, end_stream)
     }

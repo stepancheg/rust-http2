@@ -4,6 +4,7 @@ use common::conn_write::CommonToWriteMessage;
 use common::init_where::InitWhere;
 use common::stream::HttpStreamData;
 use common::stream::HttpStreamDataSpecific;
+use common::stream_handler::StreamHandlerInternal;
 use req_resp::RequestOrResponse;
 use solicit::stream_id::StreamId;
 
@@ -12,6 +13,7 @@ pub(crate) trait Types: Clone + 'static {
     type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific: HttpStreamDataSpecific;
     type ConnSpecific: ConnSpecific;
+    type StreamHandlerHolder: StreamHandlerInternal;
     // Message sent to write loop
     type ToWriteMessage: From<CommonToWriteMessage> + Send;
 

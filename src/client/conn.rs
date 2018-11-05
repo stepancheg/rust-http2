@@ -28,6 +28,7 @@ use solicit_async::*;
 
 use bytes::Bytes;
 use client::req::ClientRequest;
+use client::stream_handler::ClientStreamHandlerHolder;
 use client::types::ClientTypes;
 use client::ClientInterface;
 use client_died_error_holder::ClientDiedErrorHolder;
@@ -44,6 +45,7 @@ use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use common::stream::HttpStreamDataSpecific;
 use common::stream::InMessageStage;
+use common::stream_handler::StreamHandlerInternal;
 use common::stream_map::HttpStreamRef;
 use common::stream_queue_sync::stream_queue_sync;
 use data_or_headers::DataOrHeaders;
@@ -154,7 +156,8 @@ where
             let (inc_tx, inc_rx) =
                 stream_queue_sync::<ClientTypes>(self.conn_died_error_holder.clone());
 
-            self.streams.get_mut(stream_id).unwrap().stream().peer_tx = Some(Box::new(inc_tx));
+            self.streams.get_mut(stream_id).unwrap().stream().peer_tx =
+                Some(ClientStreamHandlerHolder(Box::new(inc_tx)));
 
             let in_window_size = self
                 .streams
@@ -505,9 +508,9 @@ where
             if let Some(ref mut response_handler) = stream.stream().peer_tx {
                 // TODO: reset stream on error
                 drop(match headers_place {
-                    HeadersPlace::Initial => {
-                        response_handler.headers(headers, end_stream == EndStream::Yes)
-                    }
+                    HeadersPlace::Initial => response_handler
+                        .0
+                        .headers(headers, end_stream == EndStream::Yes),
                     HeadersPlace::Trailing => {
                         assert_eq!(EndStream::Yes, end_stream);
                         response_handler.trailers(headers)

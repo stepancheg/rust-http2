@@ -4,12 +4,8 @@ use result;
 use ErrorCode;
 use Headers;
 
-/// Synchrnous callback of incoming data
-pub(crate) trait StreamHandler: 'static {
-    /// HEADERS frame received
-    ///
-    /// Invoked only on the client.
-    fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()>;
+/// Synchronous callback of incoming data
+pub(crate) trait StreamHandlerInternal: 'static {
     /// DATA frame received
     fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()>;
     /// Trailers HEADERS received

@@ -1,6 +1,7 @@
 pub(crate) mod conf;
 pub(crate) mod conn;
 pub(crate) mod req;
+pub(crate) mod stream_handler;
 pub(crate) mod tls;
 pub(crate) mod types;
 

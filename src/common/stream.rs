@@ -13,7 +13,7 @@ use super::types::Types;
 
 use super::stream_queue::StreamQueue;
 use super::window_size;
-use common::stream_handler::StreamHandler;
+use common::stream_handler::StreamHandlerInternal;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
 use ErrorCode;
@@ -68,7 +68,7 @@ pub(crate) struct HttpStreamCommon<T: Types> {
     pub out_window_size: WindowSize,
     pub in_window_size: WindowSize,
     pub outgoing: StreamQueue,
-    pub peer_tx: Option<Box<StreamHandler>>,
+    pub peer_tx: Option<T::StreamHandlerHolder>,
     // task waiting for window increase
     pub pump_out_window: window_size::StreamOutWindowSender,
     // Incoming remaining content-length

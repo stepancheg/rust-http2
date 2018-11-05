@@ -43,6 +43,7 @@ use common::stream::HttpStreamCommon;
 use common::stream::HttpStreamData;
 use common::stream::HttpStreamDataSpecific;
 use common::stream::InMessageStage;
+use common::stream_handler::StreamHandlerInternal;
 use common::stream_map::HttpStreamRef;
 use headers_place::HeadersPlace;
 use misc::any_to_string;

@@ -5,6 +5,7 @@ use server::conn::ServerConnData;
 use server::conn::ServerStream;
 use server::conn::ServerStreamData;
 use server::conn::ServerToWriteMessage;
+use server::stream_handler::ServerStreamHandlerHolder;
 
 #[derive(Clone)]
 pub(crate) struct ServerTypes;
@@ -13,6 +14,7 @@ impl Types for ServerTypes {
     type HttpStreamData = ServerStream;
     type HttpStreamSpecific = ServerStreamData;
     type ConnSpecific = ServerConnData;
+    type StreamHandlerHolder = ServerStreamHandlerHolder;
     type ToWriteMessage = ServerToWriteMessage;
 
     const CLIENT_OR_SERVER: ClientOrServer = ClientOrServer::Server;

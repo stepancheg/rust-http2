@@ -10,9 +10,9 @@ use futures::Poll;
 use error;
 
 use bytes::Bytes;
+use client::stream_handler::ClientStreamHandler;
 use client::types::ClientTypes;
 use client_died_error_holder::*;
-use common::stream_handler::StreamHandler;
 use common::types::Types;
 use data_or_headers::DataOrHeaders;
 use data_or_headers_with_flag::DataOrHeadersWithFlag;
@@ -70,7 +70,11 @@ impl ServerStreamHandler for StreamQueueSyncSender<ServerTypes> {
     }
 }
 
-impl StreamHandler for StreamQueueSyncSender<ClientTypes> {
+impl ClientStreamHandler for StreamQueueSyncSender<ClientTypes> {
+    fn request_created(&mut self) -> result::Result<()> {
+        Ok(())
+    }
+
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
