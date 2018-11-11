@@ -273,7 +273,7 @@ impl Client {
         client.build()
     }
 
-    fn start_request(
+    pub fn start_request(
         &self,
         headers: Headers,
         body: Option<Bytes>,
