@@ -163,6 +163,7 @@ where
 
             let increase_in_window = ClientIncreaseInWindow(IncreaseInWindow {
                 stream_id,
+                in_window_size,
                 to_write_tx: self.to_write_tx.clone(),
             });
 
@@ -170,7 +171,7 @@ where
                 common: CommonSender::new(stream_id, write_tx, out_window, true),
             };
 
-            match stream_handler.request_created(req, in_window_size, increase_in_window) {
+            match stream_handler.request_created(req, increase_in_window) {
                 Err(e) => {
                     warn!("client cancelled request: {:?}", e);
                     // Should be fine to cancel before start, but TODO: check

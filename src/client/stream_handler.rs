@@ -13,7 +13,6 @@ pub trait ClientStreamCreatedHandler: Send + 'static {
     fn request_created(
         &mut self,
         req: ClientRequest,
-        in_window_size: u32,
         increase_in_window: ClientIncreaseInWindow,
     ) -> result::Result<Box<ClientStreamHandler>>;
 }

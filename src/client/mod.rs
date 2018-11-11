@@ -290,7 +290,6 @@ impl Client {
             fn request_created(
                 &mut self,
                 req: ClientRequest,
-                in_window_size: u32,
                 increase_in_window: ClientIncreaseInWindow,
             ) -> result::Result<Box<ClientStreamHandler>> {
                 let tx = self.tx.take().unwrap();
@@ -300,7 +299,6 @@ impl Client {
                 let stream_from_network = StreamFromNetwork {
                     rx: inc_rx,
                     increase_in_window: increase_in_window.0,
-                    in_window_size,
                 };
                 let resp = Response::from_stream(stream_from_network);
 

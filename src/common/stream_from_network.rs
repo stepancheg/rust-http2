@@ -19,7 +19,6 @@ use data_or_headers_with_flag::DataOrHeadersWithFlag;
 pub(crate) struct StreamFromNetwork<T: Types> {
     pub rx: StreamQueueSyncReceiver<T>,
     pub increase_in_window: IncreaseInWindow<T>,
-    pub in_window_size: u32,
 }
 
 impl<T: Types> Stream for StreamFromNetwork<T> {
@@ -39,15 +38,14 @@ impl<T: Types> Stream for StreamFromNetwork<T> {
             ..
         } = part
         {
-            self.in_window_size -= b.len() as u32;
+            self.increase_in_window.data_frame_processed(b.len() as u32);
 
             // TODO: use different
             // TODO: increment after process of the frame (i. e. on next poll)
             let edge = DEFAULT_SETTINGS.initial_window_size / 2;
-            if self.in_window_size < edge {
+            if self.increase_in_window.in_window_size() < edge {
                 let inc = DEFAULT_SETTINGS.initial_window_size;
                 self.increase_in_window.increase_window(inc)?;
-                self.in_window_size += inc;
             }
         }
 

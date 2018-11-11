@@ -5,7 +5,15 @@ use result;
 pub struct ClientIncreaseInWindow(pub(crate) IncreaseInWindow<ClientTypes>);
 
 impl ClientIncreaseInWindow {
-    pub fn increase_window(&self, inc: u32) -> result::Result<()> {
+    pub fn in_window_size(&self) -> u32 {
+        self.0.in_window_size()
+    }
+
+    pub fn data_frame_processed(&mut self, size: u32) {
+        self.0.data_frame_processed(size)
+    }
+
+    pub fn increase_window(&mut self, inc: u32) -> result::Result<()> {
         self.0.increase_window(inc)
     }
 }

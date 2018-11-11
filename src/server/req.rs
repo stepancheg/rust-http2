@@ -27,12 +27,11 @@ impl<'a> ServerRequest<'a> {
         if self.end_stream {
             HttpStreamAfterHeaders::empty()
         } else {
-            self.register_stream_handler(|increase_in_window, in_window_size| {
+            self.register_stream_handler(|increase_in_window| {
                 let (inc_tx, inc_rx) = stream_queue_sync();
                 let stream_from_network = StreamFromNetwork {
                     rx: inc_rx,
                     increase_in_window: increase_in_window.0,
-                    in_window_size,
                 };
 
                 (
@@ -48,15 +47,16 @@ impl<'a> ServerRequest<'a> {
     /// responsibility.
     pub fn register_stream_handler<F, H, R>(&mut self, f: F) -> R
     where
-        F: FnOnce(ServerIncreaseInWindow, u32) -> (H, R),
+        F: FnOnce(ServerIncreaseInWindow) -> (H, R),
         H: ServerStreamHandler,
     {
         assert!(self.stream_handler.is_none());
         let increase_window = ServerIncreaseInWindow(IncreaseInWindow {
             stream_id: self.stream_id,
+            in_window_size: self.in_window_size,
             to_write_tx: self.to_write_tx.clone(),
         });
-        let (h, r) = f(increase_window, self.in_window_size);
+        let (h, r) = f(increase_window);
         *self.stream_handler = Some(ServerStreamHandlerHolder(Box::new(h)));
         r
     }
