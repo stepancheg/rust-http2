@@ -111,6 +111,15 @@ impl WindowSize {
     pub fn size(&self) -> i32 {
         self.0
     }
+
+    /// Window size when it's know to be non-negative
+    ///
+    /// Panics if windows size if negative
+    pub fn unsigned(&self) -> u32 {
+        let r = self.0 as u32;
+        assert_eq!(r as i32, self.0);
+        r
+    }
 }
 
 impl fmt::Display for WindowSize {
