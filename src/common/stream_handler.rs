@@ -7,7 +7,7 @@ use Headers;
 /// Synchronous callback of incoming data
 pub(crate) trait StreamHandlerInternal: 'static {
     /// DATA frame received
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()>;
+    fn data_frame(&mut self, data: Bytes, in_window_size: u32, end_stream: bool) -> result::Result<()>;
     /// Trailers HEADERS received
     fn trailers(&mut self, trailers: Headers) -> result::Result<()>;
     /// RST_STREAM frame received

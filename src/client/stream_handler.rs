@@ -22,7 +22,7 @@ pub trait ClientStreamHandler: Send + 'static {
     /// Response HEADERS frame received
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()>;
     /// DATA frame received
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()>;
+    fn data_frame(&mut self, data: Bytes, in_window_size: u32, end_stream: bool) -> result::Result<()>;
     /// Trailers HEADERS received
     fn trailers(&mut self, trailers: Headers) -> result::Result<()>;
     /// RST_STREAM frame received
@@ -34,8 +34,8 @@ pub trait ClientStreamHandler: Send + 'static {
 pub(crate) struct ClientStreamHandlerHolder(pub(crate) Box<ClientStreamHandler>);
 
 impl StreamHandlerInternal for ClientStreamHandlerHolder {
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
-        self.0.data_frame(data, end_stream)
+    fn data_frame(&mut self, data: Bytes, in_window_size: u32, end_stream: bool) -> result::Result<()> {
+        self.0.data_frame(data, in_window_size, end_stream)
     }
 
     fn trailers(&mut self, trailers: Headers) -> result::Result<()> {

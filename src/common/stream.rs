@@ -247,7 +247,7 @@ impl<T: Types> HttpStreamCommon<T> {
     pub fn data_recvd(&mut self, data: Bytes, last: bool) {
         if let Some(ref mut response_handler) = self.peer_tx {
             // TODO: reset stream if rx is dead
-            drop(response_handler.data_frame(data, last));
+            drop(response_handler.data_frame(data, self.in_window_size.unsigned(), last));
         }
     }
 
