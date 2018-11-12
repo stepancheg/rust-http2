@@ -9,6 +9,7 @@ use futures::Stream;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
+use SenderState;
 
 /// Reference to outgoing stream on the client side.
 pub struct ClientRequest {
@@ -16,6 +17,10 @@ pub struct ClientRequest {
 }
 
 impl ClientRequest {
+    pub fn state(&self) -> SenderState {
+        self.common.state()
+    }
+
     /// Wait for stream to be ready to accept data.
     pub fn poll(&mut self) -> Poll<(), StreamDead> {
         self.common.poll()
