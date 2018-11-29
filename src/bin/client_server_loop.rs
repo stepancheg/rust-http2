@@ -88,7 +88,7 @@ fn ping_pong() {
         fn start_request(
             &self,
             _context: ServerHandlerContext,
-            mut req: ServerRequest,
+            req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_headers(Headers::ok_200())?;

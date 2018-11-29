@@ -23,7 +23,7 @@ pub struct ServerRequest<'a> {
 }
 
 impl<'a> ServerRequest<'a> {
-    pub fn make_stream(&mut self) -> HttpStreamAfterHeaders {
+    pub fn make_stream(self) -> HttpStreamAfterHeaders {
         if self.end_stream {
             HttpStreamAfterHeaders::empty()
         } else {
@@ -45,7 +45,7 @@ impl<'a> ServerRequest<'a> {
     /// Register synchnous stream handler (callback will be called immediately
     /// when new data arrives). Note that increasing in window size is the handler
     /// responsibility.
-    pub fn register_stream_handler<F, H, R>(&mut self, f: F) -> R
+    pub fn register_stream_handler<F, H, R>(self, f: F) -> R
     where
         F: FnOnce(ServerIncreaseInWindow) -> (H, R),
         H: ServerStreamHandler,

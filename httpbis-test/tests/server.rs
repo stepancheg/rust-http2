@@ -55,7 +55,7 @@ use unix_socket::UnixStream;
 fn simple_new() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |_, mut req, mut resp| {
+    let server = ServerOneConn::new_fn(0, |_, req, mut resp| {
         resp.send_headers(Headers::ok_200())?;
         resp.pull_from_stream(req.make_stream())?;
         Ok(())
