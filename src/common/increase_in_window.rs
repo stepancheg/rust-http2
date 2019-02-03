@@ -3,6 +3,7 @@ use common::conn_write::CommonToWriteMessage;
 use common::types::Types;
 use result;
 use solicit::stream_id::StreamId;
+use solicit::DEFAULT_SETTINGS;
 
 pub(crate) struct IncreaseInWindow<T: Types> {
     pub stream_id: StreamId,
@@ -26,6 +27,14 @@ impl<T: Types> IncreaseInWindow<T> {
         self.in_window_size = self.in_window_size.checked_add(inc).unwrap();
         let m = CommonToWriteMessage::IncreaseInWindow(self.stream_id, inc);
         self.to_write_tx.unbounded_send(m.into())
+    }
+
+    pub fn increase_window_auto(&mut self) -> result::Result<()> {
+        if self.in_window_size < DEFAULT_SETTINGS.initial_window_size / 2 {
+            self.increase_window(DEFAULT_SETTINGS.initial_window_size)
+        } else {
+            Ok(())
+        }
     }
 }
 
