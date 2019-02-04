@@ -45,7 +45,7 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
             HttpFrame::Headers(frame) => {
                 let headers = match self.decoder.decode(&frame.header_fragment()) {
                     Err(e) => {
-                        warn!("failed to decode headers: {:?}", e);
+                        ndc_warn!("failed to decode headers: {:?}", e);
                         return Ok(Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(
                             ErrorCode::CompressionError,
                         )));
@@ -65,7 +65,7 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
                         // regular header fields. Any request or response that contains
                         // a pseudo-header field that appears in a header block after
                         // a regular header field MUST be treated as malformed (Section 8.1.2.6).
-                        warn!(
+                        ndc_warn!(
                             "received incorrect headers in stream {}: {:?}",
                             frame.stream_id, e
                         );

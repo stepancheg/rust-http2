@@ -97,12 +97,12 @@ impl DynamicTable {
         // a magic number determined by them (under reasonable assumptions of
         // how the table is stored).
         self.size += name.len() + value.len() + 32;
-        debug!("New dynamic table size {}", self.size);
+        ndc_debug!("New dynamic table size {}", self.size);
         // Now add it to the internal buffer
         self.table.push_front((name, value));
         // ...and make sure we're not over the maximum size.
         self.consolidate_table();
-        debug!("After consolidation dynamic table size {}", self.size);
+        ndc_debug!("After consolidation dynamic table size {}", self.size);
     }
 
     #[cfg(test)]

@@ -173,7 +173,7 @@ where
 
             match stream_handler.request_created(req, increase_in_window) {
                 Err(e) => {
-                    warn!("client cancelled request: {:?}", e);
+                    ndc_warn!("client cancelled request: {:?}", e);
                     // Should be fine to cancel before start, but TODO: check
                     self.streams
                         .get_mut(stream_id)
@@ -239,7 +239,7 @@ impl ClientConn {
         let lh_copy = lh.clone();
 
         let future = handshake.and_then(move |conn| {
-            debug!("handshake done");
+            ndc_debug!("handshake done");
 
             let (read, write) = conn.split();
 
@@ -297,7 +297,7 @@ impl ClientConn {
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = addr.connect(&lh).map_err(Into::into);
         let map_callback = move |socket: Box<StreamItem>| {
-            info!("connected to {}", addr);
+            ndc_info!("connected to {}", addr);
 
             if socket.is_tcp() {
                 socket
@@ -336,7 +336,7 @@ impl ClientConn {
         let connect = addr
             .connect(&lh)
             .map(move |c| {
-                info!("connected to {}", addr);
+                ndc_info!("connected to {}", addr);
                 c
             }).map_err(|e| e.into());
 
@@ -461,7 +461,7 @@ where
         };
 
         if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
-            warn!("invalid headers: {:?}: {:?}", e, headers);
+            ndc_warn!("invalid headers: {:?}: {:?}", e, headers);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
@@ -472,7 +472,7 @@ where
 
                 let status_1xx = status >= 100 && status <= 199;
                 if status_1xx && end_stream == EndStream::Yes {
-                    warn!("1xx headers and end stream: {}", stream_id);
+                    ndc_warn!("1xx headers and end stream: {}", stream_id);
                     self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
                     return Ok(None);
                 }
@@ -480,7 +480,7 @@ where
             }
             HeadersPlace::Trailing => {
                 if end_stream == EndStream::No {
-                    warn!("headers without end stream after data: {}", stream_id);
+                    ndc_warn!("headers without end stream after data: {}", stream_id);
                     self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
                     return Ok(None);
                 }

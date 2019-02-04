@@ -126,7 +126,7 @@ impl<'m, T: Types + 'm> HttpStreamRef<'m, T> {
 
     fn remove(self) {
         let stream_id = self.id();
-        debug!("removing stream {}", stream_id);
+        ndc_debug!("removing stream {}", stream_id);
         self.writable_streams.remove(&stream_id);
         self.entry.remove();
     }
@@ -195,7 +195,7 @@ impl<'m, T: Types + 'm> HttpStreamRef<'m, T> {
 
         let new_window_size = self.stream().out_window_size.0;
 
-        debug!(
+        ndc_debug!(
             "stream {} out window size change: {} -> {}",
             self.id(),
             old_window_size,

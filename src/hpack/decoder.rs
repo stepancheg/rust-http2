@@ -91,7 +91,7 @@ fn decode_integer(buf: &[u8], prefix_size: u8) -> Result<(usize, usize), Decoder
 /// bytes consumed from the given buffer.
 fn decode_string<'a>(buf: &'a [u8]) -> Result<(Bytes, usize), DecoderError> {
     let (len, consumed) = decode_integer(buf, 7)?;
-    debug!("decode_string: Consumed = {}, len = {}", consumed, len);
+    ndc_debug!("decode_string: Consumed = {}, len = {}", consumed, len);
     if consumed + len > buf.len() {
         return Err(DecoderError::StringDecodingError(
             StringDecodingError::NotEnoughOctets,
@@ -99,7 +99,7 @@ fn decode_string<'a>(buf: &'a [u8]) -> Result<(Bytes, usize), DecoderError> {
     }
     let raw_string = &buf[consumed..consumed + len];
     if buf[0] & 128 == 128 {
-        debug!("decode_string: Using the Huffman code");
+        ndc_debug!("decode_string: Using the Huffman code");
         // Huffman coding used: pass the raw octets to the Huffman decoder
         // and return its result.
         let mut decoder = HuffmanDecoder::new();
@@ -114,7 +114,7 @@ fn decode_string<'a>(buf: &'a [u8]) -> Result<(Bytes, usize), DecoderError> {
         Ok((Bytes::from(decoded), consumed + len))
     } else {
         // The octets were transmitted raw
-        debug!("decode_string: Raw octet string received");
+        ndc_debug!("decode_string: Raw octet string received");
         Ok((Bytes::from(raw_string), consumed + len))
     }
 }
@@ -353,7 +353,7 @@ impl Decoder {
     /// Decodes an indexed header representation.
     fn decode_indexed(&self, buf: &[u8]) -> Result<((Bytes, Bytes), usize), DecoderError> {
         let (index, consumed) = decode_integer(buf, 7)?;
-        debug!(
+        ndc_debug!(
             "Decoding indexed: index = {}, consumed = {}",
             index, consumed
         );
@@ -427,7 +427,7 @@ impl Decoder {
 
         self.header_table.dynamic_table.set_max_table_size(new_size);
 
-        info!(
+        ndc_info!(
             "Decoder changed max table size from {} to {}",
             self.header_table.dynamic_table.get_size(),
             new_size
@@ -1682,7 +1682,7 @@ mod interop_tests {
 
         for fixture in files {
             let file_name = fixture.unwrap().path();
-            debug!("Testing fixture: {:?}", file_name);
+            ndc_debug!("Testing fixture: {:?}", file_name);
             test_story(file_name);
         }
     }

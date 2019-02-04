@@ -205,7 +205,7 @@ impl<T: Types> Drop for CommonSender<T> {
     fn drop(&mut self) {
         // TODO: different message if panicked
         if self.state() != SenderState::Done {
-            warn!("Sender was not properly finished, sending RST_STREAM InternalError");
+            ndc_warn!("Sender was not properly finished, sending RST_STREAM InternalError");
         }
         drop(self.reset(ErrorCode::InternalError))
     }

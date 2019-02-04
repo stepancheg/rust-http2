@@ -183,10 +183,10 @@ impl ServerHandler for ServerHandlerPaths {
         mut resp: ServerResponse,
     ) -> result::Result<()> {
         if let Some(service) = self.find_service(req.headers.path()) {
-            debug!("invoking user callback for path {}", req.headers.path());
+            ndc_debug!("invoking user callback for path {}", req.headers.path());
             service.start_request(context, req, resp)
         } else {
-            debug!("serving 404 for path {}", req.headers.path());
+            ndc_debug!("serving 404 for path {}", req.headers.path());
             drop(resp.send_headers(Headers::not_found_404()));
             drop(resp.close());
             Ok(())

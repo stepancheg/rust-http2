@@ -64,11 +64,11 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
         let future = future.then(move |r| {
             match r {
                 Ok(()) => {
-                    info!("{} completed without errors", D::what());
+                    ndc_info!("{} completed without errors", D::what());
                     holder.set_once(error::Error::ClientCompletedWithoutError);
                 }
                 Err(e) => {
-                    warn!("{} completed with error: {:?}", D::what(), e);
+                    ndc_warn!("{} completed with error: {:?}", D::what(), e);
                     holder.set_once(e);
                 }
             }
@@ -79,7 +79,7 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
         let future = AssertUnwindSafe(future).catch_unwind().then(move |r| {
             if let Err(e) = r {
                 let message = any_to_string(e);
-                warn!("{} panicked: {}", D::what(), message);
+                ndc_warn!("{} panicked: {}", D::what(), message);
                 holder.set_once(error::Error::ClientPanicked(message));
             }
             Ok(())

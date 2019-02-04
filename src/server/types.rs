@@ -19,4 +19,5 @@ impl Types for ServerTypes {
 
     const CLIENT_OR_SERVER: ClientOrServer = ClientOrServer::Server;
     const OUT_REQUEST_OR_RESPONSE: RequestOrResponse = RequestOrResponse::Response;
+    const CONN_NDC: &'static str = "server conn";
 }

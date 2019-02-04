@@ -25,7 +25,7 @@ impl<W: AsyncWrite> HttpFramedWrite<W> {
     }
 
     pub fn buffer_frame<F: FrameIR>(&mut self, frame: F) {
-        debug!("send {:?}", frame);
+        ndc_debug!("send {:?}", frame);
 
         frame.serialize_into(&mut self.buf);
     }

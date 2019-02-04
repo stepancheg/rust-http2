@@ -141,7 +141,7 @@ impl DataOrHeadersWithFlagStream {
                 Err(e) => {
                     let e = any_to_string(e);
                     // TODO: send plain text error if headers weren't sent yet
-                    warn!("handler panicked: {}", e);
+                    ndc_warn!("handler panicked: {}", e);
                     Err(error::Error::HandlerPanicked(e))
                 }
             }

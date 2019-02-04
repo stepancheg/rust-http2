@@ -23,6 +23,8 @@ pub(crate) trait Types: Clone + 'static {
     /// Outgoing messages are requests or responses
     const OUT_REQUEST_OR_RESPONSE: RequestOrResponse;
 
+    const CONN_NDC: &'static str;
+
     /// Is stream initiated locally or by peer?
     /// e. g. `is_init_locally(3)` returns `true` for client and `false` for server.
     fn init_where(stream_id: StreamId) -> InitWhere {
