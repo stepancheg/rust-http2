@@ -65,7 +65,7 @@ where
             let mut frame = DataFrame::with_data(stream_id, Bytes::new());
             frame.set_flag(DataFlag::EndStream);
 
-            ndc_debug!("sending frame {:?}", frame);
+            debug!("sending frame {:?}", frame);
 
             self.queued_write.queue_not_goaway(frame);
 
@@ -261,7 +261,7 @@ where
     }
 
     pub fn send_goaway(&mut self, error_code: ErrorCode) -> result::Result<()> {
-        ndc_debug!("requesting to send GOAWAY with code {:?}", error_code);
+        debug!("requesting to send GOAWAY with code {:?}", error_code);
         let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
         self.queued_write.queue_goaway(frame);
         task::current().notify();

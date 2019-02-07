@@ -294,7 +294,7 @@ where
         .for_each(
             move |((socket, peer_addr), (conn_handles, service, state, tls, conf))| {
                 if socket.is_tcp() {
-                    ndc_info!(
+                    info!(
                         "accepted connection from {}",
                         peer_addr.downcast_ref::<SocketAddr>().unwrap()
                     );
@@ -326,7 +326,7 @@ where
                             assert!(removed.is_some());
                             r
                         }).map_err(|e| {
-                            ndc_warn!("connection end: {:?}", e);
+                            warn!("connection end: {:?}", e);
                             ()
                         })
                 });

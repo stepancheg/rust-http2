@@ -97,7 +97,7 @@ where
 
             if let Some(in_rem_content_length) = stream.stream().in_rem_content_length {
                 if in_rem_content_length < frame.data.len() as u64 {
-                    ndc_warn!("stream data underflow content-length");
+                    warn!("stream data underflow content-length");
                     error = Some(ErrorCode::ProtocolError);
                     break;
                 }
@@ -148,7 +148,7 @@ where
                     Err(error::Error::Other("PING ACK opaque data mismatch"))
                 }
             } else {
-                ndc_warn!("PING ACK without PING");
+                warn!("PING ACK without PING");
                 Ok(())
             }
         } else {
@@ -170,7 +170,7 @@ where
 
         for (stream_id, mut stream) in self.streams.remove_local_streams_with_id_gt(last_stream_id)
         {
-            ndc_debug!("removed stream {} because of GOAWAY", stream_id);
+            debug!("removed stream {} because of GOAWAY", stream_id);
             stream.goaway_recvd(raw_error_code);
         }
 
@@ -286,7 +286,7 @@ where
                 // END_STREAM flag.  This means that a receiver could receive a
                 // WINDOW_UPDATE frame on a "half-closed (remote)" or "closed" stream.
                 // A receiver MUST NOT treat this as an error (see Section 5.1).
-                ndc_debug!("WINDOW_UPDATE of unknown stream: {}", frame.get_stream_id());
+                debug!("WINDOW_UPDATE of unknown stream: {}", frame.get_stream_id());
                 return Ok(None);
             }
         }
@@ -307,7 +307,7 @@ where
             .unwrap()
             .try_increase_window_size(frame.increment)
         {
-            ndc_info!("failed to increment stream window: {}", frame.stream_id);
+            info!("failed to increment stream window: {}", frame.stream_id);
             self.send_rst_stream(frame.stream_id, ErrorCode::FlowControlError)?;
             return Ok(None);
         }
@@ -336,12 +336,12 @@ where
         // connection, a GOAWAY frame with an error code of FLOW_CONTROL_ERROR
         // is sent.
         if let Err(_) = self.out_window_size.try_increase(frame.increment) {
-            ndc_info!("attempted to increase window size too far");
+            info!("attempted to increase window size too far");
             self.send_flow_control_error()?;
             return Ok(());
         }
 
-        ndc_debug!(
+        debug!(
             "conn out window size change: {} -> {}",
             old_window_size, self.out_window_size
         );
@@ -427,7 +427,7 @@ where
     }
 
     fn process_http_frame(&mut self, frame: HttpFrameDecoded) -> result::Result<()> {
-        ndc_debug!("received frame: {:?}", frame);
+        debug!("received frame: {:?}", frame);
         match HttpFrameClassified::from(frame) {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
             HttpFrameClassified::Stream(f) => self.process_stream_frame(f),

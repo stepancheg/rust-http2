@@ -62,7 +62,7 @@ impl<R: AsyncRead> HttpFramedRead<R> {
         };
 
         if header.payload_len > max_frame_size {
-            ndc_warn!(
+            warn!(
                 "closing conn because peer sent frame with size: {}, max_frame_size: {}",
                 header.payload_len, max_frame_size
             );

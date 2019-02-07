@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate log;
-extern crate env_logger;
+extern crate log_ndc_env_logger;
 
 extern crate regex;
 
@@ -33,6 +33,6 @@ pub const BIND_HOST: &str = "127.0.0.1";
 pub fn init_logger() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        env_logger::init();
+        log_ndc_env_logger::init();
     });
 }

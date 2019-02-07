@@ -65,7 +65,7 @@ pub fn send_frame<W: AsyncWrite + Send + 'static, F: FrameIR>(
     frame: F,
 ) -> impl Future<Item = W, Error = error::Error> {
     let buf = frame.serialize_into_vec();
-    ndc_debug!(
+    debug!(
         "send frame {}",
         RawFrameRef { raw_content: &buf }.frame_type()
     );
@@ -85,7 +85,7 @@ pub fn client_handshake<I: AsyncWrite + AsyncRead + Send + 'static>(
     conn: I,
     settings: SettingsFrame,
 ) -> HttpFuture<I> {
-    ndc_debug!("send PREFACE");
+    debug!("send PREFACE");
     let send_preface = write_all(conn, PREFACE)
         .map(|(conn, _)| conn)
         .map_err(|e| e.into());

@@ -135,7 +135,7 @@ impl HttpStreamAfterHeaders {
                 Err(e) => {
                     let e = any_to_string(e);
                     // TODO: send plain text error if headers weren't sent yet
-                    ndc_warn!("handler panicked: {}", e);
+                    warn!("handler panicked: {}", e);
                     Err(error::Error::HandlerPanicked(e))
                 }
             }

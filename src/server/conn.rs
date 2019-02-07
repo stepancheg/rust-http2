@@ -110,7 +110,7 @@ where
 
         self.last_peer_stream_id = stream_id;
 
-        ndc_debug!("new stream: {}", stream_id);
+        debug!("new stream: {}", stream_id);
 
         let (_, out_window) = self.new_stream_data(
             stream_id,
@@ -158,12 +158,12 @@ where
         match invoke_result {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
-                ndc_warn!("handler returned error: {:?}", e);
+                warn!("handler returned error: {:?}", e);
                 stream.close_outgoing(ErrorCode::InternalError);
             }
             Err(e) => {
                 let e = any_to_string(e);
-                ndc_warn!("handler panicked: {}", e);
+                warn!("handler panicked: {}", e);
                 stream.close_outgoing(ErrorCode::InternalError);
             }
         }
@@ -219,7 +219,7 @@ where
         };
 
         if let Err(e) = headers.validate(RequestOrResponse::Request, headers_place) {
-            ndc_warn!("invalid headers: {:?} {:?}", e, headers);
+            warn!("invalid headers: {:?} {:?}", e, headers);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
@@ -231,7 +231,7 @@ where
         }
 
         if end_stream == EndStream::No {
-            ndc_warn!("more headers without end stream flag");
+            warn!("more headers without end stream flag");
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
@@ -290,7 +290,7 @@ impl ServerConn {
         });
 
         let future = Box::new(run.then(|x| {
-            ndc_info!("connection end: {:?}", x);
+            info!("connection end: {:?}", x);
             x
         }));
 

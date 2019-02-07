@@ -110,7 +110,7 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 
     pub fn close_local(&mut self) {
-        ndc_trace!("close local");
+        trace!("close local");
         self.state = match self.state {
             StreamState::Closed | StreamState::HalfClosedRemote => StreamState::Closed,
             _ => StreamState::HalfClosedLocal,
@@ -118,7 +118,7 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 
     pub fn close_remote(&mut self) {
-        ndc_trace!("close remote");
+        trace!("close remote");
         self.state = match self.state {
             StreamState::Closed | StreamState::HalfClosedLocal => StreamState::Closed,
             _ => StreamState::HalfClosedRemote,
@@ -220,7 +220,7 @@ impl<T: Types> HttpStreamCommon<T> {
         let max_window = cmp::min(self.out_window_size.size(), conn_out_window_size.size());
 
         if data.len() as usize > max_window as usize {
-            ndc_trace!("truncating data of len {} to {}", data.len(), max_window);
+            trace!("truncating data of len {} to {}", data.len(), max_window);
             let size = max_window as usize;
             let rem = data.split_off(size);
             self.outgoing.push_front(DataOrHeaders::Data(rem));

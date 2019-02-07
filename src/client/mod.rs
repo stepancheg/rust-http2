@@ -483,7 +483,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                 if let Err(start) = self.conn.start_request_with_resp_sender(start) {
                     self.init_conn();
                     if let Err(_start) = self.conn.start_request_with_resp_sender(start) {
-                        ndc_warn!("client died and reconnect failed");
+                        warn!("client died and reconnect failed");
                         // TODO: invoke a callback to report about the error
                     }
                 }

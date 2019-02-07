@@ -3,6 +3,7 @@
 //! Based on futures/tokio.
 
 #[macro_use]
+extern crate log;
 extern crate log_ndc;
 
 extern crate futures;

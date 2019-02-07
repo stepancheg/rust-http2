@@ -315,7 +315,7 @@ where
                 };
 
                 if send_connection_error {
-                    ndc_debug!("stream is idle: {}, sending GOAWAY", stream_id);
+                    debug!("stream is idle: {}, sending GOAWAY", stream_id);
                     self.send_goaway(ErrorCode::StreamClosed)?;
                 }
             }
@@ -335,7 +335,7 @@ where
                 };
 
                 if send_rst {
-                    ndc_debug!(
+                    debug!(
                         "stream is half-closed remote: {}, sending RST_STREAM",
                         stream_id
                     );
@@ -373,10 +373,10 @@ where
                 // depending on how stream was closed
                 if send_stream_closed {
                     if self.peer_closed_streams.contains(stream_id) {
-                        ndc_debug!("stream is closed by peer: {}, sending GOAWAY", stream_id);
+                        debug!("stream is closed by peer: {}, sending GOAWAY", stream_id);
                         self.send_goaway(ErrorCode::StreamClosed)?;
                     } else {
-                        ndc_debug!("stream is closed by us: {}, sending RST_STREAM", stream_id);
+                        debug!("stream is closed by us: {}, sending RST_STREAM", stream_id);
                         self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
                     }
                 }
@@ -441,7 +441,7 @@ where
         let read_ready = self.read_process_frame()? != Async::NotReady;
 
         Ok(if write_ready || read_ready {
-            ndc_info!("connection loop complete");
+            info!("connection loop complete");
             Async::Ready(())
         } else {
             Async::NotReady

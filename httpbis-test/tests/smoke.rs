@@ -1,5 +1,4 @@
 extern crate bytes;
-extern crate env_logger;
 extern crate futures;
 extern crate httpbis;
 extern crate log;

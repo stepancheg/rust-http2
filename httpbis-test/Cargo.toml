@@ -12,7 +12,7 @@ Moved into separate crate so tests could have a library to use (this library)
 [dependencies]
 
 log                = "0.4"
-env_logger         = "0.5"
+log-ndc-env-logger = "0.2.*"
 
 bytes              = "0.4"
 futures            = "~0.1"

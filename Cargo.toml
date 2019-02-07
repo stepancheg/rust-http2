@@ -13,7 +13,7 @@ bench = false
 [dependencies]
 
 log             = "0.4"
-log-ndc         = "0.1.*"
+log-ndc         = "0.2.*"
 futures         = "0.1.*"
 futures-cpupool = "0.1.*"
 tokio-core      = "0.1.*"

@@ -296,7 +296,7 @@ mod tests {
 
         let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
-        ndc_debug!("{:?}", result);
+        debug!("{:?}", result);
         assert!(is_decodable(&result, &headers));
     }
 
@@ -313,7 +313,7 @@ mod tests {
         assert_eq!(encoder.header_table.dynamic_table.to_vec_of_vec(), headers);
         // ...but also indicated as such in the output.
         assert!(0x40 == (0x40 & result[0]));
-        ndc_debug!("{:?}", result);
+        debug!("{:?}", result);
     }
 
     /// Tests that when a header gets added to the dynamic table, the encoder

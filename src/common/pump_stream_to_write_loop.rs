@@ -38,11 +38,11 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
                 Ok(Async::Ready(())) => {}
                 Err(window_size::StreamDead::Conn) => {
-                    ndc_warn!("conn dead");
+                    warn!("conn dead");
                     return Ok(Async::Ready(()));
                 }
                 Err(window_size::StreamDead::Stream) => {
-                    ndc_warn!("stream {} dead", self.stream_id);
+                    warn!("stream {} dead", self.stream_id);
                     return Ok(Async::Ready(()));
                 }
             }
@@ -51,7 +51,7 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
                 Ok(poll) => poll,
                 Err(e) => {
                     let e = any_to_string(e);
-                    ndc_warn!("stream panicked: {}", e);
+                    warn!("stream panicked: {}", e);
                     let rst =
                         CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::InternalError);
                     drop(self.to_write_tx.unbounded_send(rst.into()));
@@ -63,11 +63,11 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
                 Ok(Async::Ready(r)) => r,
                 Err(e) => {
-                    ndc_warn!("stream error: {:?}", e);
+                    warn!("stream error: {:?}", e);
                     let stream_end =
                         CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::InternalError);
                     if let Err(e) = self.to_write_tx.unbounded_send(stream_end.into()) {
-                        ndc_warn!(
+                        warn!(
                             "failed to write to channel, probably connection is closed: {:?}",
                             e
                         );
@@ -84,7 +84,7 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
 
                     let msg = CommonToWriteMessage::StreamEnqueue(self.stream_id, part.into());
                     if let Err(e) = self.to_write_tx.unbounded_send(msg.into()) {
-                        ndc_warn!(
+                        warn!(
                             "failed to write to channel, probably connection is closed: {:?}",
                             e
                         );
@@ -96,7 +96,7 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
                 None => {
                     let msg = CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::NoError);
                     if let Err(e) = self.to_write_tx.unbounded_send(msg.into()) {
-                        ndc_warn!(
+                        warn!(
                             "failed to write to channel, probably connection is closed: {:?}",
                             e
                         );
