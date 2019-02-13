@@ -169,6 +169,7 @@ where
 
             let req = ClientRequest {
                 common: CommonSender::new(stream_id, write_tx, out_window, true),
+                drop_callback: None,
             };
 
             match stream_handler.request_created(req, increase_in_window) {

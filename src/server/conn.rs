@@ -131,6 +131,7 @@ where
 
         let sender = ServerResponse {
             common: CommonSender::new(stream_id, self.to_write_tx.clone(), out_window, false),
+            drop_callback: None,
         };
 
         let context = ServerHandlerContext {
@@ -159,12 +160,12 @@ where
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
                 warn!("handler returned error: {:?}", e);
-                stream.close_outgoing(ErrorCode::InternalError);
+                // Not closing stream because sender object
+                // is now responsible for sending `RST_STREAM` on error.
             }
             Err(e) => {
                 let e = any_to_string(e);
                 warn!("handler panicked: {}", e);
-                stream.close_outgoing(ErrorCode::InternalError);
             }
         }
 

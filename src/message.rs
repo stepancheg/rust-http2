@@ -50,6 +50,13 @@ impl SimpleHttpMessage {
         }
     }
 
+    pub fn internal_error_500(message: &str) -> SimpleHttpMessage {
+        SimpleHttpMessage {
+            headers: Headers::internal_error_500(),
+            body: Bytes::from(message),
+        }
+    }
+
     pub fn found_200_plain_text(body: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::ok_200(),

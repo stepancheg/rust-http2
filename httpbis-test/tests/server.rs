@@ -80,6 +80,34 @@ fn simple_new() {
     assert_eq!(0, server.dump_state().streams.len());
 }
 
+
+#[test]
+fn custom_drop_callback() {
+    init_logger();
+
+    let server = ServerOneConn::new_fn(0, |_, _req, mut resp| {
+        resp.set_drop_callback(|resp| {
+            Ok(resp.send_internal_error_500("test test")?)
+        });
+        Err(httpbis::Error::Other("my"))
+    });
+
+    let mut tester = HttpConnTester::connect(server.port());
+    tester.send_preface();
+    tester.settings_xchg();
+
+    let mut headers = Headers::new();
+    headers.add(":method", "GET");
+    headers.add(":path", "/aabb");
+    headers.add(":scheme", "http");
+    tester.send_headers(1, headers, false);
+
+    tester.send_data(1, b"abcd", true);
+
+    let recv_headers = tester.recv_frame_headers_check(1, false);
+    assert_eq!("500", recv_headers.get(":status"));
+}
+
 #[test]
 fn panic_in_handler() {
     init_logger();

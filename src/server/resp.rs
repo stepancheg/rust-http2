@@ -11,14 +11,48 @@ use HttpStreamAfterHeaders;
 use SenderState;
 use SimpleHttpMessage;
 use StreamDead;
+use std::mem;
+use result;
+use assert_types::assert_send;
 
+
+// NOTE: Keep in sync with ClientRequest
 pub struct ServerResponse {
     pub(crate) common: CommonSender<ServerTypes>,
+    // need to replace with FnOnce when rust allows it
+    pub(crate) drop_callback: Option<Box<FnMut(&mut ServerResponse) -> result::Result<()> + Send>>,
+}
+
+impl Drop for ServerResponse {
+    fn drop(&mut self) {
+        if self.state() != SenderState::Done {
+            warn!("sender was not properly finished, state: {:?}, invoking custom callback", self.state());
+            if let Some(mut drop_callback) = mem::replace(&mut self.drop_callback, None) {
+                if let Err(e) = drop_callback(self) {
+                    warn!("custom callback resulted in error: {:?}", e);
+                }
+            }
+        }
+    }
+}
+
+fn _assert_types() {
+    assert_send::<ServerResponse>();
 }
 
 impl ServerResponse {
     pub fn state(&self) -> SenderState {
         self.common.state()
+    }
+
+    pub fn set_drop_callback<F>(&mut self, f: F)
+        where F: FnMut(&mut ServerResponse) -> result::Result<()> + Send + 'static
+    {
+        self.drop_callback = Some(Box::new(f));
+    }
+
+    pub fn clear_drop_callback(&mut self) {
+        mem::replace(&mut self.drop_callback, None);
     }
 
     pub fn poll(&mut self) -> Poll<(), StreamDead> {
@@ -72,6 +106,10 @@ impl ServerResponse {
 
     pub fn send_not_found_404(&mut self, message: &str) -> Result<(), SendError> {
         self.send_message(SimpleHttpMessage::not_found_404(message))
+    }
+
+    pub fn send_internal_error_500(&mut self, message: &str) -> Result<(), SendError> {
+        self.send_message(SimpleHttpMessage::internal_error_500(message))
     }
 
     pub fn reset(&mut self, error_code: ErrorCode) -> Result<(), SendError> {
