@@ -264,7 +264,7 @@ fn spawn_server_event_loop<S, A>(
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
     service: S,
-    _alive_tx: mpsc::Sender<()>)
+    alive_tx: mpsc::Sender<()>)
         -> oneshot::Receiver<()>
     where S : Service, A : TlsAcceptor,
 {
@@ -272,10 +272,11 @@ fn spawn_server_event_loop<S, A>(
 
     let tokio_listener = listen.to_tokio_listener(&handle);
 
-    let stuff = stream::repeat((handle.clone(), service, state, tls, conf));
+    // pass alive_tx to the main event loop because otherwise rustc optimize it away
+    let stuff = stream::repeat((handle.clone(), service, state, tls, conf, alive_tx));
 
     let loop_run = tokio_listener.incoming().map_err(Error::from).zip(stuff)
-        .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf))| {
+        .for_each(move |((socket, peer_addr), (loop_handle, service, state, tls, conf, _))| {
 
             if socket.is_tcp() {
                 info!("accepted connection from {}",
