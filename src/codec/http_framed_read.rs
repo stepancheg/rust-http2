@@ -15,6 +15,7 @@ use solicit::frame::FRAME_HEADER_LEN;
 use solicit::stream_id::StreamId;
 use tokio_io::AsyncRead;
 use ErrorCode;
+use solicit::frame::HttpFrameType;
 
 /// Buffered read for reading HTTP/2 frames.
 pub struct HttpFramedRead<R: AsyncRead> {
@@ -37,7 +38,7 @@ impl<R: AsyncRead> HttpFramedRead<R> {
             Async::NotReady => return Ok(Async::NotReady),
         };
         if n == 0 {
-            return Err(error::Error::Other("EOF from stream"));
+            return Err(error::Error::EofFromStream);
         }
         Ok(Async::Ready(()))
     }
@@ -154,9 +155,7 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::Other(
-                            "expecting CONTINUATION frame, got HEADERS",
-                        ));
+                        return Err(error::Error::ExpectingContinuationGot(HttpFrameType::Headers));
                     } else {
                         if h.flags.is_set(HeadersFlag::EndHeaders) {
                             return Ok(Async::Ready(HttpFrame::Headers(h)));
@@ -168,9 +167,7 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
                 }
                 HttpFrame::PushPromise(p) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::Other(
-                            "expecting CONTINUATION frame, got PUSH_PROMISE",
-                        ));
+                        return Err(error::Error::ExpectingContinuationGot(HttpFrameType::PushPromise));
                     } else {
                         if p.flags.is_set(PushPromiseFlag::EndHeaders) {
                             return Ok(Async::Ready(HttpFrame::PushPromise(p)));
@@ -183,9 +180,8 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
                 HttpFrame::Continuation(c) => {
                     if let Some(mut h) = self.header_opt.take() {
                         if h.get_stream_id() != c.stream_id {
-                            return Err(error::Error::Other(
-                                "CONTINUATION frame with different stream id",
-                            ));
+                            return Err(error::Error::ExpectingContinuationGotDifferentStreamId(
+                                h.get_stream_id(), c.stream_id));
                         } else {
                             let header_end = c.is_headers_end();
                             h.extend_header_fragment(c.header_fragment);
@@ -198,12 +194,12 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
                             }
                         }
                     } else {
-                        return Err(error::Error::Other("CONTINUATION frame without headers"));
+                        return Err(error::Error::ContinuationFrameWithoutHeaders);
                     }
                 }
                 f => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::Other("expecting CONTINUATION frame"));
+                        return Err(error::Error::ExpectingContinuationGot(f.frame_type()));
                     } else {
                         return Ok(Async::Ready(f));
                     }

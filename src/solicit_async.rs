@@ -38,7 +38,7 @@ pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFr
     read.read_exact(&mut header_buf)?;
     let header = unpack_header(&header_buf);
     if header.payload_len > max_frame_size {
-        return Err(error::Error::Other("too large"));
+        return Err(error::Error::PayloadTooLarge(header.payload_len, max_frame_size));
     }
     let total_length = FRAME_HEADER_LEN + header.payload_len as usize;
     let mut raw_frame = Vec::with_capacity(total_length);
@@ -166,15 +166,15 @@ where
                 if c == b'\n' {
                     if looks_like_http_1(&self.collected) {
                         let w = write_all(self.conn.take().unwrap(), HTTP_1_500_RESPONSE);
-                        let write = w.map_err(Error::from);
+                        let write = w.map_err(error::Error::from);
                         let write =
-                            write.then(|_| Err(Error::Other("request is made using HTTP/1")));
+                            write.then(|_| Err(error::Error::RequestIsMadeUsingHttp1));
                         return Ok(Async::Ready(Box::new(write)));
                     }
                 }
 
                 if self.collected.len() == PREFACE.len() {
-                    return Err(Error::InvalidFrame(format!(
+                    return Err(error::Error::InvalidFrame(format!(
                         "wrong preface, likely TLS: {:?}",
                         BsDebug(&self.collected)
                     )));

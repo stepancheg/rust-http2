@@ -37,7 +37,7 @@ impl<T: Types> StreamQueueSyncSender<T> {
     fn send(&self, item: Result<DataOrHeadersWithFlag, error::Error>) -> result::Result<()> {
         if let Err(_send_error) = self.sender.unbounded_send(item) {
             // TODO: better error
-            Err(error::Error::Other("pull stream died"))
+            Err(error::Error::PullStreamDied)
         } else {
             Ok(())
         }
@@ -115,7 +115,7 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
                 // should be impossible, because
                 // callbacks are notified of client death in
                 // `HttpStreamCommon::conn_died`
-                return Err(error::Error::Other("internal error: unexpected EOF"));
+                return Err(error::Error::InternalError("internal error: unexpected EOF".to_owned()));
             }
             Ok(Async::Ready(Some(Err(e)))) => {
                 self.eof_received = true;

@@ -418,7 +418,7 @@ impl ClientInterface for ClientConn {
         };
 
         if let Err(_) = self.start_request_with_resp_sender(start) {
-            return Err(error::Error::Other("client died"));
+            return Err(error::Error::ClientDied(None));
         }
 
         Ok(())

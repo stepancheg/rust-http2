@@ -84,10 +84,10 @@ impl<C: TlsConnector> ClientBuilder<C> {
         // TODO: sync
         let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
         if addrs.is_empty() {
-            return Err(Error::Other("addr is resolved to empty list"));
+            return Err(Error::AddrResolvedToEmptyList);
         } else if addrs.len() > 1 {
             // TODO: allow multiple addresses
-            return Err(Error::Other("addr is resolved to more than one addr"));
+            return Err(Error::AddrResolvedToMoreThanOneAddr);
         }
         self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())
@@ -382,7 +382,7 @@ impl Client {
             self.controller_tx
                 .unbounded_send(ControllerCommand::_DumpState(tx)),
         );
-        Box::new(rx.map_err(|_| error::Error::Other("conn died")))
+        Box::new(rx.map_err(|_| error::Error::ConnDied))
     }
 
     /// Create a future which waits for successful connection.
@@ -395,7 +395,7 @@ impl Client {
         );
         // TODO: return client death reason
         Box::new(
-            rx.map_err(|_| error::Error::Other("conn died"))
+            rx.map_err(|_| error::Error::ConnDied)
                 .and_then(|r| r),
         )
     }
@@ -434,8 +434,8 @@ impl ClientInterface for Client {
             .controller_tx
             .unbounded_send(ControllerCommand::StartRequest(start))
         {
-            // TODO: named error
-            return Err(error::Error::Other("client controller died"));
+            // TODO: cause
+            return Err(error::Error::ClientControllerDied);
         }
 
         Ok(())
@@ -492,7 +492,8 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                 if let Err(tx) = self.conn.wait_for_connect_with_resp_sender(tx) {
                     self.init_conn();
                     if let Err(tx) = self.conn.wait_for_connect_with_resp_sender(tx) {
-                        let err = error::Error::Other("client died and reconnect failed");
+                        // TODO: reason
+                        let err = error::Error::ClientDiedAndReconnectFailed;
                         // ignore error
                         drop(tx.send(Err(err)));
                     }
@@ -506,7 +507,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
     }
 
     fn run(self, rx: UnboundedReceiver<ControllerCommand>) -> HttpFuture<()> {
-        let rx = rx.map_err(|_| error::Error::Other("channel died"));
+        let rx = rx.map_err(|_| error::Error::ChannelDied);
         let r = rx.fold(self, |state, cmd| Ok::<_, error::Error>(state.iter(cmd)));
         let r = r.map(|_| ());
         Box::new(r)

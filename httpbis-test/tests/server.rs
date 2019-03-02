@@ -89,7 +89,7 @@ fn custom_drop_callback() {
         resp.set_drop_callback(|resp| {
             Ok(resp.send_internal_error_500("test test")?)
         });
-        Err(httpbis::Error::Other("my"))
+        Err(httpbis::Error::User("my".to_owned()))
     });
 
     let mut tester = HttpConnTester::connect(server.port());

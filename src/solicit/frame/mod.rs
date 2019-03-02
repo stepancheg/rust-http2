@@ -613,6 +613,24 @@ pub enum HttpFrameType {
     Unknown(u8),
 }
 
+impl fmt::Display for HttpFrameType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HttpFrameType::Data => write!(f, "DATA"),
+            HttpFrameType::Headers => write!(f, "HEADERS"),
+            HttpFrameType::Priority => write!(f, "PRIORITY"),
+            HttpFrameType::RstStream => write!(f, "RST_STREAM"),
+            HttpFrameType::Settings => write!(f, "SETTINGS"),
+            HttpFrameType::PushPromise => write!(f, "PUSH_PROMISE"),
+            HttpFrameType::Ping => write!(f, "PING"),
+            HttpFrameType::Goaway => write!(f, "GOAWAY"),
+            HttpFrameType::WindowUpdate => write!(f, "WINDOW_UPDATE"),
+            HttpFrameType::Continuation => write!(f, "CONTINUATION"),
+            HttpFrameType::Unknown(u) => write!(f, "UNKNOWN({})", u),
+        }
+    }
+}
+
 impl HttpFrameType {
     pub fn frame_type(&self) -> u8 {
         match self {

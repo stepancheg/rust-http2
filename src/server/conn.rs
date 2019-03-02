@@ -97,15 +97,11 @@ where
         end_stream: EndStream,
     ) -> result::Result<HttpStreamRef<ServerTypes>> {
         if ServerTypes::init_where(stream_id) == InitWhere::Locally {
-            return Err(error::Error::Other(
-                "initiated stream with server id from client",
-            ));
+            return Err(error::Error::InitiatedStreamWithServerIdFromClient(stream_id));
         }
 
         if stream_id <= self.last_peer_stream_id {
-            return Err(error::Error::Other(
-                "stream id is le than already existing stream id",
-            ));
+            return Err(error::Error::StreamIdLeExistingStream(stream_id, self.last_peer_stream_id));
         }
 
         self.last_peer_stream_id = stream_id;
@@ -377,12 +373,10 @@ impl ServerConn {
         if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(
             CommonToWriteMessage::DumpState(tx),
         )) {
-            return Box::new(future::err(error::Error::Other(
-                "failed to send req to dump state",
-            )));
+            return Box::new(future::err(error::Error::FailedToSendReqToDumpState));
         }
 
-        let rx = rx.map_err(|_| error::Error::Other("oneshot canceled"));
+        let rx = rx.map_err(|_| error::Error::OneshotCancelled);
 
         Box::new(rx)
     }

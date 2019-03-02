@@ -73,7 +73,7 @@ where
             if self.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                 let increment = DEFAULT_SETTINGS.initial_window_size;
                 self.in_window_size.try_increase(increment)
-                    .map_err(|()| error::Error::Other("failed to increase window size"))?;
+                    .map_err(|()| error::Error::ConnInWindowOverflow(self.in_window_size.size(), increment))?;
 
                 Some(increment)
             } else {
@@ -145,7 +145,7 @@ where
                 if opaque_data == frame.opaque_data {
                     Ok(())
                 } else {
-                    Err(error::Error::Other("PING ACK opaque data mismatch"))
+                    Err(error::Error::PingAckOpaqueDataMismatch(opaque_data, frame.opaque_data))
                 }
             } else {
                 warn!("PING ACK without PING");
@@ -160,7 +160,7 @@ where
 
     fn process_goaway(&mut self, frame: GoawayFrame) -> result::Result<()> {
         if let Some(..) = self.goaway_received {
-            return Err(error::Error::Other("GOAWAY after GOAWAY"));
+            return Err(error::Error::GoawayAfterGoaway);
         }
 
         let last_stream_id = frame.last_stream_id;
@@ -204,7 +204,7 @@ where
             self.our_settings_ack = settings;
             Ok(())
         } else {
-            Err(error::Error::Other("SETTINGS ack without settings sent"))
+            Err(error::Error::SettingsAckWithoutSettingsSent)
         }
     }
 
@@ -459,7 +459,7 @@ where
     pub fn read_process_frame(&mut self) -> Poll<(), error::Error> {
         loop {
             if self.end_loop() {
-                return Err(error::Error::Other("GOAWAY"));
+                return Err(error::Error::Goaway);
             }
 
             match self.recv_http_frame()? {
