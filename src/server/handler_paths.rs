@@ -57,8 +57,8 @@ impl Node {
     }
 }
 
-fn split_path<'a>(mut path: &'a str) -> Option<(&'a str, &'a str)> {
-    path = path.trim_left_matches('/');
+fn split_path(mut path: &str) -> Option<(&str, &str)> {
+    path = path.trim_start_matches('/');
 
     if path.is_empty() {
         None
