@@ -9,13 +9,13 @@ use solicit::frame::push_promise::PushPromiseFlag;
 use solicit::frame::unpack_header_from_slice;
 use solicit::frame::HeadersFrame;
 use solicit::frame::HttpFrame;
+use solicit::frame::HttpFrameType;
 use solicit::frame::PushPromiseFrame;
 use solicit::frame::RawFrame;
 use solicit::frame::FRAME_HEADER_LEN;
 use solicit::stream_id::StreamId;
 use tokio_io::AsyncRead;
 use ErrorCode;
-use solicit::frame::HttpFrameType;
 
 /// Buffered read for reading HTTP/2 frames.
 pub struct HttpFramedRead<R: AsyncRead> {
@@ -155,7 +155,9 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::ExpectingContinuationGot(HttpFrameType::Headers));
+                        return Err(error::Error::ExpectingContinuationGot(
+                            HttpFrameType::Headers,
+                        ));
                     } else {
                         if h.flags.is_set(HeadersFlag::EndHeaders) {
                             return Ok(Async::Ready(HttpFrame::Headers(h)));
@@ -167,7 +169,9 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
                 }
                 HttpFrame::PushPromise(p) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::ExpectingContinuationGot(HttpFrameType::PushPromise));
+                        return Err(error::Error::ExpectingContinuationGot(
+                            HttpFrameType::PushPromise,
+                        ));
                     } else {
                         if p.flags.is_set(PushPromiseFlag::EndHeaders) {
                             return Ok(Async::Ready(HttpFrame::PushPromise(p)));
@@ -181,7 +185,9 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
                     if let Some(mut h) = self.header_opt.take() {
                         if h.get_stream_id() != c.stream_id {
                             return Err(error::Error::ExpectingContinuationGotDifferentStreamId(
-                                h.get_stream_id(), c.stream_id));
+                                h.get_stream_id(),
+                                c.stream_id,
+                            ));
                         } else {
                             let header_end = c.is_headers_end();
                             h.extend_header_fragment(c.header_fragment);

@@ -234,7 +234,8 @@ where
                 stream_id,
                 out_window,
                 stream,
-            }.map_err(|v| match v {}),
+            }
+            .map_err(|v| match v {}),
         );
         Ok(())
     }

@@ -1,8 +1,8 @@
 use std::error::Error as std_Error;
 use std::fmt;
 use std::io;
-use std::sync::Arc;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use assert_types::*;
 
@@ -14,10 +14,10 @@ use tokio_timer::TimeoutError;
 
 use common::sender::SendError;
 use solicit::error_code::ErrorCode;
+use solicit::frame::HttpFrameType;
 use solicit::frame::ParseFrameError;
 use void::Void;
 use StreamDead;
-use solicit::frame::HttpFrameType;
 use StreamId;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
@@ -144,11 +144,17 @@ impl fmt::Display for Error {
             Error::TlsError(_) => write!(f, "Encountered TLS error"),
             Error::CodeError(_) => write!(f, "Encountered HTTP named error"),
             Error::RstStreamReceived(_) => write!(f, "Received RST_STREAM from peer"),
-            Error::InvalidFrame(..) => write!(f, "Encountered an invalid or unexpected HTTP/2 frame"),
+            Error::InvalidFrame(..) => {
+                write!(f, "Encountered an invalid or unexpected HTTP/2 frame")
+            }
             Error::CompressionError(_) => write!(f, "Encountered an error with HPACK compression"),
             Error::WindowSizeOverflow => write!(f, "The connection flow control window overflowed"),
-            Error::UnknownStreamId => write!(f, "Attempted an operation with an unknown HTTP/2 stream ID"),
-            Error::UnableToConnect => write!(f, "An error attempting to establish an HTTP/2 connection"),
+            Error::UnknownStreamId => {
+                write!(f, "Attempted an operation with an unknown HTTP/2 stream ID")
+            }
+            Error::UnableToConnect => {
+                write!(f, "An error attempting to establish an HTTP/2 connection")
+            }
             Error::MalformedResponse => write!(f, "The received response was malformed"),
             Error::ConnectionTimeout => write!(f, "Connection time out"),
             Error::Shutdown => write!(f, "Local shutdown"),
@@ -165,24 +171,55 @@ impl fmt::Display for Error {
             Error::StdError(e) => write!(f, "{}", e),
             Error::User(e) => write!(f, "User error: {}", e),
             Error::AddrResolvedToEmptyList => write!(f, "Address resolved to empty list"),
-            Error::AddrResolvedToMoreThanOneAddr => write!(f, "Address resolved to more than one address"),
+            Error::AddrResolvedToMoreThanOneAddr => {
+                write!(f, "Address resolved to more than one address")
+            }
             Error::ClientDiedAndReconnectFailed => write!(f, "Client died and reconnect failed"),
             Error::ClientControllerDied => write!(f, "Client controller died"),
             Error::ChannelDied => write!(f, "Channel died"),
             Error::ConnDied => write!(f, "Conn died"),
             Error::EofFromStream => write!(f, "EOF from stream"),
-            Error::ExpectingContinuationGot(t) => write!(f, "Expecting {} got {}", HttpFrameType::Continuation, t),
-            Error::ExpectingContinuationGotDifferentStreamId(_, _) => write!(f, "Expecting {} got different stream id", HttpFrameType::Continuation),
-            Error::ContinuationFrameWithoutHeaders => write!(f, "{} frame without {}", HttpFrameType::Continuation, HttpFrameType::Headers),
-            Error::InitiatedStreamWithServerIdFromClient(stream_id) => write!(f, "Initiated stream with server id from client: {}", stream_id),
+            Error::ExpectingContinuationGot(t) => {
+                write!(f, "Expecting {} got {}", HttpFrameType::Continuation, t)
+            }
+            Error::ExpectingContinuationGotDifferentStreamId(_, _) => write!(
+                f,
+                "Expecting {} got different stream id",
+                HttpFrameType::Continuation
+            ),
+            Error::ContinuationFrameWithoutHeaders => write!(
+                f,
+                "{} frame without {}",
+                HttpFrameType::Continuation,
+                HttpFrameType::Headers
+            ),
+            Error::InitiatedStreamWithServerIdFromClient(stream_id) => write!(
+                f,
+                "Initiated stream with server id from client: {}",
+                stream_id
+            ),
             Error::StreamIdLeExistingStream(_, _) => write!(f, "Stream id <= existing stream"),
             Error::FailedToSendReqToDumpState => write!(f, "Failed to send request to dump state"),
             Error::OneshotCancelled => write!(f, "Oneshot cancelled"),
-            Error::StreamInWindowOverflow(stream_id, _, _) => write!(f, "Stream {} in windows overflow", stream_id),
+            Error::StreamInWindowOverflow(stream_id, _, _) => {
+                write!(f, "Stream {} in windows overflow", stream_id)
+            }
             Error::ConnInWindowOverflow(_, _) => write!(f, "Conn in windows overflow"),
-            Error::PingAckOpaqueDataMismatch(_, _) => write!(f, "{} ack opaque data mismatch", HttpFrameType::Ping),
-            Error::GoawayAfterGoaway => write!(f, "{} after {}", HttpFrameType::Goaway, HttpFrameType::Goaway),
-            Error::SettingsAckWithoutSettingsSent => write!(f, "{} ack without {} sent", HttpFrameType::Settings, HttpFrameType::Settings),
+            Error::PingAckOpaqueDataMismatch(_, _) => {
+                write!(f, "{} ack opaque data mismatch", HttpFrameType::Ping)
+            }
+            Error::GoawayAfterGoaway => write!(
+                f,
+                "{} after {}",
+                HttpFrameType::Goaway,
+                HttpFrameType::Goaway
+            ),
+            Error::SettingsAckWithoutSettingsSent => write!(
+                f,
+                "{} ack without {} sent",
+                HttpFrameType::Settings,
+                HttpFrameType::Settings
+            ),
             Error::Goaway => write!(f, "{}", HttpFrameType::Goaway),
             Error::GoawayReceived => write!(f, "{} received", HttpFrameType::Goaway),
             Error::PullStreamDied => write!(f, "Pull stream died"),

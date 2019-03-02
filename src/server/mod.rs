@@ -188,7 +188,8 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                         .clone()
                         .unwrap_or_else(|| "http2-server-loop".to_owned())
                         .to_string(),
-                ).spawn(move || {
+                )
+                .spawn(move || {
                     let mut lp = reactor::Core::new().expect("http2server");
                     let done_rx = spawn_server_event_loop(
                         lp.handle(),
@@ -325,7 +326,8 @@ where
                             let removed = g.conns.remove(&conn_id);
                             assert!(removed.is_some());
                             r
-                        }).map_err(|e| {
+                        })
+                        .map_err(|e| {
                             warn!("connection end: {:?}", e);
                             ()
                         })

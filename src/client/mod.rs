@@ -191,7 +191,8 @@ impl<C: TlsConnector> ClientBuilder<C> {
                     );
 
                     lp.run(done_rx).expect("run");
-                }).expect("spawn");
+                })
+                .expect("spawn");
             Completion::Thread(join_handle)
         };
 
@@ -394,10 +395,7 @@ impl Client {
                 .unbounded_send(ControllerCommand::WaitForConnect(tx)),
         );
         // TODO: return client death reason
-        Box::new(
-            rx.map_err(|_| error::Error::ConnDied)
-                .and_then(|r| r),
-        )
+        Box::new(rx.map_err(|_| error::Error::ConnDied).and_then(|r| r))
     }
 }
 

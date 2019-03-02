@@ -107,7 +107,8 @@ impl Response {
                         stream::once(Ok(DataOrHeadersWithFlag::intermediate_headers(headers)));
                     let rem = rem.into_flag_stream();
                     header.chain(rem)
-                }).flatten_stream(),
+                })
+                .flatten_stream(),
         )
     }
 

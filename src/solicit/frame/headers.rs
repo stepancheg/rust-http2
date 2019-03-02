@@ -418,7 +418,8 @@ impl HeadersFrameType {
                 match last {
                     true => header_flags.with(HeadersFlag::EndHeaders),
                     false => header_flags,
-                }.0
+                }
+                .0
             }
             HeadersFrameType::Continuation => match last {
                 true => ContinuationFlag::EndHeaders.bitmask(),
@@ -867,7 +868,8 @@ mod tests {
             padding_len: 0,
             encoder: &mut encoder,
             max_frame_size,
-        }.serialize_into_vec();
+        }
+        .serialize_into_vec();
 
         let frames = unpack_frames_for_test(&serialized);
         assert!(frames.len() > 2);

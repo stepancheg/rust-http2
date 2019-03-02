@@ -581,7 +581,8 @@ mod tests {
                     frame_type: 4,
                     flags: 0,
                     stream_id: 0,
-                }).to_vec()
+                })
+                .to_vec()
                 .into_iter(),
             );
             res.extend(
@@ -614,7 +615,8 @@ mod tests {
                     frame_type: 4,
                     flags: 0,
                     stream_id: 0,
-                }).to_vec()
+                })
+                .to_vec()
                 .into_iter(),
             );
             res.extend(
@@ -648,7 +650,8 @@ mod tests {
             frame_type: 4,
             flags: 1,
             stream_id: 0,
-        }).to_vec();
+        })
+        .to_vec();
 
         let serialized = frame.serialize_into_vec();
 

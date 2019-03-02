@@ -239,7 +239,8 @@ mod tests {
         let expected: Vec<u8> = raw_frame_from_parts(
             FrameHeader::new(11, 0x7, 0, 0),
             vec![0, 0, 0, 0, 0, 0, 0, 1, b'H', b'i', b'!'],
-        ).as_ref()
+        )
+        .as_ref()
         .to_owned();
         let raw = frame.serialize_into_vec();
 

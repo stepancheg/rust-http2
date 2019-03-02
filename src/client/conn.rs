@@ -339,7 +339,8 @@ impl ClientConn {
             .map(move |c| {
                 info!("connected to {}", addr);
                 c
-            }).map_err(|e| e.into());
+            })
+            .map_err(|e| e.into());
 
         let tls_conn = connect.and_then(move |conn| {
             tokio_tls_api::connect_async(&*connector, &domain, conn)

@@ -64,7 +64,8 @@ fn request() {
         "127.0.0.1",
         server.local_addr().port().unwrap(),
         Default::default(),
-    ).expect("client");
+    )
+    .expect("client");
 
     forever(|| {
         let (header, body) = client
@@ -106,7 +107,8 @@ fn ping_pong() {
         "127.0.0.1",
         server.local_addr().port().unwrap(),
         Default::default(),
-    ).expect("client");
+    )
+    .expect("client");
 
     let (mut sender, response) = client
         .start_post_sink("/any", "localhost")

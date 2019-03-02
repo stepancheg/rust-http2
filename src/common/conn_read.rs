@@ -145,7 +145,10 @@ where
                 if opaque_data == frame.opaque_data {
                     Ok(())
                 } else {
-                    Err(error::Error::PingAckOpaqueDataMismatch(opaque_data, frame.opaque_data))
+                    Err(error::Error::PingAckOpaqueDataMismatch(
+                        opaque_data,
+                        frame.opaque_data,
+                    ))
                 }
             } else {
                 warn!("PING ACK without PING");

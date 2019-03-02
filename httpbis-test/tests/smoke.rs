@@ -161,7 +161,8 @@ fn seq_slow() {
         BIND_HOST,
         server.local_addr().port().unwrap(),
         Default::default(),
-    ).expect("client");
+    )
+    .expect("client");
 
     let (headers, resp) = client
         .start_get("/gfgfg", "localhost")

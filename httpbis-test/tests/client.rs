@@ -325,7 +325,8 @@ pub fn sink_poll() {
     let mut sender = executor::spawn(future::lazy(move || {
         assert_eq!(Ok(Async::NotReady), sender.poll());
         future::ok::<_, ()>(sender)
-    })).wait_future()
+    }))
+    .wait_future()
     .unwrap();
 
     server_tester.send_window_update_conn(3);

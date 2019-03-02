@@ -1,3 +1,4 @@
+use assert_types::assert_send;
 use bytes::Bytes;
 use client::types::ClientTypes;
 use common::sender::CommonSender;
@@ -6,14 +7,12 @@ use common::window_size::StreamDead;
 use error;
 use futures::Poll;
 use futures::Stream;
+use result;
+use std::mem;
 use ErrorCode;
 use Headers;
 use HttpStreamAfterHeaders;
 use SenderState;
-use result;
-use std::mem;
-use assert_types::assert_send;
-
 
 /// Reference to outgoing stream on the client side.
 // NOTE: keep in sync with ServerResponse
@@ -26,7 +25,10 @@ pub struct ClientRequest {
 impl Drop for ClientRequest {
     fn drop(&mut self) {
         if self.state() != SenderState::Done {
-            warn!("sender was not properly finished, state: {:?}, invoking custom callback", self.state());
+            warn!(
+                "sender was not properly finished, state: {:?}, invoking custom callback",
+                self.state()
+            );
             if let Some(mut drop_callback) = mem::replace(&mut self.drop_callback, None) {
                 if let Err(e) = drop_callback(self) {
                     warn!("custom callback resulted in error: {:?}", e);
@@ -46,7 +48,8 @@ impl ClientRequest {
     }
 
     pub fn set_drop_callback<F>(&mut self, f: F)
-        where F: FnMut(&mut ClientRequest) -> result::Result<()> + Send + 'static
+    where
+        F: FnMut(&mut ClientRequest) -> result::Result<()> + Send + 'static,
     {
         self.drop_callback = Some(Box::new(f));
     }

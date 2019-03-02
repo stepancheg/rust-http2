@@ -80,15 +80,12 @@ fn simple_new() {
     assert_eq!(0, server.dump_state().streams.len());
 }
 
-
 #[test]
 fn custom_drop_callback() {
     init_logger();
 
     let server = ServerOneConn::new_fn(0, |_, _req, mut resp| {
-        resp.set_drop_callback(|resp| {
-            Ok(resp.send_internal_error_500("test test")?)
-        });
+        resp.set_drop_callback(|resp| Ok(resp.send_internal_error_500("test test")?));
         Err(httpbis::Error::User("my".to_owned()))
     });
 
@@ -554,7 +551,8 @@ fn external_event_loop() {
                 .iter()
                 .map(|s| s.local_addr().port().unwrap())
                 .collect::<Vec<_>>(),
-        ).expect("send");
+        )
+        .expect("send");
 
         core.run(shutdown_rx).expect("run");
     });
@@ -593,7 +591,8 @@ fn example_cpu_pool() {
                         warn!("failed to send response: {:?}", e);
                     }
                     Ok::<_, ()>(())
-                }).forget();
+                })
+                .forget();
             Ok(())
         });
     server.set_port(0);
@@ -603,7 +602,8 @@ fn example_cpu_pool() {
         "127.0.0.1",
         server.local_addr().port().unwrap(),
         Default::default(),
-    ).expect("client");
+    )
+    .expect("client");
 
     let response = client
         .start_get("/foo", "localhost")

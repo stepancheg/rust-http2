@@ -97,11 +97,16 @@ where
         end_stream: EndStream,
     ) -> result::Result<HttpStreamRef<ServerTypes>> {
         if ServerTypes::init_where(stream_id) == InitWhere::Locally {
-            return Err(error::Error::InitiatedStreamWithServerIdFromClient(stream_id));
+            return Err(error::Error::InitiatedStreamWithServerIdFromClient(
+                stream_id,
+            ));
         }
 
         if stream_id <= self.last_peer_stream_id {
-            return Err(error::Error::StreamIdLeExistingStream(stream_id, self.last_peer_stream_id));
+            return Err(error::Error::StreamIdLeExistingStream(
+                stream_id,
+                self.last_peer_stream_id,
+            ));
         }
 
         self.last_peer_stream_id = stream_id;

@@ -77,7 +77,8 @@ fn new_http_client() -> Client {
         &SocketAddr::from(("127.0.0.1".parse::<IpAddr>().unwrap(), PORT)),
         ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
         ClientConf::new(),
-    ).expect("client")
+    )
+    .expect("client")
 }
 
 fn run_test_case(name: &str) {
@@ -101,7 +102,8 @@ fn main() {
                 .long("test_case")
                 .help("The name of the test case to execute. For example, \"not_found\"")
                 .takes_value(true),
-        ).get_matches();
+        )
+        .get_matches();
 
     match options.value_of("test_case") {
         Some(test_case) => {

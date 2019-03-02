@@ -175,7 +175,8 @@ impl<T: Types> CommonSender<T> {
                 write_tx
                     .unbounded_send(
                         CommonToWriteMessage::Pull(self.stream_id, stream, out_window).into(),
-                    ).map_err(|e| SendError::ConnectionDied(Arc::new(e)))
+                    )
+                    .map_err(|e| SendError::ConnectionDied(Arc::new(e)))
             }
             None => Err(SendError::IncorrectState(SenderState::Done)),
         }
@@ -208,7 +209,8 @@ impl<T: Types> Drop for CommonSender<T> {
         if state != SenderState::Done {
             warn!(
                 "sender was not properly finished, state {:?}, sending RST_STREAM InternalError",
-                 self.state());
+                self.state()
+            );
             drop(self.reset(ErrorCode::InternalError));
         }
     }

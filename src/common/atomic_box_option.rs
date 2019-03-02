@@ -126,14 +126,12 @@ mod test {
         let b = AtomicBoxOption::new();
 
         assert!(b.swap(None, Ordering::SeqCst).is_none());
-        assert!(
-            b.swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst)
-                .is_none()
-        );
-        assert!(
-            b.swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst)
-                .is_some()
-        );
+        assert!(b
+            .swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst)
+            .is_none());
+        assert!(b
+            .swap(Some(Box::new(Canary::new(count.clone()))), Ordering::SeqCst)
+            .is_some());
 
         drop(b);
 
@@ -146,26 +144,25 @@ mod test {
 
         let b = AtomicBoxOption::new();
 
-        assert!(
-            b.compare_exchange(ptr::null_mut(), None, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-        );
-        assert!(
-            b.compare_exchange(
+        assert!(b
+            .compare_exchange(ptr::null_mut(), None, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok());
+        assert!(b
+            .compare_exchange(
                 ptr::null_mut(),
                 Some(Box::new(Canary::new(count.clone()))),
                 Ordering::SeqCst,
                 Ordering::SeqCst
-            ).is_ok()
-        );
-        assert!(
-            b.compare_exchange(
+            )
+            .is_ok());
+        assert!(b
+            .compare_exchange(
                 ptr::null_mut(),
                 Some(Box::new(Canary::new(count.clone()))),
                 Ordering::SeqCst,
                 Ordering::SeqCst
-            ).is_err()
-        );
+            )
+            .is_err());
 
         drop(b);
 

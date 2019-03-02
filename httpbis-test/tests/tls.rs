@@ -79,7 +79,8 @@ fn tls() {
         socket_addr,
         ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
         Default::default(),
-    ).expect("http client");
+    )
+    .expect("http client");
 
     let resp: SimpleHttpMessage = client
         .start_get("/hi", "localhost")

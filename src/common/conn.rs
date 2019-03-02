@@ -415,7 +415,11 @@ where
     pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
         if let Some(mut stream) = self.streams.get_mut(stream_id) {
             if let Err(_) = stream.stream().in_window_size.try_increase(increase) {
-                return Err(error::Error::StreamInWindowOverflow(stream_id, stream.stream().in_window_size.size(), increase));
+                return Err(error::Error::StreamInWindowOverflow(
+                    stream_id,
+                    stream.stream().in_window_size.size(),
+                    increase,
+                ));
             }
         } else {
             return Ok(());

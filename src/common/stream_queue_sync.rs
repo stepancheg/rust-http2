@@ -45,7 +45,12 @@ impl<T: Types> StreamQueueSyncSender<T> {
 }
 
 impl ServerStreamHandler for StreamQueueSyncSender<ServerTypes> {
-    fn data_frame(&mut self, data: Bytes, _in_window_size: u32, end_stream: bool) -> result::Result<()> {
+    fn data_frame(
+        &mut self,
+        data: Bytes,
+        _in_window_size: u32,
+        end_stream: bool,
+    ) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
             last: end_stream,
@@ -76,7 +81,12 @@ impl ClientStreamHandler for StreamQueueSyncSender<ClientTypes> {
         }))
     }
 
-    fn data_frame(&mut self, data: Bytes, _in_window_size: u32, end_stream: bool) -> result::Result<()> {
+    fn data_frame(
+        &mut self,
+        data: Bytes,
+        _in_window_size: u32,
+        end_stream: bool,
+    ) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
             last: end_stream,
@@ -115,7 +125,9 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
                 // should be impossible, because
                 // callbacks are notified of client death in
                 // `HttpStreamCommon::conn_died`
-                return Err(error::Error::InternalError("internal error: unexpected EOF".to_owned()));
+                return Err(error::Error::InternalError(
+                    "internal error: unexpected EOF".to_owned(),
+                ));
             }
             Ok(Async::Ready(Some(Err(e)))) => {
                 self.eof_received = true;

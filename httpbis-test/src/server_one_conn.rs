@@ -65,7 +65,8 @@ impl ServerOneConn {
                 let listener = tokio_core::net::TcpListener::bind(
                     &(BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap(),
                     &lp.handle(),
-                ).unwrap();
+                )
+                .unwrap();
 
                 let actual_port = listener.local_addr().unwrap().port();
                 from_loop_tx
@@ -80,7 +81,8 @@ impl ServerOneConn {
                     .into_future()
                     .map_err(|_| {
                         httpbis::Error::from(io::Error::new(io::ErrorKind::Other, "something"))
-                    }).and_then(move |(conn, listener)| {
+                    })
+                    .and_then(move |(conn, listener)| {
                         // incoming stream is endless
                         let (conn, _) = conn.unwrap();
 
@@ -101,7 +103,8 @@ impl ServerOneConn {
                 let future = future.then(|_| future::finished::<_, ()>(()));
 
                 lp.run(shutdown_rx.select(future)).ok();
-            }).expect("spawn");
+            })
+            .expect("spawn");
 
         ServerOneConn {
             from_loop: from_loop_rx.wait().unwrap(),
