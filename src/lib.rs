@@ -59,6 +59,7 @@ mod hpack;
 mod solicit_async;
 mod solicit_misc;
 
+mod display_comma_separated;
 mod misc;
 
 mod resp;

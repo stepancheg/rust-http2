@@ -87,7 +87,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
             return Err(Error::AddrResolvedToEmptyList);
         } else if addrs.len() > 1 {
             // TODO: allow multiple addresses
-            return Err(Error::AddrResolvedToMoreThanOneAddr);
+            return Err(Error::AddrResolvedToMoreThanOneAddr(addrs));
         }
         self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())

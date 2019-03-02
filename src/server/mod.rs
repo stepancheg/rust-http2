@@ -98,7 +98,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
         if addrs.is_empty() {
             return Err(Error::AddrResolvedToEmptyList);
         } else if addrs.len() > 1 {
-            return Err(Error::AddrResolvedToMoreThanOneAddr);
+            return Err(Error::AddrResolvedToMoreThanOneAddr(addrs));
         }
         self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())

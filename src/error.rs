@@ -13,9 +13,11 @@ use tls_api;
 use tokio_timer::TimeoutError;
 
 use common::sender::SendError;
+use display_comma_separated::DisplayCommaSeparated;
 use solicit::error_code::ErrorCode;
 use solicit::frame::HttpFrameType;
 use solicit::frame::ParseFrameError;
+use std::net::SocketAddr;
 use void::Void;
 use StreamDead;
 use StreamId;
@@ -30,7 +32,7 @@ pub enum Error {
     CodeError(ErrorCode),
     RstStreamReceived(ErrorCode),
     AddrResolvedToEmptyList,
-    AddrResolvedToMoreThanOneAddr,
+    AddrResolvedToMoreThanOneAddr(Vec<SocketAddr>),
     /// The HTTP/2 connection received an invalid HTTP/2 frame
     InvalidFrame(String),
     /// The HPACK decoder was unable to decode a header chunk and raised an error.
@@ -171,9 +173,11 @@ impl fmt::Display for Error {
             Error::StdError(e) => write!(f, "{}", e),
             Error::User(e) => write!(f, "User error: {}", e),
             Error::AddrResolvedToEmptyList => write!(f, "Address resolved to empty list"),
-            Error::AddrResolvedToMoreThanOneAddr => {
-                write!(f, "Address resolved to more than one address")
-            }
+            Error::AddrResolvedToMoreThanOneAddr(a) => write!(
+                f,
+                "Address resolved to more than one address: {}",
+                DisplayCommaSeparated(&a[..])
+            ),
             Error::ClientDiedAndReconnectFailed => write!(f, "Client died and reconnect failed"),
             Error::ClientControllerDied => write!(f, "Client controller died"),
             Error::ChannelDied => write!(f, "Channel died"),
