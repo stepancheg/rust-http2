@@ -15,6 +15,7 @@ use common::sender::SendError;
 use solicit::error_code::ErrorCode;
 use solicit::frame::ParseFrameError;
 use void::Void;
+use StreamDead;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
 /// connection.
@@ -50,6 +51,7 @@ pub enum Error {
     ClientPanicked(String),
     ClientCompletedWithoutError,
     SendError(SendError),
+    StreamDead(StreamDead),
     CallerDied,
 }
 
@@ -90,6 +92,12 @@ impl From<SendError> for Error {
     }
 }
 
+impl From<StreamDead> for Error {
+    fn from(e: StreamDead) -> Self {
+        Error::StreamDead(e)
+    }
+}
+
 impl From<Void> for Error {
     fn from(v: Void) -> Self {
         match v {}
@@ -126,6 +134,7 @@ impl StdError for Error {
             Error::ClientCompletedWithoutError => "Client completed without error",
             Error::SendError(_) => "Failed to write message to stream",
             Error::CallerDied => "Request caller died",
+            Error::StreamDead(_) => "Stream dead",
             Error::Other(_) => "An unknown error",
         }
     }
