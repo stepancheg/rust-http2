@@ -20,4 +20,8 @@ impl ClientIncreaseInWindow {
     pub fn increase_window_auto(&mut self) -> result::Result<()> {
         self.0.increase_window_auto()
     }
+
+    pub fn increase_window_auto_above(&mut self, above: u32) -> result::Result<()> {
+        self.0.increase_window_auto_above(above)
+    }
 }
