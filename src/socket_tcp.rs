@@ -20,8 +20,8 @@ use socket::ToTokioListener;
 use ServerConf;
 
 impl ToSocketListener for SocketAddr {
-    fn to_listener(&self, conf: &ServerConf) -> Box<ToTokioListener + Send> {
-        Box::new(listener(self, conf).unwrap())
+    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>> {
+        Ok(Box::new(listener(self, conf)?))
     }
 
     fn cleanup(&self) {}
@@ -56,6 +56,7 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 
     configure_tcp(&listener, conf)?;
     listener.reuse_address(true)?;
+    debug!("binding socket to {}", addr);
     listener.bind(addr)?;
     let backlog = conf.backlog.unwrap_or(1024);
     listener.listen(backlog)

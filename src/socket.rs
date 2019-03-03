@@ -12,9 +12,11 @@ use tokio_io::AsyncWrite;
 use futures::stream::Stream;
 use futures::Future;
 use ServerConf;
+use socket_unix::SocketAddrUnix;
+
 
 pub trait ToSocketListener {
-    fn to_listener(&self, conf: &ServerConf) -> Box<ToTokioListener + Send>;
+    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>>;
 
     fn cleanup(&self);
 }
@@ -22,7 +24,7 @@ pub trait ToSocketListener {
 #[derive(Clone)]
 pub enum AnySocketAddr {
     Inet(SocketAddr),
-    Unix(String),
+    Unix(SocketAddrUnix),
 }
 
 impl Display for AnySocketAddr {
@@ -47,14 +49,10 @@ impl AnySocketAddr {
 }
 
 impl ToSocketListener for AnySocketAddr {
-    fn to_listener(&self, conf: &ServerConf) -> Box<ToTokioListener + Send> {
+    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>> {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.to_listener(conf),
-            #[cfg(unix)]
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.to_listener(conf),
-            #[cfg(not(unix))]
-            // TODO: error instead of panic
-            &AnySocketAddr::Unix(..) => panic!("cannot use unix sockets on non-unix"),
         }
     }
 
@@ -76,10 +74,7 @@ impl ToClientStream for AnySocketAddr {
     ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send> {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
-            #[cfg(unix)]
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
-            #[cfg(not(unix))]
-            &AnySocketAddr::Unix(..) => panic!("cannot use unix sockets on non-unix"),
         }
     }
 }

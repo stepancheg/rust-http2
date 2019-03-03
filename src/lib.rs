@@ -35,7 +35,6 @@ mod socket_tcp;
 
 #[cfg(unix)]
 extern crate tokio_uds;
-#[cfg(unix)]
 mod socket_unix;
 
 mod ascii;

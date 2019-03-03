@@ -60,6 +60,7 @@ use common::stream_from_network::StreamFromNetwork;
 use result;
 use solicit::stream_id::StreamId;
 use Response;
+use socket_unix::SocketAddrUnix;
 
 /// Builder for HTTP/2 client.
 ///
@@ -97,8 +98,8 @@ impl<C: TlsConnector> ClientBuilder<C> {
 #[cfg(unix)]
 impl<C: TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
-    pub fn set_unix_addr(&mut self, addr: &str) -> Result<()> {
-        self.addr = Some(AnySocketAddr::Unix(addr.to_owned()));
+    pub fn set_unix_addr<A: Into<SocketAddrUnix>>(&mut self, addr: A) -> Result<()> {
+        self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
     }
 }

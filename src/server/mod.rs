@@ -50,6 +50,7 @@ pub use server::conf::ServerConf;
 pub use server::conn::ServerConn;
 use server::handler::ServerHandler;
 use server::handler_paths::ServerHandlerPaths;
+use socket_unix::SocketAddrUnix;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
@@ -108,8 +109,8 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
 #[cfg(unix)]
 impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     // Set name of unix domain socket
-    pub fn set_unix_addr(&mut self, addr: String) -> Result<()> {
-        self.addr = Some(AnySocketAddr::Unix(addr));
+    pub fn set_unix_addr<S: Into<SocketAddrUnix>>(&mut self, addr: S) -> Result<()> {
+        self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
     }
 }
@@ -152,7 +153,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
         let listen = self
             .addr
             .expect("listen addr not specified")
-            .to_listener(&self.conf);
+            .to_listener(&self.conf)?;
 
         let local_addr = listen.local_addr().unwrap();
         //let local_addr = local_addr.downcast_ref::<T>().expect("downcast socket_addr").clone();
