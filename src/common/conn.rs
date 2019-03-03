@@ -247,9 +247,16 @@ where
         // parsed from the raw frame to have the correct payload size, but we assert it just in
         // case.
         debug_assert!(size < 0x80000000);
+        let old_in_window_size = self.in_window_size.size();
         self.in_window_size
             .try_decrease_to_positive(size as i32)
-            .map_err(|_| error::Error::WindowSizeOverflow)
+            .map_err(|_| error::Error::WindowSizeOverflow)?;
+        let new_in_window_size = self.in_window_size.size();
+        debug!(
+            "decrease conn window: {} -> {}",
+            old_in_window_size, new_in_window_size
+        );
+        Ok(())
     }
 
     pub fn process_dump_state(

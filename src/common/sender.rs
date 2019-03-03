@@ -128,6 +128,14 @@ impl<T: Types> CommonSender<T> {
     }
 
     pub fn send_headers(&mut self, headers: Headers) -> Result<(), SendError> {
+        self.send_headers_impl(headers, false)
+    }
+
+    pub fn send_headers_end_of_stream(&mut self, headers: Headers) -> Result<(), SendError> {
+        self.send_headers_impl(headers, true)
+    }
+
+    pub fn send_headers_impl(&mut self, headers: Headers, last: bool) -> Result<(), SendError> {
         if self.state() != SenderState::ExpectingHeaders {
             return Err(SendError::IncorrectState(self.state()));
         }
@@ -136,10 +144,14 @@ impl<T: Types> CommonSender<T> {
             stream_id,
             DataOrHeadersWithFlag {
                 content: DataOrHeaders::Headers(headers),
-                last: false,
+                last,
             },
         ))?;
-        self.state.as_mut().unwrap().seen_headers = true;
+        if last {
+            self.state.take();
+        } else {
+            self.state.as_mut().unwrap().seen_headers = true;
+        }
         Ok(())
     }
 

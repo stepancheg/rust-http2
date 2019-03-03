@@ -70,6 +70,10 @@ impl ServerResponse {
         self.common.send_headers(headers)
     }
 
+    pub fn send_headers_end_of_stream(&mut self, headers: Headers) -> Result<(), SendError> {
+        self.common.send_headers_end_of_stream(headers)
+    }
+
     pub fn send_data(&mut self, data: Bytes) -> Result<(), SendError> {
         self.common.send_data(data)
     }

@@ -22,14 +22,20 @@ impl<T: Types> IncreaseInWindow<T> {
     pub fn data_frame_processed(&mut self, size: u32) {
         let old_in_window_size = self.in_window_size;
         self.in_window_size = self.in_window_size.checked_sub(size).unwrap();
-        debug!("data frame processed, in window size: {} -> {}", old_in_window_size, self.in_window_size);
+        debug!(
+            "data frame processed, in window size: {} -> {}",
+            old_in_window_size, self.in_window_size
+        );
     }
 
     pub fn increase_window(&mut self, inc: u32) -> result::Result<()> {
         let old_in_window_size = self.in_window_size;
         // TODO: do not panic
         self.in_window_size = self.in_window_size.checked_add(inc).unwrap();
-        debug!("requesting increase stream window: {} -> {}", old_in_window_size, self.in_window_size);
+        debug!(
+            "requesting increase stream window: {} -> {}",
+            old_in_window_size, self.in_window_size
+        );
         let m = CommonToWriteMessage::IncreaseInWindow(self.stream_id, inc);
         self.to_write_tx.unbounded_send(m.into())
     }

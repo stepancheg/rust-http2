@@ -45,12 +45,7 @@ impl<T: Types> StreamQueueSyncSender<T> {
 }
 
 impl ServerStreamHandler for StreamQueueSyncSender<ServerTypes> {
-    fn data_frame(
-        &mut self,
-        data: Bytes,
-        _in_window_size: u32,
-        end_stream: bool,
-    ) -> result::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
             last: end_stream,
@@ -81,12 +76,7 @@ impl ClientStreamHandler for StreamQueueSyncSender<ClientTypes> {
         }))
     }
 
-    fn data_frame(
-        &mut self,
-        data: Bytes,
-        _in_window_size: u32,
-        end_stream: bool,
-    ) -> result::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
             last: end_stream,

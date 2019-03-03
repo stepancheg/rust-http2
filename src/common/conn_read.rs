@@ -72,8 +72,11 @@ where
         // TODO: need something better
             if self.in_window_size.size() < (DEFAULT_SETTINGS.initial_window_size / 2) as i32 {
                 let increment = DEFAULT_SETTINGS.initial_window_size;
+                let old_in_window_size = self.in_window_size.size();
                 self.in_window_size.try_increase(increment)
                     .map_err(|()| error::Error::ConnInWindowOverflow(self.in_window_size.size(), increment))?;
+                let new_in_window_size = self.in_window_size.size();
+                debug!("requesting increase in window: {} -> {}", old_in_window_size, new_in_window_size);
 
                 Some(increment)
             } else {
@@ -111,11 +114,20 @@ where
                 stream.stream().in_message_stage
             );
 
+            let old_in_window_size = stream.stream().in_window_size.size();
             stream
                 .stream()
                 .in_window_size
                 .try_decrease_to_positive(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
+            let new_in_window_size = stream.stream().in_window_size.size();
+
+            debug!(
+                "decrease stream {} window: {} -> {}",
+                stream.id(),
+                old_in_window_size,
+                new_in_window_size
+            );
 
             let end_of_stream = frame.is_end_of_stream();
             stream.stream().data_recvd(frame.data, end_of_stream);

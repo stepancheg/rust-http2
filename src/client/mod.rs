@@ -58,9 +58,9 @@ use client_died_error_holder::SomethingDiedErrorHolder;
 use common::conn::ConnStateSnapshot;
 use common::stream_from_network::StreamFromNetwork;
 use result;
+use socket_unix::SocketAddrUnix;
 use solicit::stream_id::StreamId;
 use Response;
-use socket_unix::SocketAddrUnix;
 
 /// Builder for HTTP/2 client.
 ///

@@ -20,9 +20,9 @@ use socket::ToClientStream;
 use socket::ToServerStream;
 use socket::ToSocketListener;
 use socket::ToTokioListener;
-use ServerConf;
-use std::path::PathBuf;
 use std::fmt;
+use std::path::PathBuf;
+use ServerConf;
 
 #[derive(Debug, Clone)]
 pub struct SocketAddrUnix(pub(crate) PathBuf);
@@ -66,7 +66,10 @@ impl ToSocketListener for SocketAddrUnix {
 
     #[cfg(not(unix))]
     fn to_listener(&self, _conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>> {
-        Err(io::Error::new(io::ErrorKind::Other, "cannot use unix sockets on non-unix"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "cannot use unix sockets on non-unix",
+        ))
     }
 
     fn cleanup(&self) {
@@ -124,7 +127,10 @@ impl ToClientStream for SocketAddrUnix {
         _handle: &reactor::Handle,
     ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send> {
         use futures::future;
-        Box::new(future::err(io::Error::new(io::ErrorKind::Other, "cannot use unix sockets on non-unix")))
+        Box::new(future::err(io::Error::new(
+            io::ErrorKind::Other,
+            "cannot use unix sockets on non-unix",
+        )))
     }
 }
 
