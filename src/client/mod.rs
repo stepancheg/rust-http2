@@ -60,6 +60,7 @@ use common::stream_from_network::StreamFromNetwork;
 use result;
 use socket_unix::SocketAddrUnix;
 use solicit::stream_id::StreamId;
+use std::fmt;
 use Response;
 
 /// Builder for HTTP/2 client.
@@ -131,6 +132,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
 
     pub fn build(self) -> Result<Client> {
         let addr = self.addr.expect("addr is not specified");
+        let addr_copy = addr.clone();
 
         let http_scheme = self.tls.http_scheme();
 
@@ -152,7 +154,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
                 spawn_client_event_loop(
                     handle.clone(),
                     shutdown_future,
-                    addr,
+                    addr_copy,
                     tls,
                     conf,
                     done_tx,
@@ -182,7 +184,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
                     spawn_client_event_loop(
                         lp.handle(),
                         shutdown_future,
-                        addr,
+                        addr_copy,
                         tls,
                         conf,
                         done_tx,
@@ -203,6 +205,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
             http_scheme,
             shutdown: shutdown_signal,
             client_died_error_holder,
+            addr,
         })
     }
 }
@@ -224,6 +227,16 @@ pub struct Client {
     // used only once to send shutdown signal
     shutdown: ShutdownSignal,
     client_died_error_holder: SomethingDiedErrorHolder<ClientDiedType>,
+    addr: AnySocketAddr,
+}
+
+impl fmt::Debug for Client {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Client")
+            .field("addr", &self.addr)
+            .field("http_scheme", &self.http_scheme)
+            .finish()
+    }
 }
 
 impl Client {

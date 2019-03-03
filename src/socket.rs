@@ -20,7 +20,7 @@ pub trait ToSocketListener {
     fn cleanup(&self);
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum AnySocketAddr {
     Inet(SocketAddr),
     Unix(SocketAddrUnix),

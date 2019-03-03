@@ -51,6 +51,7 @@ pub use server::conn::ServerConn;
 use server::handler::ServerHandler;
 use server::handler_paths::ServerHandlerPaths;
 use socket_unix::SocketAddrUnix;
+use std::fmt;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
@@ -229,6 +230,14 @@ pub struct Server {
     shutdown: ShutdownSignal,
     alive_rx: mpsc::Receiver<()>,
     join: Option<Completion>,
+}
+
+impl fmt::Debug for Server {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Server")
+            .field("local_addr", &self.local_addr)
+            .finish()
+    }
 }
 
 #[derive(Default)]
