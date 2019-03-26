@@ -12,7 +12,6 @@ pub(crate) mod types;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -139,8 +138,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     }
 
     pub fn build(self) -> Result<Server> {
-        let (alive_tx, alive_rx) = mpsc::channel();
-
         let state: Arc<Mutex<ServerState>> = Default::default();
 
         let state_copy = state.clone();
@@ -174,7 +171,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                     shutdown_future,
                     conf,
                     service,
-                    alive_tx,
                 ));
                 future::finished(())
             });
@@ -202,7 +198,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                         shutdown_future,
                         conf,
                         service,
-                        alive_tx,
                     );
                     drop(lp.run(done_rx));
                 })?;
@@ -214,7 +209,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
             shutdown: shutdown_signal,
             local_addr: local_addr,
             join: Some(join),
-            alive_rx: alive_rx,
         })
     }
 }
@@ -228,7 +222,6 @@ pub struct Server {
     state: Arc<Mutex<ServerState>>,
     local_addr: AnySocketAddr,
     shutdown: ShutdownSignal,
-    alive_rx: mpsc::Receiver<()>,
     join: Option<Completion>,
 }
 
@@ -282,7 +275,6 @@ fn spawn_server_event_loop<S, A>(
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
     service: S,
-    _alive_tx: mpsc::Sender<()>,
 ) -> oneshot::Receiver<()>
 where
     S: ServerHandler,
@@ -371,10 +363,6 @@ where
 impl Server {
     pub fn local_addr(&self) -> &AnySocketAddr {
         &self.local_addr
-    }
-
-    pub fn is_alive(&self) -> bool {
-        self.alive_rx.try_recv() != Err(mpsc::TryRecvError::Disconnected)
     }
 
     // for tests
