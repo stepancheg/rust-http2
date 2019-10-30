@@ -605,13 +605,11 @@ impl Headers {
                 // ":method", ":scheme", and ":path" pseudo-header fields, unless it is
                 // a CONNECT request (Section 8.3).  An HTTP request that omits
                 // mandatory pseudo-header fields is malformed (Section 8.1.2.6).
-                RequestOrResponse::Request => {
-                    &[
-                        PseudoHeaderName::Method,
-                        PseudoHeaderName::Scheme,
-                        PseudoHeaderName::Path,
-                    ][..]
-                }
+                RequestOrResponse::Request => &[
+                    PseudoHeaderName::Method,
+                    PseudoHeaderName::Scheme,
+                    PseudoHeaderName::Path,
+                ][..],
                 // For HTTP/2 responses, a single ":status" pseudo-header field is
                 // defined that carries the HTTP status code field (see [RFC7231],
                 // Section 6).  This pseudo-header field MUST be included in all

@@ -168,5 +168,4 @@ mod test {
 
         assert_eq!(0, count.load(Ordering::SeqCst));
     }
-
 }

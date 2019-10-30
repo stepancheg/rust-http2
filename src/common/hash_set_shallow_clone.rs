@@ -123,5 +123,4 @@ mod test {
         items.sort();
         assert_eq!(&[20], &items[..]);
     }
-
 }
