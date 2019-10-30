@@ -107,7 +107,6 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     }
 }
 
-#[cfg(unix)]
 impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     // Set name of unix domain socket
     pub fn set_unix_addr<S: Into<SocketAddrUnix>>(&mut self, addr: S) -> Result<()> {

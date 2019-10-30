@@ -96,7 +96,6 @@ impl<C: TlsConnector> ClientBuilder<C> {
     }
 }
 
-#[cfg(unix)]
 impl<C: TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
     pub fn set_unix_addr<A: Into<SocketAddrUnix>>(&mut self, addr: A) -> Result<()> {
