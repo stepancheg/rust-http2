@@ -3,10 +3,14 @@ dist: trusty
 
 language: rust
 
-rust:
-  - stable
-  - beta
-  - nightly
+matrix:
+  include:
+  - rust: stable
+  - rust: beta
+  - rust: nightly
+  - rust: stable
+    os: windows
+    env: ON_WINDOWS=1
 
 script:
   - ci/run.sh
