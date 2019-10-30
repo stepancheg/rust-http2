@@ -8,11 +8,6 @@ rust:
   - beta
   - nightly
 
-install:
-  - rustc --version
-  - ci/install-h2spec.sh
-  - export PATH="$PATH:$(pwd)"
-
 script:
   - ci/run.sh
 
