@@ -11,6 +11,8 @@ matrix:
   - rust: stable
     os: windows
     env: ON_WINDOWS=1
+  allow_failures:
+  - os: windows
 
 script:
   - ci/run.sh
