@@ -131,7 +131,7 @@ impl Into<u32> for ErrorCode {
 pub(crate) struct ErrorCodeOrUnknown(pub(crate) u32);
 
 impl ErrorCodeOrUnknown {
-    pub fn to_error_code(&self) -> ErrorCode {
+    pub fn _to_error_code(&self) -> ErrorCode {
         ErrorCode::from(self.0)
     }
 }
