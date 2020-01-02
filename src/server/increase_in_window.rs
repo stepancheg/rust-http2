@@ -1,6 +1,6 @@
-use common::increase_in_window::IncreaseInWindow;
-use result;
-use server::types::ServerTypes;
+use crate::common::increase_in_window::IncreaseInWindow;
+use crate::result;
+use crate::server::types::ServerTypes;
 
 pub struct ServerIncreaseInWindow(pub(crate) IncreaseInWindow<ServerTypes>);
 

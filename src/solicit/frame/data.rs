@@ -1,14 +1,14 @@
 //! The module contains the implementation of the `DATA` frame and associated flags.
 
-use solicit::frame::flags::*;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::frame::flags::*;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 
 use bytes::Bytes;
-use codec::write_buffer::WriteBuffer;
-use misc::BsDebug;
-use solicit::stream_id::StreamId;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::misc::BsDebug;
+use crate::solicit::stream_id::StreamId;
 use std::fmt;
 
 pub const DATA_FRAME_TYPE: u8 = 0x0;
@@ -228,11 +228,11 @@ impl FrameIR for DataFrame {
 #[cfg(test)]
 mod tests {
     use super::{DataFlag, DataFrame};
-    use solicit::frame::tests::build_padded_frame_payload;
-    use solicit::frame::FrameHeader;
-    use solicit::frame::FrameIR;
-    use solicit::frame::{pack_header, Frame};
-    use solicit::tests::common::raw_frame_from_parts;
+    use crate::solicit::frame::tests::build_padded_frame_payload;
+    use crate::solicit::frame::FrameHeader;
+    use crate::solicit::frame::FrameIR;
+    use crate::solicit::frame::{pack_header, Frame};
+    use crate::solicit::tests::common::raw_frame_from_parts;
 
     /// Tests that the `DataFrame` struct correctly interprets a DATA frame
     /// with no padding set.

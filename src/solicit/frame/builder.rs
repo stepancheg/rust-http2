@@ -1,9 +1,9 @@
 //! Defines the `FrameBuilder` trait and some default implementations of the trait.
 
-use codec::write_buffer::WriteBuffer;
-use solicit::frame::pack_header;
-use solicit::frame::FrameHeader;
-use solicit::frame::FRAME_HEADER_LEN;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::frame::pack_header;
+use crate::solicit::frame::FrameHeader;
+use crate::solicit::frame::FRAME_HEADER_LEN;
 
 /// A trait that provides additional methods for serializing HTTP/2 frames.
 pub trait FrameBuilder {

@@ -4,8 +4,8 @@ use std::sync::Mutex;
 
 use futures::future::Future;
 
-use error;
-use misc::any_to_string;
+use crate::error;
+use crate::misc::any_to_string;
 use std::panic::AssertUnwindSafe;
 
 pub(crate) trait DiedType: Default + Clone {

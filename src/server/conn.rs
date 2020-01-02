@@ -1,19 +1,19 @@
 use std::panic;
 use std::sync::Arc;
 
-use error;
-use result;
+use crate::error;
+use crate::result;
 
-use solicit::end_stream::EndStream;
-use solicit::frame::settings::*;
-use solicit::header::*;
-use solicit::DEFAULT_SETTINGS;
+use crate::solicit::end_stream::EndStream;
+use crate::solicit::frame::settings::*;
+use crate::solicit::header::*;
+use crate::solicit::DEFAULT_SETTINGS;
 
 use futures::future;
 use futures::future::Future;
 use futures::sync::oneshot;
 
-use common::types::Types;
+use crate::common::types::Types;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor;
 use tokio_io::AsyncRead;
@@ -23,40 +23,40 @@ use tokio_tls_api;
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
-use solicit_async::*;
+use crate::solicit_async::*;
 
-use socket::StreamItem;
+use crate::socket::StreamItem;
 
-use common::init_where::InitWhere;
+use crate::common::init_where::InitWhere;
 
-use client_died_error_holder::SomethingDiedErrorHolder;
-use common::conn::Conn;
-use common::conn::ConnSpecific;
-use common::conn::ConnStateSnapshot;
-use common::conn_command_channel::conn_command_channel;
-use common::conn_command_channel::ConnCommandSender;
-use common::conn_read::ConnReadSideCustom;
-use common::conn_write::CommonToWriteMessage;
-use common::conn_write::ConnWriteSideCustom;
-use common::sender::CommonSender;
-use common::stream::HttpStreamCommon;
-use common::stream::HttpStreamData;
-use common::stream::HttpStreamDataSpecific;
-use common::stream::InMessageStage;
-use common::stream_handler::StreamHandlerInternal;
-use common::stream_map::HttpStreamRef;
-use headers_place::HeadersPlace;
-use misc::any_to_string;
-use req_resp::RequestOrResponse;
-use server::handler::ServerHandler;
-use server::handler::ServerHandlerContext;
-use server::req::ServerRequest;
-use server::types::ServerTypes;
-use solicit::stream_id::StreamId;
-use ErrorCode;
-use ServerConf;
-use ServerResponse;
-use ServerTlsOption;
+use crate::client_died_error_holder::SomethingDiedErrorHolder;
+use crate::common::conn::Conn;
+use crate::common::conn::ConnSpecific;
+use crate::common::conn::ConnStateSnapshot;
+use crate::common::conn_command_channel::conn_command_channel;
+use crate::common::conn_command_channel::ConnCommandSender;
+use crate::common::conn_read::ConnReadSideCustom;
+use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::conn_write::ConnWriteSideCustom;
+use crate::common::sender::CommonSender;
+use crate::common::stream::HttpStreamCommon;
+use crate::common::stream::HttpStreamData;
+use crate::common::stream::HttpStreamDataSpecific;
+use crate::common::stream::InMessageStage;
+use crate::common::stream_handler::StreamHandlerInternal;
+use crate::common::stream_map::HttpStreamRef;
+use crate::headers_place::HeadersPlace;
+use crate::misc::any_to_string;
+use crate::req_resp::RequestOrResponse;
+use crate::server::handler::ServerHandler;
+use crate::server::handler::ServerHandlerContext;
+use crate::server::req::ServerRequest;
+use crate::server::types::ServerTypes;
+use crate::solicit::stream_id::StreamId;
+use crate::ErrorCode;
+use crate::ServerConf;
+use crate::ServerResponse;
+use crate::ServerTlsOption;
 
 pub struct ServerStreamData {}
 

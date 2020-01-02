@@ -3,14 +3,14 @@ use futures::stream::Stream;
 
 use bytes::Bytes;
 
-use data_or_headers::DataOrHeaders;
-use data_or_trailers::DataOrTrailers;
-use error;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_trailers::DataOrTrailers;
+use crate::error;
 use futures::Poll;
-use misc::any_to_string;
-use solicit::end_stream::EndStream;
-use solicit::header::Headers;
-use solicit_async::HttpFutureStreamSend;
+use crate::misc::any_to_string;
+use crate::solicit::end_stream::EndStream;
+use crate::solicit::header::Headers;
+use crate::solicit_async::HttpFutureStreamSend;
 use std::panic::AssertUnwindSafe;
 
 /// Stream frame content with END_STREAM flag

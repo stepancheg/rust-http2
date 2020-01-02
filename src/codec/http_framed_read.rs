@@ -1,21 +1,21 @@
 use bytes::Bytes;
 use bytes::BytesMut;
 
-use error;
+use crate::error;
 use futures::Async;
 use futures::Poll;
-use solicit::frame::headers::HeadersFlag;
-use solicit::frame::push_promise::PushPromiseFlag;
-use solicit::frame::unpack_header_from_slice;
-use solicit::frame::HeadersFrame;
-use solicit::frame::HttpFrame;
-use solicit::frame::HttpFrameType;
-use solicit::frame::PushPromiseFrame;
-use solicit::frame::RawFrame;
-use solicit::frame::FRAME_HEADER_LEN;
-use solicit::stream_id::StreamId;
+use crate::solicit::frame::headers::HeadersFlag;
+use crate::solicit::frame::push_promise::PushPromiseFlag;
+use crate::solicit::frame::unpack_header_from_slice;
+use crate::solicit::frame::HeadersFrame;
+use crate::solicit::frame::HttpFrame;
+use crate::solicit::frame::HttpFrameType;
+use crate::solicit::frame::PushPromiseFrame;
+use crate::solicit::frame::RawFrame;
+use crate::solicit::frame::FRAME_HEADER_LEN;
+use crate::solicit::stream_id::StreamId;
 use tokio_io::AsyncRead;
-use ErrorCode;
+use crate::ErrorCode;
 
 /// Buffered read for reading HTTP/2 frames.
 pub struct HttpFramedRead<R: AsyncRead> {

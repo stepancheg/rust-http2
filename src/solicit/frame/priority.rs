@@ -1,16 +1,16 @@
 use bytes::Buf;
 use bytes::IntoBuf;
 
-use codec::write_buffer::WriteBuffer;
-use solicit::frame::flags::Flags;
-use solicit::frame::flags::NoFlag;
-use solicit::frame::Frame;
-use solicit::frame::FrameHeader;
-use solicit::frame::FrameIR;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::RawFrame;
-use solicit::stream_id::StreamId;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::frame::flags::Flags;
+use crate::solicit::frame::flags::NoFlag;
+use crate::solicit::frame::Frame;
+use crate::solicit::frame::FrameHeader;
+use crate::solicit::frame::FrameIR;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::RawFrame;
+use crate::solicit::stream_id::StreamId;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct PriorityFrame {

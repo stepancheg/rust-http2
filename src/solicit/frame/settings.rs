@@ -1,12 +1,12 @@
 //! The module contains the implementation of the `SETTINGS` frame and associated flags.
 
-use codec::write_buffer::WriteBuffer;
-use solicit::frame::flags::*;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::stream_id::StreamId;
-use solicit::MAX_WINDOW_SIZE;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::frame::flags::*;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::stream_id::StreamId;
+use crate::solicit::MAX_WINDOW_SIZE;
 
 pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
 
@@ -379,9 +379,9 @@ impl FrameIR for SettingsFrame {
 #[cfg(test)]
 mod tests {
     use super::{HttpSetting, SettingsFrame};
-    use solicit::frame::FrameIR;
-    use solicit::frame::{pack_header, Frame, FrameHeader};
-    use solicit::tests::common::raw_frame_from_parts;
+    use crate::solicit::frame::FrameIR;
+    use crate::solicit::frame::{pack_header, Frame, FrameHeader};
+    use crate::solicit::tests::common::raw_frame_from_parts;
 
     /// Tests that a `SettingsFrame` correctly handles a SETTINGS frame with
     /// no ACK flag and only a single setting.

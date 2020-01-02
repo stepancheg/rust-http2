@@ -11,8 +11,8 @@ use tokio_io::AsyncWrite;
 
 use futures::stream::Stream;
 use futures::Future;
-use socket_unix::SocketAddrUnix;
-use ServerConf;
+use crate::socket_unix::SocketAddrUnix;
+use crate::ServerConf;
 
 pub trait ToSocketListener {
     fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>>;

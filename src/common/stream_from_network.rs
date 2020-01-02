@@ -4,15 +4,15 @@ use futures::stream::Stream;
 use futures::Async;
 use futures::Poll;
 
-use solicit::DEFAULT_SETTINGS;
+use crate::solicit::DEFAULT_SETTINGS;
 
-use error;
+use crate::error;
 
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::Types;
-use common::increase_in_window::IncreaseInWindow;
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::common::increase_in_window::IncreaseInWindow;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.

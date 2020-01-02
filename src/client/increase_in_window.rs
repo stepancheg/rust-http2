@@ -1,6 +1,6 @@
-use client::types::ClientTypes;
-use common::increase_in_window::IncreaseInWindow;
-use result;
+use crate::client::types::ClientTypes;
+use crate::common::increase_in_window::IncreaseInWindow;
+use crate::result;
 
 pub struct ClientIncreaseInWindow(pub(crate) IncreaseInWindow<ClientTypes>);
 

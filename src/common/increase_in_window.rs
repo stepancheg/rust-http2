@@ -1,9 +1,9 @@
-use common::conn_command_channel::ConnCommandSender;
-use common::conn_write::CommonToWriteMessage;
-use common::types::Types;
-use result;
-use solicit::stream_id::StreamId;
-use solicit::DEFAULT_SETTINGS;
+use crate::common::conn_command_channel::ConnCommandSender;
+use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::types::Types;
+use crate::result;
+use crate::solicit::stream_id::StreamId;
+use crate::solicit::DEFAULT_SETTINGS;
 
 pub(crate) struct IncreaseInWindow<T: Types> {
     pub stream_id: StreamId,

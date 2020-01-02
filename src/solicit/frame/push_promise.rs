@@ -2,19 +2,19 @@ use bytes::Buf;
 use bytes::Bytes;
 use bytes::IntoBuf;
 
-use solicit::frame::builder::FrameBuilder;
-use solicit::frame::parse_padded_payload;
-use solicit::frame::Frame;
-use solicit::frame::FrameHeader;
-use solicit::frame::FrameIR;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::RawFrame;
+use crate::solicit::frame::builder::FrameBuilder;
+use crate::solicit::frame::parse_padded_payload;
+use crate::solicit::frame::Frame;
+use crate::solicit::frame::FrameHeader;
+use crate::solicit::frame::FrameIR;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::RawFrame;
 
 use super::flags::Flag;
 use super::flags::Flags;
-use codec::write_buffer::WriteBuffer;
-use solicit::stream_id::StreamId;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::stream_id::StreamId;
 
 pub const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
 

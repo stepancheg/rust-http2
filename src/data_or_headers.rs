@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use solicit::header::Headers;
+use crate::solicit::header::Headers;
 
 /// Stream frame content
 #[derive(Debug)]

@@ -1,6 +1,6 @@
-use solicit::frame::headers::HeadersDecodedFrame;
-use solicit::frame::*;
-use solicit::stream_id::StreamId;
+use crate::solicit::frame::headers::HeadersDecodedFrame;
+use crate::solicit::frame::*;
+use crate::solicit::stream_id::StreamId;
 
 /// Frames with stream
 #[derive(Debug)]

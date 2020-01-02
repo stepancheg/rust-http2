@@ -11,13 +11,13 @@ use futures::Future;
 
 use net2;
 
-use socket::AnySocketAddr;
-use socket::StreamItem;
-use socket::ToClientStream;
-use socket::ToServerStream;
-use socket::ToSocketListener;
-use socket::ToTokioListener;
-use ServerConf;
+use crate::socket::AnySocketAddr;
+use crate::socket::StreamItem;
+use crate::socket::ToClientStream;
+use crate::socket::ToServerStream;
+use crate::socket::ToSocketListener;
+use crate::socket::ToTokioListener;
+use crate::ServerConf;
 
 impl ToSocketListener for SocketAddr {
     fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {

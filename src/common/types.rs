@@ -1,12 +1,12 @@
-use common::client_or_server::ClientOrServer;
-use common::conn::ConnSpecific;
-use common::conn_write::CommonToWriteMessage;
-use common::init_where::InitWhere;
-use common::stream::HttpStreamData;
-use common::stream::HttpStreamDataSpecific;
-use common::stream_handler::StreamHandlerInternal;
-use req_resp::RequestOrResponse;
-use solicit::stream_id::StreamId;
+use crate::common::client_or_server::ClientOrServer;
+use crate::common::conn::ConnSpecific;
+use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::init_where::InitWhere;
+use crate::common::stream::HttpStreamData;
+use crate::common::stream::HttpStreamDataSpecific;
+use crate::common::stream_handler::StreamHandlerInternal;
+use crate::req_resp::RequestOrResponse;
+use crate::solicit::stream_id::StreamId;
 
 /// Client or server type names for connection and stream
 pub(crate) trait Types: Clone + 'static {

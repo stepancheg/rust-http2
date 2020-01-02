@@ -6,16 +6,16 @@ use futures::Poll;
 use void::Void;
 
 use super::*;
-use common::conn_command_channel::ConnCommandSender;
-use common::conn_write::CommonToWriteMessage;
-use common::types::Types;
-use misc::any_to_string;
-use solicit::stream_id::StreamId;
+use crate::common::conn_command_channel::ConnCommandSender;
+use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::types::Types;
+use crate::misc::any_to_string;
+use crate::solicit::stream_id::StreamId;
 use std::panic;
 use std::panic::AssertUnwindSafe;
-use DataOrTrailers;
-use ErrorCode;
-use HttpStreamAfterHeaders;
+use crate::DataOrTrailers;
+use crate::ErrorCode;
+use crate::HttpStreamAfterHeaders;
 
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {

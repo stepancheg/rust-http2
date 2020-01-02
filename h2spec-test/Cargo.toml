@@ -7,6 +7,7 @@ license = "MIT/Apache-2.0"
 description = "Rust implementation of HTTP/2 protocol"
 repository = "https://github.com/stepancheg/rust-http2"
 keywords = ["http2"]
+edition = "2018"
 
 [dependencies]
 httpbis = { path = ".." }

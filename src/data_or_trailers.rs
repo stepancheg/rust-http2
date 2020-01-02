@@ -6,15 +6,15 @@ use futures::Poll;
 
 use bytes::Bytes;
 
-use error;
+use crate::error;
 
-use solicit::header::Headers;
+use crate::solicit::header::Headers;
 
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-use misc::any_to_string;
-use solicit::end_stream::EndStream;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
+use crate::misc::any_to_string;
+use crate::solicit::end_stream::EndStream;
 
 /// Stream frame content after initial headers
 pub enum DataOrTrailers {

@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use solicit::frame::{pack_header, FrameHeader, RawFrame};
+use crate::solicit::frame::{pack_header, FrameHeader, RawFrame};
 
 /// Creates a new `RawFrame` from two separate parts: the header and the payload.
 /// Useful for tests that need to create frames, since they can easily specify the header and the

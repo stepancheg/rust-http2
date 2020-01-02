@@ -14,18 +14,18 @@ use tokio_io::io::write_all;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 
-use error;
-use error::Error;
-use result::Result;
+use crate::error;
+use crate::error::Error;
+use crate::result::Result;
 
-use solicit::frame::settings::SettingsFrame;
-use solicit::frame::unpack_header;
-use solicit::frame::FrameIR;
-use solicit::frame::RawFrame;
-use solicit::frame::RawFrameRef;
-use solicit::frame::FRAME_HEADER_LEN;
+use crate::solicit::frame::settings::SettingsFrame;
+use crate::solicit::frame::unpack_header;
+use crate::solicit::frame::FrameIR;
+use crate::solicit::frame::RawFrame;
+use crate::solicit::frame::RawFrameRef;
+use crate::solicit::frame::FRAME_HEADER_LEN;
 
-use misc::BsDebug;
+use crate::misc::BsDebug;
 
 pub type HttpFuture<T> = Box<dyn Future<Item = T, Error = Error>>;
 

@@ -5,17 +5,17 @@ use futures::stream::Stream;
 
 use bytes::Bytes;
 
-use message::SimpleHttpMessage;
-use solicit::header::Headers;
-use solicit_async::*;
+use crate::message::SimpleHttpMessage;
+use crate::solicit::header::Headers;
+use crate::solicit_async::*;
 
-use error::Error;
+use crate::error::Error;
 
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-use data_or_trailers::*;
-use error;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
+use crate::data_or_trailers::*;
+use crate::error;
 use futures::Poll;
 
 /// Convenient wrapper around async HTTP response future/stream

@@ -4,12 +4,12 @@ use std::result;
 use std::str;
 use std::str::FromStr;
 
-use headers_place::HeadersPlace;
-use req_resp::RequestOrResponse;
+use crate::headers_place::HeadersPlace;
+use crate::req_resp::RequestOrResponse;
 
-use assert_types::*;
+use crate::assert_types::*;
 
-use ascii::Ascii;
+use crate::ascii::Ascii;
 use bytes::Bytes;
 use bytes::BytesMut;
 use std::mem;
@@ -700,12 +700,12 @@ impl FromIterator<Header> for Headers {
 
 #[cfg(test)]
 mod test {
-    use ascii::Ascii;
+    use crate::ascii::Ascii;
     use bytes::Bytes;
-    use solicit::header::Header;
-    use solicit::header::HeaderName;
-    use solicit::header::HeaderNameEnum;
-    use solicit::header::PseudoHeaderName;
+    use crate::solicit::header::Header;
+    use crate::solicit::header::HeaderName;
+    use crate::solicit::header::HeaderNameEnum;
+    use crate::solicit::header::PseudoHeaderName;
 
     #[test]
     fn test_partial_eq_of_headers() {

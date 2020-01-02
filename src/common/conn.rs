@@ -2,14 +2,14 @@ use std::collections::HashMap;
 
 use tokio_core::reactor;
 
-use error;
-use result;
+use crate::error;
+use crate::result;
 
-use solicit::frame::settings::HttpSettings;
-use solicit::frame::*;
-use solicit::session::StreamState;
-use solicit::session::StreamStateIdleOrClosed;
-use solicit::DEFAULT_SETTINGS;
+use crate::solicit::frame::settings::HttpSettings;
+use crate::solicit::frame::*;
+use crate::solicit::session::StreamState;
+use crate::solicit::session::StreamStateIdleOrClosed;
+use crate::solicit::DEFAULT_SETTINGS;
 
 use super::closed_streams::*;
 use super::conf::*;
@@ -18,33 +18,33 @@ use super::stream_map::*;
 use super::types::*;
 use super::window_size;
 
-pub use resp::Response;
+pub use crate::resp::Response;
 
-use client_died_error_holder::ConnDiedType;
-use client_died_error_holder::SomethingDiedErrorHolder;
-use codec::http_decode_read::HttpDecodeRead;
-use codec::queued_write::QueuedWrite;
-use common::conn_command_channel::ConnCommandReceiver;
-use common::conn_command_channel::ConnCommandSender;
-use common::conn_read::ConnReadSideCustom;
-use common::conn_write::ConnWriteSideCustom;
-use common::init_where::InitWhere;
-use common::iteration_exit::IterationExit;
+use crate::client_died_error_holder::ConnDiedType;
+use crate::client_died_error_holder::SomethingDiedErrorHolder;
+use crate::codec::http_decode_read::HttpDecodeRead;
+use crate::codec::queued_write::QueuedWrite;
+use crate::common::conn_command_channel::ConnCommandReceiver;
+use crate::common::conn_command_channel::ConnCommandSender;
+use crate::common::conn_read::ConnReadSideCustom;
+use crate::common::conn_write::ConnWriteSideCustom;
+use crate::common::init_where::InitWhere;
+use crate::common::iteration_exit::IterationExit;
 use futures::future;
 use futures::sync::oneshot;
 use futures::task;
 use futures::Async;
 use futures::Future;
 use futures::Poll;
-use hpack;
-use solicit::stream_id::StreamId;
-use solicit::WindowSize;
+use crate::hpack;
+use crate::solicit::stream_id::StreamId;
+use crate::solicit::WindowSize;
 use std::collections::HashSet;
 use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
-use ErrorCode;
+use crate::ErrorCode;
 
 /// Client or server fields of connection
 pub trait ConnSpecific: 'static {}

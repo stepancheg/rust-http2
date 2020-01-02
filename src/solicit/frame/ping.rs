@@ -1,11 +1,11 @@
 //! Implements the `PING` HTTP/2 frame.
 
-use codec::write_buffer::WriteBuffer;
-use solicit::frame::flags::*;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::stream_id::StreamId;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::frame::flags::*;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::stream_id::StreamId;
 
 /// Ping frames are always 8 bytes
 pub const PING_FRAME_LEN: u32 = 8;
@@ -129,10 +129,10 @@ impl FrameIR for PingFrame {
 mod tests {
     use super::PingFrame;
 
-    use solicit::frame::Frame;
-    use solicit::frame::FrameHeader;
-    use solicit::frame::FrameIR;
-    use solicit::tests::common::raw_frame_from_parts;
+    use crate::solicit::frame::Frame;
+    use crate::solicit::frame::FrameHeader;
+    use crate::solicit::frame::FrameIR;
+    use crate::solicit::tests::common::raw_frame_from_parts;
 
     #[test]
     fn test_parse_not_ack() {

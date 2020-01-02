@@ -1,14 +1,14 @@
 //! The module contains the implementation of the `RST_STREAM` frame.
 
-use solicit::frame::flags::*;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::frame::flags::*;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 
-use codec::write_buffer::WriteBuffer;
-use solicit::error_code::ErrorCodeOrUnknown;
-use solicit::stream_id::StreamId;
-use ErrorCode;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::error_code::ErrorCodeOrUnknown;
+use crate::solicit::stream_id::StreamId;
+use crate::ErrorCode;
 
 /// The total allowed size for the `RST_STREAM` frame payload.
 pub const RST_STREAM_FRAME_LEN: u32 = 4;
@@ -113,9 +113,9 @@ impl FrameIR for RstStreamFrame {
 mod tests {
     use super::RstStreamFrame;
 
-    use solicit::frame::FrameIR;
-    use solicit::frame::{pack_header, Frame, FrameHeader};
-    use ErrorCode;
+    use crate::solicit::frame::FrameIR;
+    use crate::solicit::frame::{pack_header, Frame, FrameHeader};
+    use crate::ErrorCode;
 
     /// A helper function that creates a new Vec containing the serialized representation of the
     /// given `FrameHeader` followed by the raw provided payload.

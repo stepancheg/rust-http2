@@ -1,12 +1,12 @@
-use client_died_error_holder::ConnDiedType;
-use client_died_error_holder::SomethingDiedErrorHolder;
-use common::types::Types;
+use crate::client_died_error_holder::ConnDiedType;
+use crate::client_died_error_holder::SomethingDiedErrorHolder;
+use crate::common::types::Types;
 use futures::sync::mpsc;
 use futures::sync::mpsc::UnboundedReceiver;
 use futures::sync::mpsc::UnboundedSender;
 use futures::Poll;
 use futures::Stream;
-use result;
+use crate::result;
 use void::Void;
 
 pub(crate) struct ConnCommandSender<T: Types> {

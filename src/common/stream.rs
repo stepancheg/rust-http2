@@ -2,21 +2,21 @@ use std::cmp;
 
 use bytes::Bytes;
 
-use error;
+use crate::error;
 
-use solicit::end_stream::EndStream;
-use solicit::header::Headers;
-use solicit::session::StreamState;
-use solicit::WindowSize;
+use crate::solicit::end_stream::EndStream;
+use crate::solicit::header::Headers;
+use crate::solicit::session::StreamState;
+use crate::solicit::WindowSize;
 
 use super::types::Types;
 
 use super::stream_queue::StreamQueue;
 use super::window_size;
-use common::stream_handler::StreamHandlerInternal;
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use ErrorCode;
+use crate::common::stream_handler::StreamHandlerInternal;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::ErrorCode;
 
 pub enum HttpStreamCommand {
     Headers(Headers, EndStream),

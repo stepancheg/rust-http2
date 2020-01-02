@@ -6,16 +6,16 @@ use super::stream::HttpStreamCommand;
 use super::stream::HttpStreamCommon;
 use super::stream::HttpStreamStateSnapshot;
 use super::types::Types;
-use common::hash_set_shallow_clone::HashSetShallowClone;
-use common::hash_set_shallow_clone::HashSetShallowCloneItems;
-use common::init_where::InitWhere;
-use common::stream::DroppedData;
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use solicit::session::StreamState;
-use solicit::stream_id::StreamId;
-use solicit::WindowSize;
-use ErrorCode;
+use crate::common::hash_set_shallow_clone::HashSetShallowClone;
+use crate::common::hash_set_shallow_clone::HashSetShallowCloneItems;
+use crate::common::init_where::InitWhere;
+use crate::common::stream::DroppedData;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::solicit::session::StreamState;
+use crate::solicit::stream_id::StreamId;
+use crate::solicit::WindowSize;
+use crate::ErrorCode;
 
 #[derive(Default)]
 pub(crate) struct StreamMap<T: Types> {

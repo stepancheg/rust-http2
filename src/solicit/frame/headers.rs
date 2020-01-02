@@ -3,21 +3,21 @@
 use bytes::Buf;
 use bytes::Bytes;
 
-use codec::write_buffer::WriteBuffer;
-use hpack;
-use hpack::encoder::EncodeBuf;
-use solicit::frame::continuation::ContinuationFlag;
-use solicit::frame::flags::*;
-use solicit::frame::pack_header;
-use solicit::frame::HttpFrameType;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::FRAME_HEADER_LEN;
-use solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::stream_id::StreamId;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::hpack;
+use crate::hpack::encoder::EncodeBuf;
+use crate::solicit::frame::continuation::ContinuationFlag;
+use crate::solicit::frame::flags::*;
+use crate::solicit::frame::pack_header;
+use crate::solicit::frame::HttpFrameType;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::FRAME_HEADER_LEN;
+use crate::solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::stream_id::StreamId;
 use std::cmp;
 use std::fmt;
-use Headers;
+use crate::Headers;
 
 pub const HEADERS_FRAME_TYPE: u8 = 0x1;
 
@@ -529,18 +529,18 @@ impl<'a> FrameIR for HeadersMultiFrame<'a> {
 #[cfg(test)]
 mod tests {
     use super::{HeadersFlag, HeadersFrame, StreamDependency};
-    use hpack;
-    use solicit::frame::continuation::ContinuationFlag;
-    use solicit::frame::flags::Flags;
-    use solicit::frame::headers::HeadersMultiFrame;
-    use solicit::frame::tests::build_padded_frame_payload;
-    use solicit::frame::unpack_frames_for_test;
-    use solicit::frame::FrameHeader;
-    use solicit::frame::FrameIR;
-    use solicit::frame::HttpFrame;
-    use solicit::frame::{pack_header, Frame};
-    use solicit::tests::common::raw_frame_from_parts;
-    use Headers;
+    use crate::hpack;
+    use crate::solicit::frame::continuation::ContinuationFlag;
+    use crate::solicit::frame::flags::Flags;
+    use crate::solicit::frame::headers::HeadersMultiFrame;
+    use crate::solicit::frame::tests::build_padded_frame_payload;
+    use crate::solicit::frame::unpack_frames_for_test;
+    use crate::solicit::frame::FrameHeader;
+    use crate::solicit::frame::FrameIR;
+    use crate::solicit::frame::HttpFrame;
+    use crate::solicit::frame::{pack_header, Frame};
+    use crate::solicit::tests::common::raw_frame_from_parts;
+    use crate::Headers;
 
     /// Tests that a stream dependency structure can be correctly parsed by the
     /// `StreamDependency::parse` method.

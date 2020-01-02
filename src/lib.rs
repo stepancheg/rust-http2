@@ -65,67 +65,67 @@ mod resp;
 
 mod exec;
 
-pub use socket::AnySocketAddr;
+pub use crate::socket::AnySocketAddr;
 
-pub use solicit::error_code::ErrorCode;
-pub use solicit::header::Header;
-pub use solicit::header::HeaderName;
-pub use solicit::header::HeaderValue;
-pub use solicit::header::Headers;
-pub use solicit::header::PseudoHeaderName;
-pub use solicit::stream_id::StreamId;
-pub use solicit::HttpScheme;
+pub use crate::solicit::error_code::ErrorCode;
+pub use crate::solicit::header::Header;
+pub use crate::solicit::header::HeaderName;
+pub use crate::solicit::header::HeaderValue;
+pub use crate::solicit::header::Headers;
+pub use crate::solicit::header::PseudoHeaderName;
+pub use crate::solicit::stream_id::StreamId;
+pub use crate::solicit::HttpScheme;
 
-pub use exec::_CpuPoolOption;
+pub use crate::exec::_CpuPoolOption;
 
-pub use client::conf::ClientConf;
-pub use client::req::ClientRequest;
-pub use client::tls::ClientTlsOption;
-pub use client::Client;
-pub use client::ClientBuilder;
-pub use client::ClientInterface;
-pub use common::sender::SendError;
-pub use common::sender::SenderState;
-pub use common::window_size::StreamDead;
+pub use crate::client::conf::ClientConf;
+pub use crate::client::req::ClientRequest;
+pub use crate::client::tls::ClientTlsOption;
+pub use crate::client::Client;
+pub use crate::client::ClientBuilder;
+pub use crate::client::ClientInterface;
+pub use crate::common::sender::SendError;
+pub use crate::common::sender::SenderState;
+pub use crate::common::window_size::StreamDead;
 
-pub use server::conf::ServerAlpn;
-pub use server::conf::ServerConf;
-pub use server::handler::ServerHandler;
-pub use server::handler::ServerHandlerContext;
-pub use server::handler_paths::ServerHandlerPaths;
-pub use server::increase_in_window::ServerIncreaseInWindow;
-pub use server::req::ServerRequest;
-pub use server::resp::ServerResponse;
-pub use server::stream_handler::ServerStreamHandler;
-pub use server::tls::ServerTlsOption;
-pub use server::Server;
-pub use server::ServerBuilder;
+pub use crate::server::conf::ServerAlpn;
+pub use crate::server::conf::ServerConf;
+pub use crate::server::handler::ServerHandler;
+pub use crate::server::handler::ServerHandlerContext;
+pub use crate::server::handler_paths::ServerHandlerPaths;
+pub use crate::server::increase_in_window::ServerIncreaseInWindow;
+pub use crate::server::req::ServerRequest;
+pub use crate::server::resp::ServerResponse;
+pub use crate::server::stream_handler::ServerStreamHandler;
+pub use crate::server::tls::ServerTlsOption;
+pub use crate::server::Server;
+pub use crate::server::ServerBuilder;
 
-pub use data_or_trailers::DataOrTrailers;
-pub use data_or_trailers::HttpStreamAfterHeaders;
-pub use resp::Response;
+pub use crate::data_or_trailers::DataOrTrailers;
+pub use crate::data_or_trailers::HttpStreamAfterHeaders;
+pub use crate::resp::Response;
 
-pub use message::SimpleHttpMessage;
+pub use crate::message::SimpleHttpMessage;
 
-pub use error::Error;
-pub use result::Result;
+pub use crate::error::Error;
+pub use crate::result::Result;
 
 /// Functions used in tests
 #[doc(hidden)]
 pub mod for_test {
-    pub use common::conn::ConnStateSnapshot;
-    pub use common::stream::HttpStreamStateSnapshot;
-    pub use server::conn::ServerConn;
-    pub use solicit_async::recv_raw_frame_sync;
+    pub use crate::common::conn::ConnStateSnapshot;
+    pub use crate::common::stream::HttpStreamStateSnapshot;
+    pub use crate::server::conn::ServerConn;
+    pub use crate::solicit_async::recv_raw_frame_sync;
 
-    pub use solicit::frame::settings::HttpSettings;
-    pub use solicit::WindowSize;
-    pub use solicit::DEFAULT_SETTINGS;
+    pub use crate::solicit::frame::settings::HttpSettings;
+    pub use crate::solicit::WindowSize;
+    pub use crate::solicit::DEFAULT_SETTINGS;
 
     pub mod solicit {
-        pub use solicit::*;
+        pub use crate::solicit::*;
     }
     pub mod hpack {
-        pub use hpack::*;
+        pub use crate::hpack::*;
     }
 }

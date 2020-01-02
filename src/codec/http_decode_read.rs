@@ -1,16 +1,16 @@
-use codec::http_framed_read::HttpFramedJoinContinuationRead;
-use error;
+use crate::codec::http_framed_read::HttpFramedJoinContinuationRead;
+use crate::error;
 use futures::Async;
 use futures::Poll;
-use hpack;
-use solicit::frame::headers::HeadersDecodedFrame;
-use solicit::frame::HttpFrame;
-use solicit::frame::HttpFrameDecoded;
-use solicit::stream_id::StreamId;
+use crate::hpack;
+use crate::solicit::frame::headers::HeadersDecodedFrame;
+use crate::solicit::frame::HttpFrame;
+use crate::solicit::frame::HttpFrameDecoded;
+use crate::solicit::stream_id::StreamId;
 use tokio_io::AsyncRead;
-use ErrorCode;
-use Header;
-use Headers;
+use crate::ErrorCode;
+use crate::Header;
+use crate::Headers;
 
 pub struct HttpDecodeRead<R: AsyncRead> {
     framed_read: HttpFramedJoinContinuationRead<R>,

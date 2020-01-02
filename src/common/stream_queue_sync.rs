@@ -7,20 +7,20 @@ use futures::sync::mpsc::UnboundedSender;
 use futures::Async;
 use futures::Poll;
 
-use error;
+use crate::error;
 
 use bytes::Bytes;
-use client::stream_handler::ClientStreamHandler;
-use client::types::ClientTypes;
-use common::types::Types;
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
-use result;
-use server::stream_handler::ServerStreamHandler;
-use server::types::ServerTypes;
+use crate::client::stream_handler::ClientStreamHandler;
+use crate::client::types::ClientTypes;
+use crate::common::types::Types;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::result;
+use crate::server::stream_handler::ServerStreamHandler;
+use crate::server::types::ServerTypes;
 use std::marker;
-use ErrorCode;
-use Headers;
+use crate::ErrorCode;
+use crate::Headers;
 
 pub(crate) struct StreamQueueSyncSender<T: Types> {
     sender: UnboundedSender<Result<DataOrHeadersWithFlag, error::Error>>,

@@ -1,11 +1,11 @@
 use bytes::Bytes;
-use client::increase_in_window::ClientIncreaseInWindow;
-use common::stream_handler::StreamHandlerInternal;
-use error;
-use result;
-use ClientRequest;
-use ErrorCode;
-use Headers;
+use crate::client::increase_in_window::ClientIncreaseInWindow;
+use crate::common::stream_handler::StreamHandlerInternal;
+use crate::error;
+use crate::result;
+use crate::ClientRequest;
+use crate::ErrorCode;
+use crate::Headers;
 
 /// Called once when stream is created
 pub trait ClientStreamCreatedHandler: Send + 'static {

@@ -1,4 +1,4 @@
-use common::conf::CommonConf;
+use crate::common::conf::CommonConf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerAlpn {

@@ -1,6 +1,6 @@
 use std;
 
-use error;
+use crate::error;
 
 /// A convenience `Result` type that has the `HttpError` type as the error
 /// type and a generic Ok result type.

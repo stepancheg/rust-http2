@@ -4,7 +4,7 @@ use std::mem;
 
 use bytes::Bytes;
 
-use solicit::frame::flags::*;
+use crate::solicit::frame::flags::*;
 
 /// A helper macro that unpacks a sequence of 4 bytes found in the buffer with
 /// the given identifier, starting at the given offset, into the given integer
@@ -61,20 +61,20 @@ pub use self::push_promise::PushPromiseFrame;
 pub use self::rst_stream::RstStreamFrame;
 pub use self::settings::{HttpSetting, SettingsFlag, SettingsFrame};
 pub use self::window_update::WindowUpdateFrame;
-use codec::write_buffer::WriteBuffer;
-use solicit::frame;
-use solicit::frame::continuation::CONTINUATION_FRAME_TYPE;
-use solicit::frame::data::DATA_FRAME_TYPE;
-use solicit::frame::goaway::GOAWAY_FRAME_TYPE;
-use solicit::frame::headers::HeadersDecodedFrame;
-use solicit::frame::headers::HEADERS_FRAME_TYPE;
-use solicit::frame::ping::PING_FRAME_TYPE;
-use solicit::frame::priority::PRIORITY_FRAME_TYPE;
-use solicit::frame::push_promise::PUSH_PROMISE_FRAME_TYPE;
-use solicit::frame::rst_stream::RST_STREAM_FRAME_TYPE;
-use solicit::frame::settings::SETTINGS_FRAME_TYPE;
-use solicit::frame::window_update::WINDOW_UPDATE_FRAME_TYPE;
-use solicit::stream_id::StreamId;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::frame;
+use crate::solicit::frame::continuation::CONTINUATION_FRAME_TYPE;
+use crate::solicit::frame::data::DATA_FRAME_TYPE;
+use crate::solicit::frame::goaway::GOAWAY_FRAME_TYPE;
+use crate::solicit::frame::headers::HeadersDecodedFrame;
+use crate::solicit::frame::headers::HEADERS_FRAME_TYPE;
+use crate::solicit::frame::ping::PING_FRAME_TYPE;
+use crate::solicit::frame::priority::PRIORITY_FRAME_TYPE;
+use crate::solicit::frame::push_promise::PUSH_PROMISE_FRAME_TYPE;
+use crate::solicit::frame::rst_stream::RST_STREAM_FRAME_TYPE;
+use crate::solicit::frame::settings::SETTINGS_FRAME_TYPE;
+use crate::solicit::frame::window_update::WINDOW_UPDATE_FRAME_TYPE;
+use crate::solicit::stream_id::StreamId;
 use std::fmt;
 
 pub const FRAME_HEADER_LEN: usize = 9;

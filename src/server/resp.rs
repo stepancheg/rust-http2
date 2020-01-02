@@ -1,19 +1,19 @@
-use assert_types::assert_send;
+use crate::assert_types::assert_send;
 use bytes::Bytes;
-use common::sender::CommonSender;
-use common::sender::SendError;
-use error;
+use crate::common::sender::CommonSender;
+use crate::common::sender::SendError;
+use crate::error;
 use futures::Poll;
 use futures::Stream;
-use result;
-use server::types::ServerTypes;
+use crate::result;
+use crate::server::types::ServerTypes;
 use std::mem;
-use ErrorCode;
-use Headers;
-use HttpStreamAfterHeaders;
-use SenderState;
-use SimpleHttpMessage;
-use StreamDead;
+use crate::ErrorCode;
+use crate::Headers;
+use crate::HttpStreamAfterHeaders;
+use crate::SenderState;
+use crate::SimpleHttpMessage;
+use crate::StreamDead;
 
 // NOTE: Keep in sync with ClientRequest
 pub struct ServerResponse {

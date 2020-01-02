@@ -1,11 +1,11 @@
-use error;
+use crate::error;
 use tokio_io::AsyncWrite;
 
 use bytes::Buf;
-use codec::write_buffer::WriteBuffer;
+use crate::codec::write_buffer::WriteBuffer;
 use futures::Async;
 use futures::Poll;
-use solicit::frame::FrameIR;
+use crate::solicit::frame::FrameIR;
 
 pub struct HttpFramedWrite<W: AsyncWrite> {
     write: W,

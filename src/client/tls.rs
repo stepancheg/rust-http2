@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tls_api::TlsConnector;
 
-use solicit::HttpScheme;
+use crate::solicit::HttpScheme;
 
 pub enum ClientTlsOption<C: TlsConnector> {
     Plain,

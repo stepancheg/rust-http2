@@ -4,23 +4,23 @@ use std::io;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use assert_types::*;
+use crate::assert_types::*;
 
-use hpack::decoder::DecoderError;
+use crate::hpack::decoder::DecoderError;
 
 use tls_api;
 
 use tokio_timer::TimeoutError;
 
-use common::sender::SendError;
-use display_comma_separated::DisplayCommaSeparated;
-use solicit::error_code::ErrorCode;
-use solicit::frame::HttpFrameType;
-use solicit::frame::ParseFrameError;
+use crate::common::sender::SendError;
+use crate::display_comma_separated::DisplayCommaSeparated;
+use crate::solicit::error_code::ErrorCode;
+use crate::solicit::frame::HttpFrameType;
+use crate::solicit::frame::ParseFrameError;
 use std::net::SocketAddr;
 use void::Void;
-use StreamDead;
-use StreamId;
+use crate::StreamDead;
+use crate::StreamId;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
 /// connection.

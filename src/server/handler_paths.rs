@@ -2,12 +2,12 @@ use std::collections::hash_map;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use result;
-use server::handler::ServerHandler;
-use server::handler::ServerHandlerContext;
-use server::req::ServerRequest;
-use solicit::header::Headers;
-use ServerResponse;
+use crate::result;
+use crate::server::handler::ServerHandler;
+use crate::server::handler::ServerHandlerContext;
+use crate::server::req::ServerRequest;
+use crate::solicit::header::Headers;
+use crate::ServerResponse;
 
 #[derive(Default)]
 struct Node {

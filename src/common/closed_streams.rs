@@ -1,4 +1,4 @@
-use solicit::stream_id::StreamId;
+use crate::solicit::stream_id::StreamId;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 

@@ -9,8 +9,8 @@ use bytes::Bytes;
 
 use super::HeaderTable;
 use bytes::BytesMut;
-use hpack::static_table::StaticTable;
-use hpack::HeaderValueFound;
+use crate::hpack::static_table::StaticTable;
+use crate::hpack::HeaderValueFound;
 
 pub trait EncodeBuf {
     fn write_all(&mut self, bytes: &[u8]);

@@ -11,7 +11,7 @@ use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::thread;
 
-use common::stream_queue_sync::stream_queue_sync;
+use crate::common::stream_queue_sync::stream_queue_sync;
 
 use bytes::Bytes;
 
@@ -29,39 +29,39 @@ use tls_api::TlsConnector;
 use tls_api::TlsConnectorBuilder;
 use tls_api_stub;
 
-use futures_misc::*;
+use crate::futures_misc::*;
 
-use error;
-use error::Error;
-use result::Result;
+use crate::error;
+use crate::error::Error;
+use crate::result::Result;
 
-use solicit::header::*;
-use solicit::HttpScheme;
+use crate::solicit::header::*;
+use crate::solicit::HttpScheme;
 
-use solicit_async::*;
+use crate::solicit_async::*;
 
-use socket::AnySocketAddr;
-use socket::ToClientStream;
+use crate::socket::AnySocketAddr;
+use crate::socket::ToClientStream;
 
-use client::conf::ClientConf;
-use client::conn::ClientConn;
-use client::conn::ClientConnCallbacks;
-use client::conn::StartRequestMessage;
-use client::increase_in_window::ClientIncreaseInWindow;
-use client::req::ClientRequest;
-use client::stream_handler::ClientStreamCreatedHandler;
-use client::stream_handler::ClientStreamHandler;
-pub use client::tls::ClientTlsOption;
-use client::types::ClientTypes;
-use client_died_error_holder::ClientDiedType;
-use client_died_error_holder::SomethingDiedErrorHolder;
-use common::conn::ConnStateSnapshot;
-use common::stream_from_network::StreamFromNetwork;
-use result;
-use socket_unix::SocketAddrUnix;
-use solicit::stream_id::StreamId;
+use crate::client::conf::ClientConf;
+use crate::client::conn::ClientConn;
+use crate::client::conn::ClientConnCallbacks;
+use crate::client::conn::StartRequestMessage;
+use crate::client::increase_in_window::ClientIncreaseInWindow;
+use crate::client::req::ClientRequest;
+use crate::client::stream_handler::ClientStreamCreatedHandler;
+use crate::client::stream_handler::ClientStreamHandler;
+pub use crate::client::tls::ClientTlsOption;
+use crate::client::types::ClientTypes;
+use crate::client_died_error_holder::ClientDiedType;
+use crate::client_died_error_holder::SomethingDiedErrorHolder;
+use crate::common::conn::ConnStateSnapshot;
+use crate::common::stream_from_network::StreamFromNetwork;
+use crate::result;
+use crate::socket_unix::SocketAddrUnix;
+use crate::solicit::stream_id::StreamId;
 use std::fmt;
-use Response;
+use crate::Response;
 
 /// Builder for HTTP/2 client.
 ///

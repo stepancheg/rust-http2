@@ -9,8 +9,8 @@
 pub use self::decoder::Decoder;
 pub use self::encoder::Encoder;
 use bytes::Bytes;
-use hpack::dynamic_table::DynamicTable;
-use hpack::static_table::StaticTable;
+use crate::hpack::dynamic_table::DynamicTable;
+use crate::hpack::static_table::StaticTable;
 
 pub mod decoder;
 mod dynamic_table;
@@ -152,8 +152,8 @@ mod tests {
 
     use super::static_table::STATIC_TABLE;
     use super::HeaderTable;
-    use hpack::static_table::StaticTable;
-    use hpack::HeaderValueFound;
+    use crate::hpack::static_table::StaticTable;
+    use crate::hpack::HeaderValueFound;
 
     /// Tests that indexing the header table with indices that correspond to
     /// entries found in the static table works.

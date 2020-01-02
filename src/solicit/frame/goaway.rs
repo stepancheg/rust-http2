@@ -2,14 +2,14 @@
 
 use bytes::Bytes;
 
-use codec::write_buffer::WriteBuffer;
-use solicit::error_code::ErrorCodeOrUnknown;
-use solicit::frame::flags::*;
-use solicit::frame::ParseFrameError;
-use solicit::frame::ParseFrameResult;
-use solicit::frame::{parse_stream_id, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
-use solicit::stream_id::StreamId;
-use ErrorCode;
+use crate::codec::write_buffer::WriteBuffer;
+use crate::solicit::error_code::ErrorCodeOrUnknown;
+use crate::solicit::frame::flags::*;
+use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::{parse_stream_id, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::stream_id::StreamId;
+use crate::ErrorCode;
 
 /// The minimum size for the `GOAWAY` frame payload.
 /// It is 8 octets, as the last stream id and error code are required parts of the GOAWAY frame.
@@ -139,13 +139,13 @@ impl FrameIR for GoawayFrame {
 mod tests {
     use super::GoawayFrame;
 
-    use solicit::frame::Frame;
-    use solicit::frame::FrameHeader;
-    use solicit::frame::FrameIR;
-    use solicit::tests::common::raw_frame_from_parts;
+    use crate::solicit::frame::Frame;
+    use crate::solicit::frame::FrameHeader;
+    use crate::solicit::frame::FrameIR;
+    use crate::solicit::tests::common::raw_frame_from_parts;
 
     use bytes::Bytes;
-    use ErrorCode;
+    use crate::ErrorCode;
 
     #[test]
     fn test_parse_valid_no_debug_data() {

@@ -1,9 +1,9 @@
 use bytes::Bytes;
 
-use solicit::header::*;
+use crate::solicit::header::*;
 
-use data_or_headers::DataOrHeaders;
-use data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::data_or_headers::DataOrHeaders;
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 #[derive(Default)]
 pub struct SimpleHttpMessage {

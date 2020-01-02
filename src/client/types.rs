@@ -1,11 +1,11 @@
-use client::conn::ClientConnData;
-use client::conn::ClientStream;
-use client::conn::ClientStreamData;
-use client::conn::ClientToWriteMessage;
-use client::stream_handler::ClientStreamHandlerHolder;
-use common::client_or_server::ClientOrServer;
-use common::types::Types;
-use req_resp::RequestOrResponse;
+use crate::client::conn::ClientConnData;
+use crate::client::conn::ClientStream;
+use crate::client::conn::ClientStreamData;
+use crate::client::conn::ClientToWriteMessage;
+use crate::client::stream_handler::ClientStreamHandlerHolder;
+use crate::common::client_or_server::ClientOrServer;
+use crate::common::types::Types;
+use crate::req_resp::RequestOrResponse;
 
 #[derive(Clone)]
 pub struct ClientTypes;

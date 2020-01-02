@@ -1,4 +1,4 @@
-use common::conf::CommonConf;
+use crate::common::conf::CommonConf;
 use std::time::Duration;
 
 #[derive(Default, Debug, Clone)]
