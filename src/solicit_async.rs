@@ -27,13 +27,13 @@ use solicit::frame::FRAME_HEADER_LEN;
 
 use misc::BsDebug;
 
-pub type HttpFuture<T> = Box<Future<Item = T, Error = Error>>;
+pub type HttpFuture<T> = Box<dyn Future<Item = T, Error = Error>>;
 
-pub type HttpFutureSend<T> = Box<Future<Item = T, Error = Error> + Send>;
-pub type HttpFutureStreamSend<T> = Box<Stream<Item = T, Error = Error> + Send>;
+pub type HttpFutureSend<T> = Box<dyn Future<Item = T, Error = Error> + Send>;
+pub type HttpFutureStreamSend<T> = Box<dyn Stream<Item = T, Error = Error> + Send>;
 
 /// Inefficient, but OK because used only in tests
-pub fn recv_raw_frame_sync(read: &mut Read, max_frame_size: u32) -> Result<RawFrame> {
+pub fn recv_raw_frame_sync(read: &mut dyn Read, max_frame_size: u32) -> Result<RawFrame> {
     let mut header_buf = [0; FRAME_HEADER_LEN];
     read.read_exact(&mut header_buf)?;
     let header = unpack_header(&header_buf);

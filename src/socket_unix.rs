@@ -59,7 +59,7 @@ impl fmt::Display for SocketAddrUnix {
 
 impl ToSocketListener for SocketAddrUnix {
     #[cfg(unix)]
-    fn to_listener(&self, _conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>> {
+    fn to_listener(&self, _conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         debug!("binding socket to {}", self);
         Ok(Box::new(::std::os::unix::net::UnixListener::bind(&self.0)?))
     }
@@ -81,7 +81,7 @@ impl ToSocketListener for SocketAddrUnix {
 
 #[cfg(unix)]
 impl ToTokioListener for ::std::os::unix::net::UnixListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<ToServerStream> {
+    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<dyn ToServerStream> {
         Box::new(UnixListener::from_listener(*self, handle).unwrap())
     }
 
@@ -96,11 +96,11 @@ impl ToTokioListener for ::std::os::unix::net::UnixListener {
 impl ToServerStream for UnixListener {
     fn incoming(
         self: Box<Self>,
-    ) -> Box<Stream<Item = (Box<StreamItem>, Box<Any>), Error = io::Error>> {
+    ) -> Box<dyn Stream<Item = (Box<dyn StreamItem>, Box<dyn Any>), Error = io::Error>> {
         let stream = (*self).incoming().map(|(stream, addr)| {
             (
-                Box::new(stream) as Box<StreamItem>,
-                Box::new(addr) as Box<Any>,
+                Box::new(stream) as Box<dyn StreamItem>,
+                Box::new(addr) as Box<dyn Any>,
             )
         });
         Box::new(stream)
@@ -112,10 +112,10 @@ impl ToClientStream for SocketAddrUnix {
     fn connect(
         &self,
         handle: &reactor::Handle,
-    ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send> {
+    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
         let stream = UnixStream::connect(&self.0, &handle);
         if stream.is_ok() {
-            Box::new(ok(Box::new(stream.unwrap()) as Box<StreamItem>))
+            Box::new(ok(Box::new(stream.unwrap()) as Box<dyn StreamItem>))
         } else {
             Box::new(err(stream.unwrap_err()))
         }
@@ -125,7 +125,7 @@ impl ToClientStream for SocketAddrUnix {
     fn connect(
         &self,
         _handle: &reactor::Handle,
-    ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send> {
+    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
         use futures::future;
         Box::new(future::err(io::Error::new(
             io::ErrorKind::Other,

@@ -277,7 +277,7 @@ fn spawn_server_event_loop<S, A>(
     mut conn_handles: Vec<reactor::Remote>,
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
-    listen: Box<ToTokioListener + Send>,
+    listen: Box<dyn ToTokioListener + Send>,
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
     service: S,

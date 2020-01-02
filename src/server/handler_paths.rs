@@ -11,12 +11,12 @@ use ServerResponse;
 
 #[derive(Default)]
 struct Node {
-    service: Option<Arc<ServerHandler>>,
+    service: Option<Arc<dyn ServerHandler>>,
     children: HashMap<String, Node>,
 }
 
 impl Node {
-    fn add_service(&mut self, path: &str, service: Arc<ServerHandler>) {
+    fn add_service(&mut self, path: &str, service: Arc<dyn ServerHandler>) {
         match split_path(path) {
             None => {
                 self.service = Some(service);
@@ -34,7 +34,7 @@ impl Node {
         }
     }
 
-    fn remove_service(&mut self, path: &str) -> Option<Arc<ServerHandler>> {
+    fn remove_service(&mut self, path: &str) -> Option<Arc<dyn ServerHandler>> {
         match split_path(path) {
             None => self.service.take(),
             Some((first, rem)) => match self.children.get_mut(first) {
@@ -44,7 +44,7 @@ impl Node {
         }
     }
 
-    fn find_service(&self, path: &str) -> Option<&ServerHandler> {
+    fn find_service(&self, path: &str) -> Option<&dyn ServerHandler> {
         if let Some((first, rem)) = split_path(path) {
             if let Some(node) = self.children.get(first) {
                 if let Some(service) = node.find_service(rem) {
@@ -133,7 +133,7 @@ impl ServerHandlerPaths {
     /// server.service.set_service("/", Arc::new(Root{}));
     /// server.service.set_service("/files", Arc::new(Files{}));
     /// ```
-    pub fn set_service(&mut self, path: &str, service: Arc<ServerHandler>) {
+    pub fn set_service(&mut self, path: &str, service: Arc<dyn ServerHandler>) {
         assert!(path.starts_with("/"));
         self.root.add_service(path, service);
     }
@@ -165,12 +165,12 @@ impl ServerHandlerPaths {
         self.set_service(path, Arc::new(service))
     }
 
-    pub fn remove_service(&mut self, path: &str) -> Option<Arc<ServerHandler>> {
+    pub fn remove_service(&mut self, path: &str) -> Option<Arc<dyn ServerHandler>> {
         assert!(path.starts_with("/"));
         self.root.remove_service(path)
     }
 
-    fn find_service(&self, path: &str) -> Option<&ServerHandler> {
+    fn find_service(&self, path: &str) -> Option<&dyn ServerHandler> {
         self.root.find_service(path)
     }
 }

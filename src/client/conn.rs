@@ -71,7 +71,7 @@ impl HttpStreamData for ClientStream {
 }
 
 pub struct ClientConnData {
-    _callbacks: Box<ClientConnCallbacks>,
+    _callbacks: Box<dyn ClientConnCallbacks>,
 }
 
 impl ConnSpecific for ClientConnData {}
@@ -87,7 +87,7 @@ pub(crate) struct StartRequestMessage {
     pub body: Option<Bytes>,
     pub trailers: Option<Headers>,
     pub end_stream: bool,
-    pub stream_handler: Box<ClientStreamCreatedHandler>,
+    pub stream_handler: Box<dyn ClientStreamCreatedHandler>,
 }
 
 pub struct ClientStartRequestMessage {
@@ -269,7 +269,7 @@ impl ClientConn {
 
     pub fn spawn<H, C>(
         lh: reactor::Handle,
-        addr: Box<ToClientStream>,
+        addr: Box<dyn ToClientStream>,
         tls: ClientTlsOption<C>,
         conf: ClientConf,
         callbacks: H,
@@ -288,7 +288,7 @@ impl ClientConn {
 
     pub fn spawn_plain<C>(
         lh: reactor::Handle,
-        addr: Box<ToClientStream>,
+        addr: Box<dyn ToClientStream>,
         conf: ClientConf,
         callbacks: C,
     ) -> Self
@@ -297,7 +297,7 @@ impl ClientConn {
     {
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = addr.connect(&lh).map_err(Into::into);
-        let map_callback = move |socket: Box<StreamItem>| {
+        let map_callback = move |socket: Box<dyn StreamItem>| {
             info!("connected to {}", addr);
 
             if socket.is_tcp() {
@@ -309,7 +309,7 @@ impl ClientConn {
             socket
         };
 
-        let connect: Box<Future<Item = _, Error = _> + Send> =
+        let connect: Box<dyn Future<Item = _, Error = _> + Send> =
             if let Some(timeout) = conf.connection_timeout {
                 let timer = Timer::default();
                 Box::new(timer.timeout(connect, timeout).map(map_callback))
@@ -324,7 +324,7 @@ impl ClientConn {
         lh: reactor::Handle,
         domain: &str,
         connector: Arc<C>,
-        addr: Box<ToClientStream>,
+        addr: Box<dyn ToClientStream>,
         conf: ClientConf,
         callbacks: H,
     ) -> Self
@@ -408,7 +408,7 @@ impl ClientInterface for ClientConn {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<ClientStreamCreatedHandler>,
+        stream_handler: Box<dyn ClientStreamCreatedHandler>,
     ) -> result::Result<()> {
         let start = StartRequestMessage {
             headers,

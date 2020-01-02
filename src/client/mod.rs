@@ -305,7 +305,7 @@ impl Client {
                 &mut self,
                 req: ClientRequest,
                 increase_in_window: ClientIncreaseInWindow,
-            ) -> result::Result<Box<ClientStreamHandler>> {
+            ) -> result::Result<Box<dyn ClientStreamHandler>> {
                 let tx = self.tx.take().unwrap();
 
                 let (inc_tx, inc_rx) = stream_queue_sync::<ClientTypes>();
@@ -420,7 +420,7 @@ pub trait ClientInterface {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<ClientStreamCreatedHandler>,
+        stream_handler: Box<dyn ClientStreamCreatedHandler>,
     ) -> result::Result<()>;
 }
 
@@ -431,7 +431,7 @@ impl ClientInterface for Client {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<ClientStreamCreatedHandler>,
+        stream_handler: Box<dyn ClientStreamCreatedHandler>,
     ) -> result::Result<()> {
         let start = StartRequestMessage {
             headers,

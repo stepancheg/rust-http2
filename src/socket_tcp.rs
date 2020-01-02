@@ -20,7 +20,7 @@ use socket::ToTokioListener;
 use ServerConf;
 
 impl ToSocketListener for SocketAddr {
-    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>> {
+    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         Ok(Box::new(listener(self, conf)?))
     }
 
@@ -63,7 +63,7 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 }
 
 impl ToTokioListener for ::std::net::TcpListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<ToServerStream> {
+    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<dyn ToServerStream> {
         let local_addr = self.local_addr().unwrap();
         Box::new(TcpListener::from_listener(*self, &local_addr, handle).unwrap())
     }
@@ -76,11 +76,11 @@ impl ToTokioListener for ::std::net::TcpListener {
 impl ToServerStream for TcpListener {
     fn incoming(
         self: Box<Self>,
-    ) -> Box<Stream<Item = (Box<StreamItem>, Box<Any>), Error = io::Error>> {
+    ) -> Box<dyn Stream<Item = (Box<dyn StreamItem>, Box<dyn Any>), Error = io::Error>> {
         let stream = (*self).incoming().map(|(stream, addr)| {
             (
-                Box::new(stream) as Box<StreamItem>,
-                Box::new(addr) as Box<Any>,
+                Box::new(stream) as Box<dyn StreamItem>,
+                Box::new(addr) as Box<dyn Any>,
             )
         });
         Box::new(stream)
@@ -91,9 +91,9 @@ impl ToClientStream for SocketAddr {
     fn connect(
         &self,
         handle: &reactor::Handle,
-    ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send> {
+    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
         let stream =
-            TcpStream::connect(self, &handle).map(|stream| Box::new(stream) as Box<StreamItem>);
+            TcpStream::connect(self, &handle).map(|stream| Box::new(stream) as Box<dyn StreamItem>);
         Box::new(stream)
     }
 }

@@ -53,7 +53,7 @@ pub enum Error {
     InternalError(String),
     NotImplemented(&'static str),
     User(String),
-    StdError(Box<std_Error + Sync + Send + 'static>),
+    StdError(Box<dyn std_Error + Sync + Send + 'static>),
     ClientDied(Option<Arc<Error>>),
     ClientDiedAndReconnectFailed,
     ClientControllerDied,
@@ -234,11 +234,11 @@ impl fmt::Display for Error {
 }
 
 impl std_Error for Error {
-    fn cause(&self) -> Option<&std_Error> {
+    fn cause(&self) -> Option<&dyn std_Error> {
         match *self {
             Error::IoError(ref e) => Some(e),
             Error::TlsError(ref e) => Some(e),
-            Error::StdError(ref e) => Some(Box::deref(e) as &std_Error),
+            Error::StdError(ref e) => Some(Box::deref(e) as &dyn std_Error),
             _ => None,
         }
     }

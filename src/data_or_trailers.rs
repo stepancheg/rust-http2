@@ -51,7 +51,7 @@ impl DataOrTrailers {
 /// Most users won't need anything except data, so this type provides
 /// convenient constructors and accessors.
 pub struct HttpStreamAfterHeaders(
-    pub Box<Stream<Item = DataOrTrailers, Error = error::Error> + Send + 'static>,
+    pub Box<dyn Stream<Item = DataOrTrailers, Error = error::Error> + Send + 'static>,
 );
 
 impl HttpStreamAfterHeaders {

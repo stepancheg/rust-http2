@@ -78,7 +78,7 @@ impl HttpStreamData for ServerStream {
 }
 
 pub(crate) struct ServerConnData {
-    factory: Arc<ServerHandler>,
+    factory: Arc<dyn ServerHandler>,
 }
 
 impl ConnSpecific for ServerConnData {}
@@ -301,7 +301,7 @@ impl ServerConn {
 
     pub fn new<S, A>(
         lh: &reactor::Handle,
-        socket: Box<StreamItem>,
+        socket: Box<dyn StreamItem>,
         tls: ServerTlsOption<A>,
         conf: ServerConf,
         service: Arc<S>,

@@ -19,7 +19,8 @@ use StreamDead;
 pub struct ServerResponse {
     pub(crate) common: CommonSender<ServerTypes>,
     // need to replace with FnOnce when rust allows it
-    pub(crate) drop_callback: Option<Box<FnMut(&mut ServerResponse) -> result::Result<()> + Send>>,
+    pub(crate) drop_callback:
+        Option<Box<dyn FnMut(&mut ServerResponse) -> result::Result<()> + Send>>,
 }
 
 impl Drop for ServerResponse {

@@ -32,7 +32,7 @@ impl<'a> fmt::Debug for BsDebug<'a> {
     }
 }
 
-pub fn any_to_string(any: Box<Any + Send + 'static>) -> String {
+pub fn any_to_string(any: Box<dyn Any + Send + 'static>) -> String {
     if any.is::<String>() {
         *any.downcast::<String>().unwrap()
     } else if any.is::<&str>() {

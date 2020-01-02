@@ -19,7 +19,7 @@ pub trait ServerStreamHandler: 'static {
     fn error(&mut self, error: error::Error) -> result::Result<()>;
 }
 
-pub(crate) struct ServerStreamHandlerHolder(pub(crate) Box<ServerStreamHandler>);
+pub(crate) struct ServerStreamHandlerHolder(pub(crate) Box<dyn ServerStreamHandler>);
 
 impl StreamHandlerInternal for ServerStreamHandlerHolder {
     fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {

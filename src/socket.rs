@@ -15,7 +15,7 @@ use socket_unix::SocketAddrUnix;
 use ServerConf;
 
 pub trait ToSocketListener {
-    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>>;
+    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>>;
 
     fn cleanup(&self);
 }
@@ -48,7 +48,7 @@ impl AnySocketAddr {
 }
 
 impl ToSocketListener for AnySocketAddr {
-    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>> {
+    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.to_listener(conf),
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.to_listener(conf),
@@ -70,7 +70,7 @@ impl ToClientStream for AnySocketAddr {
     fn connect(
         &self,
         handle: &reactor::Handle,
-    ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send> {
+    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
@@ -79,7 +79,7 @@ impl ToClientStream for AnySocketAddr {
 }
 
 pub trait ToTokioListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<ToServerStream>;
+    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<dyn ToServerStream>;
 
     fn local_addr(&self) -> io::Result<AnySocketAddr>;
 }
@@ -87,14 +87,14 @@ pub trait ToTokioListener {
 pub trait ToServerStream {
     fn incoming(
         self: Box<Self>,
-    ) -> Box<Stream<Item = (Box<StreamItem>, Box<Any>), Error = io::Error>>;
+    ) -> Box<dyn Stream<Item = (Box<dyn StreamItem>, Box<dyn Any>), Error = io::Error>>;
 }
 
 pub trait ToClientStream: Display + Send + Sync {
     fn connect(
         &self,
         handle: &reactor::Handle,
-    ) -> Box<Future<Item = Box<StreamItem>, Error = io::Error> + Send>;
+    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send>;
 }
 
 pub trait StreamItem: AsyncRead + AsyncWrite + io::Read + io::Write + Debug + Send + Sync {

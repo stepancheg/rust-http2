@@ -19,7 +19,8 @@ use SenderState;
 pub struct ClientRequest {
     pub(crate) common: CommonSender<ClientTypes>,
     // need to replace with FnOnce when rust allows it
-    pub(crate) drop_callback: Option<Box<FnMut(&mut ClientRequest) -> result::Result<()> + Send>>,
+    pub(crate) drop_callback:
+        Option<Box<dyn FnMut(&mut ClientRequest) -> result::Result<()> + Send>>,
 }
 
 impl Drop for ClientRequest {
