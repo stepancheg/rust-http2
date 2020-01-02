@@ -13,19 +13,15 @@ use crate::solicit::frame::settings::*;
 use crate::solicit::header::*;
 use crate::solicit::DEFAULT_SETTINGS;
 
-use futures::future::Future;
-use futures::sync::oneshot;
+use std::future::Future;
 
 use tls_api::TlsConnector;
 
-use tokio_core::reactor;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
-use tokio_timer::Timer;
-use tokio_tls_api;
+use tls_api;
 
 use crate::solicit_async::*;
 
+use crate::assert_types::assert_send_future;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::req::ClientRequest;
 use crate::client::stream_handler::ClientStreamCreatedHandler;
@@ -59,6 +55,16 @@ use crate::ClientConf;
 use crate::ClientTlsOption;
 use crate::ErrorCode;
 use bytes::Bytes;
+use futures::channel::oneshot;
+use futures::FutureExt;
+use futures::TryFutureExt;
+use std::pin::Pin;
+use std::task::Context;
+use tokio::io::split;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::runtime::Handle;
+use tokio::time;
 
 pub struct ClientStreamData {}
 
@@ -113,10 +119,14 @@ where
 {
     type Types = ClientTypes;
 
-    fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
+    fn process_message(
+        &mut self,
+        cx: &mut Context<'_>,
+        message: ClientToWriteMessage,
+    ) -> result::Result<()> {
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
-            ClientToWriteMessage::Common(common) => self.process_common_message(common),
+            ClientToWriteMessage::Common(common) => self.process_common_message(cx, common),
             ClientToWriteMessage::WaitForHandshake(tx) => {
                 // ignore error
                 drop(tx.send(Ok(())));
@@ -209,20 +219,20 @@ where
     }
 }
 
-pub trait ClientConnCallbacks: 'static {
+pub trait ClientConnCallbacks: Send + 'static {
     // called at most once
     fn goaway(&self, stream_id: StreamId, raw_error_code: u32);
 }
 
 impl ClientConn {
     fn spawn_connected<I, C>(
-        lh: reactor::Handle,
+        lh: Handle,
         connect: HttpFutureSend<I>,
         conf: ClientConf,
         callbacks: C,
     ) -> Self
     where
-        I: AsyncWrite + AsyncRead + Send + 'static,
+        I: AsyncWrite + AsyncRead + Unpin + Send + 'static,
         C: ClientConnCallbacks,
     {
         let conn_died_error_holder = SomethingDiedErrorHolder::new();
@@ -237,7 +247,10 @@ impl ClientConn {
         let mut settings = DEFAULT_SETTINGS;
         settings.apply_from_frame(&settings_frame);
 
-        let handshake = connect.and_then(|conn| client_handshake(conn, settings_frame));
+        let handshake = connect.and_then(|mut conn| async {
+            client_handshake(&mut conn, settings_frame).await?;
+            Ok(conn)
+        });
 
         let conn_died_error_holder_copy = conn_died_error_holder.clone();
 
@@ -246,7 +259,7 @@ impl ClientConn {
         let future = handshake.and_then(move |conn| {
             debug!("handshake done");
 
-            let (read, write) = conn.split();
+            let (read, write) = split(conn);
 
             let conn_data = Conn::<ClientTypes, _>::new(
                 lh_copy,
@@ -272,8 +285,8 @@ impl ClientConn {
     }
 
     pub fn spawn<H, C>(
-        lh: reactor::Handle,
-        addr: Box<dyn ToClientStream>,
+        lh: Handle,
+        addr: Pin<Box<dyn ToClientStream + Send>>,
         tls: ClientTlsOption<C>,
         conf: ClientConf,
         callbacks: H,
@@ -291,8 +304,8 @@ impl ClientConn {
     }
 
     pub fn spawn_plain<C>(
-        lh: reactor::Handle,
-        addr: Box<dyn ToClientStream>,
+        lh: Handle,
+        addr: Pin<Box<dyn ToClientStream>>,
         conf: ClientConf,
         callbacks: C,
     ) -> Self
@@ -300,8 +313,8 @@ impl ClientConn {
         C: ClientConnCallbacks,
     {
         let no_delay = conf.no_delay.unwrap_or(true);
-        let connect = addr.connect(&lh).map_err(Into::into);
-        let map_callback = move |socket: Box<dyn StreamItem>| {
+        let connect = TryFutureExt::map_err(addr.connect(&lh), error::Error::from);
+        let map_callback = move |socket: Pin<Box<dyn StreamItem + Send>>| {
             info!("connected to {}", addr);
 
             if socket.is_tcp() {
@@ -313,22 +326,29 @@ impl ClientConn {
             socket
         };
 
-        let connect: Box<dyn Future<Item = _, Error = _> + Send> =
-            if let Some(timeout) = conf.connection_timeout {
-                let timer = Timer::default();
-                Box::new(timer.timeout(connect, timeout).map(map_callback))
-            } else {
-                Box::new(connect.map(map_callback))
-            };
+        let connect: Pin<
+            Box<dyn Future<Output = result::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>,
+        > = if let Some(timeout) = conf.connection_timeout {
+            Box::pin(time::timeout(timeout, connect).map(|r| match r {
+                Ok(r) => r,
+                Err(_) => Err(error::Error::ConnectionTimeout),
+            }))
+        } else {
+            Box::pin(connect)
+        };
+
+        let connect = Box::pin(
+            connect.map_ok(move |socket: Pin<Box<dyn StreamItem + Send>>| map_callback(socket)),
+        );
 
         ClientConn::spawn_connected(lh, connect, conf, callbacks)
     }
 
     pub fn spawn_tls<H, C>(
-        lh: reactor::Handle,
+        lh: Handle,
         domain: &str,
         connector: Arc<C>,
-        addr: Box<dyn ToClientStream>,
+        addr: Pin<Box<dyn ToClientStream + Send>>,
         conf: ClientConf,
         callbacks: H,
     ) -> Self
@@ -344,16 +364,20 @@ impl ClientConn {
                 info!("connected to {}", addr);
                 c
             })
-            .map_err(|e| e.into());
+            .map_err(|e| error::Error::from(e));
 
-        let tls_conn = connect.and_then(move |conn| {
-            tokio_tls_api::connect_async(&*connector, &domain, conn)
-                .map_err(|e| Error::IoError(io::Error::new(io::ErrorKind::Other, e)))
-        });
+        let connect = assert_send_future(connect);
+
+        let tls_conn = connect
+            .and_then(move |conn| async move { Ok(connector.connect(&domain, conn).await?) });
+
+        let tls_conn = assert_send_future(tls_conn);
 
         let tls_conn = tls_conn.map_err(Error::from);
 
-        ClientConn::spawn_connected(lh, Box::new(tls_conn), conf, callbacks)
+        let tls_conn = assert_send_future(tls_conn);
+
+        ClientConn::spawn_connected(lh, Box::pin(tls_conn), conf, callbacks)
     }
 
     pub(crate) fn start_request_with_resp_sender(
@@ -389,7 +413,7 @@ impl ClientConn {
         let rx =
             rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
 
-        Box::new(rx)
+        Box::pin(rx)
     }
 
     pub fn wait_for_connect_with_resp_sender(
@@ -438,12 +462,13 @@ where
 
     fn process_headers(
         &mut self,
+        cx: &mut Context<'_>,
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
     ) -> result::Result<Option<HttpStreamRef<ClientTypes>>> {
         let existing_stream = self
-            .get_stream_for_headers_maybe_send_error(stream_id)?
+            .get_stream_for_headers_maybe_send_error(cx, stream_id)?
             .is_some();
         if !existing_stream {
             return Ok(None);
@@ -468,7 +493,7 @@ where
 
         if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
             warn!("invalid headers: {:?}: {:?}", e, headers);
-            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 
@@ -479,7 +504,7 @@ where
                 let status_1xx = status >= 100 && status <= 199;
                 if status_1xx && end_stream == EndStream::Yes {
                     warn!("1xx headers and end stream: {}", stream_id);
-                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                    self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
                     return Ok(None);
                 }
                 status_1xx
@@ -487,7 +512,7 @@ where
             HeadersPlace::Trailing => {
                 if end_stream == EndStream::No {
                     warn!("headers without end stream after data: {}", stream_id);
-                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                    self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
                     return Ok(None);
                 }
                 false

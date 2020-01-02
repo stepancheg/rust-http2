@@ -10,8 +10,6 @@ use crate::hpack::decoder::DecoderError;
 
 use tls_api;
 
-use tokio_timer::TimeoutError;
-
 use crate::common::sender::SendError;
 use crate::display_comma_separated::DisplayCommaSeparated;
 use crate::solicit::error_code::ErrorCode;
@@ -20,6 +18,7 @@ use crate::solicit::frame::ParseFrameError;
 use crate::StreamDead;
 use crate::StreamId;
 use std::net::SocketAddr;
+use tokio::time::Timeout;
 use void::Void;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
@@ -109,8 +108,8 @@ impl From<tls_api::Error> for Error {
     }
 }
 
-impl<F> From<TimeoutError<F>> for Error {
-    fn from(_err: TimeoutError<F>) -> Error {
+impl<F> From<Timeout<F>> for Error {
+    fn from(_err: Timeout<F>) -> Error {
         Error::ConnectionTimeout
     }
 }

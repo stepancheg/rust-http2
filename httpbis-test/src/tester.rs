@@ -32,6 +32,7 @@ use httpbis::SimpleHttpMessage;
 use httpbis::StreamId;
 
 use super::BIND_HOST;
+use crate::bytes_ext::BytesExt;
 use httpbis::for_test::HttpSettings;
 use httpbis::for_test::WindowSize;
 use httpbis::for_test::DEFAULT_SETTINGS;
@@ -201,7 +202,7 @@ impl HttpConnTester {
 
     pub fn send_data(&mut self, stream_id: StreamId, data: &[u8], end: bool) {
         let mut data_frame = DataFrame::new(stream_id);
-        data_frame.data = Bytes::from(data);
+        data_frame.data = Bytes::copy_from_slice(data);
         if end {
             data_frame.set_flag(DataFlag::EndStream);
         }

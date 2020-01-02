@@ -5,15 +5,12 @@ use std::sync::atomic::AtomicIsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use futures::task;
-use futures::task::Task;
-
-use futures::Async;
-use futures::Poll;
+use std::task::Poll;
 
 use super::atomic_box_option::AtomicBoxOption;
 
 use super::waiters::*;
+use futures::task::Context;
 
 struct ConnOutWindowShared {
     window_size: AtomicIsize,
@@ -22,7 +19,7 @@ struct ConnOutWindowShared {
 
 struct StreamWindowShared {
     conn: Arc<ConnOutWindowShared>,
-    task: AtomicBoxOption<Task>,
+    task: AtomicBoxOption<std::task::Waker>,
     closed: AtomicBool,
     window_size: AtomicIsize,
 }
@@ -51,7 +48,7 @@ impl Drop for StreamOutWindowSender {
     fn drop(&mut self) {
         self.shared.closed.store(true, Ordering::SeqCst);
         if let Some(task) = self.shared.task.swap_null(Ordering::SeqCst) {
-            task.notify();
+            task.wake();
         }
     }
 }
@@ -119,7 +116,7 @@ impl StreamOutWindowSender {
         let new_size = old_size + size as isize;
         if new_size > 0 {
             if let Some(task) = self.shared.task.swap_null(Ordering::SeqCst) {
-                task.notify();
+                task.wake();
             }
         }
     }
@@ -172,39 +169,39 @@ impl StreamOutWindowReceiver {
         }
     }
 
-    fn poll_conn(&self) -> Poll<(), ConnDead> {
+    fn poll_conn(&self, cx: &mut Context<'_>) -> Poll<Result<(), ConnDead>> {
         self.check_conn_closed()?;
 
         if self.shared.conn.window_size.load(Ordering::SeqCst) > 0 {
-            return Ok(Async::Ready(()));
+            return Poll::Ready(Ok(()));
         }
 
-        self.conn_waiter.park();
+        self.conn_waiter.park(cx);
 
         self.check_conn_closed()?;
 
-        Ok(if self.shared.conn.window_size.load(Ordering::SeqCst) > 0 {
-            Async::Ready(())
+        if self.shared.conn.window_size.load(Ordering::SeqCst) > 0 {
+            Poll::Ready(Ok(()))
         } else {
-            Async::NotReady
-        })
+            Poll::Pending
+        }
     }
 
-    pub fn poll(&self) -> Poll<(), StreamDead> {
+    pub fn poll(&self, cx: &mut Context<'_>) -> Poll<Result<(), StreamDead>> {
         self.check_stream_closed()?;
 
         if self.shared.window_size.load(Ordering::SeqCst) <= 0 {
             self.shared
                 .task
-                .store_box(Box::new(task::current()), Ordering::SeqCst);
+                .store_box(Box::new(cx.waker().clone()), Ordering::SeqCst);
 
             self.check_stream_closed()?;
 
             if self.shared.window_size.load(Ordering::SeqCst) <= 0 {
-                return Ok(Async::NotReady);
+                return Poll::Pending;
             }
         }
 
-        Ok(self.poll_conn()?)
+        self.poll_conn(cx).map_err(|e| e.into())
     }
 }

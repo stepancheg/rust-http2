@@ -1,4 +1,4 @@
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 
 use crate::solicit::header::*;
 
@@ -46,21 +46,21 @@ impl SimpleHttpMessage {
     pub fn not_found_404(message: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::not_found_404(),
-            body: Bytes::from(message),
+            body: Bytes::copy_from_slice(message.as_bytes()),
         }
     }
 
     pub fn internal_error_500(message: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::internal_error_500(),
-            body: Bytes::from(message),
+            body: Bytes::copy_from_slice(message.as_bytes()),
         }
     }
 
     pub fn found_200_plain_text(body: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::ok_200(),
-            body: Bytes::from(body),
+            body: Bytes::copy_from_slice(body.as_bytes()),
         }
     }
 
@@ -77,7 +77,11 @@ impl SimpleHttpMessage {
                 self.headers.extend(headers);
             }
             DataOrHeaders::Data(data) => {
-                self.body.extend_from_slice(&data);
+                // TODO: quadratic
+                let mut body = BytesMut::new();
+                body.extend_from_slice(&self.body[..]);
+                body.extend_from_slice(&data[..]);
+                self.body = body.freeze();
             }
         }
     }

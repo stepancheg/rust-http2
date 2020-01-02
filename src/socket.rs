@@ -5,14 +5,15 @@ use std::fmt::Formatter;
 use std::io;
 use std::net::SocketAddr;
 
-use tokio_core::reactor;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
 
 use crate::socket_unix::SocketAddrUnix;
 use crate::ServerConf;
 use futures::stream::Stream;
 use futures::Future;
+use std::pin::Pin;
+use tokio::runtime::Handle;
 
 pub trait ToSocketListener {
     fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>>;
@@ -69,8 +70,8 @@ impl ToSocketListener for AnySocketAddr {
 impl ToClientStream for AnySocketAddr {
     fn connect(
         &self,
-        handle: &reactor::Handle,
-    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
+        handle: &Handle,
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
@@ -79,7 +80,7 @@ impl ToClientStream for AnySocketAddr {
 }
 
 pub trait ToTokioListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<dyn ToServerStream>;
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Box<dyn ToServerStream>;
 
     fn local_addr(&self) -> io::Result<AnySocketAddr>;
 }
@@ -87,17 +88,22 @@ pub trait ToTokioListener {
 pub trait ToServerStream {
     fn incoming(
         self: Box<Self>,
-    ) -> Box<dyn Stream<Item = (Box<dyn StreamItem>, Box<dyn Any>), Error = io::Error>>;
+    ) -> Pin<
+        Box<
+            dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>>
+                + Send,
+        >,
+    >;
 }
 
 pub trait ToClientStream: Display + Send + Sync {
     fn connect(
         &self,
-        handle: &reactor::Handle,
-    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send>;
+        handle: &Handle,
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>>;
 }
 
-pub trait StreamItem: AsyncRead + AsyncWrite + io::Read + io::Write + Debug + Send + Sync {
+pub trait StreamItem: AsyncRead + AsyncWrite + Debug + Send + Sync {
     fn is_tcp(&self) -> bool;
 
     fn set_nodelay(&self, no_delay: bool) -> io::Result<()>;

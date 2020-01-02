@@ -284,7 +284,7 @@ impl Frame for HeadersFrame {
                 // stream error (Section 5.4.2) of type PROTOCOL_ERROR.
                 return Err(ParseFrameError::StreamDependencyOnItself(stream_id));
             }
-            (actual.slice_from(5), Some(dep))
+            (actual.slice(5..), Some(dep))
         } else {
             (actual, None)
         };

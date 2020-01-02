@@ -1,6 +1,5 @@
 use bytes::Buf;
 use bytes::Bytes;
-use bytes::IntoBuf;
 
 use crate::solicit::frame::builder::FrameBuilder;
 use crate::solicit::frame::parse_padded_payload;
@@ -105,12 +104,12 @@ impl Frame for PushPromiseFrame {
 
         let (payload, padding_len) = parse_padded_payload(raw_frame.payload(), padded)?;
 
-        let mut buf = (&payload).into_buf();
+        let mut buf = &payload[..];
 
-        let promised_stream_id = buf.get_u32_be();
+        let promised_stream_id = buf.get_u32();
 
         let header_fragment =
-            payload.slice((payload_len as usize) - buf.remaining(), payload.len());
+            payload.slice((payload_len as usize) - buf.remaining()..payload.len());
 
         Ok(PushPromiseFrame {
             header_fragment,

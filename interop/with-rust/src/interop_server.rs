@@ -57,8 +57,8 @@ impl ServerHandler for Blocks {
         if let Some(captures) = blocks_re.captures(req.headers.path()) {
             let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
             let count: u32 = captures.get(2).expect("2").as_str().parse().expect("parse");
-            let stream = stream::iter_ok(
-                (0..count).map(move |i| Bytes::from(vec![(i % 0xff) as u8; size as usize])),
+            let stream = stream::iter(
+                (0..count).map(move |i| Ok(Bytes::from(vec![(i % 0xff) as u8; size as usize]))),
             );
             resp.pull_bytes_from_stream(stream)?;
         } else {

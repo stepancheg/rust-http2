@@ -3,8 +3,8 @@ extern crate futures;
 extern crate httpbis;
 
 use bytes::Bytes;
-use futures::future::Future;
-use futures::stream::Stream;
+use futures::stream::StreamExt;
+use futures::stream::TryStreamExt;
 use httpbis::Client;
 use httpbis::Headers;
 use httpbis::ServerBuilder;
@@ -15,6 +15,7 @@ use httpbis::ServerResponse;
 use std::env;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::runtime::Runtime;
 
 fn forever(mut cb: impl FnMut()) {
     println!("running forever");
@@ -68,15 +69,17 @@ fn request() {
     .expect("client");
 
     forever(|| {
-        let (header, body) = client
-            .start_get("/any", "localhost")
-            .0
-            .wait()
+        let (header, body) = Runtime::new()
+            .unwrap()
+            .block_on(client.start_get("/any", "localhost").0)
             .expect("headers");
         assert_eq!(200, header.status());
 
         // TODO: check content
-        body.collect().wait().expect("body");
+        Runtime::new()
+            .unwrap()
+            .block_on(body.try_collect::<Vec<_>>())
+            .expect("body");
     });
 }
 
@@ -110,20 +113,23 @@ fn ping_pong() {
     )
     .expect("client");
 
-    let (mut sender, response) = client
-        .start_post_sink("/any", "localhost")
-        .wait()
+    let (mut sender, response) = Runtime::new()
+        .unwrap()
+        .block_on(client.start_post_sink("/any", "localhost"))
         .expect("request");
 
-    let (header, response) = response.wait().expect("response wait");
+    let (header, response) = Runtime::new()
+        .unwrap()
+        .block_on(response)
+        .expect("response wait");
 
     assert_eq!(200, header.status());
 
-    let body = response.filter_data();
-    let mut body = body.wait();
+    let mut body = response.filter_data();
+    let mut runtime = Runtime::new().unwrap();
 
     let mut i = 0u32;
-    forever(|| {
+    forever(move || {
         i = i.wrapping_add(1);
         let mut req = Vec::new();
         req.resize(BLOCK_SIZE, i as u8);
@@ -131,7 +137,7 @@ fn ping_pong() {
 
         let mut read = 0;
         while read < BLOCK_SIZE {
-            let chunk = body.next().unwrap().unwrap();
+            let chunk = runtime.block_on(body.next()).unwrap().unwrap();
             read += chunk.len();
         }
         assert_eq!(BLOCK_SIZE, read);

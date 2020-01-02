@@ -20,8 +20,6 @@ use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
 use tls_api_openssl::TlsConnector;
 
-use futures::future::Future;
-
 use httpbis::Client;
 use httpbis::ClientConf;
 use httpbis::ClientTlsOption;
@@ -30,21 +28,20 @@ use httpbis_interop::PORT;
 
 use clap::App;
 use clap::Arg;
+use tokio::runtime::Runtime;
 
 fn not_found(client: Client) {
-    let r = client
-        .start_get("/404", "localhost")
-        .collect()
-        .wait()
+    let mut rt = Runtime::new().unwrap();
+    let r = rt
+        .block_on(client.start_get("/404", "localhost").collect())
         .expect("get");
     assert_eq!(404, r.headers.status());
 }
 
 fn found(client: Client) {
-    let r = client
-        .start_get("/200", "localhost")
-        .collect()
-        .wait()
+    let mut rt = Runtime::new().unwrap();
+    let r = rt
+        .block_on(client.start_get("/200", "localhost").collect())
         .expect("get");
     assert_eq!(200, r.headers.status());
     assert_eq!(Bytes::from("200 200 200"), r.body);

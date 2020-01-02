@@ -3,17 +3,17 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use tokio_core::reactor;
 #[cfg(unix)]
-use tokio_uds::UnixListener;
+use tokio::net::UnixListener;
 #[cfg(unix)]
-use tokio_uds::UnixStream;
+use tokio::net::UnixStream;
 
-use futures::future::err;
-use futures::future::ok;
+use futures::stream;
+
 use futures::stream::Stream;
 use futures::Future;
 
+use crate::assert_types::assert_send_stream;
 use crate::socket::AnySocketAddr;
 use crate::socket::StreamItem;
 use crate::socket::ToClientStream;
@@ -23,6 +23,8 @@ use crate::socket::ToTokioListener;
 use crate::ServerConf;
 use std::fmt;
 use std::path::PathBuf;
+use std::pin::Pin;
+use tokio::runtime::Handle;
 
 #[derive(Debug, Clone)]
 pub struct SocketAddrUnix(pub(crate) PathBuf);
@@ -81,8 +83,8 @@ impl ToSocketListener for SocketAddrUnix {
 
 #[cfg(unix)]
 impl ToTokioListener for ::std::os::unix::net::UnixListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<dyn ToServerStream> {
-        Box::new(UnixListener::from_listener(*self, handle).unwrap())
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Box<dyn ToServerStream> {
+        handle.enter(|| Box::new(UnixListener::from_std(*self).unwrap()))
     }
 
     fn local_addr(&self) -> io::Result<AnySocketAddr> {
@@ -96,14 +98,31 @@ impl ToTokioListener for ::std::os::unix::net::UnixListener {
 impl ToServerStream for UnixListener {
     fn incoming(
         self: Box<Self>,
-    ) -> Box<dyn Stream<Item = (Box<dyn StreamItem>, Box<dyn Any>), Error = io::Error>> {
-        let stream = (*self).incoming().map(|(stream, addr)| {
-            (
-                Box::new(stream) as Box<dyn StreamItem>,
-                Box::new(addr) as Box<dyn Any>,
-            )
+    ) -> Pin<
+        Box<
+            dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>>
+                + Send,
+        >,
+    > {
+        let unix_listener = *self;
+
+        let stream = stream::unfold(unix_listener, |mut unix_listener_listener| async {
+            let r = match unix_listener_listener.accept().await {
+                Ok((socket, addr)) => Ok((
+                    Box::pin(socket) as Pin<Box<dyn StreamItem + Send>>,
+                    Box::new(addr) as Box<dyn Any + Send>,
+                )),
+                Err(e) => Err(e),
+            };
+            Some((r, unix_listener_listener))
         });
-        Box::new(stream)
+
+        let stream = assert_send_stream::<
+            io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>,
+            _,
+        >(stream);
+
+        Box::pin(stream)
     }
 }
 
@@ -111,23 +130,28 @@ impl ToClientStream for SocketAddrUnix {
     #[cfg(unix)]
     fn connect(
         &self,
-        handle: &reactor::Handle,
-    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
-        let stream = UnixStream::connect(&self.0, &handle);
-        if stream.is_ok() {
-            Box::new(ok(Box::new(stream.unwrap()) as Box<dyn StreamItem>))
-        } else {
-            Box::new(err(stream.unwrap_err()))
+        handle: &Handle,
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
+        // TODO: async connect
+        let stream = match std::os::unix::net::UnixStream::connect(&self.0) {
+            Ok(stream) => stream,
+            Err(e) => return Box::pin(async { Err(e) }),
+        };
+        match handle.enter(|| UnixStream::from_std(stream)) {
+            Ok(stream) => {
+                Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn StreamItem + Send>>) })
+            }
+            Err(e) => return Box::pin(async { Err(e) }),
         }
     }
 
     #[cfg(not(unix))]
     fn connect(
         &self,
-        _handle: &reactor::Handle,
-    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
+        _handle: &Handle,
+    ) -> Pin<Box<dyn Future<Output = io::Result<Box<dyn StreamItem + Send>>> + Send>> {
         use futures::future;
-        Box::new(future::err(io::Error::new(
+        Box::pin(future::err(io::Error::new(
             io::ErrorKind::Other,
             "cannot use unix sockets on non-unix",
         )))

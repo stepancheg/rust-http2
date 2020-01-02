@@ -2,15 +2,17 @@ use std::any::Any;
 use std::io;
 use std::net::SocketAddr;
 
-use tokio_core::net::TcpListener;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor;
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
 
+use futures::future::Future;
+use futures::future::TryFutureExt;
+use futures::stream;
 use futures::stream::Stream;
-use futures::Future;
 
 use net2;
 
+use crate::assert_types::assert_send_stream;
 use crate::socket::AnySocketAddr;
 use crate::socket::StreamItem;
 use crate::socket::ToClientStream;
@@ -18,6 +20,8 @@ use crate::socket::ToServerStream;
 use crate::socket::ToSocketListener;
 use crate::socket::ToTokioListener;
 use crate::ServerConf;
+use std::pin::Pin;
+use tokio::runtime::Handle;
 
 impl ToSocketListener for SocketAddr {
     fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
@@ -63,9 +67,8 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 }
 
 impl ToTokioListener for ::std::net::TcpListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &reactor::Handle) -> Box<dyn ToServerStream> {
-        let local_addr = self.local_addr().unwrap();
-        Box::new(TcpListener::from_listener(*self, &local_addr, handle).unwrap())
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Box<dyn ToServerStream> {
+        handle.enter(|| Box::new(TcpListener::from_std(*self).unwrap()))
     }
 
     fn local_addr(&self) -> io::Result<AnySocketAddr> {
@@ -76,25 +79,42 @@ impl ToTokioListener for ::std::net::TcpListener {
 impl ToServerStream for TcpListener {
     fn incoming(
         self: Box<Self>,
-    ) -> Box<dyn Stream<Item = (Box<dyn StreamItem>, Box<dyn Any>), Error = io::Error>> {
-        let stream = (*self).incoming().map(|(stream, addr)| {
-            (
-                Box::new(stream) as Box<dyn StreamItem>,
-                Box::new(addr) as Box<dyn Any>,
-            )
+    ) -> Pin<
+        Box<
+            dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>>
+                + Send,
+        >,
+    > {
+        let tcp_listener = *self;
+
+        let stream = stream::unfold(tcp_listener, |mut tcp_listener| async move {
+            let r = match tcp_listener.accept().await {
+                Ok((socket, addr)) => Ok((
+                    Box::pin(socket) as Pin<Box<dyn StreamItem + Send>>,
+                    Box::new(addr) as Box<dyn Any + Send>,
+                )),
+                Err(e) => Err(e),
+            };
+            Some((r, tcp_listener))
         });
-        Box::new(stream)
+
+        let stream = assert_send_stream::<
+            io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>,
+            _,
+        >(stream);
+
+        Box::pin(stream)
     }
 }
 
 impl ToClientStream for SocketAddr {
     fn connect(
         &self,
-        handle: &reactor::Handle,
-    ) -> Box<dyn Future<Item = Box<dyn StreamItem>, Error = io::Error> + Send> {
-        let stream =
-            TcpStream::connect(self, &handle).map(|stream| Box::new(stream) as Box<dyn StreamItem>);
-        Box::new(stream)
+        _handle: &Handle,
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
+        let future = TcpStream::connect(self.clone())
+            .map_ok(|stream| Box::pin(stream) as Pin<Box<dyn StreamItem + Send>>);
+        Box::pin(future)
     }
 }
 

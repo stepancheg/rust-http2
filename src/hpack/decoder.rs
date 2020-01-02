@@ -89,7 +89,7 @@ fn decode_integer(buf: &[u8], prefix_size: u8) -> Result<(usize, usize), Decoder
 ///
 /// Returns the decoded string in a newly allocated `Vec` and the number of
 /// bytes consumed from the given buffer.
-fn decode_string<'a>(buf: &'a [u8]) -> Result<(Bytes, usize), DecoderError> {
+fn decode_string(buf: &[u8]) -> Result<(Bytes, usize), DecoderError> {
     let (len, consumed) = decode_integer(buf, 7)?;
     debug!("decode_string: Consumed = {}, len = {}", consumed, len);
     if consumed + len > buf.len() {
@@ -115,7 +115,7 @@ fn decode_string<'a>(buf: &'a [u8]) -> Result<(Bytes, usize), DecoderError> {
     } else {
         // The octets were transmitted raw
         debug!("decode_string: Raw octet string received");
-        Ok((Bytes::from(raw_string), consumed + len))
+        Ok((Bytes::copy_from_slice(raw_string), consumed + len))
     }
 }
 

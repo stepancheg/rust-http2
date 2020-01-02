@@ -1,11 +1,10 @@
 #![allow(dead_code)]
 
+use futures::channel::mpsc::unbounded;
+use futures::channel::mpsc::UnboundedReceiver;
+use futures::channel::mpsc::UnboundedSender;
 use futures::stream::Stream;
-use futures::sync::mpsc::unbounded;
-use futures::sync::mpsc::UnboundedReceiver;
-use futures::sync::mpsc::UnboundedSender;
-use futures::Async;
-use futures::Poll;
+use std::task::Poll;
 
 use crate::error;
 
@@ -20,7 +19,9 @@ use crate::server::types::ServerTypes;
 use crate::ErrorCode;
 use crate::Headers;
 use bytes::Bytes;
+use futures::task::Context;
 use std::marker;
+use std::pin::Pin;
 
 pub(crate) struct StreamQueueSyncSender<T: Types> {
     sender: UnboundedSender<Result<DataOrHeadersWithFlag, error::Error>>,
@@ -100,30 +101,31 @@ impl ClientStreamHandler for StreamQueueSyncSender<ClientTypes> {
 }
 
 impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
-    type Item = DataOrHeadersWithFlag;
-    type Error = error::Error;
+    type Item = result::Result<DataOrHeadersWithFlag>;
 
-    fn poll(&mut self) -> Poll<Option<DataOrHeadersWithFlag>, error::Error> {
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<result::Result<DataOrHeadersWithFlag>>> {
         if self.eof_received {
-            return Ok(Async::Ready(None));
+            return Poll::Ready(None);
         }
 
-        let part = match self.receiver.poll() {
-            Err(()) => unreachable!(),
-            Ok(Async::NotReady) => return Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => {
+        let part = match Pin::new(&mut self.receiver).poll_next(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(None) => {
                 // should be impossible, because
                 // callbacks are notified of client death in
                 // `HttpStreamCommon::conn_died`
-                return Err(error::Error::InternalError(
+                return Poll::Ready(Some(Err(error::Error::InternalError(
                     "internal error: unexpected EOF".to_owned(),
-                ));
+                ))));
             }
-            Ok(Async::Ready(Some(Err(e)))) => {
+            Poll::Ready(Some(Err(e))) => {
                 self.eof_received = true;
-                return Err(e);
+                return Poll::Ready(Some(Err(e)));
             }
-            Ok(Async::Ready(Some(Ok(part)))) => {
+            Poll::Ready(Some(Ok(part))) => {
                 if part.last {
                     self.eof_received = true;
                 }
@@ -131,7 +133,7 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
             }
         };
 
-        Ok(Async::Ready(Some(part)))
+        Poll::Ready(Some(Ok(part)))
     }
 }
 

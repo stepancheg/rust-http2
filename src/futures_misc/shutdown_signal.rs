@@ -1,11 +1,12 @@
-use futures::future::Future;
+use futures::channel::mpsc::unbounded;
+use futures::channel::mpsc::UnboundedReceiver;
+use futures::channel::mpsc::UnboundedSender;
 use futures::stream::Stream;
-use futures::sync::mpsc::unbounded;
-use futures::sync::mpsc::UnboundedReceiver;
-use futures::sync::mpsc::UnboundedSender;
-use futures::Async;
-use futures::Poll;
+use std::future::Future;
+use std::task::Poll;
 
+use futures::task::Context;
+use std::pin::Pin;
 use void::Void;
 
 pub fn shutdown_signal() -> (ShutdownSignal, ShutdownFuture) {
@@ -35,14 +36,12 @@ pub struct ShutdownFuture {
 }
 
 impl Future for ShutdownFuture {
-    type Item = Void;
-    type Error = ();
+    type Output = Result<Void, ()>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.rx.poll() {
-            Ok(Async::Ready(_)) => Err(()),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(_) => Err(()),
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match Pin::new(&mut self.rx).poll_next(cx) {
+            Poll::Ready(_) => Poll::Ready(Err(())),
+            Poll::Pending => Poll::Pending,
         }
     }
 }

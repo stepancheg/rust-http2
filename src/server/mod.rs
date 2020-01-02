@@ -9,6 +9,7 @@ pub(crate) mod stream_handler;
 pub mod tls;
 pub(crate) mod types;
 
+use futures::future::try_join_all;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
@@ -19,14 +20,14 @@ use std::thread;
 
 use tls_api;
 
-use tokio_core::reactor;
-
+use futures::channel::oneshot;
 use futures::future;
-use futures::future::join_all;
-use futures::future::Future;
+use futures::future::try_join;
+use futures::future::FutureExt;
+use futures::future::TryFutureExt;
 use futures::stream;
-use futures::stream::Stream;
-use futures::sync::oneshot;
+use futures::stream::StreamExt;
+use futures::stream::TryStreamExt;
 
 use crate::error::Error;
 use crate::result::Result;
@@ -43,7 +44,9 @@ use crate::socket::ToSocketListener;
 use crate::socket::ToTokioListener;
 
 pub use self::tls::ServerTlsOption;
+use crate::assert_types::assert_send_future;
 use crate::common::conn::ConnStateSnapshot;
+use crate::result;
 pub use crate::server::conf::ServerConf;
 pub use crate::server::conn::ServerConn;
 use crate::server::handler::ServerHandler;
@@ -52,6 +55,7 @@ use crate::socket_unix::SocketAddrUnix;
 use rand::thread_rng;
 use rand::Rng;
 use std::fmt;
+use tokio::runtime::{Handle, Runtime};
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
@@ -59,11 +63,11 @@ pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub addr: Option<AnySocketAddr>,
     /// Event loop to spawn server.
     /// If not specified, builder will create new event loop in a new thread.
-    pub event_loop: Option<reactor::Remote>,
+    pub event_loop: Option<Handle>,
     /// Event loops used to run incoming connections.
     /// If empty, listener event loop will be used.
     // TODO: test it
-    pub conn_event_loops: Vec<reactor::Remote>,
+    pub conn_event_loops: Vec<Handle>,
     pub service: ServerHandlerPaths,
 }
 
@@ -163,20 +167,18 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
             let conf = self.conf;
             let service = self.service;
             let conn_event_loops = self.conn_event_loops;
-            remote.spawn(move |handle| {
-                drop(spawn_server_event_loop(
-                    handle.clone(),
-                    conn_event_loops,
-                    state_copy,
-                    tls,
-                    listen,
-                    shutdown_future,
-                    conf,
-                    service,
-                    alive_tx,
-                ));
-                future::finished(())
-            });
+            let handle = remote.clone();
+            remote.spawn(spawn_server_event_loop(
+                handle.clone(),
+                conn_event_loops,
+                state_copy,
+                tls,
+                listen,
+                shutdown_future,
+                conf,
+                service,
+                alive_tx,
+            ));
             Completion::Rx(done_rx)
         } else {
             let tls = self.tls;
@@ -191,19 +193,21 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                         .to_string(),
                 )
                 .spawn(move || {
-                    let mut lp = reactor::Core::new().expect("http2server");
-                    let done_rx = spawn_server_event_loop(
-                        lp.handle(),
-                        conn_event_loops,
-                        state_copy,
-                        tls,
-                        listen,
-                        shutdown_future,
-                        conf,
-                        service,
-                        alive_tx,
+                    let mut lp = Runtime::new().expect("http2server");
+                    lp.block_on(
+                        spawn_server_event_loop(
+                            lp.handle().clone(),
+                            conn_event_loops,
+                            state_copy,
+                            tls,
+                            listen,
+                            shutdown_future,
+                            conf,
+                            service,
+                            alive_tx,
+                        )
+                        .map(|_| ()),
                     );
-                    drop(lp.run(done_rx));
                 })?;
             Completion::Thread(join_handle)
         };
@@ -250,10 +254,17 @@ impl ServerState {
         let futures: Vec<_> = self
             .conns
             .iter()
-            .map(|(&id, conn)| conn.dump_state().map(move |state| (id, state)))
+            .map(|(&id, conn)| {
+                assert_send_future::<result::Result<_>, _>(
+                    conn.dump_state().map_ok(move |state| (id, state)),
+                )
+            })
             .collect();
 
-        Box::new(join_all(futures).map(|states| ServerStateSnapshot {
+        let j = try_join_all(futures);
+        let j = assert_send_future::<result::Result<_>, _>(j);
+
+        Box::pin(j.map_ok(|states| ServerStateSnapshot {
             conns: states.into_iter().collect(),
         }))
     }
@@ -273,8 +284,8 @@ impl ServerStateSnapshot {
 }
 
 fn spawn_server_event_loop<S, A>(
-    handle: reactor::Handle,
-    mut conn_handles: Vec<reactor::Remote>,
+    handle: Handle,
+    mut conn_handles: Vec<Handle>,
     state: Arc<Mutex<ServerState>>,
     tls: ServerTlsOption<A>,
     listen: Box<dyn ToTokioListener + Send>,
@@ -292,7 +303,7 @@ where
     let tokio_listener = listen.to_tokio_listener(&handle);
 
     if conn_handles.is_empty() {
-        conn_handles.push(handle.remote().clone());
+        conn_handles.push(handle.clone());
     }
 
     let stuff = stream::repeat((conn_handles, service, state, tls, conf));
@@ -301,7 +312,11 @@ where
         .incoming()
         .map_err(Error::from)
         .zip(stuff)
-        .for_each(
+        .map(|(r, stuff)| match r {
+            Ok(s) => Ok((s, stuff)),
+            Err(e) => Err(e),
+        })
+        .try_for_each(
             move |((socket, peer_addr), (conn_handles, service, state, tls, conf))| {
                 if socket.is_tcp() {
                     info!(
@@ -317,8 +332,9 @@ where
 
                 // TODO: implement smarter selection
                 let handle = conn_handles[thread_rng().gen_range(0, conn_handles.len())].clone();
-                handle.spawn(move |handle| {
-                    let (conn, future) = ServerConn::new(&handle, socket, tls, conf, service);
+                let handle_clone = handle.clone();
+                handle.spawn({
+                    let (conn, future) = ServerConn::new(&handle_clone, socket, tls, conf, service);
 
                     let conn_id = {
                         let mut g = state.lock().expect("lock");
@@ -329,19 +345,20 @@ where
                         conn_id
                     };
 
-                    future
-                        .then(move |r| {
-                            let mut g = state.lock().expect("lock");
-                            let removed = g.conns.remove(&conn_id);
-                            assert!(removed.is_some());
-                            r
-                        })
-                        .map_err(|e| {
-                            warn!("connection end: {:?}", e);
-                            ()
-                        })
+                    let future = assert_send_future::<result::Result<()>, _>(future);
+
+                    FutureExt::then(future, move |r| {
+                        let mut g = state.lock().expect("lock");
+                        let removed = g.conns.remove(&conn_id);
+                        assert!(removed.is_some());
+                        future::ready(r)
+                    })
+                    .map_err(|e| {
+                        warn!("connection end: {:?}", e);
+                        ()
+                    })
                 });
-                Ok(())
+                future::ok(())
             },
         );
 
@@ -350,16 +367,18 @@ where
     let shutdown_future = shutdown_future.then(move |_| {
         // Must complete with error,
         // so `join` with this future cancels another future.
-        future::failed::<(), _>(Error::Shutdown)
+        future::err::<(), _>(Error::Shutdown)
     });
 
     // Wait for either completion of connection (i. e. error)
     // or shutdown signal.
-    let done = loop_run.join(shutdown_future);
+    let done = try_join(loop_run, shutdown_future);
+
+    let done = assert_send_future::<result::Result<_>, _>(done);
 
     let done = done.then(|_| {
         drop(done_tx.send(()));
-        Ok(())
+        future::ready(())
     });
 
     handle.spawn(done);

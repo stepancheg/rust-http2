@@ -6,10 +6,11 @@ extern crate url;
 
 use std::env;
 use std::process;
-
-use futures::future::Future;
+use tokio::runtime::Runtime;
 
 fn main() {
+    let mut rt = Runtime::new().unwrap();
+
     let args = env::args();
     let args: Vec<_> = args.collect();
     if args.len() != 2 {
@@ -31,10 +32,8 @@ fn main() {
         httpbis::Client::new_tls::<tls_api_openssl::TlsConnector>(host, port, Default::default())
             .expect("client");
 
-    let resp = client
-        .start_get(url.path(), host)
-        .collect()
-        .wait()
+    let resp = rt
+        .block_on(client.start_get(url.path(), host).collect())
         .expect("execute request");
 
     print!("{}", resp.dump());

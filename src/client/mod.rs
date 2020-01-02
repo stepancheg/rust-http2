@@ -15,15 +15,14 @@ use crate::common::stream_queue_sync::stream_queue_sync;
 
 use bytes::Bytes;
 
+use futures::channel::mpsc::unbounded;
+use futures::channel::mpsc::UnboundedReceiver;
+use futures::channel::mpsc::UnboundedSender;
+use futures::channel::oneshot;
 use futures::future;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::mpsc::unbounded;
-use futures::sync::mpsc::UnboundedReceiver;
-use futures::sync::mpsc::UnboundedSender;
-use futures::sync::oneshot;
-
-use tokio_core::reactor;
+use futures::future::FutureExt;
+use futures::future::TryFutureExt;
+use futures::stream::StreamExt;
 
 use tls_api::TlsConnector;
 use tls_api::TlsConnectorBuilder;
@@ -62,13 +61,14 @@ use crate::socket_unix::SocketAddrUnix;
 use crate::solicit::stream_id::StreamId;
 use crate::Response;
 use std::fmt;
+use tokio::runtime::{Handle, Runtime};
 
 /// Builder for HTTP/2 client.
 ///
 /// Client parameters can be specified only during construction,
 /// and later client cannot be reconfigured.
 pub struct ClientBuilder<C: TlsConnector = tls_api_stub::TlsConnector> {
-    pub event_loop: Option<reactor::Remote>,
+    pub event_loop: Option<Handle>,
     pub addr: Option<AnySocketAddr>,
     pub tls: ClientTlsOption<C>,
     pub conf: ClientConf,
@@ -149,9 +149,10 @@ impl<C: TlsConnector> ClientBuilder<C> {
             let tls = self.tls;
             let conf = self.conf;
             let controller_tx = controller_tx.clone();
-            remote.spawn(move |handle| {
+            let handle = remote.clone();
+            remote.spawn(future::lazy(move |_cx| {
                 spawn_client_event_loop(
-                    handle.clone(),
+                    handle,
                     shutdown_future,
                     addr_copy,
                     tls,
@@ -160,9 +161,8 @@ impl<C: TlsConnector> ClientBuilder<C> {
                     controller_tx,
                     controller_rx,
                     client_died_error_holder_copy,
-                );
-                future::finished(())
-            });
+                )
+            }));
             Completion::Rx(done_rx)
         } else {
             // Start event loop.
@@ -178,10 +178,10 @@ impl<C: TlsConnector> ClientBuilder<C> {
                 .name(thread_name)
                 .spawn(move || {
                     // Create an event loop.
-                    let mut lp: reactor::Core = reactor::Core::new().expect("Core::new");
+                    let mut lp: Runtime = Runtime::new().expect("Core::new");
 
                     spawn_client_event_loop(
-                        lp.handle(),
+                        lp.handle().clone(),
                         shutdown_future,
                         addr_copy,
                         tls,
@@ -192,7 +192,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
                         client_died_error_holder_copy,
                     );
 
-                    lp.run(done_rx).expect("run");
+                    lp.block_on(done_rx).expect("run");
                 })
                 .expect("spawn");
             Completion::Thread(join_handle)
@@ -330,13 +330,13 @@ impl Client {
             end_stream,
             Box::new(Impl { tx: Some(tx) }),
         ) {
-            return Box::new(future::err(e));
+            return Box::pin(future::err(e));
         }
 
         let client_error = self.client_died_error_holder.clone();
         let resp_rx = rx.map_err(move |oneshot::Canceled| client_error.error());
 
-        Box::new(resp_rx)
+        Box::pin(resp_rx)
     }
 
     pub fn start_request_end_stream(
@@ -396,7 +396,7 @@ impl Client {
             self.controller_tx
                 .unbounded_send(ControllerCommand::_DumpState(tx)),
         );
-        Box::new(rx.map_err(|_| error::Error::ConnDied))
+        Box::pin(rx.map_err(|_| error::Error::ConnDied))
     }
 
     /// Create a future which waits for successful connection.
@@ -408,7 +408,10 @@ impl Client {
                 .unbounded_send(ControllerCommand::WaitForConnect(tx)),
         );
         // TODO: return client death reason
-        Box::new(rx.map_err(|_| error::Error::ConnDied).and_then(|r| r))
+        Box::pin(
+            rx.map_err(|_| error::Error::ConnDied)
+                .and_then(|r| future::ready(r)),
+        )
     }
 }
 
@@ -461,7 +464,7 @@ enum ControllerCommand {
 }
 
 struct ControllerState<T: ToClientStream, C: TlsConnector> {
-    handle: reactor::Handle,
+    handle: Handle,
     socket_addr: T,
     tls: ClientTlsOption<C>,
     conf: ClientConf,
@@ -474,7 +477,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
     fn init_conn(&mut self) {
         let conn = ClientConn::spawn(
             self.handle.clone(),
-            Box::new(self.socket_addr.clone()),
+            Box::pin(self.socket_addr.clone()),
             self.tls.clone(),
             self.conf.clone(),
             CallbacksImpl {
@@ -517,11 +520,11 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
         self
     }
 
-    fn run(self, rx: UnboundedReceiver<ControllerCommand>) -> HttpFuture<()> {
-        let rx = rx.map_err(|_| error::Error::ChannelDied);
-        let r = rx.fold(self, |state, cmd| Ok::<_, error::Error>(state.iter(cmd)));
-        let r = r.map(|_| ());
-        Box::new(r)
+    fn run(self, rx: UnboundedReceiver<ControllerCommand>) -> HttpFutureSend<()> {
+        // TODO: we never receive channel died
+        let r = rx.fold(self, |state, cmd| future::ready(state.iter(cmd)));
+        let r = r.map(|_| Ok(()));
+        Box::pin(r)
     }
 }
 
@@ -537,7 +540,7 @@ impl ClientConnCallbacks for CallbacksImpl {
 
 // Event loop entry point
 fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsConnector>(
-    handle: reactor::Handle,
+    handle: Handle,
     shutdown_future: ShutdownFuture,
     socket_addr: T,
     tls: ClientTlsOption<C>,
@@ -549,7 +552,7 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
 ) {
     let http_conn = ClientConn::spawn(
         handle.clone(),
-        Box::new(socket_addr.clone()),
+        Box::pin(socket_addr.clone()),
         tls.clone(),
         conf.clone(),
         CallbacksImpl {
@@ -569,21 +572,22 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
     let controller_future = init.run(controller_rx);
 
     let shutdown_future = shutdown_future.then(move |_| {
+        info!("shutdown requested");
         // Must complete with error,
         // so `join` with this future cancels another future.
-        future::failed::<(), _>(Error::Shutdown)
+        future::err::<(), _>(Error::Shutdown)
     });
 
     // Wait for either completion of connection (i. e. error)
     // or shutdown signal.
-    let done = controller_future.join(shutdown_future);
+    let done = future::try_join(controller_future, shutdown_future);
 
-    let done = done.map(|((), ())| ());
+    let done = done.map_ok(|((), ())| ());
 
     let done = done.then(|r| {
         // OK to ignore error, because rx might be already dead
         drop(done_tx.send(()));
-        r
+        future::ready(r)
     });
 
     let done = client_died_error_holder.wrap_future(done);

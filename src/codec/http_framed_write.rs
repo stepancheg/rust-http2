@@ -1,18 +1,19 @@
-use crate::error;
-use tokio_io::AsyncWrite;
+use crate::result;
+use tokio::io::AsyncWrite;
 
 use crate::codec::write_buffer::WriteBuffer;
 use crate::solicit::frame::FrameIR;
 use bytes::Buf;
-use futures::Async;
-use futures::Poll;
+use futures::task::Context;
+use std::pin::Pin;
+use std::task::Poll;
 
-pub struct HttpFramedWrite<W: AsyncWrite> {
+pub struct HttpFramedWrite<W: AsyncWrite + Unpin> {
     write: W,
     buf: WriteBuffer,
 }
 
-impl<W: AsyncWrite> HttpFramedWrite<W> {
+impl<W: AsyncWrite + Unpin> HttpFramedWrite<W> {
     pub fn new(write: W) -> Self {
         HttpFramedWrite {
             write,
@@ -30,14 +31,14 @@ impl<W: AsyncWrite> HttpFramedWrite<W> {
         frame.serialize_into(&mut self.buf);
     }
 
-    pub fn poll_flush(&mut self) -> Poll<(), error::Error> {
+    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
         loop {
             if !self.buf.has_remaining() {
-                return Ok(Async::Ready(()));
+                return Poll::Ready(Ok(()));
             }
 
-            if let Async::NotReady = self.write.write_buf(&mut self.buf)? {
-                return Ok(Async::NotReady);
+            if let Poll::Pending = Pin::new(&mut self.write).poll_write_buf(cx, &mut self.buf)? {
+                return Poll::Pending;
             }
         }
     }

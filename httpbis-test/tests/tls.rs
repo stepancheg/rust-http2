@@ -6,15 +6,11 @@ extern crate httpbis;
 extern crate regex;
 extern crate tls_api;
 extern crate tls_api_native_tls;
-extern crate tokio_core;
-extern crate tokio_tls_api;
 
 extern crate httpbis_test;
 use httpbis_test::*;
 
 use std::sync::Arc;
-
-use futures::future::Future;
 
 use httpbis::SimpleHttpMessage;
 use httpbis::*;
@@ -28,6 +24,7 @@ use tls_api::TlsConnectorBuilder;
 use tls_api_native_tls::TlsAcceptor;
 use tls_api_native_tls::TlsAcceptorBuilder;
 use tls_api_native_tls::TlsConnector;
+use tokio::runtime::Runtime;
 
 fn test_tls_acceptor() -> TlsAcceptor {
     let pkcs12 = include_bytes!("identity.p12");
@@ -49,6 +46,8 @@ fn test_tls_connector() -> TlsConnector {
 #[test]
 fn tls() {
     init_logger();
+
+    let mut rt = Runtime::new().unwrap();
 
     struct ServiceImpl {}
 
@@ -82,10 +81,8 @@ fn tls() {
     )
     .expect("http client");
 
-    let resp: SimpleHttpMessage = client
-        .start_get("/hi", "localhost")
-        .collect()
-        .wait()
+    let resp: SimpleHttpMessage = rt
+        .block_on(client.start_get("/hi", "localhost").collect())
         .unwrap();
     assert_eq!(200, resp.headers.status());
     assert_eq!(&b"hello"[..], &resp.body[..]);

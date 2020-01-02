@@ -1,14 +1,13 @@
-use void::Void;
-
-use futures::future::Future;
-use tokio_core::reactor;
+use std::future::Future;
+use std::pin::Pin;
+use tokio::runtime::Handle;
 
 pub trait Executor {
-    fn execute(&self, f: Box<dyn Future<Item = (), Error = Void> + Send + 'static>);
+    fn execute(&self, f: Pin<Box<dyn Future<Output = ()> + Send + 'static>>);
 }
 
-impl Executor for reactor::Handle {
-    fn execute(&self, f: Box<dyn Future<Item = (), Error = Void> + Send + 'static>) {
-        self.spawn(f.map_err(|e| match e {}));
+impl Executor for Handle {
+    fn execute(&self, f: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
+        self.spawn(f);
     }
 }

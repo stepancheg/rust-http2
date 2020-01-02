@@ -31,17 +31,18 @@ use crate::solicit_misc::HttpFrameConn;
 use crate::solicit_misc::HttpFrameStream;
 use crate::ErrorCode;
 use crate::Headers;
-use futures::task;
-use futures::Async;
-use futures::Poll;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
+
+use futures::task::Context;
+use std::task::Poll;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
 
 pub(crate) trait ConnReadSideCustom {
     type Types: Types;
 
     fn process_headers(
         &mut self,
+        cx: &mut Context<'_>,
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
@@ -57,13 +58,20 @@ where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
     /// Recv a frame from the network
-    fn recv_http_frame(&mut self) -> Poll<HttpFrameDecodedOrGoaway, error::Error> {
+    fn recv_http_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<result::Result<HttpFrameDecodedOrGoaway>> {
         let max_frame_size = self.our_settings_ack.max_frame_size;
 
-        self.framed_read.poll_http_frame(max_frame_size)
+        self.framed_read.poll_http_frame(cx, max_frame_size)
     }
 
-    fn process_data_frame(&mut self, frame: DataFrame) -> result::Result<Option<HttpStreamRef<T>>> {
+    fn process_data_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+        frame: DataFrame,
+    ) -> result::Result<Option<HttpStreamRef<T>>> {
         let stream_id = frame.get_stream_id();
 
         self.decrease_in_window(frame.payload_len())?;
@@ -89,9 +97,11 @@ where
             // If a DATA frame is received whose stream is not in "open" or
             // "half-closed (local)" state, the recipient MUST respond with
             // a stream error (Section 5.4.2) of type STREAM_CLOSED.
-            let mut stream = match self
-                .get_stream_maybe_send_error(frame.get_stream_id(), HttpFrameType::Data)?
-            {
+            let mut stream = match self.get_stream_maybe_send_error(
+                cx,
+                frame.get_stream_id(),
+                HttpFrameType::Data,
+            )? {
                 Some(stream) => stream,
                 None => {
                     return Ok(None);
@@ -136,11 +146,11 @@ where
 
         if let Some(increment_conn) = increment_conn {
             let window_update = WindowUpdateFrame::for_connection(increment_conn);
-            self.send_frame_and_notify(window_update);
+            self.send_frame_and_notify(cx, window_update);
         }
 
         if let Some(error) = error {
-            self.send_rst_stream(stream_id, error)?;
+            self.send_rst_stream(cx, stream_id, error)?;
             return Ok(None);
         }
 
@@ -151,7 +161,7 @@ where
         ))
     }
 
-    fn process_ping(&mut self, frame: PingFrame) -> result::Result<()> {
+    fn process_ping(&mut self, cx: &mut Context<'_>, frame: PingFrame) -> result::Result<()> {
         if frame.is_ack() {
             if let Some(opaque_data) = self.ping_sent.take() {
                 if opaque_data == frame.opaque_data {
@@ -168,7 +178,7 @@ where
             }
         } else {
             let ping = PingFrame::new_ack(frame.opaque_data());
-            self.send_frame_and_notify(ping);
+            self.send_frame_and_notify(cx, ping);
             Ok(())
         }
     }
@@ -194,6 +204,7 @@ where
 
     fn process_headers_frame(
         &mut self,
+        cx: &mut Context<'_>,
         frame: HeadersDecodedFrame,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
         let end_stream = if frame.is_end_of_stream() {
@@ -202,7 +213,7 @@ where
             EndStream::No
         };
 
-        self.process_headers(frame.stream_id, end_stream, frame.headers)
+        self.process_headers(cx, frame.stream_id, end_stream, frame.headers)
     }
 
     fn process_priority_frame(
@@ -223,7 +234,11 @@ where
         }
     }
 
-    fn process_settings_req(&mut self, frame: SettingsFrame) -> result::Result<()> {
+    fn process_settings_req(
+        &mut self,
+        cx: &mut Context<'_>,
+        frame: SettingsFrame,
+    ) -> result::Result<()> {
         assert!(!frame.is_ack());
 
         let mut out_window_increased = false;
@@ -236,7 +251,7 @@ where
                     // be treated as a connection error (Section 5.4.1) of type
                     // FLOW_CONTROL_ERROR.
                     if new_size > MAX_WINDOW_SIZE {
-                        self.send_flow_control_error()?;
+                        self.send_flow_control_error(cx)?;
                         return Ok(());
                     }
 
@@ -270,30 +285,35 @@ where
             self.peer_settings.apply(setting);
         }
 
-        self.send_ack_settings()?;
+        self.send_ack_settings(cx)?;
 
         if out_window_increased {
-            self.out_window_increased(None)?;
+            self.out_window_increased(cx, None)?;
         }
 
         Ok(())
     }
 
-    fn process_settings(&mut self, frame: SettingsFrame) -> result::Result<()> {
+    fn process_settings(
+        &mut self,
+        cx: &mut Context<'_>,
+        frame: SettingsFrame,
+    ) -> result::Result<()> {
         if frame.is_ack() {
             self.process_settings_ack(frame)
         } else {
-            self.process_settings_req(frame)
+            self.process_settings_req(cx, frame)
         }
     }
 
     fn process_stream_window_update_frame(
         &mut self,
+        cx: &mut Context<'_>,
         frame: WindowUpdateFrame,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
-        self.out_window_increased(Some(frame.stream_id))?;
+        self.out_window_increased(cx, Some(frame.stream_id))?;
 
-        match self.get_stream_maybe_send_error(frame.stream_id, HttpFrameType::WindowUpdate)? {
+        match self.get_stream_maybe_send_error(cx, frame.stream_id, HttpFrameType::WindowUpdate)? {
             Some(..) => {}
             None => {
                 // 6.9
@@ -323,7 +343,7 @@ where
             .try_increase_window_size(frame.increment)
         {
             info!("failed to increment stream window: {}", frame.stream_id);
-            self.send_rst_stream(frame.stream_id, ErrorCode::FlowControlError)?;
+            self.send_rst_stream(cx, frame.stream_id, ErrorCode::FlowControlError)?;
             return Ok(None);
         }
 
@@ -337,7 +357,11 @@ where
         Ok(Some(stream))
     }
 
-    fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
+    fn process_conn_window_update(
+        &mut self,
+        cx: &mut Context<'_>,
+        frame: WindowUpdateFrame,
+    ) -> result::Result<()> {
         assert_eq!(0, frame.stream_id);
 
         let old_window_size = self.out_window_size.0;
@@ -352,7 +376,7 @@ where
         // is sent.
         if let Err(_) = self.out_window_size.try_increase(frame.increment) {
             info!("attempted to increase window size too far");
-            self.send_flow_control_error()?;
+            self.send_flow_control_error(cx)?;
             return Ok(());
         }
 
@@ -363,16 +387,17 @@ where
 
         self.pump_out_window_size.increase(frame.increment as usize);
 
-        self.out_window_increased(None)
+        self.out_window_increased(cx, None)
     }
 
     fn process_rst_stream_frame(
         &mut self,
+        cx: &mut Context<'_>,
         frame: RstStreamFrame,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
         let stream_id = frame.get_stream_id();
         let dropped_data = if let Some(stream) =
-            self.get_stream_maybe_send_error(stream_id, HttpFrameType::RstStream)?
+            self.get_stream_maybe_send_error(cx, stream_id, HttpFrameType::RstStream)?
         {
             stream.rst_received_remove(frame.error_code())
         } else {
@@ -389,16 +414,24 @@ where
         Ok(None)
     }
 
-    fn process_conn_frame(&mut self, frame: HttpFrameConn) -> result::Result<()> {
+    fn process_conn_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+        frame: HttpFrameConn,
+    ) -> result::Result<()> {
         match frame {
-            HttpFrameConn::Settings(f) => self.process_settings(f),
-            HttpFrameConn::Ping(f) => self.process_ping(f),
+            HttpFrameConn::Settings(f) => self.process_settings(cx, f),
+            HttpFrameConn::Ping(f) => self.process_ping(cx, f),
             HttpFrameConn::Goaway(f) => self.process_goaway(f),
-            HttpFrameConn::WindowUpdate(f) => self.process_conn_window_update(f),
+            HttpFrameConn::WindowUpdate(f) => self.process_conn_window_update(cx, f),
         }
     }
 
-    fn process_stream_frame(&mut self, frame: HttpFrameStream) -> result::Result<()> {
+    fn process_stream_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+        frame: HttpFrameStream,
+    ) -> result::Result<()> {
         let stream_id = frame.get_stream_id();
         let end_of_stream = frame.is_end_of_stream();
 
@@ -415,15 +448,15 @@ where
 
         {
             let stream = match frame {
-                HttpFrameStream::Data(data) => self.process_data_frame(data)?,
-                HttpFrameStream::Headers(headers) => self.process_headers_frame(headers)?,
+                HttpFrameStream::Data(data) => self.process_data_frame(cx, data)?,
+                HttpFrameStream::Headers(headers) => self.process_headers_frame(cx, headers)?,
                 HttpFrameStream::Priority(priority) => self.process_priority_frame(priority)?,
-                HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(rst)?,
+                HttpFrameStream::RstStream(rst) => self.process_rst_stream_frame(cx, rst)?,
                 HttpFrameStream::PushPromise(_f) => {
                     return Err(error::Error::NotImplemented("PUSH_PROMISE"))
                 }
                 HttpFrameStream::WindowUpdate(window_update) => {
-                    self.process_stream_window_update_frame(window_update)?
+                    self.process_stream_window_update_frame(cx, window_update)?
                 }
             };
 
@@ -441,11 +474,15 @@ where
         Ok(())
     }
 
-    fn process_http_frame(&mut self, frame: HttpFrameDecoded) -> result::Result<()> {
+    fn process_http_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+        frame: HttpFrameDecoded,
+    ) -> result::Result<()> {
         debug!("received frame: {:?}", frame);
         match HttpFrameClassified::from(frame) {
-            HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
-            HttpFrameClassified::Stream(f) => self.process_stream_frame(f),
+            HttpFrameClassified::Conn(f) => self.process_conn_frame(cx, f),
+            HttpFrameClassified::Stream(f) => self.process_stream_frame(cx, f),
             HttpFrameClassified::Unknown(_f) => {
                 // 4.1
                 // Implementations MUST ignore and discard any frame that has a type that is unknown.
@@ -457,6 +494,7 @@ where
     /// Send `RST_STREAM` when received incorrect stream frame
     fn process_stream_error(
         &mut self,
+        context: &mut Context<'_>,
         stream_id: StreamId,
         error_code: ErrorCode,
     ) -> result::Result<()> {
@@ -466,29 +504,29 @@ where
             self.queued_write
                 .queue_not_goaway(RstStreamFrame::new(stream_id, error_code));
         }
-        task::current().notify();
+        context.waker().wake_by_ref();
         Ok(())
     }
 
     /// Loop forever, never return `Ready`
-    pub fn read_process_frame(&mut self) -> Poll<(), error::Error> {
+    pub fn read_process_frame(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
         loop {
             if self.end_loop() {
-                return Err(error::Error::Goaway);
+                return Poll::Ready(Err(error::Error::Goaway));
             }
 
-            match self.recv_http_frame()? {
-                Async::Ready(HttpFrameDecodedOrGoaway::Frame(frame)) => {
-                    self.process_http_frame(frame)?;
+            match self.recv_http_frame(cx)? {
+                Poll::Ready(HttpFrameDecodedOrGoaway::Frame(frame)) => {
+                    self.process_http_frame(cx, frame)?;
                 }
-                Async::Ready(HttpFrameDecodedOrGoaway::_SendRst(stream_id, error_code)) => {
-                    self.process_stream_error(stream_id, error_code)?;
+                Poll::Ready(HttpFrameDecodedOrGoaway::_SendRst(stream_id, error_code)) => {
+                    self.process_stream_error(cx, stream_id, error_code)?;
                 }
-                Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(error_code)) => {
-                    self.send_goaway(error_code)?;
-                    return Ok(Async::NotReady);
+                Poll::Ready(HttpFrameDecodedOrGoaway::SendGoaway(error_code)) => {
+                    self.send_goaway(cx, error_code)?;
+                    return Poll::Pending;
                 }
-                Async::NotReady => return Ok(Async::NotReady),
+                Poll::Pending => return Poll::Pending,
             };
         }
     }

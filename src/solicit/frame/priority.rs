@@ -1,5 +1,4 @@
 use bytes::Buf;
-use bytes::IntoBuf;
 
 use crate::codec::write_buffer::WriteBuffer;
 use crate::solicit::frame::flags::Flags;
@@ -46,8 +45,8 @@ impl Frame for PriorityFrame {
             return Err(ParseFrameError::StreamIdMustBeNonZero);
         }
 
-        let mut payload = raw_frame.payload().into_buf();
-        let first = payload.get_u32_be();
+        let mut payload = &raw_frame.payload()[..];
+        let first = payload.get_u32();
         let exclusive = (first & 0x80000000) != 0;
         let stream_dep = first & !0x80000000;
         let weight = payload.get_u8();

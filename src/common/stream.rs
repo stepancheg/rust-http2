@@ -268,7 +268,7 @@ impl<T: Types> HttpStreamCommon<T> {
     }
 }
 
-pub(crate) trait HttpStreamDataSpecific {}
+pub(crate) trait HttpStreamDataSpecific: Send + 'static {}
 
 pub(crate) trait HttpStreamData {
     type Types: Types;

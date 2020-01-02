@@ -1,12 +1,14 @@
 use std::panic;
 
+use futures::future;
 use futures::stream;
 use futures::stream::Stream;
-use futures::Poll;
+use futures::stream::TryStreamExt;
+use std::task::Poll;
 
 use bytes::Bytes;
 
-use crate::error;
+use crate::{error, result};
 
 use crate::solicit::header::Headers;
 
@@ -15,6 +17,9 @@ use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use crate::misc::any_to_string;
 use crate::solicit::end_stream::EndStream;
+use futures::stream::StreamExt;
+use futures::task::Context;
+use std::pin::Pin;
 
 /// Stream frame content after initial headers
 pub enum DataOrTrailers {
@@ -51,7 +56,7 @@ impl DataOrTrailers {
 /// Most users won't need anything except data, so this type provides
 /// convenient constructors and accessors.
 pub struct HttpStreamAfterHeaders(
-    pub Box<dyn Stream<Item = DataOrTrailers, Error = error::Error> + Send + 'static>,
+    pub Pin<Box<dyn Stream<Item = result::Result<DataOrTrailers>> + Send + 'static>>,
 );
 
 impl HttpStreamAfterHeaders {
@@ -60,16 +65,16 @@ impl HttpStreamAfterHeaders {
     /// Box and wraper futures stream of `DataOrTrailers`.
     pub fn new<S>(s: S) -> HttpStreamAfterHeaders
     where
-        S: Stream<Item = DataOrTrailers, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<DataOrTrailers>> + Send + 'static,
     {
-        HttpStreamAfterHeaders(Box::new(s))
+        HttpStreamAfterHeaders(Box::pin(s))
     }
 
     pub(crate) fn from_parts<S>(s: S) -> HttpStreamAfterHeaders
     where
-        S: Stream<Item = DataOrHeadersWithFlag, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<DataOrHeadersWithFlag>> + Send + 'static,
     {
-        HttpStreamAfterHeaders::new(s.map(DataOrHeadersWithFlag::into_after_headers))
+        HttpStreamAfterHeaders::new(s.map_ok(DataOrHeadersWithFlag::into_after_headers))
     }
 
     /// Create an empty response stream (no body, no trailers).
@@ -80,9 +85,9 @@ impl HttpStreamAfterHeaders {
     /// Create a response from a stream of bytes.
     pub fn bytes<S>(bytes: S) -> HttpStreamAfterHeaders
     where
-        S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
     {
-        HttpStreamAfterHeaders::new(bytes.map(DataOrTrailers::intermediate_data))
+        HttpStreamAfterHeaders::new(bytes.map_ok(DataOrTrailers::intermediate_data))
     }
 
     pub fn once(part: DataOrHeaders) -> HttpStreamAfterHeaders {
@@ -90,7 +95,7 @@ impl HttpStreamAfterHeaders {
             DataOrHeaders::Data(data) => DataOrTrailers::Data(data, EndStream::Yes),
             DataOrHeaders::Headers(header) => DataOrTrailers::Trailers(header),
         };
-        HttpStreamAfterHeaders::new(stream::once(Ok(part)))
+        HttpStreamAfterHeaders::new(stream::once(future::ok(part)))
     }
 
     /// Create simple response stream from bytes.
@@ -108,17 +113,19 @@ impl HttpStreamAfterHeaders {
     // getters
 
     /// Take only `DATA` frames from the stream
-    pub fn filter_data(self) -> impl Stream<Item = Bytes, Error = error::Error> + Send {
-        self.filter_map(|p| match p {
-            DataOrTrailers::Data(data, ..) => Some(data),
-            DataOrTrailers::Trailers(..) => None,
+    pub fn filter_data(self) -> impl Stream<Item = result::Result<Bytes>> + Send {
+        self.try_filter_map(|p| {
+            future::ok(match p {
+                DataOrTrailers::Data(data, ..) => Some(data),
+                DataOrTrailers::Trailers(..) => None,
+            })
         })
     }
 
     pub(crate) fn into_flag_stream(
         self,
-    ) -> impl Stream<Item = DataOrHeadersWithFlag, Error = error::Error> + Send {
-        self.0.map(DataOrTrailers::into_part)
+    ) -> impl Stream<Item = result::Result<DataOrHeadersWithFlag>> + Send {
+        TryStreamExt::map_ok(self.0, |r| DataOrTrailers::into_part(r))
     }
 
     // TODO: drop
@@ -130,7 +137,7 @@ impl HttpStreamAfterHeaders {
     /// Transform panic into `error::Error`
     pub fn catch_unwind(self) -> HttpStreamAfterHeaders {
         HttpStreamAfterHeaders::new(panic::AssertUnwindSafe(self.0).catch_unwind().then(|r| {
-            match r {
+            future::ready(match r {
                 Ok(r) => r,
                 Err(e) => {
                     let e = any_to_string(e);
@@ -138,16 +145,15 @@ impl HttpStreamAfterHeaders {
                     warn!("handler panicked: {}", e);
                     Err(error::Error::HandlerPanicked(e))
                 }
-            }
+            })
         }))
     }
 }
 
 impl Stream for HttpStreamAfterHeaders {
-    type Item = DataOrTrailers;
-    type Error = error::Error;
+    type Item = result::Result<DataOrTrailers>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.0.poll()
+    fn poll_next(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.0).poll_next(context)
     }
 }

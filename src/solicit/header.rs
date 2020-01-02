@@ -12,7 +12,6 @@ use crate::assert_types::*;
 use crate::ascii::Ascii;
 use bytes::Bytes;
 use bytes::BytesMut;
-use std::mem;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum PseudoHeaderName {
@@ -132,7 +131,7 @@ impl From<Bytes> for HeaderValue {
 
 impl<'a> From<&'a [u8]> for HeaderValue {
     fn from(buf: &'a [u8]) -> HeaderValue {
-        HeaderValue(Bytes::from(buf))
+        HeaderValue(Bytes::copy_from_slice(buf))
     }
 }
 
@@ -177,13 +176,13 @@ impl From<PseudoHeaderName> for HeaderName {
 
 impl<'a> From<&'a str> for HeaderName {
     fn from(s: &'a str) -> Self {
-        HeaderName::new(s)
+        HeaderName::new(Bytes::copy_from_slice(s.as_bytes()))
     }
 }
 
 impl<'a> From<&'a [u8]> for HeaderName {
     fn from(s: &'a [u8]) -> Self {
-        HeaderName::new(s)
+        HeaderName::new(Bytes::copy_from_slice(s))
     }
 }
 
@@ -291,7 +290,7 @@ impl HeaderName {
                 }
             }
 
-            for b in &name {
+            for &b in &name {
                 // TODO: restrict more
                 if b >= b'A' && b <= b'Z' {
                     return Err((HeaderError::IncorrectCharInName, name.clone()));
@@ -363,9 +362,9 @@ fn make_ascii_lowercase(bytes: &mut Bytes) {
     if bytes.as_ref().iter().all(|c| c.is_ascii_lowercase()) {
         return;
     }
-    let mut bytes_mut = BytesMut::from(mem::replace(bytes, Bytes::new()));
+    let mut bytes_mut = BytesMut::from(&bytes[..]);
     bytes_mut.as_mut().make_ascii_lowercase();
-    mem::replace(bytes, bytes_mut.freeze());
+    *bytes = bytes_mut.freeze();
 }
 
 impl Header {

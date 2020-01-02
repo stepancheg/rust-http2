@@ -9,16 +9,17 @@ use crate::solicit::frame::settings::*;
 use crate::solicit::header::*;
 use crate::solicit::DEFAULT_SETTINGS;
 
+use futures::channel::oneshot;
 use futures::future;
-use futures::future::Future;
-use futures::sync::oneshot;
+use futures::FutureExt;
+use futures::TryFutureExt;
 
 use crate::common::types::Types;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
-use tokio_tls_api;
+use tls_api;
+use tokio::io::split;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::net::TcpStream;
 
 use tls_api::TlsAcceptor;
 use tls_api_stub;
@@ -29,6 +30,7 @@ use crate::socket::StreamItem;
 
 use crate::common::init_where::InitWhere;
 
+use crate::assert_types::assert_send_future;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnSpecific;
@@ -57,6 +59,9 @@ use crate::ErrorCode;
 use crate::ServerConf;
 use crate::ServerResponse;
 use crate::ServerTlsOption;
+use std::pin::Pin;
+use std::task::Context;
+use tokio::runtime::Handle;
 
 pub struct ServerStreamData {}
 
@@ -136,7 +141,7 @@ where
         };
 
         let context = ServerHandlerContext {
-            loop_handle: self.loop_handle.remote().clone(),
+            loop_handle: self.loop_handle.clone(),
         };
 
         let mut stream_handler = None;
@@ -192,9 +197,13 @@ where
 {
     type Types = ServerTypes;
 
-    fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
+    fn process_message(
+        &mut self,
+        cx: &mut Context<'_>,
+        message: ServerToWriteMessage,
+    ) -> result::Result<()> {
         match message {
-            ServerToWriteMessage::Common(common) => self.process_common_message(common),
+            ServerToWriteMessage::Common(common) => self.process_common_message(cx, common),
         }
     }
 }
@@ -207,12 +216,13 @@ where
 
     fn process_headers(
         &mut self,
+        cx: &mut Context<'_>,
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
     ) -> result::Result<Option<HttpStreamRef<ServerTypes>>> {
         let existing_stream = self
-            .get_stream_for_headers_maybe_send_error(stream_id)?
+            .get_stream_for_headers_maybe_send_error(cx, stream_id)?
             .is_some();
 
         let headers_place = match existing_stream {
@@ -222,7 +232,7 @@ where
 
         if let Err(e) = headers.validate(RequestOrResponse::Request, headers_place) {
             warn!("invalid headers: {:?} {:?}", e, headers);
-            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 
@@ -234,7 +244,7 @@ where
 
         if end_stream == EndStream::No {
             warn!("more headers without end stream flag");
-            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+            self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 
@@ -250,14 +260,14 @@ pub struct ServerConn {
 
 impl ServerConn {
     fn connected<F, I>(
-        lh: &reactor::Handle,
+        lh: &Handle,
         socket: HttpFutureSend<I>,
         conf: ServerConf,
         service: Arc<F>,
-    ) -> (ServerConn, HttpFuture<()>)
+    ) -> (ServerConn, HttpFutureSend<()>)
     where
         F: ServerHandler,
-        I: AsyncRead + AsyncWrite + Send + 'static,
+        I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let lh = lh.clone();
 
@@ -269,12 +279,18 @@ impl ServerConn {
         let mut settings = DEFAULT_SETTINGS;
         settings.apply_from_frame(&settings_frame);
 
-        let handshake = socket.and_then(|conn| server_handshake(conn, settings_frame));
+        let handshake = socket.and_then(|conn| async {
+            let mut conn = conn;
+            server_handshake(&mut conn, settings_frame).await?;
+            Ok(conn)
+        });
+
+        let handshake = assert_send_future(handshake);
 
         let write_tx_copy = write_tx.clone();
 
         let run = handshake.and_then(move |conn| {
-            let (read, write) = conn.split();
+            let (read, write) = split(conn);
 
             let conn_data = Conn::<ServerTypes, I>::new(
                 lh,
@@ -291,58 +307,58 @@ impl ServerConn {
             conn_data.run()
         });
 
-        let future = Box::new(run.then(|x| {
+        let run = assert_send_future(run);
+
+        let future = Box::pin(run.then(|x| {
             info!("connection end: {:?}", x);
-            x
+            future::ready(x)
         }));
 
         (ServerConn { write_tx }, future)
     }
 
     pub fn new<S, A>(
-        lh: &reactor::Handle,
-        socket: Box<dyn StreamItem>,
+        lh: &Handle,
+        socket: Pin<Box<dyn StreamItem>>,
         tls: ServerTlsOption<A>,
         conf: ServerConf,
         service: Arc<S>,
-    ) -> (ServerConn, HttpFuture<()>)
+    ) -> (ServerConn, HttpFutureSend<()>)
     where
         S: ServerHandler,
         A: TlsAcceptor,
     {
         match tls {
             ServerTlsOption::Plain => {
-                let socket = Box::new(future::finished(socket));
+                let socket = Box::pin(future::ok(socket));
                 ServerConn::connected(lh, socket, conf, service)
             }
             ServerTlsOption::Tls(acceptor) => {
-                let socket = Box::new(
-                    tokio_tls_api::accept_async(&*acceptor, socket).map_err(error::Error::from),
-                );
+                let socket = Box::pin(async move { Ok(acceptor.accept(socket).await?) });
                 ServerConn::connected(lh, socket, conf, service)
             }
         }
     }
 
     pub fn new_plain_single_thread<S>(
-        lh: &reactor::Handle,
+        lh: &Handle,
         socket: TcpStream,
         conf: ServerConf,
         service: Arc<S>,
-    ) -> (ServerConn, HttpFuture<()>)
+    ) -> (ServerConn, HttpFutureSend<()>)
     where
         S: ServerHandler,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        ServerConn::new(lh, Box::new(socket), no_tls, conf, service)
+        ServerConn::new(lh, Box::pin(socket), no_tls, conf, service)
     }
 
     pub fn new_plain_single_thread_fn<F>(
-        lh: &reactor::Handle,
+        lh: &Handle,
         socket: TcpStream,
         conf: ServerConf,
         f: F,
-    ) -> (ServerConn, HttpFuture<()>)
+    ) -> (ServerConn, HttpFutureSend<()>)
     where
         F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
             + Send
@@ -378,11 +394,11 @@ impl ServerConn {
         if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(
             CommonToWriteMessage::DumpState(tx),
         )) {
-            return Box::new(future::err(error::Error::FailedToSendReqToDumpState));
+            return Box::pin(future::err(error::Error::FailedToSendReqToDumpState));
         }
 
         let rx = rx.map_err(|_| error::Error::OneshotCancelled);
 
-        Box::new(rx)
+        Box::pin(rx)
     }
 }

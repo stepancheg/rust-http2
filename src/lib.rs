@@ -6,15 +6,8 @@
 extern crate log;
 extern crate log_ndc;
 
-extern crate futures;
-
-extern crate tokio_core;
-extern crate tokio_io;
-extern crate tokio_timer;
-
 extern crate tls_api;
 extern crate tls_api_stub;
-extern crate tokio_tls_api;
 
 extern crate bytes;
 extern crate net2;
@@ -32,8 +25,6 @@ mod server;
 mod socket;
 mod socket_tcp;
 
-#[cfg(unix)]
-extern crate tokio_uds;
 mod socket_unix;
 
 mod ascii;

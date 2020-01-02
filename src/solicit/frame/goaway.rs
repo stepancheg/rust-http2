@@ -96,9 +96,7 @@ impl Frame for GoawayFrame {
 
         let last_stream_id = parse_stream_id(&raw_frame.payload());
         let error = unpack_octets_4!(raw_frame.payload(), 4, u32);
-        let debug_data = raw_frame
-            .payload()
-            .slice_from(GOAWAY_MIN_FRAME_LEN as usize);
+        let debug_data = raw_frame.payload().slice(GOAWAY_MIN_FRAME_LEN as usize..);
 
         Ok(GoawayFrame {
             last_stream_id,

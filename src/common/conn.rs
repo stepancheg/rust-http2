@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use tokio_core::reactor;
-
 use crate::error;
 use crate::result;
 
@@ -34,20 +32,21 @@ use crate::hpack;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::WindowSize;
 use crate::ErrorCode;
+use futures::channel::oneshot;
 use futures::future;
-use futures::sync::oneshot;
-use futures::task;
-use futures::Async;
+
+use futures::task::Context;
 use futures::Future;
-use futures::Poll;
 use std::collections::HashSet;
-use tokio_io::io::ReadHalf;
-use tokio_io::io::WriteHalf;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
+use std::task::Poll;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::io::ReadHalf;
+use tokio::io::WriteHalf;
+use tokio::runtime::Handle;
 
 /// Client or server fields of connection
-pub trait ConnSpecific: 'static {}
+pub trait ConnSpecific: Send + 'static {}
 
 /// HTTP/2 connection state with socket and streams
 pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
@@ -58,7 +57,7 @@ pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
     /// Messages to be sent to write loop
     pub to_write_tx: ConnCommandSender<T>,
     /// Reactor we are using
-    pub loop_handle: reactor::Handle,
+    pub loop_handle: Handle,
     /// Known streams
     pub streams: StreamMap<T>,
     /// Last streams known to be closed by peer
@@ -132,7 +131,7 @@ where
     I: AsyncWrite + AsyncRead + Send + 'static,
 {
     pub fn new(
-        loop_handle: reactor::Handle,
+        loop_handle: Handle,
         specific: T::ConnSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
@@ -270,6 +269,7 @@ where
 
     pub fn send_rst_stream(
         &mut self,
+        cx: &mut Context<'_>,
         stream_id: StreamId,
         error_code: ErrorCode,
     ) -> result::Result<()> {
@@ -277,12 +277,12 @@ where
         self.streams.remove_stream(stream_id);
 
         let rst_stream = RstStreamFrame::new(stream_id, error_code);
-        self.send_frame_and_notify(rst_stream);
+        self.send_frame_and_notify(cx, rst_stream);
         Ok(())
     }
 
-    pub fn send_flow_control_error(&mut self) -> result::Result<()> {
-        self.send_goaway(ErrorCode::FlowControlError)
+    pub fn send_flow_control_error(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
+        self.send_goaway(cx, ErrorCode::FlowControlError)
     }
 
     fn stream_state_idle_or_closed(&self, stream_id: StreamId) -> StreamStateIdleOrClosed {
@@ -307,6 +307,7 @@ where
 
     pub fn get_stream_maybe_send_error(
         &mut self,
+        cx: &mut Context<'_>,
         stream_id: StreamId,
         frame_type: HttpFrameType,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
@@ -323,7 +324,7 @@ where
 
                 if send_connection_error {
                     debug!("stream is idle: {}, sending GOAWAY", stream_id);
-                    self.send_goaway(ErrorCode::StreamClosed)?;
+                    self.send_goaway(cx, ErrorCode::StreamClosed)?;
                 }
             }
             StreamState::Open | StreamState::HalfClosedLocal => {}
@@ -346,7 +347,7 @@ where
                         "stream is half-closed remote: {}, sending RST_STREAM",
                         stream_id
                     );
-                    self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
+                    self.send_rst_stream(cx, stream_id, ErrorCode::StreamClosed)?;
                 }
             }
             StreamState::Closed => {
@@ -381,10 +382,10 @@ where
                 if send_stream_closed {
                     if self.peer_closed_streams.contains(stream_id) {
                         debug!("stream is closed by peer: {}, sending GOAWAY", stream_id);
-                        self.send_goaway(ErrorCode::StreamClosed)?;
+                        self.send_goaway(cx, ErrorCode::StreamClosed)?;
                     } else {
                         debug!("stream is closed by us: {}, sending RST_STREAM", stream_id);
-                        self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
+                        self.send_rst_stream(cx, stream_id, ErrorCode::StreamClosed)?;
                     }
                 }
             }
@@ -395,12 +396,17 @@ where
 
     pub fn get_stream_for_headers_maybe_send_error(
         &mut self,
+        cx: &mut Context<'_>,
         stream_id: StreamId,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
-        self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)
+        self.get_stream_maybe_send_error(cx, stream_id, HttpFrameType::Headers)
     }
 
-    pub fn out_window_increased(&mut self, stream_id: Option<StreamId>) -> result::Result<()> {
+    pub fn out_window_increased(
+        &mut self,
+        context: &mut Context<'_>,
+        stream_id: Option<StreamId>,
+    ) -> result::Result<()> {
         match stream_id {
             Some(stream_id) => {
                 self.flush_streams.insert(stream_id);
@@ -408,7 +414,7 @@ where
             None => self.flush_conn = true,
         }
         // Make sure writer loop is executed
-        task::current().notify();
+        context.waker().wake_by_ref();
         Ok(())
     }
 
@@ -419,7 +425,12 @@ where
         goaway && no_streams
     }
 
-    pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
+    pub fn increase_in_window(
+        &mut self,
+        cx: &mut Context<'_>,
+        stream_id: StreamId,
+        increase: u32,
+    ) -> result::Result<()> {
         if let Some(mut stream) = self.streams.get_mut(stream_id) {
             if let Err(_) = stream.stream().in_window_size.try_increase(increase) {
                 return Err(error::Error::StreamInWindowOverflow(
@@ -433,33 +444,33 @@ where
         };
 
         let window_update = WindowUpdateFrame::for_stream(stream_id, increase);
-        self.send_frame_and_notify(window_update);
+        self.send_frame_and_notify(cx, window_update);
 
         Ok(())
     }
 
-    fn poll(&mut self) -> Poll<(), error::Error> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
         // TODO: add local/peer address
         let _g = log_ndc::push(T::CONN_NDC);
 
-        match self.process_goaway_state()? {
-            IterationExit::NotReady => return Ok(Async::NotReady),
-            IterationExit::ExitEarly => return Ok(Async::Ready(())),
+        match self.process_goaway_state(cx)? {
+            IterationExit::NotReady => return Poll::Pending,
+            IterationExit::ExitEarly => return Poll::Ready(Ok(())),
             IterationExit::Continue => {}
         }
 
-        let write_ready = self.poll_write()? != Async::NotReady;
-        let read_ready = self.read_process_frame()? != Async::NotReady;
+        let write_ready = self.poll_write(cx)? != Poll::Pending;
+        let read_ready = self.read_process_frame(cx)? != Poll::Pending;
 
-        Ok(if write_ready || read_ready {
+        if write_ready || read_ready {
             info!("connection loop complete");
-            Async::Ready(())
+            Poll::Ready(Ok(()))
         } else {
-            Async::NotReady
-        })
+            Poll::Pending
+        }
     }
 
-    pub fn run(mut self) -> impl Future<Item = (), Error = error::Error> {
-        future::poll_fn(move || self.poll())
+    pub fn run(mut self) -> impl Future<Output = result::Result<()>> + Send {
+        future::poll_fn(move |cx| self.poll(cx))
     }
 }

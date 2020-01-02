@@ -3,16 +3,17 @@ use crate::client::types::ClientTypes;
 use crate::common::sender::CommonSender;
 use crate::common::sender::SendError;
 use crate::common::window_size::StreamDead;
-use crate::error;
+
 use crate::result;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use crate::SenderState;
 use bytes::Bytes;
-use futures::Poll;
-use futures::Stream;
+use futures::stream::Stream;
+use futures::task::Context;
 use std::mem;
+use std::task::Poll;
 
 /// Reference to outgoing stream on the client side.
 // NOTE: keep in sync with ServerResponse
@@ -60,8 +61,8 @@ impl ClientRequest {
     }
 
     /// Wait for stream to be ready to accept data.
-    pub fn poll(&mut self) -> Poll<(), StreamDead> {
-        self.common.poll()
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), StreamDead>> {
+        self.common.poll(cx)
     }
 
     /// Synchronously wait till outgoing stream has non-zero space
@@ -95,7 +96,7 @@ impl ClientRequest {
 
     pub fn pull_bytes_from_stream<S>(&mut self, stream: S) -> Result<(), SendError>
     where
-        S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
     {
         self.common.pull_bytes_from_stream(stream)
     }

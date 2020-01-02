@@ -1,11 +1,11 @@
 extern crate bytes;
 extern crate futures;
 extern crate httpbis;
+#[macro_use]
 extern crate log;
 extern crate regex;
 #[cfg(unix)]
 extern crate tempdir;
-extern crate tokio_core;
 
 extern crate httpbis_test;
 use httpbis_test::*;
@@ -16,9 +16,8 @@ use std::sync::Mutex;
 use bytes::Bytes;
 
 use futures::future;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::mpsc;
+
+use futures::stream::StreamExt;
 
 use httpbis::Client;
 use httpbis::Headers;
@@ -27,6 +26,7 @@ use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
+use tokio::runtime::Runtime;
 
 #[test]
 fn smoke_tcp_socket() {
@@ -42,7 +42,10 @@ fn smoke_tcp_socket() {
         futures.push(client.start_get("/blocks/200000/5", "localhost").collect());
     }
 
-    let r = future::join_all(futures).wait().expect("wait");
+    let r = Runtime::new()
+        .unwrap()
+        .block_on(future::try_join_all(futures))
+        .unwrap();
     for rr in r {
         assert_eq!(200000 * 5, rr.body.len());
     }
@@ -66,7 +69,10 @@ fn smoke_unix_domain_sockets() {
         futures.push(client.start_get("/blocks/200000/5", "localhost").collect());
     }
 
-    let r = future::join_all(futures).wait().expect("wait");
+    let r = Runtime::new()
+        .unwrap()
+        .block_on(future::try_join_all(futures))
+        .expect("wait");
     for rr in r {
         assert_eq!(200000 * 5, rr.body.len());
     }
@@ -86,7 +92,10 @@ fn parallel_large() {
         futures.push(client.start_get("/blocks/100000/5", "localhost").collect());
     }
 
-    let r = future::join_all(futures).wait().expect("wait");
+    let r = Runtime::new()
+        .unwrap()
+        .block_on(future::try_join_all(futures))
+        .expect("wait");
     for rr in r {
         assert_eq!(100000 * 5, rr.body.len());
     }
@@ -101,18 +110,24 @@ fn seq_long() {
     let client: Client =
         Client::new_plain(BIND_HOST, server.port, Default::default()).expect("client");
 
-    let (headers, parts) = client
-        .start_get("/blocks/100000/100", "localhost")
-        .0
-        .wait()
+    let (headers, parts) = Runtime::new()
+        .unwrap()
+        .block_on(client.start_get("/blocks/100000/100", "localhost").0)
         .expect("get");
 
     assert_eq!(200, headers.status());
 
     let mut sum_len = 0;
-    for b in parts.filter_data().wait() {
+
+    let mut rt = Runtime::new().unwrap();
+
+    let mut parts_filter_data = parts.filter_data();
+
+    while let Some(b) = rt.block_on(parts_filter_data.next()) {
         sum_len += b.unwrap().len();
     }
+
+    info!("Done reading response");
 
     assert_eq!(100000 * 100, sum_len);
 }
@@ -121,10 +136,10 @@ fn seq_long() {
 fn seq_slow() {
     init_logger();
 
-    let (tx, rx) = mpsc::unbounded();
+    let (tx, rx) = futures::channel::mpsc::unbounded();
 
     struct Handler {
-        rx: Mutex<Option<mpsc::UnboundedReceiver<Bytes>>>,
+        rx: Mutex<Option<futures::channel::mpsc::UnboundedReceiver<Bytes>>>,
     }
 
     impl ServerHandler for Handler {
@@ -140,7 +155,7 @@ fn seq_slow() {
                 .unwrap()
                 .take()
                 .expect("can be called only once");
-            let rx = rx.map_err(|()| unreachable!());
+            let rx = rx.map(Ok);
             resp.send_headers(Headers::ok_200())?;
             resp.pull_bytes_from_stream(rx)?;
             Ok(())
@@ -164,23 +179,24 @@ fn seq_slow() {
     )
     .expect("client");
 
-    let (headers, resp) = client
-        .start_get("/gfgfg", "localhost")
-        .0
-        .wait()
+    let mut rt = Runtime::new().unwrap();
+
+    let (headers, resp) = rt
+        .block_on(client.start_get("/gfgfg", "localhost").0)
         .expect("get");
 
     assert_eq!(200, headers.status());
 
-    let mut resp = resp.filter_data().wait();
+    let mut resp = resp.filter_data();
 
     for i in 1..100 {
         let b = vec![(i % 0x100) as u8; i * 1011];
-        tx.unbounded_send(Bytes::from(&b[..])).expect("send");
+        tx.unbounded_send(Bytes::copy_from_slice(&b[..]))
+            .expect("send");
 
         let mut c = Vec::new();
         while c.len() != b.len() {
-            c.extend(resp.next().unwrap().unwrap());
+            c.extend(rt.block_on(resp.next()).unwrap().unwrap());
         }
 
         assert_eq!(b, c);
@@ -190,11 +206,12 @@ fn seq_slow() {
 
     if false {
         // TODO
-        assert_eq!(None, resp.next().map(|e| format!("{:?}", e)));
+        assert_eq!(None, rt.block_on(resp.next()).map(|e| format!("{:?}", e)));
     } else {
         assert_eq!(
             Some(Ok(Bytes::new())),
-            resp.next().map(|r| r.map_err(|e| format!("{:?}", e)))
+            rt.block_on(resp.next())
+                .map(|r| r.map_err(|e| format!("{:?}", e)))
         );
     }
 }

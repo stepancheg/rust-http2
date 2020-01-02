@@ -1,22 +1,21 @@
-use std::io;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
+use futures::channel::oneshot;
 use futures::future;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::oneshot;
-
-use tokio_core;
-use tokio_core::reactor;
+use futures::future::FutureExt;
+use futures::future::TryFutureExt;
 
 use httpbis;
 use httpbis::for_test::*;
 use httpbis::*;
 
 use super::BIND_HOST;
+use crate::assert_types::assert_send_future;
+use std::thread::JoinHandle;
+use tokio::runtime::Runtime;
 
 /// Single connection HTTP/server.
 /// Accepts only one connection.
@@ -50,23 +49,23 @@ impl ServerOneConn {
             + Sync
             + 'static,
     {
-        let (from_loop_tx, from_loop_rx) = oneshot::channel();
+        let (from_loop_tx, from_loop_rx) = std::sync::mpsc::channel();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
         let conn: Arc<Mutex<Option<ServerConn>>> = Default::default();
 
         let conn_for_thread = conn.clone();
 
-        let join_handle = thread::Builder::new()
+        let join_handle: JoinHandle<()> = thread::Builder::new()
             .name("server_one_conn".to_owned())
             .spawn(move || {
-                let mut lp = reactor::Core::new().unwrap();
+                let mut lp = Runtime::new().unwrap();
 
-                let listener = tokio_core::net::TcpListener::bind(
-                    &(BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap(),
-                    &lp.handle(),
-                )
-                .unwrap();
+                let mut listener = lp
+                    .block_on(tokio::net::TcpListener::bind(
+                        &(BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap(),
+                    ))
+                    .unwrap();
 
                 let actual_port = listener.local_addr().unwrap().port();
                 from_loop_tx
@@ -74,43 +73,42 @@ impl ServerOneConn {
                     .ok()
                     .unwrap();
 
-                let handle = lp.handle();
+                let handle = lp.handle().clone();
 
-                let future = listener
-                    .incoming()
-                    .into_future()
-                    .map_err(|_| {
-                        httpbis::Error::from(io::Error::new(io::ErrorKind::Other, "something"))
-                    })
-                    .and_then(move |(conn, listener)| {
-                        // incoming stream is endless
-                        let (conn, _) = conn.unwrap();
+                let conn = listener.accept().map_err(httpbis::Error::from);
 
-                        // close listening port
-                        drop(listener);
+                // TODO: close listening port
+                //drop(listener);
 
-                        let (conn, future) = ServerConn::new_plain_single_thread_fn(
-                            &handle,
-                            conn,
-                            Default::default(),
-                            service,
-                        );
-                        *conn_for_thread.lock().unwrap() = Some(conn);
-                        future
-                    });
+                let future = conn.and_then(move |(conn, _addr)| {
+                    let (conn, future) = ServerConn::new_plain_single_thread_fn(
+                        &handle,
+                        conn,
+                        Default::default(),
+                        service,
+                    );
+                    *conn_for_thread.lock().unwrap() = Some(conn);
+                    future
+                });
 
-                let shutdown_rx = shutdown_rx.then(|_| future::finished::<_, ()>(()));
-                let future = future.then(|_| future::finished::<_, ()>(()));
+                let shutdown_rx = shutdown_rx.then(|_| future::ready(()));
+                let future = future.then(|_| future::ready(()));
 
-                lp.run(shutdown_rx.select(future)).ok();
+                let shutdown_rx = assert_send_future::<(), _>(shutdown_rx);
+                let future = assert_send_future::<(), _>(future);
+
+                let shutdown_rx = Box::pin(shutdown_rx);
+                let future = Box::pin(future);
+
+                lp.block_on(future::select(shutdown_rx, future));
             })
             .expect("spawn");
 
         ServerOneConn {
-            from_loop: from_loop_rx.wait().unwrap(),
+            from_loop: from_loop_rx.recv().unwrap(),
             join_handle: Some(join_handle),
             shutdown_tx: Some(shutdown_tx),
-            conn: conn,
+            conn,
         }
     }
 }
@@ -124,7 +122,10 @@ impl ServerOneConn {
     pub fn dump_state(&self) -> ConnStateSnapshot {
         let g = self.conn.lock().expect("lock");
         let conn = g.as_ref().expect("conn");
-        conn.dump_state().wait().expect("dump_status")
+        Runtime::new()
+            .unwrap()
+            .block_on(conn.dump_state())
+            .expect("dump_status")
     }
 }
 

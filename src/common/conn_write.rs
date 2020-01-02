@@ -1,3 +1,5 @@
+use std::pin::Pin;
+
 use crate::common::conn::Conn;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -12,7 +14,7 @@ use crate::common::pump_stream_to_write_loop::PumpStreamToWrite;
 use crate::common::stream::HttpStreamCommand;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
-use crate::error;
+
 use crate::result;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::flags::Flags;
@@ -29,21 +31,21 @@ use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use bytes::Bytes;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::oneshot;
-use futures::task;
-use futures::Async;
-use futures::Poll;
+use futures::channel::oneshot;
+use futures::task::Context;
 use std::cmp;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
+
+use futures::Stream;
+use std::task::Poll;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
 
 pub(crate) trait ConnWriteSideCustom {
     type Types: Types;
 
     fn process_message(
         &mut self,
+        cx: &mut Context<'_>,
         message: <Self::Types as Types>::ToWriteMessage,
     ) -> result::Result<()>;
 }
@@ -82,7 +84,7 @@ where
                 EndStream::No
             };
 
-            let mut frame = DataFrame::with_data(stream_id, data.slice(pos, end));
+            let mut frame = DataFrame::with_data(stream_id, data.slice(pos..end));
             if end_stream_in_frame == EndStream::Yes {
                 frame.set_flag(DataFlag::EndStream);
             }
@@ -178,18 +180,18 @@ where
         Ok(updated)
     }
 
-    pub fn send_frame_and_notify<F: Into<HttpFrame>>(&mut self, frame: F) {
+    pub fn send_frame_and_notify<F: Into<HttpFrame>>(&mut self, cx: &mut Context<'_>, frame: F) {
         // TODO: some of frames should not be in front of GOAWAY
         self.queued_write.queue_not_goaway(frame.into());
         // Notify the task to make sure write loop is called again
         // to flush the buffer
-        task::current().notify();
+        cx.waker().wake_by_ref();
     }
 
     /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
-    pub fn send_ack_settings(&mut self) -> result::Result<()> {
+    pub fn send_ack_settings(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
         let settings = SettingsFrame::new_ack();
-        self.send_frame_and_notify(settings);
+        self.send_frame_and_notify(cx, settings);
         Ok(())
     }
 
@@ -228,19 +230,20 @@ where
         out_window: StreamOutWindowReceiver,
     ) -> result::Result<()> {
         // TODO: spawn in handler
-        self.loop_handle.spawn(
-            PumpStreamToWrite::<T> {
-                to_write_tx: self.to_write_tx.clone(),
-                stream_id,
-                out_window,
-                stream,
-            }
-            .map_err(|v| match v {}),
-        );
+        self.loop_handle.spawn(PumpStreamToWrite::<T> {
+            to_write_tx: self.to_write_tx.clone(),
+            stream_id,
+            out_window,
+            stream,
+        });
         Ok(())
     }
 
-    pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
+    pub fn process_common_message(
+        &mut self,
+        cx: &mut Context<'_>,
+        common: CommonToWriteMessage,
+    ) -> result::Result<()> {
         match common {
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)?;
@@ -252,7 +255,7 @@ where
                 self.process_stream_pull(stream_id, stream, out_window_receiver)?;
             }
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
-                self.increase_in_window(stream_id, increase)?;
+                self.increase_in_window(cx, stream_id, increase)?;
             }
             CommonToWriteMessage::DumpState(sender) => {
                 self.process_dump_state(sender)?;
@@ -261,17 +264,24 @@ where
         Ok(())
     }
 
-    pub fn send_goaway(&mut self, error_code: ErrorCode) -> result::Result<()> {
+    pub fn send_goaway(
+        &mut self,
+        context: &mut Context<'_>,
+        error_code: ErrorCode,
+    ) -> result::Result<()> {
         debug!("requesting to send GOAWAY with code {:?}", error_code);
         let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
         self.queued_write.queue_goaway(frame);
-        task::current().notify();
+        context.waker().wake_by_ref();
         Ok(())
     }
 
-    pub fn process_goaway_state(&mut self) -> result::Result<IterationExit> {
+    pub fn process_goaway_state(&mut self, cx: &mut Context<'_>) -> result::Result<IterationExit> {
         Ok(if self.queued_write.goaway_queued() {
-            self.queued_write.poll()?;
+            match self.queued_write.poll(cx)? {
+                Poll::Pending => return Ok(IterationExit::NotReady),
+                _ => {}
+            }
             if self.queued_write.queued_empty() {
                 IterationExit::ExitEarly
             } else {
@@ -282,37 +292,41 @@ where
         })
     }
 
-    fn process_write_queue(&mut self) -> Poll<(), error::Error> {
+    fn process_write_queue(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
         loop {
-            let message = match self.write_rx.poll()? {
-                Async::NotReady => return Ok(Async::NotReady),
-                Async::Ready(Some(message)) => message,
-                Async::Ready(None) => return Ok(Async::Ready(())), // Add some diagnostics maybe?
+            let message = match Pin::new(&mut self.write_rx).poll_next(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Some(message)) => message,
+                Poll::Ready(None) => return Poll::Ready(Ok(())), // Add some diagnostics maybe?
             };
 
-            self.process_message(message)?;
+            self.process_message(cx, message)?;
         }
     }
 
-    fn poll_flush(&mut self) -> result::Result<()> {
+    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
         self.buffer_outg_conn()?;
         loop {
-            self.queued_write.poll()?;
+            match self.queued_write.poll(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Ready(Ok(())) => {}
+            }
             let updated = self.buffer_outg_conn()?;
             if !updated {
-                return Ok(());
+                return Poll::Ready(Ok(()));
             }
         }
     }
 
-    pub fn poll_write(&mut self) -> Poll<(), error::Error> {
-        if let Async::Ready(()) = self.process_write_queue()? {
-            return Ok(Async::Ready(()));
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+        if let Poll::Ready(()) = self.process_write_queue(cx)? {
+            return Poll::Ready(Ok(()));
         }
 
-        self.poll_flush()?;
+        drop(self.poll_flush(cx)?);
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }
 

@@ -4,11 +4,9 @@ extern crate bytes;
 #[macro_use]
 extern crate log;
 extern crate futures;
-extern crate futures_cpupool;
+
 extern crate httpbis;
 extern crate regex;
-extern crate tokio_core;
-extern crate tokio_tls_api;
 
 extern crate httpbis_test;
 use httpbis_test::*;
@@ -19,18 +17,17 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 
-use tokio_core::reactor;
-
 use std::io::Read as _Read;
 use std::io::Write as _Write;
 use std::thread;
 
-use futures::future::Future;
 use futures::stream;
+
+use futures::channel::oneshot;
 use futures::stream::Stream;
-use futures::sync::oneshot;
-use futures::Async;
-use futures::Poll;
+use futures::stream::StreamExt;
+
+use std::task::Poll;
 
 use httpbis::for_test::solicit::frame::headers::*;
 use httpbis::for_test::solicit::frame::settings::HttpSetting;
@@ -46,7 +43,10 @@ use std::sync::mpsc;
 extern crate tempdir;
 #[cfg(unix)]
 extern crate unix_socket;
-use futures_cpupool::CpuPool;
+
+use futures::task::Context;
+use std::pin::Pin;
+use tokio::runtime::Runtime;
 #[cfg(unix)]
 use unix_socket::UnixStream;
 
@@ -154,9 +154,12 @@ fn panic_in_stream() {
 
     let server = ServerOneConn::new_fn(0, |_, req, mut resp| {
         if req.headers.path() == "/panic" {
-            let stream = HttpStreamAfterHeaders::new(stream::iter_ok((0..2).map(|_| {
-                panic!("should reset stream");
-            })));
+            let stream = HttpStreamAfterHeaders::new(
+                stream::iter((0..2).map(|_| {
+                    panic!("should reset stream");
+                }))
+                .map(Ok),
+            );
             resp.send_headers(Headers::ok_200())?;
             resp.pull_from_stream(stream)?;
         } else {
@@ -200,6 +203,8 @@ fn panic_in_stream() {
 fn response_large() {
     init_logger();
 
+    let mut rt = Runtime::new().unwrap();
+
     let mut large_resp = Vec::new();
     while large_resp.len() < 100_000 {
         if large_resp.len() != 0 {
@@ -221,10 +226,12 @@ fn response_large() {
 
     // TODO: rewrite with TCP
     let client = Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
-    let resp = client
-        .start_post("/foobar", "localhost", Bytes::from(&b""[..]))
-        .collect()
-        .wait()
+    let resp = rt
+        .block_on(
+            client
+                .start_post("/foobar", "localhost", Bytes::from(&b""[..]))
+                .collect(),
+        )
         .expect("wait");
     assert_eq!(large_resp.len(), resp.body.len());
     assert_eq!(
@@ -328,6 +335,8 @@ fn exceed_window_size() {
 fn stream_window_gt_conn_window() {
     init_logger();
 
+    let mut rt = Runtime::new().unwrap();
+
     let server = ServerTest::new();
 
     let mut tester = HttpConnTester::connect(server.port);
@@ -352,7 +361,7 @@ fn stream_window_gt_conn_window() {
     assert_eq!(200, tester.recv_frame_headers_check(1, false).status());
     assert_eq!(w as usize, tester.recv_frame_data_check(1, false).len());
 
-    let server_sn = server.server.dump_state().wait().expect("state");
+    let server_sn = rt.block_on(server.server.dump_state()).expect("state");
     assert_eq!(0, server_sn.single_conn().1.out_window_size);
     assert_eq!(
         w as i32,
@@ -396,19 +405,21 @@ fn do_not_poll_when_not_enough_window() {
         }
 
         impl Stream for StreamImpl {
-            type Item = Bytes;
-            type Error = Error;
+            type Item = httpbis::Result<Bytes>;
 
-            fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            fn poll_next(
+                self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<Option<httpbis::Result<Bytes>>> {
                 let polls = self.polls.fetch_add(1, Ordering::SeqCst);
-                Ok(Async::Ready(match polls {
-                    0 | 1 | 2 => Some(Bytes::from(vec![
+                Poll::Ready(match polls {
+                    0 | 1 | 2 => Some(Ok(Bytes::from(vec![
                         polls as u8;
                         DEFAULT_SETTINGS.initial_window_size
                             as usize
-                    ])),
+                    ]))),
                     _ => None,
-                }))
+                })
             }
         }
 
@@ -528,88 +539,61 @@ pub fn http_1_1_unix() {
 fn external_event_loop() {
     init_logger();
 
+    let mut rt = Runtime::new().unwrap();
+
     let (tx, rx) = mpsc::channel();
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
-    let t = thread::spawn(move || {
-        let mut core = reactor::Core::new().expect("Core::new");
+    let t = thread::Builder::new()
+        .name("servers".to_owned())
+        .spawn(move || {
+            let mut core = Runtime::new().expect("Runtime::new");
 
-        let mut servers = Vec::new();
-        for _ in 0..2 {
-            let mut server = ServerBuilder::new_plain();
-            server.event_loop = Some(core.remote());
-            server.set_port(0);
-            server.service.set_service_fn("/", |_, _, mut resp| {
-                resp.send_found_200_plain_text("aabb")?;
-                Ok(())
-            });
-            servers.push(server.build().expect("server"));
-        }
+            let mut servers = Vec::new();
+            for _ in 0..2 {
+                let mut server = ServerBuilder::new_plain();
+                server.event_loop = Some(core.handle().clone());
+                server.set_port(0);
+                server.service.set_service_fn("/", |_, _, mut resp| {
+                    resp.send_found_200_plain_text("aabb")?;
+                    Ok(())
+                });
+                servers.push(server.build().expect("server"));
+            }
 
-        tx.send(
-            servers
-                .iter()
-                .map(|s| s.local_addr().port().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .expect("send");
+            tx.send(
+                servers
+                    .iter()
+                    .map(|s| s.local_addr().port().unwrap())
+                    .collect::<Vec<_>>(),
+            )
+            .expect("send");
 
-        core.run(shutdown_rx).expect("run");
-    });
+            info!("waiting for shutdown message");
+
+            core.block_on(shutdown_rx).expect("run");
+
+            info!("thread done");
+        })
+        .unwrap();
 
     let ports = rx.recv().expect("recv");
 
     for port in ports {
         let client = Client::new_plain(BIND_HOST, port, ClientConf::new()).expect("client");
-        let resp = client
-            .start_get("/", "localhost")
-            .collect()
-            .wait()
+        let resp = rt
+            .block_on(client.start_get("/", "localhost").collect())
             .expect("ok");
         assert_eq!(b"aabb", &resp.body[..]);
     }
 
+    info!("sending shutdown");
+
     shutdown_tx.send(()).expect("send");
 
+    info!("joining the thread");
+
     t.join().expect("thread join");
-}
 
-/// Example of moving heavy computation to CPU tool
-#[test]
-fn example_cpu_pool() {
-    init_logger();
-
-    let cpu_pool = CpuPool::new(2);
-
-    let mut server = ServerBuilder::new_plain();
-    server
-        .service
-        .set_service_fn("/foo", move |_, _, mut resp| {
-            cpu_pool
-                .spawn_fn(move || {
-                    if let Err(e) = resp.send_found_200_plain_text("hello") {
-                        warn!("failed to send response: {:?}", e);
-                    }
-                    Ok::<_, ()>(())
-                })
-                .forget();
-            Ok(())
-        });
-    server.set_port(0);
-    let server = server.build().expect("server");
-
-    let client = Client::new_plain(
-        "127.0.0.1",
-        server.local_addr().port().unwrap(),
-        Default::default(),
-    )
-    .expect("client");
-
-    let response = client
-        .start_get("/foo", "localhost")
-        .collect()
-        .wait()
-        .expect("get");
-    assert_eq!(200, response.headers.status());
-    assert_eq!(b"hello", response.body.as_ref());
+    info!("last line of test");
 }

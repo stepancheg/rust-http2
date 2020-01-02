@@ -1,15 +1,15 @@
 use crate::result;
 use crate::server::req::ServerRequest;
 use crate::ServerResponse;
-use tokio_core::reactor::Remote;
+use tokio::runtime::Handle;
 
 pub struct ServerHandlerContext {
-    pub(crate) loop_handle: Remote,
+    pub(crate) loop_handle: Handle,
 }
 
 impl ServerHandlerContext {
     // TODO: provide access to executor if there's any
-    pub fn loop_remote(&self) -> Remote {
+    pub fn loop_remote(&self) -> Handle {
         self.loop_handle.clone()
     }
 }

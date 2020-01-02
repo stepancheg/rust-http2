@@ -167,8 +167,10 @@ impl Encoder {
                 // The name of the header is in no tables: need to encode
                 // it with both a literal name and value.
                 self.encode_literal(&header, true, writer);
-                self.header_table
-                    .add_header(Bytes::from(header.0), Bytes::from(header.1));
+                self.header_table.add_header(
+                    Bytes::copy_from_slice(header.0),
+                    Bytes::copy_from_slice(header.1),
+                );
             }
             Some((index, HeaderValueFound::NameOnlyFound)) => {
                 // The name of the header is at the given index, but the
@@ -281,7 +283,12 @@ mod tests {
             Some(h) => {
                 h == headers
                     .iter()
-                    .map(|(k, v)| (Bytes::from(&(*k)[..]), Bytes::from(&(*v)[..])))
+                    .map(|(k, v)| {
+                        (
+                            Bytes::copy_from_slice(&(*k)[..]),
+                            Bytes::copy_from_slice(&(*v)[..]),
+                        )
+                    })
                     .collect::<Vec<_>>()
             }
             None => false,

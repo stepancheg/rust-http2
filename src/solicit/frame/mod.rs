@@ -127,7 +127,7 @@ pub fn unpack_header_from_slice(header: &[u8]) -> FrameHeader {
 pub fn unpack_frames_for_test(mut raw: &[u8]) -> Vec<HttpFrame> {
     let mut r = Vec::new();
     while !raw.is_empty() {
-        let raw_frame = RawFrame::parse(raw).unwrap();
+        let raw_frame = RawFrame::parse(Bytes::copy_from_slice(raw)).unwrap();
         raw = &raw[raw_frame.len()..];
         r.push(HttpFrame::from_raw(&raw_frame).unwrap());
     }
@@ -196,7 +196,7 @@ fn parse_padded_payload(payload: Bytes, flag: bool) -> ParseFrameResult<(Bytes, 
         return Err(ParseFrameError::ProtocolError);
     }
 
-    Ok((payload.slice(1, payload.len() - pad_len), pad_len as u8))
+    Ok((payload.slice(1..payload.len() - pad_len), pad_len as u8))
 }
 
 /// A trait that types that are an intermediate representation of HTTP/2 frames should implement.
@@ -356,7 +356,7 @@ impl RawFrame {
 
     /// Returns a slice representing the payload of the `RawFrame`.
     pub fn payload(&self) -> Bytes {
-        self.raw_content.slice_from(9)
+        self.raw_content.slice(9..)
     }
 }
 
@@ -385,7 +385,7 @@ impl From<Vec<u8>> for RawFrame {
 impl<'a> From<&'a [u8]> for RawFrame {
     fn from(raw: &'a [u8]) -> RawFrame {
         RawFrame {
-            raw_content: Bytes::from(raw),
+            raw_content: Bytes::copy_from_slice(raw),
         }
     }
 }

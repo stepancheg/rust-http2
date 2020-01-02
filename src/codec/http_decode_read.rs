@@ -1,6 +1,6 @@
 use crate::codec::http_framed_read::HttpFramedJoinContinuationRead;
-use crate::error;
 use crate::hpack;
+use crate::result;
 use crate::solicit::frame::headers::HeadersDecodedFrame;
 use crate::solicit::frame::HttpFrame;
 use crate::solicit::frame::HttpFrameDecoded;
@@ -8,11 +8,11 @@ use crate::solicit::stream_id::StreamId;
 use crate::ErrorCode;
 use crate::Header;
 use crate::Headers;
-use futures::Async;
-use futures::Poll;
-use tokio_io::AsyncRead;
+use futures::task::Context;
+use std::task::Poll;
+use tokio::io::AsyncRead;
 
-pub struct HttpDecodeRead<R: AsyncRead> {
+pub struct HttpDecodeRead<R: AsyncRead + Unpin> {
     framed_read: HttpFramedJoinContinuationRead<R>,
     /// HPACK decoder used to decode incoming headers before passing them on to the session.
     decoder: hpack::Decoder,
@@ -24,7 +24,7 @@ pub enum HttpFrameDecodedOrGoaway {
     _SendRst(StreamId, ErrorCode),
 }
 
-impl<R: AsyncRead> HttpDecodeRead<R> {
+impl<R: AsyncRead + Unpin> HttpDecodeRead<R> {
     pub fn new(read: R) -> Self {
         HttpDecodeRead {
             framed_read: HttpFramedJoinContinuationRead::new(read),
@@ -34,19 +34,20 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
 
     pub fn poll_http_frame(
         &mut self,
+        cx: &mut Context<'_>,
         max_frame_size: u32,
-    ) -> Poll<HttpFrameDecodedOrGoaway, error::Error> {
-        let frame = match self.framed_read.poll_http_frame(max_frame_size)? {
-            Async::Ready(frame) => frame,
-            Async::NotReady => return Ok(Async::NotReady),
+    ) -> Poll<result::Result<HttpFrameDecodedOrGoaway>> {
+        let frame = match self.framed_read.poll_http_frame(cx, max_frame_size)? {
+            Poll::Ready(frame) => frame,
+            Poll::Pending => return Poll::Pending,
         };
-        Ok(Async::Ready(HttpFrameDecodedOrGoaway::Frame(match frame {
+        Poll::Ready(Ok(HttpFrameDecodedOrGoaway::Frame(match frame {
             HttpFrame::Data(frame) => HttpFrameDecoded::Data(frame),
             HttpFrame::Headers(frame) => {
                 let headers = match self.decoder.decode(&frame.header_fragment()) {
                     Err(e) => {
                         warn!("failed to decode headers: {:?}", e);
-                        return Ok(Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(
+                        return Poll::Ready(Ok(HttpFrameDecodedOrGoaway::SendGoaway(
                             ErrorCode::CompressionError,
                         )));
                     }
@@ -70,7 +71,7 @@ impl<R: AsyncRead> HttpDecodeRead<R> {
                             frame.stream_id, e
                         );
                         // TODO: close connection, because decoder may be in incorrect state
-                        return Ok(Async::Ready(HttpFrameDecodedOrGoaway::SendGoaway(
+                        return Poll::Ready(Ok(HttpFrameDecodedOrGoaway::SendGoaway(
                             ErrorCode::ProtocolError,
                         )));
                     }

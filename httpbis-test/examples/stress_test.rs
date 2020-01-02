@@ -14,13 +14,13 @@ use regex::Regex;
 
 use bytes::Bytes;
 
-use futures::future::Future;
-use futures::sink::Sink;
+use futures::channel::mpsc;
+use futures::sink::SinkExt;
 use futures::stream;
-use futures::stream::Stream;
-use futures::sync::mpsc;
+use futures::stream::StreamExt;
 
 use httpbis::*;
+use tokio::runtime::Runtime;
 
 fn new_server() -> Server {
     let mut server = ServerBuilder::new_plain();
@@ -34,7 +34,7 @@ fn new_server() -> Server {
         let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
 
         resp.send_headers(Headers::ok_200())?;
-        resp.pull_bytes_from_stream(stream::repeat(Bytes::from(vec![17; size as usize])))?;
+        resp.pull_bytes_from_stream(stream::repeat(Bytes::from(vec![17; size as usize])).map(Ok))?;
         Ok(())
     });
     server.service.set_service_fn("/bq", |_, req, mut resp| {
@@ -45,16 +45,18 @@ fn new_server() -> Server {
         let (tx, rx) = mpsc::channel(1);
 
         thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+
             let mut tx = tx;
 
             let b = Bytes::from(vec![17; size as usize]);
             loop {
-                tx = tx.send(b.clone()).wait().expect("send");
+                rt.block_on(tx.send(b.clone())).expect("send");
             }
         });
 
         resp.send_headers(Headers::ok_200())?;
-        resp.pull_bytes_from_stream(rx.map_err(|_| unreachable!()))?;
+        resp.pull_bytes_from_stream(rx.map(Ok))?;
         Ok(())
     });
     server.set_port(0);
@@ -73,24 +75,26 @@ fn spawn<F: FnOnce(Client, Arc<AtomicBool>) + Send + 'static>(port: u16, f: F) -
 }
 
 fn get_200(client: Client, still_alive: Arc<AtomicBool>) {
+    let mut rt = Runtime::new().unwrap();
     loop {
         still_alive.store(true, Ordering::SeqCst);
-        let r = client
-            .start_get("/200", "localhost")
-            .collect()
-            .wait()
+        let r = rt
+            .block_on(client.start_get("/200", "localhost").collect())
             .expect("get");
         assert_eq!(200, r.headers.status());
     }
 }
 
 fn inf_impl(client: Client, still_alive: Arc<AtomicBool>, path: &str, size: usize) {
+    let mut rt = Runtime::new().unwrap();
     loop {
-        let (headers, resp) = client.start_get(path, "localhost").0.wait().expect("get");
+        let (headers, resp) = rt
+            .block_on(client.start_get(path, "localhost").0)
+            .expect("get");
 
         assert_eq!(200, headers.status());
 
-        let mut resp = resp.filter_data().wait();
+        let mut resp = resp.filter_data();
 
         let exp = vec![17; size as usize];
 
@@ -102,7 +106,7 @@ fn inf_impl(client: Client, still_alive: Arc<AtomicBool>, path: &str, size: usiz
             let mut v = Vec::new();
             while v.len() < size as usize {
                 still_alive.store(true, Ordering::SeqCst);
-                v.extend(resp.next().unwrap().unwrap());
+                v.extend(rt.block_on(resp.next()).unwrap().unwrap());
             }
             assert_eq!(&exp[..], &v[..size]);
             v.drain(..size);

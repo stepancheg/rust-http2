@@ -7,11 +7,17 @@ use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_trailers::DataOrTrailers;
 use crate::error;
 use crate::misc::any_to_string;
+use crate::result;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::Headers;
 use crate::solicit_async::HttpFutureStreamSend;
-use futures::Poll;
+use futures::future;
+use futures::stream::StreamExt;
+use futures::stream::TryStreamExt;
+use futures::task::Context;
 use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
+use std::task::Poll;
 
 /// Stream frame content with END_STREAM flag
 #[derive(Debug)]
@@ -85,9 +91,9 @@ impl DataOrHeadersWithFlagStream {
 
     pub fn new<S>(s: S) -> DataOrHeadersWithFlagStream
     where
-        S: Stream<Item = DataOrHeadersWithFlag, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<DataOrHeadersWithFlag>> + Send + 'static,
     {
-        DataOrHeadersWithFlagStream(Box::new(s))
+        DataOrHeadersWithFlagStream(Box::pin(s))
     }
 
     pub fn empty() -> DataOrHeadersWithFlagStream {
@@ -96,13 +102,13 @@ impl DataOrHeadersWithFlagStream {
 
     pub fn bytes<S>(bytes: S) -> DataOrHeadersWithFlagStream
     where
-        S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
     {
-        DataOrHeadersWithFlagStream::new(bytes.map(DataOrHeadersWithFlag::intermediate_data))
+        DataOrHeadersWithFlagStream::new(bytes.map_ok(DataOrHeadersWithFlag::intermediate_data))
     }
 
     pub fn once(part: DataOrHeaders) -> DataOrHeadersWithFlagStream {
-        DataOrHeadersWithFlagStream::new(stream::once(Ok(DataOrHeadersWithFlag {
+        DataOrHeadersWithFlagStream::new(stream::once(future::ok(DataOrHeadersWithFlag {
             content: part,
             last: true,
         })))
@@ -119,15 +125,17 @@ impl DataOrHeadersWithFlagStream {
 
     /// Create a stream without "last" flag
     pub fn drop_last_flag(self) -> HttpFutureStreamSend<DataOrHeaders> {
-        Box::new(self.map(|DataOrHeadersWithFlag { content, .. }| content))
+        Box::pin(self.map_ok(|DataOrHeadersWithFlag { content, .. }| content))
     }
 
     /// Take only `DATA` frames from the stream
     pub fn filter_data(self) -> HttpFutureStreamSend<Bytes> {
-        Box::new(
-            self.filter_map(|DataOrHeadersWithFlag { content, .. }| match content {
-                DataOrHeaders::Data(data) => Some(data),
-                _ => None,
+        Box::pin(
+            self.try_filter_map(|DataOrHeadersWithFlag { content, .. }| {
+                future::ok(match content {
+                    DataOrHeaders::Data(data) => Some(data),
+                    _ => None,
+                })
             }),
         )
     }
@@ -136,7 +144,7 @@ impl DataOrHeadersWithFlagStream {
     /// Transform panic into `error::Error`
     pub fn catch_unwind(self) -> DataOrHeadersWithFlagStream {
         DataOrHeadersWithFlagStream::new(AssertUnwindSafe(self.0).catch_unwind().then(|r| {
-            match r {
+            future::ready(match r {
                 Ok(r) => r,
                 Err(e) => {
                     let e = any_to_string(e);
@@ -144,16 +152,15 @@ impl DataOrHeadersWithFlagStream {
                     warn!("handler panicked: {}", e);
                     Err(error::Error::HandlerPanicked(e))
                 }
-            }
+            })
         }))
     }
 }
 
 impl Stream for DataOrHeadersWithFlagStream {
-    type Item = DataOrHeadersWithFlag;
-    type Error = error::Error;
+    type Item = result::Result<DataOrHeadersWithFlag>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.0.poll()
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.0).poll_next(cx)
     }
 }

@@ -2,12 +2,13 @@ use crate::client_died_error_holder::ConnDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::types::Types;
 use crate::result;
-use futures::sync::mpsc;
-use futures::sync::mpsc::UnboundedReceiver;
-use futures::sync::mpsc::UnboundedSender;
-use futures::Poll;
-use futures::Stream;
-use void::Void;
+use futures::channel::mpsc;
+use futures::channel::mpsc::UnboundedReceiver;
+use futures::channel::mpsc::UnboundedSender;
+use futures::stream::Stream;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
 pub(crate) struct ConnCommandSender<T: Types> {
     tx: UnboundedSender<T::ToWriteMessage>,
@@ -42,10 +43,12 @@ pub(crate) struct ConnCommandReceiver<T: Types> {
 
 impl<T: Types> Stream for ConnCommandReceiver<T> {
     type Item = T::ToWriteMessage;
-    type Error = Void;
 
-    fn poll(&mut self) -> Poll<Option<T::ToWriteMessage>, Void> {
-        self.rx.poll().map_err(|()| unreachable!())
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<T::ToWriteMessage>> {
+        Pin::new(&mut self.rx).poll_next(cx)
     }
 }
 

@@ -229,12 +229,15 @@ impl FrameIR for DataFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{DataFlag, DataFrame};
+    use super::DataFlag;
+    use super::DataFrame;
+    use crate::solicit::frame::pack_header;
     use crate::solicit::frame::tests::build_padded_frame_payload;
+    use crate::solicit::frame::Frame;
     use crate::solicit::frame::FrameHeader;
     use crate::solicit::frame::FrameIR;
-    use crate::solicit::frame::{pack_header, Frame};
     use crate::solicit::tests::common::raw_frame_from_parts;
+    use bytes::Bytes;
 
     /// Tests that the `DataFrame` struct correctly interprets a DATA frame
     /// with no padding set.
@@ -426,7 +429,7 @@ mod tests {
     #[test]
     fn test_data_frame_serialize_no_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
-        let frame = DataFrame::with_data_conv(1, &data[..]);
+        let frame = DataFrame::with_data_conv(1, Bytes::copy_from_slice(&data[..]));
         let expected = {
             let headers = pack_header(&FrameHeader::new(6, 0, 0, 1));
             let mut res: Vec<u8> = Vec::new();
@@ -446,7 +449,7 @@ mod tests {
     #[test]
     fn test_data_frame_serialize_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
-        let mut frame = DataFrame::with_data_conv(1, &data[..]);
+        let mut frame = DataFrame::with_data_conv(1, Bytes::copy_from_slice(&data[..]));
         frame.set_padding(5);
         let expected = {
             let headers = pack_header(&FrameHeader::new(6 + 1 + 5, 0, 8, 1));

@@ -2,13 +2,16 @@ use std::marker;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use futures::future::Future;
+use futures::future;
 
-use crate::error;
+use std::future::Future;
+
 use crate::misc::any_to_string;
+use crate::{error, result};
+use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 
-pub(crate) trait DiedType: Default + Clone {
+pub(crate) trait DiedType: Default + Clone + Send {
     fn what() -> &'static str;
 }
 
@@ -56,10 +59,10 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
         }
     }
 
-    pub fn wrap_future(
-        &self,
-        future: impl Future<Item = (), Error = error::Error>,
-    ) -> impl Future<Item = (), Error = ()> {
+    pub fn wrap_future<F>(&self, future: F) -> impl Future<Output = ()> + Send
+    where
+        F: Future<Output = result::Result<()>> + Send,
+    {
         let holder = self.clone();
         let future = future.then(move |r| {
             match r {
@@ -72,7 +75,7 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
                     holder.set_once(e);
                 }
             }
-            Ok::<(), ()>(())
+            future::ok::<(), ()>(())
         });
 
         let holder = self.clone();
@@ -82,7 +85,7 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
                 warn!("{} panicked: {}", D::what(), message);
                 holder.set_once(error::Error::ClientPanicked(message));
             }
-            Ok(())
+            future::ready(())
         });
 
         future

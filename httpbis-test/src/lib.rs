@@ -8,17 +8,18 @@ extern crate bytes;
 
 extern crate futures;
 
-extern crate tokio_core;
-
 extern crate httpbis;
 
 use std::sync::Once;
 
+mod assert_types;
+mod bytes_ext;
 mod client;
 #[path = "../../src/misc.rs"]
 mod misc;
 mod server_one_conn;
 mod server_test;
+mod task;
 mod tester;
 
 pub use self::server_one_conn::*;
@@ -26,6 +27,7 @@ pub use self::server_test::*;
 pub use self::tester::*;
 pub use client::*;
 pub use misc::*;
+pub use task::*;
 
 // Bind on IPv4 because IPv6 is broken on travis
 pub const BIND_HOST: &str = "127.0.0.1";

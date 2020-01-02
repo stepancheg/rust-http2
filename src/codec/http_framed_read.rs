@@ -2,6 +2,7 @@ use bytes::Bytes;
 use bytes::BytesMut;
 
 use crate::error;
+use crate::result;
 use crate::solicit::frame::headers::HeadersFlag;
 use crate::solicit::frame::push_promise::PushPromiseFlag;
 use crate::solicit::frame::unpack_header_from_slice;
@@ -13,17 +14,18 @@ use crate::solicit::frame::RawFrame;
 use crate::solicit::frame::FRAME_HEADER_LEN;
 use crate::solicit::stream_id::StreamId;
 use crate::ErrorCode;
-use futures::Async;
-use futures::Poll;
-use tokio_io::AsyncRead;
+use futures::task::Context;
+use std::pin::Pin;
+use std::task::Poll;
+use tokio::io::AsyncRead;
 
 /// Buffered read for reading HTTP/2 frames.
-pub struct HttpFramedRead<R: AsyncRead> {
+pub struct HttpFramedRead<R: AsyncRead + Unpin> {
     read: R,
     buf: BytesMut,
 }
 
-impl<R: AsyncRead> HttpFramedRead<R> {
+impl<R: AsyncRead + Unpin> HttpFramedRead<R> {
     pub fn new(read: R) -> HttpFramedRead<R> {
         HttpFramedRead {
             read,
@@ -31,30 +33,39 @@ impl<R: AsyncRead> HttpFramedRead<R> {
         }
     }
 
-    fn fill_buf(&mut self) -> Result<Async<()>, error::Error> {
-        self.buf.reserve(8192);
-        let n = match self.read.read_buf(&mut self.buf)? {
-            Async::Ready(n) => n,
-            Async::NotReady => return Ok(Async::NotReady),
+    fn fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+        let mut_self = self.get_mut();
+        mut_self.buf.reserve(8192);
+        let n = match Pin::new(&mut mut_self.read).poll_read_buf(cx, &mut mut_self.buf)? {
+            Poll::Ready(n) => n,
+            Poll::Pending => return Poll::Pending,
         };
         if n == 0 {
-            return Err(error::Error::EofFromStream);
+            return Poll::Ready(Err(error::Error::EofFromStream));
         }
-        Ok(Async::Ready(()))
+        Poll::Ready(Ok(()))
     }
 
-    fn fill_buff_to_at_least(&mut self, at_least: usize) -> Result<Async<()>, error::Error> {
+    fn fill_buff_to_at_least(
+        &mut self,
+        cx: &mut Context<'_>,
+        at_least: usize,
+    ) -> Poll<result::Result<()>> {
         while self.buf.len() < at_least {
-            if let Async::NotReady = self.fill_buf()? {
-                return Ok(Async::NotReady);
+            if let Poll::Pending = Pin::new(&mut *self).fill_buf(cx)? {
+                return Poll::Pending;
             }
         }
-        Ok(Async::Ready(()))
+        Poll::Ready(Ok(()))
     }
 
-    fn poll_raw_frame(&mut self, max_frame_size: u32) -> Result<Async<RawFrame>, error::Error> {
-        if let Async::NotReady = self.fill_buff_to_at_least(FRAME_HEADER_LEN)? {
-            return Ok(Async::NotReady);
+    fn poll_raw_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+        max_frame_size: u32,
+    ) -> Poll<result::Result<RawFrame>> {
+        if let Poll::Pending = self.fill_buff_to_at_least(cx, FRAME_HEADER_LEN)? {
+            return Poll::Pending;
         }
 
         let header = {
@@ -67,25 +78,29 @@ impl<R: AsyncRead> HttpFramedRead<R> {
                 "closing conn because peer sent frame with size: {}, max_frame_size: {}",
                 header.payload_len, max_frame_size
             );
-            return Err(error::Error::CodeError(ErrorCode::FrameSizeError));
+            return Poll::Ready(Err(error::Error::CodeError(ErrorCode::FrameSizeError)));
         }
 
         let total_len = FRAME_HEADER_LEN + header.payload_len as usize;
 
-        if let Async::NotReady = self.fill_buff_to_at_least(total_len)? {
-            return Ok(Async::NotReady);
+        if let Poll::Pending = self.fill_buff_to_at_least(cx, total_len)? {
+            return Poll::Pending;
         }
 
-        Ok(Async::Ready(RawFrame {
+        Poll::Ready(Ok(RawFrame {
             raw_content: self.buf.split_to(total_len).freeze(),
         }))
     }
 
-    fn poll_http_frame(&mut self, max_frame_size: u32) -> Result<Async<HttpFrame>, error::Error> {
-        Ok(match self.poll_raw_frame(max_frame_size)? {
-            Async::Ready(frame) => Async::Ready(HttpFrame::from_raw(&frame)?),
-            Async::NotReady => Async::NotReady,
-        })
+    fn poll_http_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+        max_frame_size: u32,
+    ) -> Poll<result::Result<HttpFrame>> {
+        match self.poll_raw_frame(cx, max_frame_size)? {
+            Poll::Ready(frame) => Poll::Ready(Ok(HttpFrame::from_raw(&frame)?)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
@@ -109,7 +124,12 @@ impl Continuable {
                 &mut push_promise.header_fragment
             }
         };
-        header_fragment.extend_from_slice(&bytes);
+
+        // TODO: quadratic
+        let mut bm = BytesMut::new();
+        bm.extend_from_slice(&header_fragment[..]);
+        bm.extend_from_slice(&bytes[..]);
+        *header_fragment = bm.freeze();
     }
 
     fn set_end_headers(&mut self) {
@@ -131,13 +151,13 @@ impl Continuable {
     }
 }
 
-pub struct HttpFramedJoinContinuationRead<R: AsyncRead> {
+pub struct HttpFramedJoinContinuationRead<R: AsyncRead + Unpin> {
     framed_read: HttpFramedRead<R>,
     // TODO: check total size is not exceeded some limit
     header_opt: Option<Continuable>,
 }
 
-impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
+impl<R: AsyncRead + Unpin> HttpFramedJoinContinuationRead<R> {
     pub fn new(read: R) -> Self {
         HttpFramedJoinContinuationRead {
             framed_read: HttpFramedRead::new(read),
@@ -145,22 +165,26 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
         }
     }
 
-    pub fn poll_http_frame(&mut self, max_frame_size: u32) -> Poll<HttpFrame, error::Error> {
+    pub fn poll_http_frame(
+        &mut self,
+        cx: &mut Context<'_>,
+        max_frame_size: u32,
+    ) -> Poll<result::Result<HttpFrame>> {
         loop {
-            let frame = match self.framed_read.poll_http_frame(max_frame_size)? {
-                Async::NotReady => return Ok(Async::NotReady),
-                Async::Ready(frame) => frame,
+            let frame = match self.framed_read.poll_http_frame(cx, max_frame_size)? {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(frame) => frame,
             };
 
             match frame {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::ExpectingContinuationGot(
+                        return Poll::Ready(Err(error::Error::ExpectingContinuationGot(
                             HttpFrameType::Headers,
-                        ));
+                        )));
                     } else {
                         if h.flags.is_set(HeadersFlag::EndHeaders) {
-                            return Ok(Async::Ready(HttpFrame::Headers(h)));
+                            return Poll::Ready(Ok(HttpFrame::Headers(h)));
                         } else {
                             self.header_opt = Some(Continuable::Headers(h));
                             continue;
@@ -169,12 +193,12 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
                 }
                 HttpFrame::PushPromise(p) => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::ExpectingContinuationGot(
+                        return Poll::Ready(Err(error::Error::ExpectingContinuationGot(
                             HttpFrameType::PushPromise,
-                        ));
+                        )));
                     } else {
                         if p.flags.is_set(PushPromiseFlag::EndHeaders) {
-                            return Ok(Async::Ready(HttpFrame::PushPromise(p)));
+                            return Poll::Ready(Ok(HttpFrame::PushPromise(p)));
                         } else {
                             self.header_opt = Some(Continuable::PushPromise(p));
                             continue;
@@ -184,30 +208,34 @@ impl<R: AsyncRead> HttpFramedJoinContinuationRead<R> {
                 HttpFrame::Continuation(c) => {
                     if let Some(mut h) = self.header_opt.take() {
                         if h.get_stream_id() != c.stream_id {
-                            return Err(error::Error::ExpectingContinuationGotDifferentStreamId(
-                                h.get_stream_id(),
-                                c.stream_id,
+                            return Poll::Ready(Err(
+                                error::Error::ExpectingContinuationGotDifferentStreamId(
+                                    h.get_stream_id(),
+                                    c.stream_id,
+                                ),
                             ));
                         } else {
                             let header_end = c.is_headers_end();
                             h.extend_header_fragment(c.header_fragment);
                             if header_end {
                                 h.set_end_headers();
-                                return Ok(Async::Ready(h.into_frame()));
+                                return Poll::Ready(Ok(h.into_frame()));
                             } else {
                                 self.header_opt = Some(h);
                                 continue;
                             }
                         }
                     } else {
-                        return Err(error::Error::ContinuationFrameWithoutHeaders);
+                        return Poll::Ready(Err(error::Error::ContinuationFrameWithoutHeaders));
                     }
                 }
                 f => {
                     if let Some(_) = self.header_opt {
-                        return Err(error::Error::ExpectingContinuationGot(f.frame_type()));
+                        return Poll::Ready(Err(error::Error::ExpectingContinuationGot(
+                            f.frame_type(),
+                        )));
                     } else {
-                        return Ok(Async::Ready(f));
+                        return Poll::Ready(Ok(f));
                     }
                 }
             };

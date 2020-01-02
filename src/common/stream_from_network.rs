@@ -1,18 +1,19 @@
 #![allow(dead_code)]
 
 use futures::stream::Stream;
-use futures::Async;
-use futures::Poll;
+use std::task::Poll;
 
 use crate::solicit::DEFAULT_SETTINGS;
 
-use crate::error;
+use crate::result;
 
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::Types;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use futures::task::Context;
+use std::pin::Pin;
 
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.
@@ -22,15 +23,17 @@ pub(crate) struct StreamFromNetwork<T: Types> {
 }
 
 impl<T: Types> Stream for StreamFromNetwork<T> {
-    type Item = DataOrHeadersWithFlag;
-    type Error = error::Error;
+    type Item = result::Result<DataOrHeadersWithFlag>;
 
-    fn poll(&mut self) -> Poll<Option<DataOrHeadersWithFlag>, error::Error> {
-        let part = match self.rx.poll() {
-            Ok(Async::NotReady) => return Ok(Async::NotReady),
-            Err(e) => return Err(e),
-            Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
-            Ok(Async::Ready(Some(part))) => part,
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<result::Result<DataOrHeadersWithFlag>>> {
+        let part = match Pin::new(&mut self.rx).poll_next(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
+            Poll::Ready(None) => return Poll::Ready(None),
+            Poll::Ready(Some(Ok(part))) => part,
         };
 
         if let DataOrHeadersWithFlag {
@@ -49,7 +52,7 @@ impl<T: Types> Stream for StreamFromNetwork<T> {
             }
         }
 
-        Ok(Async::Ready(Some(part)))
+        Poll::Ready(Some(Ok(part)))
     }
 }
 

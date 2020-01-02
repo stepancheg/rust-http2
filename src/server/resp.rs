@@ -1,7 +1,7 @@
 use crate::assert_types::assert_send;
 use crate::common::sender::CommonSender;
 use crate::common::sender::SendError;
-use crate::error;
+
 use crate::result;
 use crate::server::types::ServerTypes;
 use crate::ErrorCode;
@@ -11,9 +11,10 @@ use crate::SenderState;
 use crate::SimpleHttpMessage;
 use crate::StreamDead;
 use bytes::Bytes;
-use futures::Poll;
-use futures::Stream;
+use futures::stream::Stream;
+use futures::task::Context;
 use std::mem;
+use std::task::Poll;
 
 // NOTE: Keep in sync with ClientRequest
 pub struct ServerResponse {
@@ -59,8 +60,8 @@ impl ServerResponse {
         mem::replace(&mut self.drop_callback, None);
     }
 
-    pub fn poll(&mut self) -> Poll<(), StreamDead> {
-        self.common.poll()
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), StreamDead>> {
+        self.common.poll(cx)
     }
 
     pub fn block_wait(&mut self) -> Result<(), StreamDead> {
@@ -93,7 +94,7 @@ impl ServerResponse {
 
     pub fn pull_bytes_from_stream<S>(&mut self, stream: S) -> Result<(), SendError>
     where
-        S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
     {
         self.common.pull_bytes_from_stream(stream)
     }

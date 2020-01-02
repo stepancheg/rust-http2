@@ -1,17 +1,18 @@
 use crate::codec::http_framed_write::HttpFramedWrite;
-use crate::error;
+use crate::result;
 use crate::solicit::frame::FrameIR;
 use crate::solicit::frame::GoawayFrame;
-use futures::Poll;
-use tokio_io::AsyncWrite;
+use futures::task::Context;
+use std::task::Poll;
+use tokio::io::AsyncWrite;
 
-pub struct QueuedWrite<W: AsyncWrite> {
+pub struct QueuedWrite<W: AsyncWrite + Unpin> {
     framed_write: HttpFramedWrite<W>,
     // GOAWAY frame is added to the queue.
     goaway_queued: bool,
 }
 
-impl<W: AsyncWrite> QueuedWrite<W> {
+impl<W: AsyncWrite + Unpin> QueuedWrite<W> {
     pub fn new(write: W) -> QueuedWrite<W> {
         QueuedWrite {
             framed_write: HttpFramedWrite::new(write),
@@ -46,8 +47,8 @@ impl<W: AsyncWrite> QueuedWrite<W> {
         self.framed_write.buffer_frame(frame);
     }
 
-    pub fn poll(&mut self) -> Poll<(), error::Error> {
-        self.framed_write.poll_flush()
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+        self.framed_write.poll_flush(cx)
     }
 
     pub fn goaway_queued(&self) -> bool {

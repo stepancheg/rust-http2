@@ -4,19 +4,19 @@ use crate::common::types::Types;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
-use crate::error;
 use crate::solicit::stream_id::StreamId;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use crate::StreamDead;
+use crate::{error, result};
 use bytes::Bytes;
 use futures::future;
-use futures::future::Future;
-use futures::Async;
-use futures::Poll;
-use futures::Stream;
+use futures::stream::Stream;
+
+use futures::task::Context;
 use std::sync::Arc;
+use std::task::Poll;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum SenderState {
@@ -68,16 +68,16 @@ impl<T: Types> CommonSender<T> {
         }
     }
 
-    pub fn poll(&mut self) -> Poll<(), StreamDead> {
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), StreamDead>> {
         match self.state {
-            Some(ref mut state) => state.out_window.poll(),
+            Some(ref mut state) => state.out_window.poll(cx),
             // TODO: different error
-            None => Ok(Async::Ready(())),
+            None => Poll::Ready(Ok(())),
         }
     }
 
     pub fn block_wait(&mut self) -> Result<(), StreamDead> {
-        future::poll_fn(|| self.poll()).wait()
+        futures::executor::block_on(future::poll_fn(|cx| self.poll(cx)))
     }
 
     fn get_can_send(&mut self) -> Result<&mut CanSendData<T>, SendError> {
@@ -204,7 +204,7 @@ impl<T: Types> CommonSender<T> {
 
     pub fn pull_bytes_from_stream<S>(&mut self, stream: S) -> Result<(), SendError>
     where
-        S: Stream<Item = Bytes, Error = error::Error> + Send + 'static,
+        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
     {
         self.pull_from_stream(HttpStreamAfterHeaders::bytes(stream))
     }

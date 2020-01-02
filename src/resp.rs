@@ -1,7 +1,9 @@
-use futures::future;
-use futures::future::Future;
+use futures::{future, TryFutureExt, TryStreamExt};
+
 use futures::stream;
 use futures::stream::Stream;
+use futures::stream::StreamExt;
+use std::future::Future;
 
 use bytes::Bytes;
 
@@ -9,14 +11,15 @@ use crate::message::SimpleHttpMessage;
 use crate::solicit::header::Headers;
 use crate::solicit_async::*;
 
-use crate::error::Error;
-
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use crate::data_or_trailers::*;
 use crate::error;
-use futures::Poll;
+use crate::result;
+use futures::task::Context;
+use std::pin::Pin;
+use std::task::Poll;
 
 /// Convenient wrapper around async HTTP response future/stream
 pub struct Response(pub HttpFutureSend<(Headers, HttpStreamAfterHeaders)>);
@@ -26,9 +29,9 @@ impl Response {
 
     pub fn new<F>(future: F) -> Response
     where
-        F: Future<Item = (Headers, HttpStreamAfterHeaders), Error = Error> + Send + 'static,
+        F: Future<Output = result::Result<(Headers, HttpStreamAfterHeaders)>> + Send + 'static,
     {
-        Response(Box::new(future))
+        Response(Box::pin(future))
     }
 
     pub fn headers_and_stream(headers: Headers, stream: HttpStreamAfterHeaders) -> Response {
@@ -37,7 +40,7 @@ impl Response {
 
     pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> Response
     where
-        S: Stream<Item = Bytes, Error = Error> + Send + 'static,
+        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
     {
         Response::headers_and_stream(headers, HttpStreamAfterHeaders::bytes(content))
     }
@@ -49,7 +52,7 @@ impl Response {
 
     /// Create a response with headers and response body
     pub fn headers_and_bytes<B: Into<Bytes>>(header: Headers, content: B) -> Response {
-        Response::headers_and_bytes_stream(header, stream::once(Ok(content.into())))
+        Response::headers_and_bytes_stream(header, stream::once(future::ok(content.into())))
     }
 
     pub fn message(message: SimpleHttpMessage) -> Response {
@@ -70,50 +73,54 @@ impl Response {
         Response::headers(headers)
     }
 
-    pub fn from_stream<S>(stream: S) -> Response
+    pub fn from_stream<S>(mut stream: S) -> Response
     where
-        S: Stream<Item = DataOrHeadersWithFlag, Error = Error> + Send + 'static,
+        S: Stream<Item = result::Result<DataOrHeadersWithFlag>> + Unpin + Send + 'static,
     {
-        // Check that first frame is HEADERS
-        Response::new(stream.into_future().map_err(|(p, _s)| p).and_then(
-            |(first, rem)| match first {
+        Response::new(async move {
+            // Check that first frame is HEADERS
+            let (first, rem) = match stream.try_next().await? {
                 Some(part) => match part.content {
                     DataOrHeaders::Headers(headers) => {
-                        Ok((headers, HttpStreamAfterHeaders::from_parts(rem)))
+                        (headers, HttpStreamAfterHeaders::from_parts(stream))
                     }
                     DataOrHeaders::Data(..) => {
-                        Err(Error::InvalidFrame("data before headers".to_owned()))
+                        return Err(error::Error::InvalidFrame("data before headers".to_owned()))
                     }
                 },
-                None => Err(Error::InvalidFrame(
-                    "empty response, expecting headers".to_owned(),
-                )),
-            },
-        ))
+                None => {
+                    return Err(error::Error::InvalidFrame(
+                        "empty response, expecting headers".to_owned(),
+                    ))
+                }
+            };
+            Ok((first, rem))
+        })
     }
 
-    pub fn err(err: Error) -> Response {
+    pub fn err(err: error::Error) -> Response {
         Response::new(future::err(err))
     }
 
     // getters
 
     pub fn into_stream_flag(self) -> HttpFutureStreamSend<DataOrHeadersWithFlag> {
-        Box::new(
+        Box::pin(
             self.0
-                .map(|(headers, rem)| {
+                .map_ok(|(headers, rem)| {
                     // NOTE: flag may be wrong for first item
-                    let header =
-                        stream::once(Ok(DataOrHeadersWithFlag::intermediate_headers(headers)));
+                    let header = stream::once(future::ok(
+                        DataOrHeadersWithFlag::intermediate_headers(headers),
+                    ));
                     let rem = rem.into_flag_stream();
                     header.chain(rem)
                 })
-                .flatten_stream(),
+                .try_flatten_stream(),
         )
     }
 
     pub fn into_stream(self) -> HttpFutureStreamSend<DataOrHeaders> {
-        Box::new(self.into_stream_flag().map(|c| c.content))
+        Box::pin(TryStreamExt::map_ok(self.into_stream_flag(), |c| c.content))
     }
 
     pub fn into_part_stream(self) -> DataOrHeadersWithFlagStream {
@@ -121,21 +128,23 @@ impl Response {
     }
 
     pub fn collect(self) -> HttpFutureSend<SimpleHttpMessage> {
-        Box::new(
+        Box::pin(
             self.into_stream()
-                .fold(SimpleHttpMessage::new(), |mut c, p| {
+                .try_fold(SimpleHttpMessage::new(), |mut c, p| {
                     c.add(p);
-                    Ok::<_, Error>(c)
+                    future::ok::<_, error::Error>(c)
                 }),
         )
     }
 }
 
 impl Future for Response {
-    type Item = (Headers, HttpStreamAfterHeaders);
-    type Error = error::Error;
+    type Output = result::Result<(Headers, HttpStreamAfterHeaders)>;
 
-    fn poll(&mut self) -> Poll<(Headers, HttpStreamAfterHeaders), error::Error> {
-        self.0.poll()
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<result::Result<(Headers, HttpStreamAfterHeaders)>> {
+        Pin::new(&mut self.0).poll(cx)
     }
 }

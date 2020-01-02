@@ -6,7 +6,7 @@ use crate::Headers;
 use bytes::Bytes;
 
 /// Synchronous callback of incoming data
-pub trait ServerStreamHandler: 'static {
+pub trait ServerStreamHandler: Send + 'static {
     /// DATA frame received
     fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()>;
     /// Trailers HEADERS received
