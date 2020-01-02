@@ -1,8 +1,8 @@
 use crate::codec::http_framed_write::HttpFramedWrite;
 use crate::error;
-use futures::Poll;
 use crate::solicit::frame::FrameIR;
 use crate::solicit::frame::GoawayFrame;
+use futures::Poll;
 use tokio_io::AsyncWrite;
 
 pub struct QueuedWrite<W: AsyncWrite> {

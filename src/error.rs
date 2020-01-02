@@ -17,10 +17,10 @@ use crate::display_comma_separated::DisplayCommaSeparated;
 use crate::solicit::error_code::ErrorCode;
 use crate::solicit::frame::HttpFrameType;
 use crate::solicit::frame::ParseFrameError;
-use std::net::SocketAddr;
-use void::Void;
 use crate::StreamDead;
 use crate::StreamId;
+use std::net::SocketAddr;
+use void::Void;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
 /// connection.

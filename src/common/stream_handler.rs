@@ -1,8 +1,8 @@
-use bytes::Bytes;
 use crate::error;
 use crate::result;
 use crate::ErrorCode;
 use crate::Headers;
+use bytes::Bytes;
 
 /// Synchronous callback of incoming data
 pub(crate) trait StreamHandlerInternal: 'static {

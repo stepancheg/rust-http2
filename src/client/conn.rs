@@ -26,7 +26,6 @@ use tokio_tls_api;
 
 use crate::solicit_async::*;
 
-use bytes::Bytes;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::req::ClientRequest;
 use crate::client::stream_handler::ClientStreamCreatedHandler;
@@ -59,6 +58,7 @@ use crate::solicit::stream_id::StreamId;
 use crate::ClientConf;
 use crate::ClientTlsOption;
 use crate::ErrorCode;
+use bytes::Bytes;
 
 pub struct ClientStreamData {}
 

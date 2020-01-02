@@ -701,11 +701,11 @@ impl FromIterator<Header> for Headers {
 #[cfg(test)]
 mod test {
     use crate::ascii::Ascii;
-    use bytes::Bytes;
     use crate::solicit::header::Header;
     use crate::solicit::header::HeaderName;
     use crate::solicit::header::HeaderNameEnum;
     use crate::solicit::header::PseudoHeaderName;
+    use bytes::Bytes;
 
     #[test]
     fn test_partial_eq_of_headers() {

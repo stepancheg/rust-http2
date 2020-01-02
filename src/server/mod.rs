@@ -44,13 +44,13 @@ use crate::socket::ToTokioListener;
 
 pub use self::tls::ServerTlsOption;
 use crate::common::conn::ConnStateSnapshot;
-use rand::thread_rng;
-use rand::Rng;
 pub use crate::server::conf::ServerConf;
 pub use crate::server::conn::ServerConn;
 use crate::server::handler::ServerHandler;
 use crate::server::handler_paths::ServerHandlerPaths;
 use crate::socket_unix::SocketAddrUnix;
+use rand::thread_rng;
+use rand::Rng;
 use std::fmt;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {

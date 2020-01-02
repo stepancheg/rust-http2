@@ -144,8 +144,8 @@ mod tests {
     use crate::solicit::frame::FrameIR;
     use crate::solicit::tests::common::raw_frame_from_parts;
 
-    use bytes::Bytes;
     use crate::ErrorCode;
+    use bytes::Bytes;
 
     #[test]
     fn test_parse_valid_no_debug_data() {

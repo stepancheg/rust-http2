@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::types::Types;
@@ -6,17 +5,18 @@ use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::error;
+use crate::solicit::stream_id::StreamId;
+use crate::ErrorCode;
+use crate::Headers;
+use crate::HttpStreamAfterHeaders;
+use crate::StreamDead;
+use bytes::Bytes;
 use futures::future;
 use futures::future::Future;
 use futures::Async;
 use futures::Poll;
 use futures::Stream;
-use crate::solicit::stream_id::StreamId;
 use std::sync::Arc;
-use crate::ErrorCode;
-use crate::Headers;
-use crate::HttpStreamAfterHeaders;
-use crate::StreamDead;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum SenderState {

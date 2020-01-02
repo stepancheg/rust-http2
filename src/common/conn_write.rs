@@ -5,7 +5,6 @@ use crate::common::types::Types;
 
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 
-use bytes::Bytes;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::iteration_exit::IterationExit;
@@ -14,12 +13,6 @@ use crate::common::stream::HttpStreamCommand;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 use crate::error;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::oneshot;
-use futures::task;
-use futures::Async;
-use futures::Poll;
 use crate::result;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::flags::Flags;
@@ -32,12 +25,19 @@ use crate::solicit::frame::HttpFrame;
 use crate::solicit::frame::RstStreamFrame;
 use crate::solicit::frame::SettingsFrame;
 use crate::solicit::stream_id::StreamId;
-use std::cmp;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
+use bytes::Bytes;
+use futures::future::Future;
+use futures::stream::Stream;
+use futures::sync::oneshot;
+use futures::task;
+use futures::Async;
+use futures::Poll;
+use std::cmp;
+use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 
 pub(crate) trait ConnWriteSideCustom {
     type Types: Types;

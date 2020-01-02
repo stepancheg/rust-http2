@@ -1,7 +1,7 @@
 use crate::result;
 use crate::server::req::ServerRequest;
-use tokio_core::reactor::Remote;
 use crate::ServerResponse;
+use tokio_core::reactor::Remote;
 
 pub struct ServerHandlerContext {
     pub(crate) loop_handle: Remote,

@@ -60,8 +60,8 @@ use crate::common::stream_from_network::StreamFromNetwork;
 use crate::result;
 use crate::socket_unix::SocketAddrUnix;
 use crate::solicit::stream_id::StreamId;
-use std::fmt;
 use crate::Response;
+use std::fmt;
 
 /// Builder for HTTP/2 client.
 ///

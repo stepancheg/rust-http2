@@ -8,9 +8,9 @@
 // Re-export the main HPACK API entry points.
 pub use self::decoder::Decoder;
 pub use self::encoder::Encoder;
-use bytes::Bytes;
 use crate::hpack::dynamic_table::DynamicTable;
 use crate::hpack::static_table::StaticTable;
+use bytes::Bytes;
 
 pub mod decoder;
 mod dynamic_table;

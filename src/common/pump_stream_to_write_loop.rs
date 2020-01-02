@@ -11,11 +11,11 @@ use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::types::Types;
 use crate::misc::any_to_string;
 use crate::solicit::stream_id::StreamId;
-use std::panic;
-use std::panic::AssertUnwindSafe;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::HttpStreamAfterHeaders;
+use std::panic;
+use std::panic::AssertUnwindSafe;
 
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {

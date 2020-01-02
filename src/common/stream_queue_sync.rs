@@ -9,7 +9,6 @@ use futures::Poll;
 
 use crate::error;
 
-use bytes::Bytes;
 use crate::client::stream_handler::ClientStreamHandler;
 use crate::client::types::ClientTypes;
 use crate::common::types::Types;
@@ -18,9 +17,10 @@ use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::result;
 use crate::server::stream_handler::ServerStreamHandler;
 use crate::server::types::ServerTypes;
-use std::marker;
 use crate::ErrorCode;
 use crate::Headers;
+use bytes::Bytes;
+use std::marker;
 
 pub(crate) struct StreamQueueSyncSender<T: Types> {
     sender: UnboundedSender<Result<DataOrHeadersWithFlag, error::Error>>,

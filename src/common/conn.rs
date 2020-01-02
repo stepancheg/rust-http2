@@ -30,21 +30,21 @@ use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::ConnWriteSideCustom;
 use crate::common::init_where::InitWhere;
 use crate::common::iteration_exit::IterationExit;
+use crate::hpack;
+use crate::solicit::stream_id::StreamId;
+use crate::solicit::WindowSize;
+use crate::ErrorCode;
 use futures::future;
 use futures::sync::oneshot;
 use futures::task;
 use futures::Async;
 use futures::Future;
 use futures::Poll;
-use crate::hpack;
-use crate::solicit::stream_id::StreamId;
-use crate::solicit::WindowSize;
 use std::collections::HashSet;
 use tokio_io::io::ReadHalf;
 use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
-use crate::ErrorCode;
 
 /// Client or server fields of connection
 pub trait ConnSpecific: 'static {}

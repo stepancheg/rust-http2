@@ -20,9 +20,9 @@ use crate::socket::ToClientStream;
 use crate::socket::ToServerStream;
 use crate::socket::ToSocketListener;
 use crate::socket::ToTokioListener;
+use crate::ServerConf;
 use std::fmt;
 use std::path::PathBuf;
-use crate::ServerConf;
 
 #[derive(Debug, Clone)]
 pub struct SocketAddrUnix(pub(crate) PathBuf);

@@ -13,11 +13,13 @@ use crate::solicit::frame::HttpFrameType;
 use crate::solicit::frame::ParseFrameError;
 use crate::solicit::frame::ParseFrameResult;
 use crate::solicit::frame::FRAME_HEADER_LEN;
-use crate::solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::frame::{
+    parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame,
+};
 use crate::solicit::stream_id::StreamId;
+use crate::Headers;
 use std::cmp;
 use std::fmt;
-use crate::Headers;
 
 pub const HEADERS_FRAME_TYPE: u8 = 0x1;
 

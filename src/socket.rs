@@ -9,10 +9,10 @@ use tokio_core::reactor;
 use tokio_io::AsyncRead;
 use tokio_io::AsyncWrite;
 
-use futures::stream::Stream;
-use futures::Future;
 use crate::socket_unix::SocketAddrUnix;
 use crate::ServerConf;
+use futures::stream::Stream;
+use futures::Future;
 
 pub trait ToSocketListener {
     fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>>;

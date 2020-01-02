@@ -6,11 +6,11 @@ use bytes::Bytes;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_trailers::DataOrTrailers;
 use crate::error;
-use futures::Poll;
 use crate::misc::any_to_string;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::Headers;
 use crate::solicit_async::HttpFutureStreamSend;
+use futures::Poll;
 use std::panic::AssertUnwindSafe;
 
 /// Stream frame content with END_STREAM flag

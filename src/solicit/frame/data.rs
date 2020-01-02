@@ -3,12 +3,14 @@
 use crate::solicit::frame::flags::*;
 use crate::solicit::frame::ParseFrameError;
 use crate::solicit::frame::ParseFrameResult;
-use crate::solicit::frame::{parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::frame::{
+    parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame,
+};
 
-use bytes::Bytes;
 use crate::codec::write_buffer::WriteBuffer;
 use crate::misc::BsDebug;
 use crate::solicit::stream_id::StreamId;
+use bytes::Bytes;
 use std::fmt;
 
 pub const DATA_FRAME_TYPE: u8 = 0x0;

@@ -1,18 +1,18 @@
 use crate::assert_types::assert_send;
-use bytes::Bytes;
 use crate::client::types::ClientTypes;
 use crate::common::sender::CommonSender;
 use crate::common::sender::SendError;
 use crate::common::window_size::StreamDead;
 use crate::error;
-use futures::Poll;
-use futures::Stream;
 use crate::result;
-use std::mem;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use crate::SenderState;
+use bytes::Bytes;
+use futures::Poll;
+use futures::Stream;
+use std::mem;
 
 /// Reference to outgoing stream on the client side.
 // NOTE: keep in sync with ServerResponse

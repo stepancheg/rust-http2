@@ -8,9 +8,9 @@ use std::num::Wrapping;
 use bytes::Bytes;
 
 use super::HeaderTable;
-use bytes::BytesMut;
 use crate::hpack::static_table::StaticTable;
 use crate::hpack::HeaderValueFound;
+use bytes::BytesMut;
 
 pub trait EncodeBuf {
     fn write_all(&mut self, bytes: &[u8]);

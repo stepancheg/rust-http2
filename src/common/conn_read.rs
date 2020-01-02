@@ -9,9 +9,6 @@ use crate::common::stream::InMessageStage;
 use crate::common::stream_map::HttpStreamRef;
 use crate::common::types::Types;
 use crate::error;
-use futures::task;
-use futures::Async;
-use futures::Poll;
 use crate::result;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::headers::HeadersDecodedFrame;
@@ -32,10 +29,13 @@ use crate::solicit::MAX_WINDOW_SIZE;
 use crate::solicit_misc::HttpFrameClassified;
 use crate::solicit_misc::HttpFrameConn;
 use crate::solicit_misc::HttpFrameStream;
-use tokio_io::AsyncRead;
-use tokio_io::AsyncWrite;
 use crate::ErrorCode;
 use crate::Headers;
+use futures::task;
+use futures::Async;
+use futures::Poll;
+use tokio_io::AsyncRead;
+use tokio_io::AsyncWrite;
 
 pub(crate) trait ConnReadSideCustom {
     type Types: Types;

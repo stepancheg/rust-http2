@@ -2,8 +2,6 @@ use bytes::Bytes;
 use bytes::BytesMut;
 
 use crate::error;
-use futures::Async;
-use futures::Poll;
 use crate::solicit::frame::headers::HeadersFlag;
 use crate::solicit::frame::push_promise::PushPromiseFlag;
 use crate::solicit::frame::unpack_header_from_slice;
@@ -14,8 +12,10 @@ use crate::solicit::frame::PushPromiseFrame;
 use crate::solicit::frame::RawFrame;
 use crate::solicit::frame::FRAME_HEADER_LEN;
 use crate::solicit::stream_id::StreamId;
-use tokio_io::AsyncRead;
 use crate::ErrorCode;
+use futures::Async;
+use futures::Poll;
+use tokio_io::AsyncRead;
 
 /// Buffered read for reading HTTP/2 frames.
 pub struct HttpFramedRead<R: AsyncRead> {
