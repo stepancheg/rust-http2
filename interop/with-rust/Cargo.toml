@@ -3,6 +3,7 @@ name = "httpbis-interop"
 authors = ["Stepan Koltsov <stepan.koltsov@gmail.com>"]
 version = "0.0.0"
 edition = "2018"
+publish = false
 
 [lib]
 doctest = false
