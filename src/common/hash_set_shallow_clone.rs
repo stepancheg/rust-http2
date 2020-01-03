@@ -2,11 +2,11 @@ use std::collections::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::ops::Deref;
-use std::rc::Rc;
 use std::slice;
+use std::sync::Arc;
 
 pub struct HashSetShallowCloneItems<T> {
-    items: Option<Rc<Vec<T>>>,
+    items: Option<Arc<Vec<T>>>,
 }
 
 impl<T> HashSetShallowCloneItems<T> {
@@ -36,7 +36,9 @@ impl<'a, T> IntoIterator for &'a HashSetShallowCloneItems<T> {
 #[derive(Default, Debug, Eq, PartialEq)]
 pub struct HashSetShallowClone<T: Hash + Eq + Clone> {
     set: HashSet<T>,
-    items: Option<Rc<Vec<T>>>,
+    // This field is Arc because tasks need to be Sync in tokio 0.2
+    // TODO: make it Rc
+    items: Option<Arc<Vec<T>>>,
 }
 
 impl<T: Hash + Eq + Clone> HashSetShallowClone<T> {
@@ -55,7 +57,7 @@ impl<T: Hash + Eq + Clone> HashSetShallowClone<T> {
                 return HashSetShallowCloneItems { items: None };
             }
 
-            self.items = Some(Rc::new(self.set.iter().cloned().collect()));
+            self.items = Some(Arc::new(self.set.iter().cloned().collect()));
         }
         HashSetShallowCloneItems {
             items: Some(self.items.as_mut().unwrap().clone()),
