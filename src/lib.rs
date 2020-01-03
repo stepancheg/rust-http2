@@ -7,7 +7,6 @@ extern crate log;
 extern crate log_ndc;
 
 extern crate futures;
-extern crate futures_cpupool;
 
 extern crate tokio_core;
 extern crate tokio_io;
@@ -75,8 +74,6 @@ pub use crate::solicit::header::Headers;
 pub use crate::solicit::header::PseudoHeaderName;
 pub use crate::solicit::stream_id::StreamId;
 pub use crate::solicit::HttpScheme;
-
-pub use crate::exec::_CpuPoolOption;
 
 pub use crate::client::conf::ClientConf;
 pub use crate::client::req::ClientRequest;
