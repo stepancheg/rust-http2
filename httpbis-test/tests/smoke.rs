@@ -29,7 +29,7 @@ use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 
 #[test]
-fn smoke() {
+fn smoke_tcp_socket() {
     init_logger();
 
     let server = ServerTest::new();
