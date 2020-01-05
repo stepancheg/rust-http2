@@ -60,6 +60,14 @@ impl<T: Types> CommonSender<T> {
         }
     }
 
+    /// Create sender in "done" state (nothing to send)
+    pub fn new_done(stream_id: StreamId) -> Self {
+        CommonSender {
+            state: None,
+            stream_id,
+        }
+    }
+
     pub fn poll(&mut self) -> Poll<(), StreamDead> {
         match self.state {
             Some(ref mut state) => state.out_window.poll(),

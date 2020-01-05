@@ -168,7 +168,11 @@ where
             });
 
             let req = ClientRequest {
-                common: CommonSender::new(stream_id, write_tx, out_window, true),
+                common: if end_stream {
+                    CommonSender::new_done(stream_id)
+                } else {
+                    CommonSender::new(stream_id, write_tx, out_window, true)
+                },
                 drop_callback: None,
             };
 
