@@ -27,7 +27,6 @@ use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::ConnWriteSideCustom;
 use crate::common::init_where::InitWhere;
-use crate::common::iteration_exit::IterationExit;
 use crate::hpack;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::WindowSize;
@@ -451,12 +450,6 @@ where
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
-        match self.process_goaway_state(cx)? {
-            IterationExit::NotReady => return Poll::Pending,
-            IterationExit::ExitEarly => return Poll::Ready(Ok(())),
-            IterationExit::Continue => {}
-        }
-
         let write_ready = self.poll_write(cx)? != Poll::Pending;
         let read_ready = self.read_process_frame(cx)? != Poll::Pending;
 

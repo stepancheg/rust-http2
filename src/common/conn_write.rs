@@ -9,7 +9,6 @@ use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn_read::ConnReadSideCustom;
-use crate::common::iteration_exit::IterationExit;
 use crate::common::pump_stream_to_write_loop::PumpStreamToWrite;
 use crate::common::stream::HttpStreamCommand;
 use crate::common::window_size::StreamOutWindowReceiver;
@@ -276,20 +275,20 @@ where
         Ok(())
     }
 
-    pub fn process_goaway_state(&mut self, cx: &mut Context<'_>) -> result::Result<IterationExit> {
-        Ok(if self.queued_write.goaway_queued() {
+    pub fn process_goaway_state(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+        if self.queued_write.goaway_queued() {
             match self.queued_write.poll(cx)? {
-                Poll::Pending => return Ok(IterationExit::NotReady),
+                Poll::Pending => return Poll::Pending,
                 _ => {}
             }
             if self.queued_write.queued_empty() {
-                IterationExit::ExitEarly
+                Poll::Ready(Ok(()))
             } else {
-                IterationExit::NotReady
+                Poll::Pending
             }
         } else {
-            IterationExit::Continue
-        })
+            Poll::Pending
+        }
     }
 
     fn process_write_queue(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
@@ -304,27 +303,31 @@ where
         }
     }
 
-    fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+    fn poll_flush(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
         self.buffer_outg_conn()?;
         loop {
             match self.queued_write.poll(cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Ok(()),
+                Poll::Ready(Err(e)) => return Err(e),
                 Poll::Ready(Ok(())) => {}
             }
             let updated = self.buffer_outg_conn()?;
             if !updated {
-                return Poll::Ready(Ok(()));
+                return Ok(());
             }
         }
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+        if let Poll::Ready(()) = self.process_goaway_state(cx)? {
+            return Poll::Ready(Ok(()));
+        }
+
         if let Poll::Ready(()) = self.process_write_queue(cx)? {
             return Poll::Ready(Ok(()));
         }
 
-        drop(self.poll_flush(cx)?);
+        self.poll_flush(cx)?;
 
         Poll::Pending
     }
