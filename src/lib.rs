@@ -55,6 +55,8 @@ mod resp;
 
 mod exec;
 
+mod log_ndc_future;
+
 pub use crate::socket::AnySocketAddr;
 
 pub use crate::solicit::error_code::ErrorCode;

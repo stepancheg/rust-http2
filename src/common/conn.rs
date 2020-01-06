@@ -35,6 +35,7 @@ use crate::ErrorCode;
 use futures::channel::oneshot;
 use futures::future;
 
+use crate::log_ndc_future::log_ndc_future;
 use futures::task::Context;
 use futures::Future;
 use std::collections::HashSet;
@@ -450,9 +451,6 @@ where
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
-        // TODO: add local/peer address
-        let _g = log_ndc::push(T::CONN_NDC);
-
         match self.process_goaway_state(cx)? {
             IterationExit::NotReady => return Poll::Pending,
             IterationExit::ExitEarly => return Poll::Ready(Ok(())),
@@ -471,6 +469,7 @@ where
     }
 
     pub fn run(mut self) -> impl Future<Output = result::Result<()>> + Send {
-        future::poll_fn(move |cx| self.poll(cx))
+        // TODO: add local/peer address
+        log_ndc_future(T::CONN_NDC, future::poll_fn(move |cx| self.poll(cx)))
     }
 }
