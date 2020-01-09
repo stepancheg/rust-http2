@@ -1,5 +1,3 @@
-use std::pin::Pin;
-
 use crate::common::conn::Conn;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -34,7 +32,6 @@ use futures::channel::oneshot;
 use futures::task::Context;
 use std::cmp;
 
-use futures::Stream;
 use std::task::Poll;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
@@ -44,7 +41,6 @@ pub(crate) trait ConnWriteSideCustom {
 
     fn process_message(
         &mut self,
-        cx: &mut Context<'_>,
         message: <Self::Types as Types>::ToWriteMessage,
     ) -> result::Result<()>;
 }
@@ -179,18 +175,15 @@ where
         Ok(updated)
     }
 
-    pub fn send_frame_and_notify<F: Into<HttpFrame>>(&mut self, cx: &mut Context<'_>, frame: F) {
+    pub fn send_frame_and_notify<F: Into<HttpFrame>>(&mut self, frame: F) {
         // TODO: some of frames should not be in front of GOAWAY
         self.queued_write.queue_not_goaway(frame.into());
-        // Notify the task to make sure write loop is called again
-        // to flush the buffer
-        cx.waker().wake_by_ref();
     }
 
     /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
-    pub fn send_ack_settings(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
+    pub fn send_ack_settings(&mut self) -> result::Result<()> {
         let settings = SettingsFrame::new_ack();
-        self.send_frame_and_notify(cx, settings);
+        self.send_frame_and_notify(settings);
         Ok(())
     }
 
@@ -238,11 +231,7 @@ where
         Ok(())
     }
 
-    pub fn process_common_message(
-        &mut self,
-        cx: &mut Context<'_>,
-        common: CommonToWriteMessage,
-    ) -> result::Result<()> {
+    pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
         match common {
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)?;
@@ -254,7 +243,7 @@ where
                 self.process_stream_pull(stream_id, stream, out_window_receiver)?;
             }
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
-                self.increase_in_window(cx, stream_id, increase)?;
+                self.increase_in_window(stream_id, increase)?;
             }
             CommonToWriteMessage::DumpState(sender) => {
                 self.process_dump_state(sender)?;
@@ -263,47 +252,14 @@ where
         Ok(())
     }
 
-    pub fn send_goaway(
-        &mut self,
-        context: &mut Context<'_>,
-        error_code: ErrorCode,
-    ) -> result::Result<()> {
+    pub fn send_goaway(&mut self, error_code: ErrorCode) -> result::Result<()> {
         debug!("requesting to send GOAWAY with code {:?}", error_code);
         let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
         self.queued_write.queue_goaway(frame);
-        context.waker().wake_by_ref();
         Ok(())
     }
 
-    pub fn process_goaway_state(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
-        if self.queued_write.goaway_queued() {
-            match self.queued_write.poll(cx)? {
-                Poll::Pending => return Poll::Pending,
-                _ => {}
-            }
-            if self.queued_write.queued_empty() {
-                Poll::Ready(Ok(()))
-            } else {
-                Poll::Pending
-            }
-        } else {
-            Poll::Pending
-        }
-    }
-
-    fn process_write_queue(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
-        loop {
-            let message = match Pin::new(&mut self.write_rx).poll_next(cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Some(message)) => message,
-                Poll::Ready(None) => return Poll::Ready(Ok(())), // Add some diagnostics maybe?
-            };
-
-            self.process_message(cx, message)?;
-        }
-    }
-
-    fn poll_flush(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
+    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
         self.buffer_outg_conn()?;
         loop {
             match self.queued_write.poll(cx) {
@@ -316,20 +272,6 @@ where
                 return Ok(());
             }
         }
-    }
-
-    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
-        if let Poll::Ready(()) = self.process_goaway_state(cx)? {
-            return Poll::Ready(Ok(()));
-        }
-
-        if let Poll::Ready(()) = self.process_write_queue(cx)? {
-            return Poll::Ready(Ok(()));
-        }
-
-        self.poll_flush(cx)?;
-
-        Poll::Pending
     }
 }
 

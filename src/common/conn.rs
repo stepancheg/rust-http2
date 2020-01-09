@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::pin::Pin;
 
 use crate::error;
 use crate::result;
@@ -34,9 +35,11 @@ use crate::ErrorCode;
 use futures::channel::oneshot;
 use futures::future;
 
+use crate::common::loop_event::LoopEvent;
 use crate::log_ndc_future::log_ndc_future;
+use futures::future::Future;
+use futures::stream::Stream;
 use futures::task::Context;
-use futures::Future;
 use std::collections::HashSet;
 use std::task::Poll;
 use tokio::io::AsyncRead;
@@ -269,7 +272,6 @@ where
 
     pub fn send_rst_stream(
         &mut self,
-        cx: &mut Context<'_>,
         stream_id: StreamId,
         error_code: ErrorCode,
     ) -> result::Result<()> {
@@ -277,12 +279,12 @@ where
         self.streams.remove_stream(stream_id);
 
         let rst_stream = RstStreamFrame::new(stream_id, error_code);
-        self.send_frame_and_notify(cx, rst_stream);
+        self.send_frame_and_notify(rst_stream);
         Ok(())
     }
 
-    pub fn send_flow_control_error(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
-        self.send_goaway(cx, ErrorCode::FlowControlError)
+    pub fn send_flow_control_error(&mut self) -> result::Result<()> {
+        self.send_goaway(ErrorCode::FlowControlError)
     }
 
     fn stream_state_idle_or_closed(&self, stream_id: StreamId) -> StreamStateIdleOrClosed {
@@ -307,7 +309,6 @@ where
 
     pub fn get_stream_maybe_send_error(
         &mut self,
-        cx: &mut Context<'_>,
         stream_id: StreamId,
         frame_type: HttpFrameType,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
@@ -324,7 +325,7 @@ where
 
                 if send_connection_error {
                     debug!("stream is idle: {}, sending GOAWAY", stream_id);
-                    self.send_goaway(cx, ErrorCode::StreamClosed)?;
+                    self.send_goaway(ErrorCode::StreamClosed)?;
                 }
             }
             StreamState::Open | StreamState::HalfClosedLocal => {}
@@ -347,7 +348,7 @@ where
                         "stream is half-closed remote: {}, sending RST_STREAM",
                         stream_id
                     );
-                    self.send_rst_stream(cx, stream_id, ErrorCode::StreamClosed)?;
+                    self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
                 }
             }
             StreamState::Closed => {
@@ -382,10 +383,10 @@ where
                 if send_stream_closed {
                     if self.peer_closed_streams.contains(stream_id) {
                         debug!("stream is closed by peer: {}, sending GOAWAY", stream_id);
-                        self.send_goaway(cx, ErrorCode::StreamClosed)?;
+                        self.send_goaway(ErrorCode::StreamClosed)?;
                     } else {
                         debug!("stream is closed by us: {}, sending RST_STREAM", stream_id);
-                        self.send_rst_stream(cx, stream_id, ErrorCode::StreamClosed)?;
+                        self.send_rst_stream(stream_id, ErrorCode::StreamClosed)?;
                     }
                 }
             }
@@ -396,41 +397,22 @@ where
 
     pub fn get_stream_for_headers_maybe_send_error(
         &mut self,
-        cx: &mut Context<'_>,
         stream_id: StreamId,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
-        self.get_stream_maybe_send_error(cx, stream_id, HttpFrameType::Headers)
+        self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)
     }
 
-    pub fn out_window_increased(
-        &mut self,
-        context: &mut Context<'_>,
-        stream_id: Option<StreamId>,
-    ) -> result::Result<()> {
+    pub fn out_window_increased(&mut self, stream_id: Option<StreamId>) -> result::Result<()> {
         match stream_id {
             Some(stream_id) => {
                 self.flush_streams.insert(stream_id);
             }
             None => self.flush_conn = true,
         }
-        // Make sure writer loop is executed
-        context.waker().wake_by_ref();
         Ok(())
     }
 
-    /// Should we close the connection because of GOAWAY state
-    pub fn end_loop(&self) -> bool {
-        let goaway = self.goaway_sent.is_some() || self.goaway_received.is_some();
-        let no_streams = self.streams.is_empty();
-        goaway && no_streams
-    }
-
-    pub fn increase_in_window(
-        &mut self,
-        cx: &mut Context<'_>,
-        stream_id: StreamId,
-        increase: u32,
-    ) -> result::Result<()> {
+    pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
         if let Some(mut stream) = self.streams.get_mut(stream_id) {
             if let Err(_) = stream.stream().in_window_size.try_increase(increase) {
                 return Err(error::Error::StreamInWindowOverflow(
@@ -444,25 +426,65 @@ where
         };
 
         let window_update = WindowUpdateFrame::for_stream(stream_id, increase);
-        self.send_frame_and_notify(cx, window_update);
+        self.send_frame_and_notify(window_update);
 
         Ok(())
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
-        let write_ready = self.poll_write(cx)? != Poll::Pending;
-        let read_ready = self.read_process_frame(cx)? != Poll::Pending;
+    fn poll_next_event(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<LoopEvent<T>>> {
+        // Always flush outgoing queue
+        self.poll_flush(cx)?;
 
-        if write_ready || read_ready {
-            info!("connection loop complete");
-            Poll::Ready(Ok(()))
-        } else {
-            Poll::Pending
+        if self.queued_write.goaway_queued_and_flushed() {
+            info!("GOAWAY written and flushed, closing connection");
+            return Poll::Ready(Ok(LoopEvent::ExitLoop));
+        }
+
+        if self.goaway_received.is_some() && self.streams.is_empty() {
+            info!("GOAWAY received and streams is empty, closing connection");
+            return Poll::Ready(Ok(LoopEvent::ExitLoop));
+        }
+
+        match Pin::new(&mut self.write_rx).poll_next(cx) {
+            Poll::Pending => {}
+            Poll::Ready(Some(m)) => return Poll::Ready(Ok(LoopEvent::ToWriteMessage(m))),
+            Poll::Ready(None) => {
+                // TODO: reason
+                return Poll::Ready(Err(error::Error::ClientDied(None)));
+            }
+        };
+
+        match self.poll_recv_http_frame(cx)? {
+            Poll::Ready(m) => return Poll::Ready(Ok(LoopEvent::Frame(m))),
+            Poll::Pending => {}
+        }
+
+        Poll::Pending
+    }
+
+    /// Each connection is a single future which polls event and processed them
+    async fn next_event(&mut self) -> result::Result<LoopEvent<T>> {
+        future::poll_fn(|cx| self.poll_next_event(cx)).await
+    }
+
+    async fn run_loop(mut self) -> result::Result<()> {
+        loop {
+            warn!("loop iteration");
+
+            let event = self.next_event().await?;
+
+            warn!("processing event");
+
+            match event {
+                LoopEvent::ToWriteMessage(m) => self.process_message(m)?,
+                LoopEvent::Frame(f) => self.process_http_frame_of_goaway(f)?,
+                LoopEvent::ExitLoop => return Ok(()),
+            }
         }
     }
 
-    pub fn run(mut self) -> impl Future<Output = result::Result<()>> + Send {
+    pub fn run(self) -> impl Future<Output = result::Result<()>> + Send {
         // TODO: add local/peer address
-        log_ndc_future(T::CONN_NDC, future::poll_fn(move |cx| self.poll(cx)))
+        log_ndc_future(T::CONN_NDC, self.run_loop())
     }
 }

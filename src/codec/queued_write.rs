@@ -24,7 +24,7 @@ impl<W: AsyncWrite + Unpin> QueuedWrite<W> {
         self.framed_write.data_len()
     }
 
-    pub fn queued_empty(&self) -> bool {
+    pub fn _queued_empty(&self) -> bool {
         self.queued_bytes_len() == 0
     }
 
@@ -51,7 +51,11 @@ impl<W: AsyncWrite + Unpin> QueuedWrite<W> {
         self.framed_write.poll_flush(cx)
     }
 
-    pub fn goaway_queued(&self) -> bool {
+    pub fn _goaway_queued(&self) -> bool {
         self.goaway_queued
+    }
+
+    pub fn goaway_queued_and_flushed(&self) -> bool {
+        self.goaway_queued && self.framed_write.data_len() == 0
     }
 }

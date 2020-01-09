@@ -60,7 +60,6 @@ use crate::ServerConf;
 use crate::ServerResponse;
 use crate::ServerTlsOption;
 use std::pin::Pin;
-use std::task::Context;
 use tokio::runtime::Handle;
 
 pub struct ServerStreamData {}
@@ -197,13 +196,9 @@ where
 {
     type Types = ServerTypes;
 
-    fn process_message(
-        &mut self,
-        cx: &mut Context<'_>,
-        message: ServerToWriteMessage,
-    ) -> result::Result<()> {
+    fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
         match message {
-            ServerToWriteMessage::Common(common) => self.process_common_message(cx, common),
+            ServerToWriteMessage::Common(common) => self.process_common_message(common),
         }
     }
 }
@@ -216,13 +211,12 @@ where
 
     fn process_headers(
         &mut self,
-        cx: &mut Context<'_>,
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
     ) -> result::Result<Option<HttpStreamRef<ServerTypes>>> {
         let existing_stream = self
-            .get_stream_for_headers_maybe_send_error(cx, stream_id)?
+            .get_stream_for_headers_maybe_send_error(stream_id)?
             .is_some();
 
         let headers_place = match existing_stream {
@@ -232,7 +226,7 @@ where
 
         if let Err(e) = headers.validate(RequestOrResponse::Request, headers_place) {
             warn!("invalid headers: {:?} {:?}", e, headers);
-            self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 
@@ -244,7 +238,7 @@ where
 
         if end_stream == EndStream::No {
             warn!("more headers without end stream flag");
-            self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 

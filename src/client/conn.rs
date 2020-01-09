@@ -59,7 +59,6 @@ use futures::channel::oneshot;
 use futures::FutureExt;
 use futures::TryFutureExt;
 use std::pin::Pin;
-use std::task::Context;
 use tokio::io::split;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
@@ -119,14 +118,10 @@ where
 {
     type Types = ClientTypes;
 
-    fn process_message(
-        &mut self,
-        cx: &mut Context<'_>,
-        message: ClientToWriteMessage,
-    ) -> result::Result<()> {
+    fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
-            ClientToWriteMessage::Common(common) => self.process_common_message(cx, common),
+            ClientToWriteMessage::Common(common) => self.process_common_message(common),
             ClientToWriteMessage::WaitForHandshake(tx) => {
                 // ignore error
                 drop(tx.send(Ok(())));
@@ -462,13 +457,12 @@ where
 
     fn process_headers(
         &mut self,
-        cx: &mut Context<'_>,
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
     ) -> result::Result<Option<HttpStreamRef<ClientTypes>>> {
         let existing_stream = self
-            .get_stream_for_headers_maybe_send_error(cx, stream_id)?
+            .get_stream_for_headers_maybe_send_error(stream_id)?
             .is_some();
         if !existing_stream {
             return Ok(None);
@@ -493,7 +487,7 @@ where
 
         if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
             warn!("invalid headers: {:?}: {:?}", e, headers);
-            self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
+            self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
 
@@ -504,7 +498,7 @@ where
                 let status_1xx = status >= 100 && status <= 199;
                 if status_1xx && end_stream == EndStream::Yes {
                     warn!("1xx headers and end stream: {}", stream_id);
-                    self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
+                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
                     return Ok(None);
                 }
                 status_1xx
@@ -512,7 +506,7 @@ where
             HeadersPlace::Trailing => {
                 if end_stream == EndStream::No {
                     warn!("headers without end stream after data: {}", stream_id);
-                    self.send_rst_stream(cx, stream_id, ErrorCode::ProtocolError)?;
+                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
                     return Ok(None);
                 }
                 false
