@@ -10,6 +10,7 @@ use std::task::Poll;
 use super::atomic_box_option::AtomicBoxOption;
 
 use super::waiters::*;
+use futures::future;
 use futures::task::Context;
 
 struct ConnOutWindowShared {
@@ -203,5 +204,9 @@ impl StreamOutWindowReceiver {
         }
 
         self.poll_conn(cx).map_err(|e| e.into())
+    }
+
+    pub async fn poll_f(&self) -> Result<(), StreamDead> {
+        future::poll_fn(|cx| self.poll(cx)).await
     }
 }

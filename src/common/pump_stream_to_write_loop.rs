@@ -1,5 +1,5 @@
-use std::future::Future;
-use std::task::Poll;
+use futures::future::FutureExt;
+use futures::stream::StreamExt;
 
 use super::*;
 use crate::common::conn_command_channel::ConnCommandSender;
@@ -8,13 +8,11 @@ use crate::common::types::Types;
 use crate::misc::any_to_string;
 use crate::solicit::stream_id::StreamId;
 use crate::DataOrTrailers;
+
 use crate::ErrorCode;
 use crate::HttpStreamAfterHeaders;
-use futures::stream::Stream;
-use futures::task::Context;
-use std::panic;
+
 use std::panic::AssertUnwindSafe;
-use std::pin::Pin;
 
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {
@@ -25,29 +23,24 @@ pub(crate) struct PumpStreamToWrite<T: Types> {
     pub stream: HttpStreamAfterHeaders,
 }
 
-impl<T: Types> Future for PumpStreamToWrite<T> {
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+impl<T: Types> PumpStreamToWrite<T> {
+    pub async fn run(mut self) {
         loop {
             // Note poll returns Ready when window size is > 0,
             // although HEADERS could be sent even when window size is zero or negative.
-            match self.out_window.poll(cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Ok(())) => {}
-                Poll::Ready(Err(window_size::StreamDead::Conn)) => {
+            match self.out_window.poll_f().await {
+                Ok(()) => {}
+                Err(window_size::StreamDead::Conn) => {
                     warn!("conn dead");
-                    return Poll::Ready(());
+                    break;
                 }
-                Poll::Ready(Err(window_size::StreamDead::Stream)) => {
+                Err(window_size::StreamDead::Stream) => {
                     warn!("stream {} dead", self.stream_id);
-                    return Poll::Ready(());
+                    break;
                 }
             }
 
-            let poll = match panic::catch_unwind(AssertUnwindSafe(|| {
-                Pin::new(&mut self.stream).poll_next(cx)
-            })) {
+            let poll = match AssertUnwindSafe(self.stream.next()).catch_unwind().await {
                 Ok(poll) => poll,
                 Err(e) => {
                     let e = any_to_string(e);
@@ -55,15 +48,14 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
                     let rst =
                         CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::InternalError);
                     drop(self.to_write_tx.unbounded_send(rst.into()));
-                    return Poll::Ready(());
+                    break;
                 }
             };
 
             let part_opt = match poll {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(None) => None,
-                Poll::Ready(Some(Ok(r))) => Some(r),
-                Poll::Ready(Some(Err(e))) => {
+                None => None,
+                Some(Ok(r)) => Some(r),
+                Some(Err(e)) => {
                     warn!("stream error: {:?}", e);
                     let stream_end =
                         CommonToWriteMessage::StreamEnd(self.stream_id, ErrorCode::InternalError);
@@ -108,7 +100,5 @@ impl<T: Types> Future for PumpStreamToWrite<T> {
                 }
             }
         }
-
-        Poll::Ready(())
     }
 }

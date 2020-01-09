@@ -222,12 +222,15 @@ where
         out_window: StreamOutWindowReceiver,
     ) -> result::Result<()> {
         // TODO: spawn in handler
-        self.loop_handle.spawn(PumpStreamToWrite::<T> {
-            to_write_tx: self.to_write_tx.clone(),
-            stream_id,
-            out_window,
-            stream,
-        });
+        self.loop_handle.spawn(
+            PumpStreamToWrite::<T> {
+                to_write_tx: self.to_write_tx.clone(),
+                stream_id,
+                out_window,
+                stream,
+            }
+            .run(),
+        );
         Ok(())
     }
 
