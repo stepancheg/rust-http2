@@ -136,7 +136,7 @@ impl<T: Types> HttpStreamCommon<T> {
         match self.outgoing.front() {
             Some(front) => match front {
                 DataOrHeaders::Headers(..) => true,
-                DataOrHeaders::Data(data) => data.len() == 0 || self.out_window_size.size() != 0,
+                DataOrHeaders::Data(data) => data.len() == 0 || self.out_window_size.size() > 0,
             },
             None => {
                 if let Some(_error_code) = self.outgoing.end() {
