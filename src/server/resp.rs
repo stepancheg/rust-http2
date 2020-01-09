@@ -64,10 +64,6 @@ impl ServerResponse {
         self.common.poll(cx)
     }
 
-    pub fn block_wait(&mut self) -> Result<(), StreamDead> {
-        self.common.block_wait()
-    }
-
     pub fn send_headers(&mut self, headers: Headers) -> Result<(), SendError> {
         self.common.send_headers(headers)
     }

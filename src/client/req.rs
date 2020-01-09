@@ -65,11 +65,6 @@ impl ClientRequest {
         self.common.poll(cx)
     }
 
-    /// Synchronously wait till outgoing stream has non-zero space
-    pub fn block_wait(&mut self) -> Result<(), StreamDead> {
-        self.common.block_wait()
-    }
-
     /// Enqueue data to outgoing stream
     ///
     /// This operation fails if stream is in incorrect state.

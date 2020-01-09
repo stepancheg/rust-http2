@@ -4,14 +4,14 @@ use crate::common::types::Types;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::error;
+use crate::result;
 use crate::solicit::stream_id::StreamId;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use crate::StreamDead;
-use crate::{error, result};
 use bytes::Bytes;
-use futures::future;
 use futures::stream::Stream;
 
 use futures::task::Context;
@@ -74,10 +74,6 @@ impl<T: Types> CommonSender<T> {
             // TODO: different error
             None => Poll::Ready(Ok(())),
         }
-    }
-
-    pub fn block_wait(&mut self) -> Result<(), StreamDead> {
-        futures::executor::block_on(future::poll_fn(|cx| self.poll(cx)))
     }
 
     fn get_can_send(&mut self) -> Result<&mut CanSendData<T>, SendError> {
