@@ -298,20 +298,19 @@ where
     ) -> result::Result<Option<HttpStreamRef<T>>> {
         self.out_window_increased(Some(frame.stream_id))?;
 
-        match self.get_stream_maybe_send_error(frame.stream_id, HttpFrameType::WindowUpdate)? {
-            Some(..) => {}
-            None => {
-                // 6.9
-                // WINDOW_UPDATE can be sent by a peer that has sent a frame bearing the
-                // END_STREAM flag.  This means that a receiver could receive a
-                // WINDOW_UPDATE frame on a "half-closed (remote)" or "closed" stream.
-                // A receiver MUST NOT treat this as an error (see Section 5.1).
-                debug!("WINDOW_UPDATE of unknown stream: {}", frame.get_stream_id());
-                return Ok(None);
-            }
-        }
-
-        // Work arout lexical lifetimes
+        let mut stream =
+            match self.get_stream_maybe_send_error(frame.stream_id, HttpFrameType::WindowUpdate)? {
+                Some(s) => s,
+                None => {
+                    // 6.9
+                    // WINDOW_UPDATE can be sent by a peer that has sent a frame bearing the
+                    // END_STREAM flag.  This means that a receiver could receive a
+                    // WINDOW_UPDATE frame on a "half-closed (remote)" or "closed" stream.
+                    // A receiver MUST NOT treat this as an error (see Section 5.1).
+                    debug!("WINDOW_UPDATE of unknown stream: {}", frame.get_stream_id());
+                    return Ok(None);
+                }
+            };
 
         // 6.9.1
         // A sender MUST NOT allow a flow-control window to exceed 2^31-1
@@ -321,12 +320,7 @@ where
         // sends a RST_STREAM with an error code of FLOW_CONTROL_ERROR; for the
         // connection, a GOAWAY frame with an error code of FLOW_CONTROL_ERROR
         // is sent.
-        if let Err(..) = self
-            .streams
-            .get_mut(frame.stream_id)
-            .unwrap()
-            .try_increase_window_size(frame.increment)
-        {
+        if let Err(..) = stream.try_increase_window_size(frame.increment) {
             info!("failed to increment stream window: {}", frame.stream_id);
             self.send_rst_stream(frame.stream_id, ErrorCode::FlowControlError)?;
             return Ok(None);
