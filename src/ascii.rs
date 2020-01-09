@@ -18,7 +18,7 @@ impl Ascii {
         Ascii(Bytes::new())
     }
 
-    pub fn from_utf8(bs: Bytes) -> Result<Ascii, (AsciiError, Bytes)> {
+    pub fn from_bytes(bs: Bytes) -> Result<Ascii, (AsciiError, Bytes)> {
         for &b in &bs {
             if b > i8::max_value() as u8 {
                 return Err((AsciiError(()), bs));
@@ -75,6 +75,6 @@ mod test {
 
     #[test]
     fn from_utf8() {
-        assert!(Ascii::from_utf8(Bytes::from_static("ю".as_bytes())).is_err());
+        assert!(Ascii::from_bytes(Bytes::from_static("ю".as_bytes())).is_err());
     }
 }

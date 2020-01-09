@@ -298,7 +298,7 @@ impl HeaderName {
             }
 
             let ascii =
-                Ascii::from_utf8(name).map_err(|(_, b)| (HeaderError::HeaderNameNotAscii, b))?;
+                Ascii::from_bytes(name).map_err(|(_, b)| (HeaderError::HeaderNameNotAscii, b))?;
             HeaderName(HeaderNameEnum::Regular(ascii))
         })
     }
@@ -731,7 +731,7 @@ mod test {
             format!(
                 "{:?}",
                 HeaderName(HeaderNameEnum::Regular(
-                    Ascii::from_utf8(Bytes::from("x-fgfg")).unwrap()
+                    Ascii::from_bytes(Bytes::from("x-fgfg")).unwrap()
                 ))
             )
         );
