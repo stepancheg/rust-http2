@@ -60,11 +60,11 @@ mod log_ndc_future;
 pub use crate::socket::AnySocketAddr;
 
 pub use crate::solicit::error_code::ErrorCode;
+pub use crate::solicit::header::name::HeaderName;
+pub use crate::solicit::header::name::PseudoHeaderName;
 pub use crate::solicit::header::Header;
-pub use crate::solicit::header::HeaderName;
 pub use crate::solicit::header::HeaderValue;
 pub use crate::solicit::header::Headers;
-pub use crate::solicit::header::PseudoHeaderName;
 pub use crate::solicit::stream_id::StreamId;
 pub use crate::solicit::HttpScheme;
 
