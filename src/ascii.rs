@@ -74,7 +74,7 @@ mod test {
     use bytes::Bytes;
 
     #[test]
-    fn from_utf8() {
+    fn ascii_from_bytes() {
         assert!(Ascii::from_bytes(Bytes::from_static("ю".as_bytes())).is_err());
     }
 }
