@@ -27,6 +27,14 @@ impl Ascii {
         Ok(Ascii(bs))
     }
 
+    /// Create an ASCII string from bytes.
+    ///
+    /// This is a const fn, and we cannot loop in const fn
+    /// so no validation here.
+    pub const unsafe fn from_bytes_unchecked(bs: Bytes) -> Ascii {
+        Ascii(bs)
+    }
+
     pub fn as_str(&self) -> &str {
         unsafe { str::from_utf8_unchecked(self.0.as_ref()) }
     }
@@ -52,11 +60,35 @@ impl fmt::Display for Ascii {
     }
 }
 
+#[derive(Debug)]
+pub struct AsciiLowerError(());
+
+/// ASCII lowercase string (any ASCII except uppercase letters).
 pub struct AsciiLower(Ascii);
 
 impl AsciiLower {
     pub fn new() -> AsciiLower {
         AsciiLower(Ascii::new())
+    }
+
+    /// Validate bytes is an ASCII lowercase string.
+    pub fn from_bytes(bs: Bytes) -> Result<AsciiLower, (AsciiLowerError, Bytes)> {
+        for &b in &bs {
+            if !b.is_ascii() || b.is_ascii_uppercase() {
+                return Err((AsciiLowerError(()), bs));
+            }
+        }
+        unsafe { Ok(AsciiLower(Ascii::from_bytes_unchecked(bs))) }
+    }
+
+    pub const unsafe fn from_bytes_unchecked(bs: Bytes) -> AsciiLower {
+        AsciiLower(Ascii::from_bytes_unchecked(bs))
+    }
+}
+
+impl fmt::Display for AsciiLower {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -77,10 +109,31 @@ impl<'a> From<&'a str> for AsciiLower {
 #[cfg(test)]
 mod test {
     use crate::ascii::Ascii;
+    use crate::ascii::AsciiLower;
     use bytes::Bytes;
 
     #[test]
     fn ascii_from_bytes() {
         assert!(Ascii::from_bytes(Bytes::from_static("ю".as_bytes())).is_err());
+    }
+
+    #[test]
+    fn ascii_lower_from_bytes() {
+        assert!(AsciiLower::from_bytes(Bytes::from_static("qю".as_bytes())).is_err());
+        assert!(AsciiLower::from_bytes(Bytes::from_static("qQ".as_bytes())).is_err());
+        assert!(AsciiLower::from_bytes(Bytes::from_static("q".as_bytes())).is_ok());
+        assert!(AsciiLower::from_bytes(Bytes::from_static("-".as_bytes())).is_ok());
+        assert!(AsciiLower::from_bytes(Bytes::from_static("".as_bytes())).is_ok());
+    }
+
+    #[test]
+    fn ascii_lower_display() {
+        assert_eq!(
+            "foo-bar",
+            format!(
+                "{}",
+                AsciiLower::from_bytes(Bytes::from_static(b"foo-bar")).unwrap()
+            ),
+        );
     }
 }
