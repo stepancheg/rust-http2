@@ -119,6 +119,7 @@ pub struct ConnStateSnapshot {
     pub in_window_size: i32,
     pub out_window_size: i32,
     pub pump_out_window_size: isize,
+    pub out_buf_bytes: usize,
     pub streams: HashMap<StreamId, HttpStreamStateSnapshot>,
 }
 
@@ -229,6 +230,7 @@ where
             in_window_size: self.in_window_size.0,
             out_window_size: self.out_window_size.0,
             pump_out_window_size: self.pump_out_window_size.get(),
+            out_buf_bytes: self.queued_write.queued_bytes_len(),
             streams: self.streams.snapshot(),
         }
     }
