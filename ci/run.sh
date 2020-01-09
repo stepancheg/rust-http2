@@ -10,7 +10,7 @@ if test "$ACTION" = "h2spec"; then
     cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test
 else
     if test -n "$ON_WINDOWS"; then
-        pacman -S openssl-devel pkg-config
+        $msys2 pacman -S openssl-devel pkg-config
     fi
 
     # Use one thread for better errors
