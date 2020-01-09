@@ -394,7 +394,7 @@ impl Client {
         // ignore error
         drop(
             self.controller_tx
-                .unbounded_send(ControllerCommand::_DumpState(tx)),
+                .unbounded_send(ControllerCommand::DumpState(tx)),
         );
         Box::pin(rx.map_err(|_| error::Error::ConnDied))
     }
@@ -460,7 +460,7 @@ enum ControllerCommand {
     GoAway,
     StartRequest(StartRequestMessage),
     WaitForConnect(oneshot::Sender<Result<()>>),
-    _DumpState(oneshot::Sender<ConnStateSnapshot>),
+    DumpState(oneshot::Sender<ConnStateSnapshot>),
 }
 
 struct ControllerState<T: ToClientStream, C: TlsConnector> {
@@ -513,7 +513,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                     }
                 }
             }
-            ControllerCommand::_DumpState(tx) => {
+            ControllerCommand::DumpState(tx) => {
                 self.conn.dump_state_with_resp_sender(tx);
             }
         }
