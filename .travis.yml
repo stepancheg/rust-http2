@@ -10,6 +10,7 @@ matrix:
   - rust: nightly
   - rust: stable
     os: windows
+    env: ON_WINDOWS=1
   - rust: stable
     env: ACTION=h2spec
   allow_failures:
