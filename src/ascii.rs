@@ -46,6 +46,12 @@ impl fmt::Debug for Ascii {
     }
 }
 
+impl fmt::Display for Ascii {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.as_str(), f)
+    }
+}
+
 pub struct AsciiLower(Ascii);
 
 impl AsciiLower {
