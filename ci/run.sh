@@ -1,5 +1,7 @@
 #!/bin/sh -e
 
+set -x
+
 export RUST_BACKTRACE=1
 
 rustc --version
