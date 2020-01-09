@@ -9,13 +9,14 @@ use std::fmt;
 /// a GOAWAY frame with an error code of FLOW_CONTROL_ERROR is sent.
 pub const MAX_WINDOW_SIZE: u32 = 0x7fffffff;
 
-// TODO: MIN_WINDOW_SIZE
-
 #[test]
 fn test_max_window_size_is_i32_max() {
     use std::i32;
     assert_eq!(i32::max_value(), MAX_WINDOW_SIZE as i32);
 }
+
+/// Effective reachable min window size.
+pub const MIN_WINDOW_SIZE: i32 = 0 - MAX_WINDOW_SIZE as i32;
 
 // 6.9 WINDOW_UPDATE
 /// The payload of a WINDOW_UPDATE frame is one reserved bit plus an unsigned 31-bit integer
@@ -34,6 +35,7 @@ impl WindowSize {
     /// Add or subtract window size, check for overflow
     pub fn try_add(&mut self, delta: i32) -> Result<(), ()> {
         self.0 = match self.0.checked_add(delta) {
+            Some(r) if r < MIN_WINDOW_SIZE => return Err(()),
             Some(r) => r,
             None => return Err(()),
         };
