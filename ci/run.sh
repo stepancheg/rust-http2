@@ -11,6 +11,7 @@ if test "$ACTION" = "h2spec"; then
     export PATH="$PATH:$(pwd)"
     cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test
 else
+    # Something doesn't work here, but we need to install openssl
     if test -n "$ON_WINDOWS"; then
         $msys2 pacman -S openssl-devel pkg-config
     fi

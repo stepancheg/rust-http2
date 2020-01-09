@@ -8,9 +8,11 @@ matrix:
   - rust: stable
   - rust: beta
   - rust: nightly
-  - rust: stable
-    os: windows
-    env: ON_WINDOWS=1
+  # I failed to install openssl on Windows, if you know how to do it
+  # please let me know
+  #- rust: stable
+  #  os: windows
+  #  env: ON_WINDOWS=1
   - rust: stable
     env: ACTION=h2spec
   allow_failures:
