@@ -3,6 +3,7 @@ use std::pin::Pin;
 
 use crate::error;
 use crate::result;
+use crate::AnySocketAddr;
 
 use crate::solicit::frame::settings::HttpSettings;
 use crate::solicit::frame::*;
@@ -142,6 +143,7 @@ where
         to_write_tx: ConnCommandSender<T>,
         write_rx: ConnCommandReceiver<T>,
         socket: I,
+        _peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
     ) -> Self {
         let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);

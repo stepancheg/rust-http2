@@ -11,7 +11,7 @@ pub(crate) mod types;
 
 use futures::future::try_join_all;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+
 use std::net::ToSocketAddrs;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -318,12 +318,9 @@ where
         })
         .try_for_each(
             move |((socket, peer_addr), (conn_handles, service, state, tls, conf))| {
-                if socket.is_tcp() {
-                    info!(
-                        "accepted connection from {}",
-                        peer_addr.downcast_ref::<SocketAddr>().unwrap()
-                    );
+                info!("accepted connection from {}", peer_addr);
 
+                if socket.is_tcp() {
                     let no_delay = conf.no_delay.unwrap_or(true);
                     socket
                         .set_nodelay(no_delay)
@@ -334,7 +331,8 @@ where
                 let handle = conn_handles[thread_rng().gen_range(0, conn_handles.len())].clone();
                 let handle_clone = handle.clone();
                 handle.spawn({
-                    let (conn, future) = ServerConn::new(&handle_clone, socket, tls, conf, service);
+                    let (conn, future) =
+                        ServerConn::new(&handle_clone, socket, peer_addr, tls, conf, service);
 
                     let conn_id = {
                         let mut g = state.lock().expect("lock");

@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -22,6 +21,8 @@ use crate::socket::ToSocketListener;
 use crate::socket::ToTokioListener;
 use crate::ServerConf;
 use std::fmt;
+#[cfg(unix)]
+use std::os::unix::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use tokio::runtime::Handle;
@@ -56,6 +57,14 @@ impl From<String> for SocketAddrUnix {
 impl fmt::Display for SocketAddrUnix {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.0.display(), f)
+    }
+}
+
+#[cfg(unix)]
+impl From<SocketAddr> for SocketAddrUnix {
+    fn from(s: SocketAddr) -> Self {
+        // can be unnamed
+        SocketAddrUnix(s.as_pathname().unwrap_or(Path::new("")).to_owned())
     }
 }
 
@@ -99,10 +108,7 @@ impl ToServerStream for UnixListener {
     fn incoming(
         self: Box<Self>,
     ) -> Pin<
-        Box<
-            dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>>
-                + Send,
-        >,
+        Box<dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>> + Send>,
     > {
         let unix_listener = *self;
 
@@ -110,7 +116,7 @@ impl ToServerStream for UnixListener {
             let r = match unix_listener_listener.accept().await {
                 Ok((socket, addr)) => Ok((
                     Box::pin(socket) as Pin<Box<dyn StreamItem + Send>>,
-                    Box::new(addr) as Box<dyn Any + Send>,
+                    AnySocketAddr::Unix(addr.into()),
                 )),
                 Err(e) => Err(e),
             };
@@ -118,7 +124,7 @@ impl ToServerStream for UnixListener {
         });
 
         let stream = assert_send_stream::<
-            io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>,
+            io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>,
             _,
         >(stream);
 
@@ -155,6 +161,10 @@ impl ToClientStream for SocketAddrUnix {
             io::ErrorKind::Other,
             "cannot use unix sockets on non-unix",
         )))
+    }
+
+    fn socket_addr(&self) -> AnySocketAddr {
+        AnySocketAddr::Unix(self.clone())
     }
 }
 

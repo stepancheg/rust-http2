@@ -80,10 +80,11 @@ impl ServerOneConn {
                 // TODO: close listening port
                 //drop(listener);
 
-                let future = conn.and_then(move |(conn, _addr)| {
+                let future = conn.and_then(move |(conn, peer_addr)| {
                     let (conn, future) = ServerConn::new_plain_single_thread_fn(
                         &handle,
                         conn,
+                        peer_addr,
                         Default::default(),
                         service,
                     );

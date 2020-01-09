@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::io;
 use std::net::SocketAddr;
 
@@ -80,10 +79,7 @@ impl ToServerStream for TcpListener {
     fn incoming(
         self: Box<Self>,
     ) -> Pin<
-        Box<
-            dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>>
-                + Send,
-        >,
+        Box<dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>> + Send>,
     > {
         let tcp_listener = *self;
 
@@ -91,7 +87,7 @@ impl ToServerStream for TcpListener {
             let r = match tcp_listener.accept().await {
                 Ok((socket, addr)) => Ok((
                     Box::pin(socket) as Pin<Box<dyn StreamItem + Send>>,
-                    Box::new(addr) as Box<dyn Any + Send>,
+                    AnySocketAddr::Inet(addr),
                 )),
                 Err(e) => Err(e),
             };
@@ -99,7 +95,7 @@ impl ToServerStream for TcpListener {
         });
 
         let stream = assert_send_stream::<
-            io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>,
+            io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>,
             _,
         >(stream);
 
@@ -115,6 +111,10 @@ impl ToClientStream for SocketAddr {
         let future = TcpStream::connect(self.clone())
             .map_ok(|stream| Box::pin(stream) as Pin<Box<dyn StreamItem + Send>>);
         Box::pin(future)
+    }
+
+    fn socket_addr(&self) -> AnySocketAddr {
+        AnySocketAddr::Inet(*self)
     }
 }
 

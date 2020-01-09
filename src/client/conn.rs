@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::error;
 use crate::error::Error;
 use crate::result;
+use crate::AnySocketAddr;
 
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::settings::*;
@@ -223,6 +224,7 @@ impl ClientConn {
     fn spawn_connected<I, C>(
         lh: Handle,
         connect: HttpFutureSend<I>,
+        peer_addr: AnySocketAddr,
         conf: ClientConf,
         callbacks: C,
     ) -> Self
@@ -261,6 +263,7 @@ impl ClientConn {
                 to_write_tx.clone(),
                 to_write_rx,
                 conn,
+                peer_addr,
                 conn_died_error_holder,
             );
             conn_data.run().await
@@ -301,6 +304,8 @@ impl ClientConn {
     where
         C: ClientConnCallbacks,
     {
+        let addr_struct = addr.socket_addr();
+
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = TryFutureExt::map_err(addr.connect(&lh), error::Error::from);
         let map_callback = move |socket: Pin<Box<dyn StreamItem + Send>>| {
@@ -330,7 +335,7 @@ impl ClientConn {
             connect.map_ok(move |socket: Pin<Box<dyn StreamItem + Send>>| map_callback(socket)),
         );
 
-        ClientConn::spawn_connected(lh, connect, conf, callbacks)
+        ClientConn::spawn_connected(lh, connect, addr_struct, conf, callbacks)
     }
 
     pub fn spawn_tls<H, C>(
@@ -345,6 +350,8 @@ impl ClientConn {
         H: ClientConnCallbacks,
         C: TlsConnector + Sync,
     {
+        let addr_struct = addr.socket_addr();
+
         let domain = domain.to_owned();
 
         let connect = addr
@@ -366,7 +373,7 @@ impl ClientConn {
 
         let tls_conn = assert_send_future(tls_conn);
 
-        ClientConn::spawn_connected(lh, Box::pin(tls_conn), conf, callbacks)
+        ClientConn::spawn_connected(lh, Box::pin(tls_conn), addr_struct, conf, callbacks)
     }
 
     pub(crate) fn start_request_with_resp_sender(

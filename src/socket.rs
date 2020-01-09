@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -77,6 +76,10 @@ impl ToClientStream for AnySocketAddr {
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
         }
     }
+
+    fn socket_addr(&self) -> AnySocketAddr {
+        self.clone()
+    }
 }
 
 pub trait ToTokioListener {
@@ -89,10 +92,7 @@ pub trait ToServerStream {
     fn incoming(
         self: Box<Self>,
     ) -> Pin<
-        Box<
-            dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, Box<dyn Any + Send>)>>
-                + Send,
-        >,
+        Box<dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>> + Send>,
     >;
 }
 
@@ -101,6 +101,8 @@ pub trait ToClientStream: Display + Send + Sync {
         &self,
         handle: &Handle,
     ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>>;
+
+    fn socket_addr(&self) -> AnySocketAddr;
 }
 
 pub trait StreamItem: AsyncRead + AsyncWrite + Debug + Send + Sync {

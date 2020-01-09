@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::error;
 use crate::result;
+use crate::AnySocketAddr;
 
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::settings::*;
@@ -59,6 +60,7 @@ use crate::ErrorCode;
 use crate::ServerConf;
 use crate::ServerResponse;
 use crate::ServerTlsOption;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use tokio::runtime::Handle;
 
@@ -256,6 +258,7 @@ impl ServerConn {
     fn connected<F, I>(
         lh: &Handle,
         socket: HttpFutureSend<I>,
+        peer_addr: AnySocketAddr,
         conf: ServerConf,
         service: Arc<F>,
     ) -> (ServerConn, HttpFutureSend<()>)
@@ -286,6 +289,7 @@ impl ServerConn {
                 write_tx_copy,
                 write_rx,
                 conn,
+                peer_addr,
                 conn_died_error_holder,
             );
 
@@ -305,6 +309,7 @@ impl ServerConn {
     pub fn new<S, A>(
         lh: &Handle,
         socket: Pin<Box<dyn StreamItem>>,
+        peer_addr: AnySocketAddr,
         tls: ServerTlsOption<A>,
         conf: ServerConf,
         service: Arc<S>,
@@ -316,11 +321,11 @@ impl ServerConn {
         match tls {
             ServerTlsOption::Plain => {
                 let socket = Box::pin(future::ok(socket));
-                ServerConn::connected(lh, socket, conf, service)
+                ServerConn::connected(lh, socket, peer_addr, conf, service)
             }
             ServerTlsOption::Tls(acceptor) => {
                 let socket = Box::pin(async move { Ok(acceptor.accept(socket).await?) });
-                ServerConn::connected(lh, socket, conf, service)
+                ServerConn::connected(lh, socket, peer_addr, conf, service)
             }
         }
     }
@@ -328,6 +333,7 @@ impl ServerConn {
     pub fn new_plain_single_thread<S>(
         lh: &Handle,
         socket: TcpStream,
+        peer_addr: SocketAddr,
         conf: ServerConf,
         service: Arc<S>,
     ) -> (ServerConn, HttpFutureSend<()>)
@@ -335,12 +341,20 @@ impl ServerConn {
         S: ServerHandler,
     {
         let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
-        ServerConn::new(lh, Box::pin(socket), no_tls, conf, service)
+        ServerConn::new(
+            lh,
+            Box::pin(socket),
+            AnySocketAddr::Inet(peer_addr),
+            no_tls,
+            conf,
+            service,
+        )
     }
 
     pub fn new_plain_single_thread_fn<F>(
         lh: &Handle,
         socket: TcpStream,
+        peer_addr: SocketAddr,
         conf: ServerConf,
         f: F,
     ) -> (ServerConn, HttpFutureSend<()>)
@@ -369,7 +383,7 @@ impl ServerConn {
             }
         }
 
-        ServerConn::new_plain_single_thread(lh, socket, conf, Arc::new(HttpServiceFn(f)))
+        ServerConn::new_plain_single_thread(lh, socket, peer_addr, conf, Arc::new(HttpServiceFn(f)))
     }
 
     /// For tests
