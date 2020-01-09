@@ -9,6 +9,10 @@ if test "$ACTION" = "h2spec"; then
     export PATH="$PATH:$(pwd)"
     cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test
 else
+    if test -n "$ON_WINDOWS"; then
+        pacman -S openssl-devel pkg-config
+    fi
+
     # Use one thread for better errors
     cargo test --all --all-targets -- --test-threads=1
 fi
