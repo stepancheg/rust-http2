@@ -59,7 +59,7 @@ use futures::channel::oneshot;
 use futures::FutureExt;
 use futures::TryFutureExt;
 use std::pin::Pin;
-use tokio::io::split;
+
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::runtime::Handle;
@@ -242,19 +242,14 @@ impl ClientConn {
         let mut settings = DEFAULT_SETTINGS;
         settings.apply_from_frame(&settings_frame);
 
-        let handshake = connect.and_then(|mut conn| async {
-            client_handshake(&mut conn, settings_frame).await?;
-            Ok(conn)
-        });
+        let lh_copy = lh.clone();
 
         let conn_died_error_holder_copy = conn_died_error_holder.clone();
 
-        let lh_copy = lh.clone();
+        let future = connect.and_then(move |mut conn| async move {
+            client_handshake(&mut conn, settings_frame).await?;
 
-        let future = handshake.and_then(move |conn| {
             debug!("handshake done");
-
-            let (read, write) = split(conn);
 
             let conn_data = Conn::<ClientTypes, _>::new(
                 lh_copy,
@@ -265,11 +260,10 @@ impl ClientConn {
                 settings,
                 to_write_tx.clone(),
                 to_write_rx,
-                read,
-                write,
+                conn,
                 conn_died_error_holder,
             );
-            conn_data.run()
+            conn_data.run().await
         });
 
         let future = conn_died_error_holder_copy.wrap_future(future);

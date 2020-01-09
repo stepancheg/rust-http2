@@ -16,7 +16,7 @@ use futures::TryFutureExt;
 
 use crate::common::types::Types;
 use tls_api;
-use tokio::io::split;
+
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
@@ -273,18 +273,10 @@ impl ServerConn {
         let mut settings = DEFAULT_SETTINGS;
         settings.apply_from_frame(&settings_frame);
 
-        let handshake = socket.and_then(|conn| async {
-            let mut conn = conn;
-            server_handshake(&mut conn, settings_frame).await?;
-            Ok(conn)
-        });
-
-        let handshake = assert_send_future(handshake);
-
         let write_tx_copy = write_tx.clone();
 
-        let run = handshake.and_then(move |conn| {
-            let (read, write) = split(conn);
+        let run = socket.and_then(move |mut conn| async move {
+            server_handshake(&mut conn, settings_frame).await?;
 
             let conn_data = Conn::<ServerTypes, I>::new(
                 lh,
@@ -293,12 +285,11 @@ impl ServerConn {
                 settings,
                 write_tx_copy,
                 write_rx,
-                read,
-                write,
+                conn,
                 conn_died_error_holder,
             );
 
-            conn_data.run()
+            conn_data.run().await
         });
 
         let run = assert_send_future(run);

@@ -42,6 +42,7 @@ use futures::stream::Stream;
 use futures::task::Context;
 use std::collections::HashSet;
 use std::task::Poll;
+use tokio::io::split;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::io::ReadHalf;
@@ -140,14 +141,15 @@ where
         sent_settings: HttpSettings,
         to_write_tx: ConnCommandSender<T>,
         write_rx: ConnCommandReceiver<T>,
-        read: ReadHalf<I>,
-        write: WriteHalf<I>,
+        socket: I,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
     ) -> Self {
         let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
         let out_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
 
         let pump_window_size = window_size::ConnOutWindowSender::new(out_window_size.0 as u32);
+
+        let (read, write) = split(socket);
 
         let framed_read = HttpDecodeRead::new(read);
         let queued_write = QueuedWrite::new(write);
