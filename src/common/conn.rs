@@ -469,12 +469,7 @@ where
 
     async fn run_loop(mut self) -> result::Result<()> {
         loop {
-            warn!("loop iteration");
-
             let event = self.next_event().await?;
-
-            warn!("processing event");
-
             match event {
                 LoopEvent::ToWriteMessage(m) => self.process_message(m)?,
                 LoopEvent::Frame(f) => self.process_http_frame_of_goaway(f)?,
