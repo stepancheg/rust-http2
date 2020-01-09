@@ -354,7 +354,7 @@ impl fmt::Display for HeaderName {
 }
 
 fn make_ascii_lowercase(bytes: &mut Bytes) {
-    if bytes.as_ref().iter().all(|c| c.is_ascii_lowercase()) {
+    if bytes.as_ref().iter().all(|c| !c.is_ascii_uppercase()) {
         return;
     }
     let mut bytes_mut = BytesMut::from(&bytes[..]);
@@ -365,6 +365,11 @@ fn make_ascii_lowercase(bytes: &mut Bytes) {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn header_name_new_to_lower() {
+        assert_eq!("content-type", HeaderName::new("Content-Type").name());
+    }
 
     #[test]
     fn header_name_display() {
