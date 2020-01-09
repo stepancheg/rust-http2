@@ -261,6 +261,8 @@ where
                             s.pump_out_window.increase(delta as isize);
                         }
 
+                        self.streams.sync_is_writable();
+
                         if !self.streams.map.is_empty() && delta > 0 {
                             out_window_increased = true;
                         }

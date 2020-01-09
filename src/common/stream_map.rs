@@ -71,6 +71,20 @@ impl<T: Types> StreamMap<T> {
         self.map.get(&id).map(|s| s.state)
     }
 
+    pub fn sync_is_writable(&mut self) {
+        self.writable_streams = self
+            .map
+            .iter()
+            .filter_map(|(&stream_id, stream)| {
+                if stream.is_writable() {
+                    Some(stream_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Remove locally initiated streams with id > given.
     pub fn remove_local_streams_with_id_gt(
         &mut self,

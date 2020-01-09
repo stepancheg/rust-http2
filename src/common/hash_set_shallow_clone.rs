@@ -1,6 +1,7 @@
 use std::collections::hash_set;
 use std::collections::HashSet;
 use std::hash::Hash;
+use std::iter::FromIterator;
 use std::ops::Deref;
 use std::slice;
 use std::sync::Arc;
@@ -86,6 +87,15 @@ impl<T: Hash + Eq + Clone> HashSetShallowClone<T> {
 
     pub fn _iter(&self) -> hash_set::Iter<T> {
         self.set.iter()
+    }
+}
+
+impl<T: Clone + Eq + Hash> FromIterator<T> for HashSetShallowClone<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        HashSetShallowClone {
+            set: HashSet::from_iter(iter),
+            items: None,
+        }
     }
 }
 

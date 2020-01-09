@@ -153,13 +153,19 @@ impl<T: Types> HttpStreamCommon<T> {
     #[cfg(debug_assertions)]
     pub fn pop_outg(&mut self, conn_out_window_size: &mut WindowSize) -> Option<HttpStreamCommand> {
         let writable = self.is_writable();
-        let window_size_before = conn_out_window_size.0;
+        let conn_out_window_size_before = conn_out_window_size.0;
 
         let command = self.pop_outg_impl(conn_out_window_size);
         if command.is_some() {
             assert!(writable);
         } else {
-            assert!(!writable || window_size_before == 0);
+            assert!(
+                !writable || conn_out_window_size_before == 0,
+                "popped nothing but writable: {}, conn out window size before: {}, {:?}",
+                writable,
+                conn_out_window_size_before,
+                self.snapshot()
+            );
         }
         command
     }
