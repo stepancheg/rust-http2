@@ -31,6 +31,7 @@ use crate::common::conn_write::ConnWriteSideCustom;
 use crate::common::init_where::InitWhere;
 use crate::hpack;
 use crate::solicit::stream_id::StreamId;
+use crate::solicit::window_size::NonNegativeWindowSize;
 use crate::solicit::window_size::WindowSize;
 use crate::ErrorCode;
 use futures::channel::oneshot;
@@ -80,7 +81,7 @@ pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
     /// Tracks the size of the outbound flow control window
     pub out_window_size: WindowSize,
     /// Tracks the size of the inbound flow control window
-    pub in_window_size: WindowSize,
+    pub in_window_size: NonNegativeWindowSize,
 
     /// Window size from pumper point of view
     pub pump_out_window_size: window_size::ConnOutWindowSender,
@@ -151,10 +152,11 @@ where
         peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
     ) -> Self {
-        let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
+        let in_window_size =
+            NonNegativeWindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
         let out_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
 
-        let pump_window_size = window_size::ConnOutWindowSender::new(out_window_size.0 as u32);
+        let pump_window_size = window_size::ConnOutWindowSender::new(out_window_size.size() as u32);
 
         let (read, write) = split(socket);
 
@@ -227,8 +229,8 @@ where
     pub fn dump_state(&self) -> ConnStateSnapshot {
         ConnStateSnapshot {
             peer_addr: self.peer_addr.clone(),
-            in_window_size: self.in_window_size.0,
-            out_window_size: self.out_window_size.0,
+            in_window_size: self.in_window_size.size(),
+            out_window_size: self.out_window_size.size(),
             pump_out_window_size: self.pump_out_window_size.get(),
             out_buf_bytes: self.queued_write.queued_bytes_len(),
             streams: self.streams.snapshot(),
@@ -263,7 +265,7 @@ where
         debug_assert!(size < 0x80000000);
         let old_in_window_size = self.in_window_size.size();
         self.in_window_size
-            .try_decrease_to_positive(size as i32)
+            .try_decrease_to_non_negative(size as i32)
             .map_err(|_| error::Error::WindowSizeOverflow)?;
         let new_in_window_size = self.in_window_size.size();
         debug!(

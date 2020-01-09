@@ -121,7 +121,7 @@ where
             stream
                 .stream()
                 .in_window_size
-                .try_decrease_to_positive(frame.payload_len() as i32)
+                .try_decrease_to_non_negative(frame.payload_len() as i32)
                 .map_err(|()| error::Error::CodeError(ErrorCode::FlowControlError))?;
             let new_in_window_size = stream.stream().in_window_size.size();
 
@@ -256,8 +256,8 @@ where
                             // a receiver MUST adjust the size of all stream flow-control windows
                             // that it maintains by the difference between the new value
                             // and the old value.
-                            // TODO: check for overflow
-                            s.out_window_size.0 += delta;
+                            // TODO: handle overflow
+                            s.out_window_size.try_add(delta).unwrap();
                             s.pump_out_window.increase(delta as isize);
                         }
 
@@ -345,7 +345,7 @@ where
     fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
         assert_eq!(0, frame.stream_id);
 
-        let old_window_size = self.out_window_size.0;
+        let old_window_size = self.out_window_size.size();
 
         // 6.9.1
         // A sender MUST NOT allow a flow-control window to exceed 2^31-1

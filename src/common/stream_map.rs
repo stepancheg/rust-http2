@@ -203,11 +203,11 @@ impl<'m, T: Types + 'm> HttpStreamRef<'m, T> {
     }
 
     pub fn try_increase_window_size(&mut self, increment: u32) -> Result<(), ()> {
-        let old_window_size = self.stream().out_window_size.0;
+        let old_window_size = self.stream().out_window_size.size();
 
         self.stream().out_window_size.try_increase(increment)?;
 
-        let new_window_size = self.stream().out_window_size.0;
+        let new_window_size = self.stream().out_window_size.size();
 
         debug!(
             "stream {} out window size change: {} -> {}",

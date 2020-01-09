@@ -208,7 +208,7 @@ impl HttpConnTester {
         }
         self.send_frame(data_frame);
         self.out_window_size
-            .try_decrease_to_positive(data.len() as i32)
+            .try_decrease_to_non_negative(data.len() as i32)
             .expect("decrease");
     }
 

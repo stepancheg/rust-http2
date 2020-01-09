@@ -9,6 +9,14 @@ use std::fmt;
 /// a GOAWAY frame with an error code of FLOW_CONTROL_ERROR is sent.
 pub const MAX_WINDOW_SIZE: u32 = 0x7fffffff;
 
+// TODO: MIN_WINDOW_SIZE
+
+#[test]
+fn test_max_window_size_is_i32_max() {
+    use std::i32;
+    assert_eq!(i32::max_value(), MAX_WINDOW_SIZE as i32);
+}
+
 // 6.9 WINDOW_UPDATE
 /// The payload of a WINDOW_UPDATE frame is one reserved bit plus an unsigned 31-bit integer
 /// indicating the number of octets that the sender can transmit in addition to the existing
@@ -21,8 +29,17 @@ pub const MAX_WINDOW_SIZE_INC: u32 = 0x7fffffff;
 /// It exposes methods that allow the manipulation of window sizes, such that they can never
 /// overflow the spec-mandated upper bound.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct WindowSize(pub i32);
+pub struct WindowSize(i32);
 impl WindowSize {
+    /// Add or subtract window size, check for overflow
+    pub fn try_add(&mut self, delta: i32) -> Result<(), ()> {
+        self.0 = match self.0.checked_add(delta) {
+            Some(r) => r,
+            None => return Err(()),
+        };
+        Ok(())
+    }
+
     /// Tries to increase the window size by the given delta. If the WindowSize would overflow the
     /// maximum allowed value (2^31 - 1), returns an error case. If the increase succeeds, returns
     /// `Ok`.
@@ -31,20 +48,8 @@ impl WindowSize {
         if delta > MAX_WINDOW_SIZE_INC || delta == 0 {
             return Err(());
         }
-        // Now it is safe to cast the delta to the `i32`.
-        match self.0.checked_add(delta as i32) {
-            None => {
-                // When the add overflows, we will have went over the maximum allowed size of the
-                // window size...
-                Err(())
-            }
-            Some(next_val) => {
-                // The addition didn't overflow, so the next window size is in the range allowed by
-                // the spec.
-                self.0 = next_val;
-                Ok(())
-            }
-        }
+
+        self.try_add(delta as i32)
     }
 
     /// Tries to decrease the size of the window by the given delta.
@@ -62,7 +67,7 @@ impl WindowSize {
         }
     }
 
-    pub fn try_decrease_to_positive(&mut self, delta: i32) -> Result<(), ()> {
+    pub fn try_decrease_to_non_negative(&mut self, delta: i32) -> Result<(), ()> {
         match self.0.checked_sub(delta) {
             Some(new) if new >= 0 => {
                 self.0 = new;
@@ -97,5 +102,27 @@ impl WindowSize {
 impl fmt::Display for WindowSize {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
+    }
+}
+
+/// In window size cannot be negative.
+pub(crate) struct NonNegativeWindowSize(WindowSize);
+
+impl NonNegativeWindowSize {
+    pub fn new(size: i32) -> NonNegativeWindowSize {
+        assert!(size >= 0);
+        NonNegativeWindowSize(WindowSize::new(size))
+    }
+
+    pub fn size(&self) -> i32 {
+        self.0.size()
+    }
+
+    pub fn try_decrease_to_non_negative(&mut self, delta: i32) -> Result<(), ()> {
+        self.0.try_decrease_to_non_negative(delta)
+    }
+
+    pub fn try_increase(&mut self, delta: u32) -> Result<(), ()> {
+        self.0.try_increase(delta)
     }
 }

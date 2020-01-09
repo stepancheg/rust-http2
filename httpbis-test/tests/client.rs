@@ -239,7 +239,7 @@ pub fn issue_89() {
     let mut resp1 = resp1.filter_data();
 
     assert_eq!(
-        server_tester.out_window_size.0,
+        server_tester.out_window_size.size(),
         client.conn_state().in_window_size
     );
 

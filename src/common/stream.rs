@@ -7,6 +7,7 @@ use crate::error;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::Headers;
 use crate::solicit::session::StreamState;
+use crate::solicit::window_size::NonNegativeWindowSize;
 use crate::solicit::window_size::WindowSize;
 
 use super::types::Types;
@@ -66,7 +67,7 @@ pub(crate) struct HttpStreamCommon<T: Types> {
     pub specific: T::HttpStreamSpecific,
     pub state: StreamState,
     pub out_window_size: WindowSize,
-    pub in_window_size: WindowSize,
+    pub in_window_size: NonNegativeWindowSize,
     pub outgoing: StreamQueue,
     pub peer_tx: Option<T::StreamHandlerHolder>,
     // task waiting for window increase
@@ -88,7 +89,7 @@ impl<T: Types> HttpStreamCommon<T> {
         HttpStreamCommon {
             specific,
             state: StreamState::Open,
-            in_window_size: WindowSize::new(in_window_size as i32),
+            in_window_size: NonNegativeWindowSize::new(in_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),
             outgoing: StreamQueue::new(),
             peer_tx: None,
@@ -101,8 +102,8 @@ impl<T: Types> HttpStreamCommon<T> {
     pub fn snapshot(&self) -> HttpStreamStateSnapshot {
         HttpStreamStateSnapshot {
             state: self.state,
-            out_window_size: self.out_window_size.0,
-            in_window_size: self.in_window_size.0,
+            out_window_size: self.out_window_size.size(),
+            in_window_size: self.in_window_size.size(),
             pump_out_window_size: self.pump_out_window.get(),
             queued_out_data_size: self.outgoing.data_size(),
             out_data_size: self.outgoing.data_size(),
@@ -153,7 +154,7 @@ impl<T: Types> HttpStreamCommon<T> {
     #[cfg(debug_assertions)]
     pub fn pop_outg(&mut self, conn_out_window_size: &mut WindowSize) -> Option<HttpStreamCommand> {
         let writable = self.is_writable();
-        let conn_out_window_size_before = conn_out_window_size.0;
+        let conn_out_window_size_before = conn_out_window_size.size();
 
         let command = self.pop_outg_impl(conn_out_window_size);
         if command.is_some() {
@@ -233,10 +234,10 @@ impl<T: Types> HttpStreamCommon<T> {
         };
 
         self.out_window_size
-            .try_decrease_to_positive(data.len() as i32)
+            .try_decrease_to_non_negative(data.len() as i32)
             .unwrap();
         conn_out_window_size
-            .try_decrease_to_positive(data.len() as i32)
+            .try_decrease_to_non_negative(data.len() as i32)
             .unwrap();
 
         let last = self.outgoing.end() == Some(ErrorCode::NoError);
