@@ -79,6 +79,12 @@ impl PseudoHeaderName {
     }
 }
 
+impl fmt::Display for PseudoHeaderName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.name(), f)
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct PseudoHeaderNameSet {
     headers_mask: u32,
@@ -100,11 +106,65 @@ impl PseudoHeaderNameSet {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+struct RegularHeaderName(Ascii);
+
+impl RegularHeaderName {
+    pub fn from_bytes(bs: Bytes) -> Result<RegularHeaderName, (HeaderError, Bytes)> {
+        // token          = 1*<any CHAR except CTLs or separators>
+        // separators     = "(" | ")" | "<" | ">" | "@"
+        //                | "," | ";" | ":" | "\" | <">
+        //                | "/" | "[" | "]" | "?" | "="
+        //                | "{" | "}" | SP | HT
+        // field-name     = token
+
+        if bs.is_empty() {
+            return Err((HeaderError::EmptyName, bs));
+        }
+
+        for &b in &bs {
+            if !b.is_ascii() {
+                return Err((HeaderError::HeaderNameNotAscii, bs));
+            }
+            if b.is_ascii_control() {
+                return Err((HeaderError::IncorrectCharInName, bs));
+            }
+            if b.is_ascii_uppercase() {
+                return Err((HeaderError::IncorrectCharInName, bs));
+            }
+            let bad_chars = b"()<>@,;:\\\"/[]?={} \t";
+            if bad_chars.contains(&b) {
+                return Err((HeaderError::IncorrectCharInName, bs));
+            }
+        }
+        unsafe { Ok(RegularHeaderName(Ascii::from_bytes_unchecked(bs))) }
+    }
+
+    pub const unsafe fn _from_bytes_unchecked(bs: Bytes) -> RegularHeaderName {
+        RegularHeaderName(Ascii::from_bytes_unchecked(bs))
+    }
+}
+
+impl fmt::Display for RegularHeaderName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
 /// Separate type to hide contents from rustdoc.
 #[derive(Eq, PartialEq, Hash, Clone)]
 enum HeaderNameEnum {
     Pseudo(PseudoHeaderName),
-    Regular(Ascii),
+    Regular(RegularHeaderName),
+}
+
+impl fmt::Display for HeaderNameEnum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HeaderNameEnum::Pseudo(p) => fmt::Display::fmt(p, f),
+            HeaderNameEnum::Regular(r) => fmt::Display::fmt(r, f),
+        }
+    }
 }
 
 /// Representation of header name
@@ -250,9 +310,9 @@ impl HeaderName {
                 }
             }
 
-            let ascii =
-                Ascii::from_bytes(name).map_err(|(_, b)| (HeaderError::HeaderNameNotAscii, b))?;
-            HeaderName(HeaderNameEnum::Regular(ascii))
+            HeaderName(HeaderNameEnum::Regular(RegularHeaderName::from_bytes(
+                name,
+            )?))
         })
     }
 
@@ -260,7 +320,7 @@ impl HeaderName {
     pub fn name(&self) -> &str {
         match &self.0 {
             HeaderNameEnum::Pseudo(p) => p.name(),
-            HeaderNameEnum::Regular(r) => r.as_str(),
+            HeaderNameEnum::Regular(r) => r.0.as_str(),
         }
     }
 
@@ -283,10 +343,13 @@ impl HeaderName {
 
 impl fmt::Debug for HeaderName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.0 {
-            HeaderNameEnum::Pseudo(p) => fmt::Debug::fmt(p.name(), f),
-            HeaderNameEnum::Regular(r) => fmt::Debug::fmt(r, f),
-        }
+        write!(f, "HeaderName({:?})", self.name())
+    }
+}
+
+impl fmt::Display for HeaderName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -304,20 +367,40 @@ mod test {
     use super::*;
 
     #[test]
+    fn header_name_display() {
+        assert_eq!(
+            ":method",
+            format!(
+                "{}",
+                HeaderName(HeaderNameEnum::Pseudo(PseudoHeaderName::Method))
+            )
+        );
+        assert_eq!(
+            "x-fgfg",
+            format!(
+                "{}",
+                HeaderName(HeaderNameEnum::Regular(
+                    RegularHeaderName::from_bytes(Bytes::from("x-fgfg")).unwrap()
+                ))
+            )
+        );
+    }
+
+    #[test]
     fn header_name_debug() {
         assert_eq!(
-            "\":method\"",
+            "HeaderName(\":method\")",
             format!(
                 "{:?}",
                 HeaderName(HeaderNameEnum::Pseudo(PseudoHeaderName::Method))
             )
         );
         assert_eq!(
-            "\"x-fgfg\"",
+            "HeaderName(\"x-fgfg\")",
             format!(
                 "{:?}",
                 HeaderName(HeaderNameEnum::Regular(
-                    Ascii::from_bytes(Bytes::from("x-fgfg")).unwrap()
+                    RegularHeaderName::from_bytes(Bytes::from("x-fgfg")).unwrap()
                 ))
             )
         );

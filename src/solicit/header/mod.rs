@@ -57,10 +57,19 @@ impl<'a> From<&'a str> for HeaderValue {
 }
 
 /// HTTP/2 header, regular or pseudo-header
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Header {
     name: HeaderName,
     pub value: Bytes,
+}
+
+impl fmt::Debug for Header {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Header")
+            .field("name", &self.name.name())
+            .field("value", &self.value)
+            .finish()
+    }
 }
 
 fn _assert_header_sync_send() {
