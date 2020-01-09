@@ -42,6 +42,7 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::task::Context;
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::task::Poll;
 use tokio::io::split;
 use tokio::io::AsyncRead;
@@ -55,6 +56,8 @@ pub trait ConnSpecific: Send + 'static {}
 
 /// HTTP/2 connection state with socket and streams
 pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
+    pub peer_addr: AnySocketAddr,
+
     pub conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 
     /// Client or server specific data
@@ -143,7 +146,7 @@ where
         to_write_tx: ConnCommandSender<T>,
         write_rx: ConnCommandReceiver<T>,
         socket: I,
-        _peer_addr: AnySocketAddr,
+        peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
     ) -> Self {
         let in_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
@@ -157,6 +160,7 @@ where
         let queued_write = QueuedWrite::new(write);
 
         Conn {
+            peer_addr,
             conn_died_error_holder,
             specific,
             to_write_tx,
@@ -483,7 +487,7 @@ where
     }
 
     pub fn run(self) -> impl Future<Output = result::Result<()>> + Send {
-        // TODO: add local/peer address
-        log_ndc_future(T::CONN_NDC, self.run_loop())
+        let ndc = Arc::new(format!("{} {}", T::CONN_NDC, self.peer_addr));
+        log_ndc_future(ndc, self.run_loop())
     }
 }
