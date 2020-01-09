@@ -7,7 +7,7 @@ use crate::error;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::Headers;
 use crate::solicit::session::StreamState;
-use crate::solicit::WindowSize;
+use crate::solicit::window_size::WindowSize;
 
 use super::types::Types;
 

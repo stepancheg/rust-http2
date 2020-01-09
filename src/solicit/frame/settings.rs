@@ -6,7 +6,7 @@ use crate::solicit::frame::ParseFrameError;
 use crate::solicit::frame::ParseFrameResult;
 use crate::solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
 use crate::solicit::stream_id::StreamId;
-use crate::solicit::MAX_WINDOW_SIZE;
+use crate::solicit::window_size::MAX_WINDOW_SIZE;
 
 pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
 

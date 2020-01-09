@@ -109,7 +109,7 @@ pub mod for_test {
     pub use crate::solicit_async::recv_raw_frame_sync;
 
     pub use crate::solicit::frame::settings::HttpSettings;
-    pub use crate::solicit::WindowSize;
+    pub use crate::solicit::window_size::WindowSize;
     pub use crate::solicit::DEFAULT_SETTINGS;
 
     pub mod solicit {

@@ -14,7 +14,7 @@ use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::solicit::session::StreamState;
 use crate::solicit::stream_id::StreamId;
-use crate::solicit::WindowSize;
+use crate::solicit::window_size::WindowSize;
 use crate::ErrorCode;
 
 #[derive(Default)]

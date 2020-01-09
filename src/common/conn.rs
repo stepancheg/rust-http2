@@ -31,7 +31,7 @@ use crate::common::conn_write::ConnWriteSideCustom;
 use crate::common::init_where::InitWhere;
 use crate::hpack;
 use crate::solicit::stream_id::StreamId;
-use crate::solicit::WindowSize;
+use crate::solicit::window_size::WindowSize;
 use crate::ErrorCode;
 use futures::channel::oneshot;
 use futures::future;
