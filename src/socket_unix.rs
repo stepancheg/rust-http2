@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use tokio::runtime::Handle;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SocketAddrUnix(pub(crate) PathBuf);
 
 impl From<PathBuf> for SocketAddrUnix {

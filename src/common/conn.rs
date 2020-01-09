@@ -113,8 +113,9 @@ impl<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> Drop for Conn<T, I> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 pub struct ConnStateSnapshot {
+    pub peer_addr: AnySocketAddr,
     pub in_window_size: i32,
     pub out_window_size: i32,
     pub pump_out_window_size: isize,
@@ -224,6 +225,7 @@ where
 
     pub fn dump_state(&self) -> ConnStateSnapshot {
         ConnStateSnapshot {
+            peer_addr: self.peer_addr.clone(),
             in_window_size: self.in_window_size.0,
             out_window_size: self.out_window_size.0,
             pump_out_window_size: self.pump_out_window_size.get(),
