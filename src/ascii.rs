@@ -5,7 +5,9 @@ use std::str;
 
 use bytes::Bytes;
 use std::fmt;
-use std::str::Utf8Error;
+
+#[derive(Debug)]
+pub struct AsciiError(());
 
 /// Bytes wrapper that guarantees that contained bytes are ASCII.
 #[derive(Eq, PartialEq, Hash, Clone)]
@@ -16,11 +18,13 @@ impl Ascii {
         Ascii(Bytes::new())
     }
 
-    pub fn from_utf8(b: Bytes) -> Result<Ascii, (Utf8Error, Bytes)> {
-        if let Err(e) = str::from_utf8(&b) {
-            return Err((e, b));
+    pub fn from_utf8(bs: Bytes) -> Result<Ascii, (AsciiError, Bytes)> {
+        for &b in &bs {
+            if b > i8::max_value() as u8 {
+                return Err((AsciiError(()), bs));
+            }
         }
-        Ok(Ascii(b))
+        Ok(Ascii(bs))
     }
 
     pub fn as_str(&self) -> &str {
@@ -61,5 +65,16 @@ impl ops::Deref for AsciiLower {
 impl<'a> From<&'a str> for AsciiLower {
     fn from(_s: &'a str) -> AsciiLower {
         unimplemented!()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ascii::Ascii;
+    use bytes::Bytes;
+
+    #[test]
+    fn from_utf8() {
+        assert!(Ascii::from_utf8(Bytes::from_static("ю".as_bytes())).is_err());
     }
 }
