@@ -2,8 +2,8 @@ extern crate env_logger;
 extern crate httpbis;
 extern crate httpbis_h2spec_test;
 
+use std::io;
 use std::sync::Arc;
-use std::thread;
 
 fn main() {
     log_ndc_env_logger::init();
@@ -13,8 +13,12 @@ fn main() {
         .service
         .set_service("/", Arc::new(httpbis_h2spec_test::Ok200));
     server.set_port(8888);
-    let _server = server.build().expect("server.build()");
+    let server = server.build().expect("server.build()");
     loop {
-        thread::park();
+        let mut line = String::new();
+        io::stdin().read_line(&mut line).unwrap();
+
+        let state = futures::executor::block_on(server.dump_state()).unwrap();
+        println!("{:#?}", state);
     }
 }

@@ -270,6 +270,7 @@ impl ServerState {
     }
 }
 
+#[derive(Debug)]
 pub struct ServerStateSnapshot {
     pub conns: HashMap<u64, ConnStateSnapshot>,
 }
