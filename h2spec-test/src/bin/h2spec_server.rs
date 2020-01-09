@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 
 fn main() {
-    env_logger::init();
+    log_ndc_env_logger::init();
 
     let mut server = httpbis::ServerBuilder::new_plain();
     server
