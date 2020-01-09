@@ -2,6 +2,7 @@ extern crate env_logger;
 extern crate httpbis;
 extern crate httpbis_h2spec_test;
 
+use std::env;
 use std::process;
 use std::sync::Arc;
 
@@ -17,6 +18,7 @@ fn main() {
 
     let mut h2spec = process::Command::new("h2spec")
         .args(&["-p", "8888", "-v"])
+        .args(env::args().skip(1))
         .stdin(process::Stdio::null())
         .stdout(process::Stdio::inherit())
         .stderr(process::Stdio::inherit())
