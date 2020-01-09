@@ -150,6 +150,6 @@ fn main() {
     match &args[1..] {
         &["request"] => request(),
         &["ping-pong"] => ping_pong(),
-        _ => panic!("usage: {} <mode>"),
+        _ => panic!("usage: {} <mode>", args[0]),
     }
 }
