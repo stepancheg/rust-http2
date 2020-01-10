@@ -90,7 +90,7 @@ fn decode_integer(buf: &[u8], prefix_size: u8) -> Result<(usize, usize), Decoder
 ///
 /// Returns the decoded string in a newly allocated `Vec` and the number of
 /// bytes consumed from the given buffer.
-fn decode_string(buf: &[u8]) -> Result<(Bytes, usize), DecoderError> {
+fn decode_string(buf: &Bytes) -> Result<(Bytes, usize), DecoderError> {
     let (len, consumed) = decode_integer(buf, 7)?;
     debug!("decode_string: Consumed = {}, len = {}", consumed, len);
     if consumed + len > buf.len() {
@@ -98,13 +98,13 @@ fn decode_string(buf: &[u8]) -> Result<(Bytes, usize), DecoderError> {
             StringDecodingError::NotEnoughOctets,
         ));
     }
-    let raw_string = &buf[consumed..consumed + len];
+    let raw_string = buf.slice(consumed..consumed + len);
     if buf[0] & 128 == 128 {
         debug!("decode_string: Using the Huffman code");
         // Huffman coding used: pass the raw octets to the Huffman decoder
         // and return its result.
         let mut decoder = HuffmanDecoder::new();
-        let decoded = match decoder.decode(raw_string) {
+        let decoded = match decoder.decode(&raw_string) {
             Err(e) => {
                 return Err(DecoderError::StringDecodingError(
                     StringDecodingError::HuffmanDecoderError(e),
@@ -116,7 +116,7 @@ fn decode_string(buf: &[u8]) -> Result<(Bytes, usize), DecoderError> {
     } else {
         // The octets were transmitted raw
         debug!("decode_string: Raw octet string received");
-        Ok((Bytes::copy_from_slice(raw_string), consumed + len))
+        Ok((raw_string, consumed + len))
     }
 }
 
@@ -280,7 +280,7 @@ impl Decoder {
                 }
                 FieldRepresentation::LiteralWithIncrementalIndexing => {
                     let ((name, value), consumed) = {
-                        let ((name, value), consumed) = self.decode_literal(&buf[..], true)?;
+                        let ((name, value), consumed) = self.decode_literal(&buf, true)?;
                         cb(name.clone(), value.clone());
 
                         ((name, value), consumed)
@@ -295,7 +295,7 @@ impl Decoder {
                     consumed
                 }
                 FieldRepresentation::LiteralWithoutIndexing => {
-                    let ((name, value), consumed) = self.decode_literal(&buf[..], false)?;
+                    let ((name, value), consumed) = self.decode_literal(&buf, false)?;
                     cb(name, value);
 
                     consumed
@@ -305,7 +305,7 @@ impl Decoder {
                     // we would need to make sure not to change the
                     // representation received here. We don't care about this
                     // for now.
-                    let ((name, value), consumed) = self.decode_literal(&buf[..], false)?;
+                    let ((name, value), consumed) = self.decode_literal(&buf, false)?;
                     cb(name, value);
 
                     consumed
@@ -385,9 +385,9 @@ impl Decoder {
     ///
     /// - index: whether or not the decoded value should be indexed (i.e.
     ///   included in the dynamic table).
-    fn decode_literal<'b>(
-        &'b self,
-        buf: &'b [u8],
+    fn decode_literal(
+        &self,
+        buf: &Bytes,
         index: bool,
     ) -> Result<((Bytes, Bytes), usize), DecoderError> {
         let prefix = if index { 6 } else { 4 };
@@ -396,7 +396,7 @@ impl Decoder {
         // First read the name appropriately
         let name = if table_index == 0 {
             // Read name string as literal
-            let (name, name_len) = decode_string(&buf[consumed..])?;
+            let (name, name_len) = decode_string(&buf.slice(consumed..))?;
             consumed += name_len;
             name
         } else {
@@ -406,7 +406,7 @@ impl Decoder {
         };
 
         // Now read the value as a literal...
-        let (value, value_len) = decode_string(&buf[consumed..])?;
+        let (value, value_len) = decode_string(&buf.slice(consumed..))?;
         consumed += value_len;
 
         Ok(((name, value), consumed))
@@ -450,11 +450,16 @@ mod tests {
 
     use super::super::encoder::encode_integer;
     use super::super::huffman::HuffmanDecoderError;
-    use super::decode_string;
     use super::Decoder;
+    use super::DecoderError;
+    use super::DecoderResult;
     use super::FieldRepresentation;
-    use super::{DecoderError, DecoderResult};
-    use super::{IntegerDecodingError, StringDecodingError};
+    use super::IntegerDecodingError;
+    use super::StringDecodingError;
+
+    fn decode_string(s: &[u8]) -> Result<(Bytes, usize), DecoderError> {
+        super::decode_string(&Bytes::copy_from_slice(s))
+    }
 
     /// Tests that valid integer encodings are properly decoded.
     #[test]
