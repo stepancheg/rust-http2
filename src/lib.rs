@@ -1,3 +1,5 @@
+#![deny(intra_doc_link_resolution_failure)]
+
 //! Asynchnous HTTP/2 client and server implementation.
 //!
 //! Based on futures/tokio.
