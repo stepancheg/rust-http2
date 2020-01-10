@@ -279,7 +279,7 @@ mod tests {
     /// A `bool` indicating whether such a decoding can be performed.
     fn is_decodable(buf: &Vec<u8>, headers: &[(Vec<u8>, Vec<u8>)]) -> bool {
         let mut decoder = Decoder::new();
-        match decoder.decode(buf).ok() {
+        match decoder.decode_for_test(&buf[..]).ok() {
             Some(h) => {
                 h == headers
                     .iter()

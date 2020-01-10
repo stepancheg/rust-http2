@@ -3,6 +3,7 @@
 use std::io;
 use std::io::Read;
 use std::io::Write;
+use std::mem;
 
 use std::net;
 use std::net::ToSocketAddrs;
@@ -376,10 +377,10 @@ impl HttpConnTester {
     }
 
     pub fn recv_frame_headers_decode(&mut self) -> (HeadersFrame, Headers, u32) {
-        let (frame, cont_count) = self.recv_frame_headers_continuation();
+        let (mut frame, cont_count) = self.recv_frame_headers_continuation();
         let headers = self
             .decoder
-            .decode(frame.header_fragment())
+            .decode(mem::take(&mut frame.header_fragment))
             .expect("decode");
         let headers = Headers::from_vec(
             headers
@@ -461,7 +462,7 @@ impl HttpConnTester {
                     let end_of_stream = headers_frame.is_end_of_stream();
                     let headers = self
                         .decoder
-                        .decode(headers_frame.header_fragment())
+                        .decode(headers_frame.header_fragment)
                         .expect("decode");
                     let headers = Headers::from_vec(
                         headers

@@ -6,6 +6,7 @@
 //! headers as opaque octets.
 use std::num::Wrapping;
 
+use bytes::Buf;
 use bytes::Bytes;
 
 use super::huffman::HuffmanDecoder;
@@ -258,32 +259,28 @@ impl Decoder {
     ///
     /// If an error is encountered during the decoding of any header, decoding halts and the
     /// appropriate error is returned as the `Err` variant of the `Result`.
-    pub fn decode_with_cb<F>(&mut self, buf: &[u8], mut cb: F) -> Result<(), DecoderError>
+    pub fn decode_with_cb<F>(&mut self, mut buf: Bytes, mut cb: F) -> Result<(), DecoderError>
     where
         F: FnMut(Bytes, Bytes),
     {
-        let mut current_octet_index = 0;
-
         let mut current_size_update = true;
 
-        while current_octet_index < buf.len() {
+        while buf.has_remaining() {
             // At this point we are always at the beginning of the next block
             // within the HPACK data.
             // The type of the block can always be determined from the first
             // byte.
-            let initial_octet = buf[current_octet_index];
-            let buffer_leftover = &buf[current_octet_index..];
+            let initial_octet = buf[0];
             let consumed = match FieldRepresentation::new(initial_octet) {
                 FieldRepresentation::Indexed => {
-                    let ((name, value), consumed) = self.decode_indexed(buffer_leftover)?;
+                    let ((name, value), consumed) = self.decode_indexed(&buf[..])?;
                     cb(name, value);
 
                     consumed
                 }
                 FieldRepresentation::LiteralWithIncrementalIndexing => {
                     let ((name, value), consumed) = {
-                        let ((name, value), consumed) =
-                            self.decode_literal(buffer_leftover, true)?;
+                        let ((name, value), consumed) = self.decode_literal(&buf[..], true)?;
                         cb(name.clone(), value.clone());
 
                         ((name, value), consumed)
@@ -298,7 +295,7 @@ impl Decoder {
                     consumed
                 }
                 FieldRepresentation::LiteralWithoutIndexing => {
-                    let ((name, value), consumed) = self.decode_literal(buffer_leftover, false)?;
+                    let ((name, value), consumed) = self.decode_literal(&buf[..], false)?;
                     cb(name, value);
 
                     consumed
@@ -308,7 +305,7 @@ impl Decoder {
                     // we would need to make sure not to change the
                     // representation received here. We don't care about this
                     // for now.
-                    let ((name, value), consumed) = self.decode_literal(buffer_leftover, false)?;
+                    let ((name, value), consumed) = self.decode_literal(&buf[..], false)?;
                     cb(name, value);
 
                     consumed
@@ -319,11 +316,11 @@ impl Decoder {
                     }
 
                     // Handle the dynamic table size update...
-                    self.update_max_dynamic_size(buffer_leftover)?
+                    self.update_max_dynamic_size(&buf[..])?
                 }
             };
 
-            current_octet_index += consumed;
+            buf.advance(consumed);
 
             match FieldRepresentation::new(initial_octet) {
                 FieldRepresentation::SizeUpdate => {}
@@ -342,12 +339,20 @@ impl Decoder {
     /// The buffer should represent the entire block that should be decoded.
     /// For example, in HTTP/2, all continuation frames need to be concatenated
     /// to a single buffer before passing them to the decoder.
-    pub fn decode(&mut self, buf: &[u8]) -> DecoderResult {
+    pub fn decode(&mut self, buf: Bytes) -> DecoderResult {
         let mut header_list = Vec::new();
 
         self.decode_with_cb(buf, |n, v| header_list.push((n, v)))?;
 
         Ok(header_list)
+    }
+
+    #[cfg(test)]
+    pub fn decode_for_test<B>(&mut self, buf: B) -> DecoderResult
+    where
+        B: AsRef<[u8]>,
+    {
+        self.decode(Bytes::copy_from_slice(buf.as_ref()))
     }
 
     /// Decodes an indexed header representation.
@@ -678,7 +683,7 @@ mod tests {
     fn test_decode_fully_in_static_table() {
         let mut decoder = Decoder::new();
 
-        let header_list = decoder.decode(&[0x82]).unwrap();
+        let header_list = decoder.decode_for_test(&[0x82]).unwrap();
 
         assert_eq!(
             vec![(Bytes::from(&b":method"[..]), Bytes::from(&b"GET"[..]))],
@@ -690,7 +695,7 @@ mod tests {
     fn test_decode_multiple_fully_in_static_table() {
         let mut decoder = Decoder::new();
 
-        let header_list = decoder.decode(&[0x82, 0x86, 0x84]).unwrap();
+        let header_list = decoder.decode_for_test(&[0x82, 0x86, 0x84]).unwrap();
 
         assert_eq!(
             header_list,
@@ -712,7 +717,7 @@ mod tests {
             0x04, 0x0c, 0x2f, 0x73, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2f, 0x70, 0x61, 0x74, 0x68,
         ];
 
-        let header_list = decoder.decode(&hex_dump).unwrap();
+        let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
         assert_eq!(
             header_list,
@@ -736,7 +741,7 @@ mod tests {
             0x75, 0x73, 0x74, 0x6f, 0x6d, 0x2d, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
         ];
 
-        let header_list = decoder.decode(&hex_dump).unwrap();
+        let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
         assert_eq!(
             header_list,
@@ -764,7 +769,7 @@ mod tests {
                 0x75, 0x73, 0x74, 0x6f, 0x6d, 0x2d, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -799,7 +804,7 @@ mod tests {
                 0x2d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -830,7 +835,7 @@ mod tests {
             0x72, 0x65, 0x74,
         ];
 
-        let header_list = decoder.decode(&hex_dump).unwrap();
+        let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
         assert_eq!(
             header_list,
@@ -853,7 +858,7 @@ mod tests {
                 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -879,7 +884,7 @@ mod tests {
                 0x82, 0x86, 0x84, 0xbe, 0x58, 0x08, 0x6e, 0x6f, 0x2d, 0x63, 0x61, 0x63, 0x68, 0x65,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -913,7 +918,7 @@ mod tests {
                 0x65,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -961,7 +966,7 @@ mod tests {
                 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump[..]).unwrap();
 
             assert_eq!(
                 header_list,
@@ -995,7 +1000,7 @@ mod tests {
             // Second Response (C.5.2.)
             let hex_dump = [0x48, 0x03, 0x33, 0x30, 0x37, 0xc1, 0xc0, 0xbf];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -1038,7 +1043,7 @@ mod tests {
                 0x36, 0x30, 0x30, 0x3b, 0x20, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x3d, 0x31,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump[..]).unwrap();
 
             let expected_header_list = [
                 (Bytes::from(&b":status"[..]), Bytes::from(&b"200"[..])),
@@ -1094,7 +1099,7 @@ mod tests {
                 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump[..]).unwrap();
 
             assert_eq!(
                 header_list,
@@ -1133,7 +1138,7 @@ mod tests {
                 0x20,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             // Headers have been correctly decoded...
             assert_eq!(
@@ -1175,7 +1180,7 @@ mod tests {
                 0x90, 0xf4, 0xff,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -1201,7 +1206,7 @@ mod tests {
                 0x82, 0x86, 0x84, 0xbe, 0x58, 0x86, 0xa8, 0xeb, 0x10, 0x64, 0x9c, 0xbf,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -1234,7 +1239,7 @@ mod tests {
                 0x89, 0x25, 0xa8, 0x49, 0xe9, 0x5b, 0xb8, 0xe8, 0xb4, 0xbf,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -1281,7 +1286,7 @@ mod tests {
                 0x63, 0xc7, 0x8f, 0x0b, 0x97, 0xc8, 0xe9, 0xae, 0x82, 0xae, 0x43, 0xd3,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump[..]).unwrap();
 
             assert_eq!(
                 header_list,
@@ -1315,7 +1320,7 @@ mod tests {
             // Second Response (C.6.2.)
             let hex_dump = [0x48, 0x83, 0x64, 0x0e, 0xff, 0xc1, 0xc0, 0xbf];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump).unwrap();
 
             assert_eq!(
                 header_list,
@@ -1357,7 +1362,7 @@ mod tests {
                 0x03, 0xed, 0x4e, 0xe5, 0xb1, 0x06, 0x3d, 0x50, 0x07,
             ];
 
-            let header_list = decoder.decode(&hex_dump).unwrap();
+            let header_list = decoder.decode_for_test(&hex_dump[..]).unwrap();
 
             let expected_header_list = [
                 (Bytes::from(&b":status"[..]), Bytes::from(&b"200"[..])),
@@ -1434,7 +1439,7 @@ mod tests {
             assert!(
                 is_decoder_error(
                     &DecoderError::HeaderIndexOutOfBounds,
-                    &decoder.decode(&raw_message)
+                    &decoder.decode(Bytes::copy_from_slice(&raw_message))
                 ),
                 "Expected index out of bounds"
             );
@@ -1453,7 +1458,7 @@ mod tests {
             0x90, 0xf4, 0xfe,
         ];
 
-        assert!(match decoder.decode(&hex_dump) {
+        assert!(match decoder.decode_for_test(&hex_dump) {
             Err(DecoderError::StringDecodingError(StringDecodingError::HuffmanDecoderError(
                 HuffmanDecoderError::InvalidPadding,
             ))) => true,
@@ -1472,7 +1477,7 @@ mod tests {
             0x40, 0x0a, b'c', b'u', b's', b't', b'o', b'm', b'-', b'k', b'e',
         ];
 
-        let result = decoder.decode(&hex_dump);
+        let result = decoder.decode_for_test(&hex_dump);
 
         assert!(match result {
             Err(DecoderError::StringDecodingError(StringDecodingError::NotEnoughOctets)) => true,
@@ -1491,7 +1496,7 @@ mod tests {
             0x40, 0x0a, b'c', b'u', b's', b't', b'o', b'm', b'-', b'k', b'e', b'y',
         ];
 
-        let result = decoder.decode(&hex_dump);
+        let result = decoder.decode_for_test(&hex_dump);
 
         assert!(match result {
             Err(DecoderError::IntegerDecodingError(IntegerDecodingError::NotEnoughOctets)) => true,

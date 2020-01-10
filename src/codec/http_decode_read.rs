@@ -44,7 +44,7 @@ impl<R: AsyncRead + Unpin> HttpDecodeRead<R> {
         Poll::Ready(Ok(HttpFrameDecodedOrGoaway::Frame(match frame {
             HttpFrame::Data(frame) => HttpFrameDecoded::Data(frame),
             HttpFrame::Headers(frame) => {
-                let headers = match self.decoder.decode(&frame.header_fragment()) {
+                let headers = match self.decoder.decode(frame.header_fragment) {
                     Err(e) => {
                         warn!("failed to decode headers: {:?}", e);
                         return Poll::Ready(Ok(HttpFrameDecodedOrGoaway::SendGoaway(
