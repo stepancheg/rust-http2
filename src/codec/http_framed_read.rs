@@ -104,49 +104,63 @@ impl<R: AsyncRead + Unpin> HttpFramedRead<R> {
     }
 }
 
-enum Continuable {
+enum ContinuableFrame {
     Headers(HeadersFrame),
     PushPromise(PushPromiseFrame),
 }
 
+struct Continuable {
+    header_fragment: BytesMut,
+    /// Note frame contatains a header fragment, but it is not used
+    frame: ContinuableFrame,
+}
+
 impl Continuable {
-    fn into_frame(self) -> HttpFrame {
-        match self {
-            Continuable::Headers(headers) => HttpFrame::Headers(headers),
-            Continuable::PushPromise(push_promise) => HttpFrame::PushPromise(push_promise),
+    fn headers(header: HeadersFrame) -> Continuable {
+        Continuable {
+            header_fragment: BytesMut::from(&header.header_fragment[..]),
+            frame: ContinuableFrame::Headers(header),
+        }
+    }
+
+    fn push_promise(push_promise: PushPromiseFrame) -> Continuable {
+        Continuable {
+            header_fragment: BytesMut::from(&push_promise.header_fragment[..]),
+            frame: ContinuableFrame::PushPromise(push_promise),
+        }
+    }
+
+    fn into_frame(mut self) -> HttpFrame {
+        let header_fragment = match &mut self.frame {
+            ContinuableFrame::Headers(headers) => &mut headers.header_fragment,
+            ContinuableFrame::PushPromise(push_promise) => &mut push_promise.header_fragment,
+        };
+        *header_fragment = self.header_fragment.freeze();
+        match self.frame {
+            ContinuableFrame::Headers(headers) => HttpFrame::Headers(headers),
+            ContinuableFrame::PushPromise(push_promise) => HttpFrame::PushPromise(push_promise),
         }
     }
 
     fn extend_header_fragment(&mut self, bytes: Bytes) {
-        let header_fragment = match self {
-            &mut Continuable::Headers(ref mut headers) => &mut headers.header_fragment,
-            &mut Continuable::PushPromise(ref mut push_promise) => {
-                &mut push_promise.header_fragment
-            }
-        };
-
-        // TODO: quadratic
-        let mut bm = BytesMut::new();
-        bm.extend_from_slice(&header_fragment[..]);
-        bm.extend_from_slice(&bytes[..]);
-        *header_fragment = bm.freeze();
+        self.header_fragment.extend_from_slice(&bytes[..]);
     }
 
     fn set_end_headers(&mut self) {
-        match self {
-            &mut Continuable::Headers(ref mut headers) => {
+        match self.frame {
+            ContinuableFrame::Headers(ref mut headers) => {
                 headers.flags.set(HeadersFlag::EndHeaders)
             }
-            &mut Continuable::PushPromise(ref mut push_promise) => {
+            ContinuableFrame::PushPromise(ref mut push_promise) => {
                 push_promise.flags.set(PushPromiseFlag::EndHeaders)
             }
         }
     }
 
     fn get_stream_id(&self) -> StreamId {
-        match self {
-            &Continuable::Headers(ref headers) => headers.stream_id,
-            &Continuable::PushPromise(ref push_promise) => push_promise.stream_id,
+        match self.frame {
+            ContinuableFrame::Headers(ref headers) => headers.stream_id,
+            ContinuableFrame::PushPromise(ref push_promise) => push_promise.stream_id,
         }
     }
 }
@@ -186,7 +200,7 @@ impl<R: AsyncRead + Unpin> HttpFramedJoinContinuationRead<R> {
                         if h.flags.is_set(HeadersFlag::EndHeaders) {
                             return Poll::Ready(Ok(HttpFrame::Headers(h)));
                         } else {
-                            self.header_opt = Some(Continuable::Headers(h));
+                            self.header_opt = Some(Continuable::headers(h));
                             continue;
                         }
                     }
@@ -200,7 +214,7 @@ impl<R: AsyncRead + Unpin> HttpFramedJoinContinuationRead<R> {
                         if p.flags.is_set(PushPromiseFlag::EndHeaders) {
                             return Poll::Ready(Ok(HttpFrame::PushPromise(p)));
                         } else {
-                            self.header_opt = Some(Continuable::PushPromise(p));
+                            self.header_opt = Some(Continuable::push_promise(p));
                             continue;
                         }
                     }
