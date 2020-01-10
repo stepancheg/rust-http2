@@ -18,6 +18,10 @@ else
 
     # Use one thread for better errors
     cargo test --all --all-targets -- --test-threads=1
+
+    # `--all-targets` does not include doctests
+    # https://github.com/rust-lang/cargo/issues/6669
+    cargo test --doc
 fi
 
 # vim: set ts=4 sw=4 et:
