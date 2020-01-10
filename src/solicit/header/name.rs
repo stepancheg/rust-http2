@@ -303,13 +303,6 @@ impl HeaderName {
                 }
             }
 
-            for &b in &name {
-                // TODO: restrict more
-                if b >= b'A' && b <= b'Z' {
-                    return Err((HeaderError::IncorrectCharInName, name.clone()));
-                }
-            }
-
             HeaderName(HeaderNameEnum::Regular(RegularHeaderName::from_bytes(
                 name,
             )?))
