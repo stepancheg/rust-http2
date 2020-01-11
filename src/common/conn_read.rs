@@ -229,8 +229,6 @@ where
     fn process_settings_req(&mut self, frame: SettingsFrame) -> result::Result<()> {
         assert!(!frame.is_ack());
 
-        let mut out_window_increased = false;
-
         for setting in frame.settings {
             match setting {
                 HttpSetting::InitialWindowSize(new_size) => {
@@ -248,10 +246,6 @@ where
 
                     if delta != 0 {
                         self.streams.add_out_window(delta);
-
-                        if !self.streams.is_empty() && delta > 0 {
-                            out_window_increased = true;
-                        }
                     }
                 }
                 HttpSetting::HeaderTableSize(_new_size) => {}
@@ -262,10 +256,6 @@ where
         }
 
         self.send_ack_settings()?;
-
-        if out_window_increased {
-            self.out_window_increased(None)?;
-        }
 
         Ok(())
     }
@@ -282,8 +272,6 @@ where
         &mut self,
         frame: WindowUpdateFrame,
     ) -> result::Result<Option<HttpStreamRef<T>>> {
-        self.out_window_increased(Some(frame.stream_id))?;
-
         let mut stream =
             match self.get_stream_maybe_send_error(frame.stream_id, HttpFrameType::WindowUpdate)? {
                 Some(s) => s,
@@ -314,6 +302,7 @@ where
 
         let mut stream = self.streams.get_mut(frame.stream_id).unwrap();
 
+        // TODO: push pump increase inside stream.try_increase_window_size
         stream
             .stream()
             .pump_out_window
@@ -347,8 +336,7 @@ where
         );
 
         self.pump_out_window_size.increase(frame.increment as usize);
-
-        self.out_window_increased(None)
+        Ok(())
     }
 
     fn process_rst_stream_frame(
