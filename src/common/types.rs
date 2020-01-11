@@ -9,7 +9,8 @@ use crate::req_resp::RequestOrResponse;
 use crate::solicit::stream_id::StreamId;
 
 /// Client or server type names for connection and stream
-pub(crate) trait Types: Clone + Unpin + 'static {
+// Note `Default` and `Clone` are needed only for derive to work
+pub(crate) trait Types: Default + Clone + Unpin + 'static {
     type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific: HttpStreamDataSpecific;
     type ConnSpecific: ConnSpecific;

@@ -7,7 +7,7 @@ use crate::server::conn::ServerStreamData;
 use crate::server::conn::ServerToWriteMessage;
 use crate::server::stream_handler::ServerStreamHandlerHolder;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct ServerTypes;
 
 impl Types for ServerTypes {

@@ -43,6 +43,7 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::task::Context;
 use std::collections::HashSet;
+use std::mem;
 use std::sync::Arc;
 use std::task::Poll;
 use tokio::io::split;
@@ -108,9 +109,7 @@ pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
 
 impl<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> Drop for Conn<T, I> {
     fn drop(&mut self) {
-        for (_, stream) in self.streams.map.drain() {
-            stream.conn_died(self.conn_died_error_holder.error());
-        }
+        mem::take(&mut self.streams).conn_died(|| self.conn_died_error_holder.error());
     }
 }
 

@@ -7,7 +7,7 @@ use crate::common::client_or_server::ClientOrServer;
 use crate::common::types::Types;
 use crate::req_resp::RequestOrResponse;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ClientTypes;
 
 impl Types for ClientTypes {

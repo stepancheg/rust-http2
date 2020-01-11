@@ -247,23 +247,9 @@ where
                     let delta = (new_size as i32) - (old_size as i32);
 
                     if delta != 0 {
-                        for (_, s) in &mut self.streams.map {
-                            // In addition to changing the flow-control window for streams
-                            // that are not yet active, a SETTINGS frame can alter the initial
-                            // flow-control window size for streams with active flow-control windows
-                            // (that is, streams in the "open" or "half-closed (remote)" state).
-                            // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
-                            // a receiver MUST adjust the size of all stream flow-control windows
-                            // that it maintains by the difference between the new value
-                            // and the old value.
-                            // TODO: handle overflow
-                            s.out_window_size.try_add(delta).unwrap();
-                            s.pump_out_window.increase(delta as isize);
-                        }
+                        self.streams.add_out_window(delta);
 
-                        self.streams.sync_is_writable();
-
-                        if !self.streams.map.is_empty() && delta > 0 {
+                        if !self.streams.is_empty() && delta > 0 {
                             out_window_increased = true;
                         }
                     }

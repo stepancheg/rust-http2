@@ -15,11 +15,11 @@ use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::solicit::session::StreamState;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::window_size::WindowSize;
-use crate::ErrorCode;
+use crate::{error, ErrorCode};
 
 #[derive(Default)]
 pub(crate) struct StreamMap<T: Types> {
-    pub map: HashMap<StreamId, HttpStreamCommon<T>>,
+    map: HashMap<StreamId, HttpStreamCommon<T>>,
     // This field must be kept in sync with stream state.
     writable_streams: HashSetShallowClone<StreamId>,
 }
@@ -71,7 +71,7 @@ impl<T: Types> StreamMap<T> {
         self.map.get(&id).map(|s| s.state)
     }
 
-    pub fn sync_is_writable(&mut self) {
+    fn sync_is_writable(&mut self) {
         self.writable_streams = self
             .map
             .iter()
@@ -83,6 +83,25 @@ impl<T: Types> StreamMap<T> {
                 }
             })
             .collect()
+    }
+
+    /// Increment or decrement each stream out window
+    pub fn add_out_window(&mut self, delta: i32) {
+        for (_, s) in &mut self.map {
+            // In addition to changing the flow-control window for streams
+            // that are not yet active, a SETTINGS frame can alter the initial
+            // flow-control window size for streams with active flow-control windows
+            // (that is, streams in the "open" or "half-closed (remote)" state).
+            // When the value of SETTINGS_INITIAL_WINDOW_SIZE changes,
+            // a receiver MUST adjust the size of all stream flow-control windows
+            // that it maintains by the difference between the new value
+            // and the old value.
+            // TODO: handle overflow
+            s.out_window_size.try_add(delta).unwrap();
+            s.pump_out_window.increase(delta as isize);
+        }
+
+        self.sync_is_writable();
     }
 
     /// Remove locally initiated streams with id > given.
@@ -118,6 +137,15 @@ impl<T: Types> StreamMap<T> {
 
     pub fn snapshot(&self) -> HashMap<StreamId, HttpStreamStateSnapshot> {
         self.map.iter().map(|(&k, s)| (k, s.snapshot())).collect()
+    }
+
+    pub fn conn_died<F>(mut self, error: F)
+    where
+        F: Fn() -> error::Error,
+    {
+        for (_, s) in self.map.drain() {
+            s.conn_died(error());
+        }
     }
 }
 
