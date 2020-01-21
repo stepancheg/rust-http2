@@ -14,53 +14,16 @@ use bytes::Bytes;
 use crate::solicit::header::name::HeaderName;
 use crate::solicit::header::name::PseudoHeaderName;
 use crate::solicit::header::name::PseudoHeaderNameSet;
+use crate::HeaderValue;
 
 pub(crate) mod name;
-
-/// A convenience struct representing a header value.
-pub struct HeaderValue(Bytes);
-
-impl fmt::Debug for HeaderValue {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, fmt)
-    }
-}
-
-impl From<Vec<u8>> for HeaderValue {
-    fn from(vec: Vec<u8>) -> HeaderValue {
-        HeaderValue(Bytes::from(vec))
-    }
-}
-
-impl From<Bytes> for HeaderValue {
-    fn from(bytes: Bytes) -> HeaderValue {
-        HeaderValue(bytes)
-    }
-}
-
-impl<'a> From<&'a [u8]> for HeaderValue {
-    fn from(buf: &'a [u8]) -> HeaderValue {
-        HeaderValue(Bytes::copy_from_slice(buf))
-    }
-}
-
-impl From<String> for HeaderValue {
-    fn from(s: String) -> HeaderValue {
-        From::from(s.into_bytes())
-    }
-}
-
-impl<'a> From<&'a str> for HeaderValue {
-    fn from(s: &'a str) -> HeaderValue {
-        From::from(s.as_bytes())
-    }
-}
+pub(crate) mod value;
 
 /// HTTP/2 header, regular or pseudo-header
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Header {
     name: HeaderName,
-    pub value: Bytes,
+    pub value: HeaderValue,
 }
 
 impl fmt::Debug for Header {
@@ -102,7 +65,7 @@ impl Header {
     /// header name must be lower case.
     pub fn new_validate(name: Bytes, value: Bytes) -> HeaderResult<Header> {
         let name = HeaderName::new_validate(name).map_err(|(e, _)| e)?;
-        Ok(Header { name, value })
+        Ok(Header { name, value: HeaderValue::from(value) })
     }
 
     /// Creates a new `Header` with the given name and value.
@@ -114,7 +77,7 @@ impl Header {
     pub fn new<N: Into<HeaderName>, V: Into<HeaderValue>>(name: N, value: V) -> Header {
         Header {
             name: name.into(),
-            value: value.into().0,
+            value: value.into(),
         }
     }
 
@@ -139,12 +102,12 @@ impl Header {
     }
     /// Return a borrowed representation of the `Header` value.
     pub fn value(&self) -> &[u8] {
-        &self.value
+        self.value.as_slice()
     }
 
     /// name: value
     pub fn format(&self) -> String {
-        format!("{}: {}", self.name(), String::from_utf8_lossy(&self.value))
+        format!("{}: {}", self.name(), String::from_utf8_lossy(self.value.as_slice()))
     }
 
     pub fn is_preudo_header(&self) -> bool {
@@ -166,7 +129,7 @@ impl Header {
             // The only exception to this is the TE header field, which MAY be
             // present in an HTTP/2 request; when it is, it MUST NOT contain any
             // value other than "trailers".
-            if self.value.as_ref() != b"trailers" {
+            if self.value.as_slice() != b"trailers" {
                 return Err(HeaderError::TeCanOnlyContainTrailer);
             }
         }
@@ -312,7 +275,7 @@ impl Headers {
             }
 
             if header_name == PseudoHeaderName::Path {
-                if header.value.is_empty() {
+                if header.value.as_slice().is_empty() {
                     return Err(HeaderError::EmptyValue(header_name));
                 }
             }
