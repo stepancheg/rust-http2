@@ -65,7 +65,10 @@ impl Header {
     /// header name must be lower case.
     pub fn new_validate(name: Bytes, value: Bytes) -> HeaderResult<Header> {
         let name = HeaderName::new_validate(name).map_err(|(e, _)| e)?;
-        Ok(Header { name, value: HeaderValue::from(value) })
+        Ok(Header {
+            name,
+            value: HeaderValue::from(value),
+        })
     }
 
     /// Creates a new `Header` with the given name and value.
@@ -107,7 +110,11 @@ impl Header {
 
     /// name: value
     pub fn format(&self) -> String {
-        format!("{}: {}", self.name(), String::from_utf8_lossy(self.value.as_slice()))
+        format!(
+            "{}: {}",
+            self.name(),
+            String::from_utf8_lossy(self.value.as_slice())
+        )
     }
 
     pub fn is_preudo_header(&self) -> bool {

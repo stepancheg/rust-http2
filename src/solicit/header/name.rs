@@ -111,12 +111,23 @@ struct RegularHeaderName(Ascii);
 
 impl RegularHeaderName {
     pub fn from_bytes(bs: Bytes) -> Result<RegularHeaderName, (HeaderError, Bytes)> {
+        // https://svn.tools.ietf.org/svn/wg/httpbis/specs/rfc7230.html#header.fields
+        //
+        // field-name     = token
+        //
         // token          = 1*<any CHAR except CTLs or separators>
         // separators     = "(" | ")" | "<" | ">" | "@"
         //                | "," | ";" | ":" | "\" | <">
         //                | "/" | "[" | "]" | "?" | "="
         //                | "{" | "}" | SP | HT
-        // field-name     = token
+        //
+        // or?
+        //
+        // token          = 1*tchar
+        // tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+        //                / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+        //                / DIGIT / ALPHA
+        //                ; any VCHAR, except delimiters
 
         if bs.is_empty() {
             return Err((HeaderError::EmptyName, bs));
