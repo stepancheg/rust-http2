@@ -11,11 +11,13 @@ use crate::assert_types::*;
 
 use bytes::Bytes;
 
+use crate::solicit::header::method::{METHOD_GET, METHOD_POST};
 use crate::solicit::header::name::HeaderName;
 use crate::solicit::header::name::PseudoHeaderName;
 use crate::solicit::header::name::PseudoHeaderNameSet;
 use crate::HeaderValue;
 
+pub(crate) mod method;
 pub(crate) mod name;
 pub(crate) mod value;
 
@@ -93,12 +95,17 @@ impl Header {
 
     /// Construct a `:method` `GET` header
     fn method_get() -> Header {
-        Header::method("GET".as_bytes())
+        Header::method(METHOD_GET)
     }
 
     /// Construct a `:path` header
     fn path(path: impl Into<HeaderValue>) -> Header {
         Header::new(PseudoHeaderName::Path, path.into())
+    }
+
+    /// Construct a `:path` header
+    fn status(path: impl Into<HeaderValue>) -> Header {
+        Header::new(PseudoHeaderName::Status, path.into())
     }
 
     /// Return a borrowed representation of the `Header` name.
@@ -228,15 +235,12 @@ impl Headers {
 
     /// Construct a `Headers` object with specified `:method` and `:path` headers
     pub fn new_post(path: impl Into<HeaderValue>) -> Headers {
-        Headers::from_vec(vec![
-            Header::new(":method", "POST"),
-            Header::new(":path", path),
-        ])
+        Headers::from_vec(vec![Header::method(METHOD_POST), Header::path(path)])
     }
 
     /// Construct a `Headers` object with single `:status` header
     pub fn new_status(code: u32) -> Headers {
-        Headers::from_vec(vec![Header::new(":status", format!("{}", code))])
+        Headers::from_vec(vec![Header::status(format!("{}", code))])
     }
 
     /// Construct `:status 200` headers

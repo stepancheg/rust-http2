@@ -53,6 +53,10 @@ impl HeaderValue {
     pub fn as_slice(&self) -> &[u8] {
         self.0.as_bytes()
     }
+
+    pub const unsafe fn from_bytes_unchecked(bytes: Bytes) -> HeaderValue {
+        HeaderValue(Ascii::from_bytes_unchecked(bytes))
+    }
 }
 
 impl fmt::Debug for HeaderValue {
