@@ -38,6 +38,10 @@ impl Ascii {
     pub fn as_str(&self) -> &str {
         unsafe { str::from_utf8_unchecked(self.0.as_ref()) }
     }
+
+    pub fn into_bytes(self) -> Bytes {
+        self.0
+    }
 }
 
 impl ops::Deref for Ascii {

@@ -413,11 +413,11 @@ mod test {
     #[test]
     fn test_debug() {
         assert_eq!(
-            "Header { name: \":method\", value: b\"GET\" }",
+            "Header { name: \":method\", value: \"GET\" }",
             format!("{:?}", Header::new(&b":method"[..], &b"GET"[..]))
         );
         assert_eq!(
-            "Header { name: \":method\", value: b\"\\t\" }",
+            "Header { name: \":method\", value: \"\\t\" }",
             format!("{:?}", Header::new(&b":method"[..], &b"\t"[..]))
         );
     }

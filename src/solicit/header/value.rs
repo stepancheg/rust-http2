@@ -1,10 +1,11 @@
+use crate::ascii::Ascii;
 use crate::solicit::header::HeaderError;
 use bytes::Bytes;
 use std::fmt;
 
 /// A convenience struct representing a header value.
 #[derive(Eq, PartialEq, Hash, Clone)]
-pub struct HeaderValue(Bytes);
+pub struct HeaderValue(Ascii);
 
 impl HeaderValue {
     pub fn from_bytes(bs: Bytes) -> Result<HeaderValue, (HeaderError, Bytes)> {
@@ -42,15 +43,15 @@ impl HeaderValue {
             }
         }
 
-        Ok(HeaderValue(bs))
+        Ok(HeaderValue(unsafe { Ascii::from_bytes_unchecked(bs) }))
     }
 
     pub fn into_inner(self) -> Bytes {
-        self.0
+        self.0.into_bytes()
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        &self.0
+        self.0.as_bytes()
     }
 }
 
