@@ -16,10 +16,12 @@ use crate::solicit::header::method::METHOD_POST;
 use crate::solicit::header::name::HeaderName;
 use crate::solicit::header::name::PseudoHeaderName;
 use crate::solicit::header::name::PseudoHeaderNameSet;
+use crate::solicit::header::status::status_to_header_value;
 use crate::HeaderValue;
 
 pub(crate) mod method;
 pub(crate) mod name;
+pub(crate) mod status;
 pub(crate) mod value;
 
 /// HTTP/2 header, regular or pseudo-header
@@ -105,8 +107,8 @@ impl Header {
     }
 
     /// Construct a `:path` header
-    fn status(path: impl Into<HeaderValue>) -> Header {
-        Header::new(PseudoHeaderName::Status, path.into())
+    fn status(code: u32) -> Header {
+        Header::new(PseudoHeaderName::Status, status_to_header_value(code))
     }
 
     /// Return a borrowed representation of the `Header` name.
@@ -241,7 +243,7 @@ impl Headers {
 
     /// Construct a `Headers` object with single `:status` header
     pub fn new_status(code: u32) -> Headers {
-        Headers::from_vec(vec![Header::status(format!("{}", code))])
+        Headers::from_vec(vec![Header::status(code)])
     }
 
     /// Construct `:status 200` headers
