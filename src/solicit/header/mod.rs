@@ -11,7 +11,8 @@ use crate::assert_types::*;
 
 use bytes::Bytes;
 
-use crate::solicit::header::method::{METHOD_GET, METHOD_POST};
+use crate::solicit::header::method::METHOD_GET;
+use crate::solicit::header::method::METHOD_POST;
 use crate::solicit::header::name::HeaderName;
 use crate::solicit::header::name::PseudoHeaderName;
 use crate::solicit::header::name::PseudoHeaderNameSet;
