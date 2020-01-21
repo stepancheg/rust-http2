@@ -32,7 +32,15 @@ impl HeaderValue {
         // SHOULD limit their field values to US‑ASCII octets. A recipient SHOULD
         // treat other octets in field content (obs‑text) as opaque data.
 
-        // TODO: actually validate
+        for &b in &bs {
+            if !b.is_ascii() {
+                return Err((HeaderError::HeaderValueNotAscii, bs));
+            }
+
+            if (b < b' ' || b > b'~') && b != b'\t' {
+                return Err((HeaderError::IncorrectCharInValue, bs));
+            }
+        }
 
         Ok(HeaderValue(bs))
     }

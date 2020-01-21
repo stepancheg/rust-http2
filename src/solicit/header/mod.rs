@@ -46,7 +46,9 @@ pub enum HeaderError {
     EmptyName,
     EmptyValue(PseudoHeaderName),
     IncorrectCharInName,
+    IncorrectCharInValue,
     HeaderNameNotAscii,
+    HeaderValueNotAscii,
     UnexpectedPseudoHeader(PseudoHeaderName),
     PseudoHeadersInTrailers,
     PseudoHeadersAfterRegularHeaders,
@@ -415,8 +417,8 @@ mod test {
             format!("{:?}", Header::new(&b":method"[..], &b"GET"[..]))
         );
         assert_eq!(
-            "Header { name: \":method\", value: b\"\\xcd\" }",
-            format!("{:?}", Header::new(&b":method"[..], &b"\xcd"[..]))
+            "Header { name: \":method\", value: b\"\\t\" }",
+            format!("{:?}", Header::new(&b":method"[..], &b"\t"[..]))
         );
     }
 }
