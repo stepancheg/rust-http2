@@ -64,6 +64,12 @@ impl AsRef<str> for Ascii {
     }
 }
 
+impl Into<Bytes> for Ascii {
+    fn into(self) -> Bytes {
+        self.0
+    }
+}
+
 impl fmt::Debug for Ascii {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self.as_str(), f)

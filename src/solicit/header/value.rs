@@ -95,6 +95,12 @@ impl<'a> From<&'a str> for HeaderValue {
     }
 }
 
+impl Into<Bytes> for HeaderValue {
+    fn into(self) -> Bytes {
+        self.0.into()
+    }
+}
+
 impl AsRef<[u8]> for HeaderValue {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()

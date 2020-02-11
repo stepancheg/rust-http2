@@ -79,6 +79,12 @@ impl PseudoHeaderName {
     }
 }
 
+impl Into<Bytes> for PseudoHeaderName {
+    fn into(self) -> Bytes {
+        self.name_bytes()
+    }
+}
+
 impl fmt::Display for PseudoHeaderName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self.name(), f)
@@ -156,6 +162,12 @@ impl RegularHeaderName {
     }
 }
 
+impl Into<Bytes> for RegularHeaderName {
+    fn into(self) -> Bytes {
+        self.0.into()
+    }
+}
+
 impl fmt::Display for RegularHeaderName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
@@ -225,6 +237,15 @@ impl From<Vec<u8>> for HeaderName {
 impl From<Bytes> for HeaderName {
     fn from(s: Bytes) -> Self {
         HeaderName::new(s)
+    }
+}
+
+impl Into<Bytes> for HeaderName {
+    fn into(self) -> Bytes {
+        match self.0 {
+            HeaderNameEnum::Pseudo(n) => n.into(),
+            HeaderNameEnum::Regular(n) => n.into(),
+        }
     }
 }
 
