@@ -52,6 +52,18 @@ impl ops::Deref for Ascii {
     }
 }
 
+impl AsRef<[u8]> for Ascii {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<str> for Ascii {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl fmt::Debug for Ascii {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self.as_str(), f)

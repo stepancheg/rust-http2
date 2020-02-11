@@ -228,6 +228,18 @@ impl From<Bytes> for HeaderName {
     }
 }
 
+impl AsRef<[u8]> for HeaderName {
+    fn as_ref(&self) -> &[u8] {
+        self.name().as_bytes()
+    }
+}
+
+impl AsRef<str> for HeaderName {
+    fn as_ref(&self) -> &str {
+        self.name()
+    }
+}
+
 impl HeaderName {
     /// Construct a pseudo header name.
     ///

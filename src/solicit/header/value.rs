@@ -94,3 +94,15 @@ impl<'a> From<&'a str> for HeaderValue {
         HeaderValue::from(s.as_bytes())
     }
 }
+
+impl AsRef<[u8]> for HeaderValue {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<str> for HeaderValue {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
