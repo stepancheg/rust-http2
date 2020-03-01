@@ -27,18 +27,19 @@ use tls_api_native_tls::TlsConnector;
 use tokio::runtime::Runtime;
 
 fn test_tls_acceptor() -> TlsAcceptor {
-    let pkcs12 = include_bytes!("identity.p12");
-    let builder = TlsAcceptorBuilder::from_pkcs12(pkcs12, "mypass").unwrap();
+    let server_keys = &httpbis_test::openssl_test_key_gen::keys().server;
+
+    let builder =
+        TlsAcceptorBuilder::from_pkcs12(&server_keys.pkcs12, &server_keys.pkcs12_password).unwrap();
     builder.build().unwrap()
 }
 
 fn test_tls_connector() -> TlsConnector {
-    let root_ca = include_bytes!("root-ca.der");
-    let root_ca = Certificate::from_der(root_ca.to_vec());
+    let client_keys = &httpbis_test::openssl_test_key_gen::keys().client;
 
     let mut builder = TlsConnector::builder().unwrap();
     builder
-        .add_root_certificate(root_ca)
+        .add_root_certificate(Certificate::from_der(client_keys.cert_der.clone()))
         .expect("add_root_certificate");
     builder.build().unwrap()
 }
@@ -76,7 +77,7 @@ fn tls() {
 
     let client: Client = Client::new_expl(
         socket_addr,
-        ClientTlsOption::Tls("foobar.com".to_owned(), Arc::new(test_tls_connector())),
+        ClientTlsOption::Tls("localhost".to_owned(), Arc::new(test_tls_connector())),
         Default::default(),
     )
     .expect("http client");
