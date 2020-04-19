@@ -59,7 +59,7 @@ mod exec;
 
 mod log_ndc_future;
 
-mod bytes_deque;
+pub(crate) mod bytes_deque;
 
 pub use crate::socket::AnySocketAddr;
 

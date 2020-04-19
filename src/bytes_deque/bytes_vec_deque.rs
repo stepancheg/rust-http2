@@ -43,7 +43,7 @@ impl Into<Vec<u8>> for BytesVecDeque {
 }
 
 impl BytesVecDeque {
-    fn new() -> BytesVecDeque {
+    pub fn new() -> BytesVecDeque {
         Default::default()
     }
 
