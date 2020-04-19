@@ -77,9 +77,10 @@ impl ServerOneConn {
 
                 let conn = listener.accept().map_err(httpbis::Error::from);
 
-                let future = conn.and_then(move |(conn, peer_addr)| {
-                    drop(listener);
+                // TODO: close listening port
+                //drop(listener);
 
+                let future = conn.and_then(move |(conn, peer_addr)| {
                     let (conn, future) = ServerConn::new_plain_single_thread_fn(
                         &handle,
                         conn,
