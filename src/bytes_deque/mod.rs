@@ -1,56 +1,9 @@
-use bytes::{Bytes, BytesMut};
-use std::collections::VecDeque;
+use bytes::{Buf, Bytes};
 use std::mem;
 
-#[derive(Debug)]
-struct BytesVecDeque {
-    deque: VecDeque<Bytes>,
-    len: usize,
-}
-
-impl<I: Into<VecDeque<Bytes>>> From<I> for BytesVecDeque {
-    fn from(deque: I) -> Self {
-        let deque = deque.into();
-        let len = deque.iter().map(Bytes::len).sum();
-        BytesVecDeque { deque, len }
-    }
-}
-
-impl Into<Bytes> for BytesVecDeque {
-    fn into(self) -> Bytes {
-        if self.deque.is_empty() || self.len == 0 {
-            Bytes::new()
-        } else if self.deque.len() == 1 {
-            self.deque.into_iter().next().unwrap()
-        } else {
-            let mut bytes_mut = BytesMut::with_capacity(self.len);
-            for bytes in self.deque {
-                bytes_mut.extend_from_slice(&bytes);
-            }
-            bytes_mut.freeze()
-        }
-    }
-}
-
-impl Into<Vec<u8>> for BytesVecDeque {
-    fn into(self) -> Vec<u8> {
-        let mut v = Vec::with_capacity(self.len);
-        for b in self.deque {
-            v.extend_from_slice(b.as_ref());
-        }
-        v
-    }
-}
-
-impl BytesVecDeque {
-    fn extend(&mut self, bytes: Bytes) {
-        if bytes.is_empty() {
-            return;
-        }
-        self.len += bytes.len();
-        self.deque.push_back(bytes);
-    }
-}
+mod bytes_vec_deque;
+use bytes_vec_deque::BytesVecDeque;
+use std::io::IoSlice;
 
 #[derive(Debug)]
 enum Inner {
@@ -70,7 +23,7 @@ impl BytesDeque {
     pub fn len(&self) -> usize {
         match &self.0 {
             Inner::One(b) => b.len(),
-            Inner::Deque(d) => d.len,
+            Inner::Deque(d) => d.len(),
         }
     }
 
@@ -86,7 +39,7 @@ impl BytesDeque {
             Inner::One(one) => {
                 self.0 = Inner::Deque(BytesVecDeque::from(vec![mem::take(one), bytes]));
             }
-            Inner::Deque(deque) if deque.len == 0 => {
+            Inner::Deque(deque) if deque.len() == 0 => {
                 self.0 = Inner::One(bytes);
             }
             Inner::Deque(deque) => {
@@ -110,6 +63,36 @@ impl Into<Vec<u8>> for BytesDeque {
         match self.0 {
             Inner::One(b) => Vec::from(b.as_ref()),
             Inner::Deque(d) => d.into(),
+        }
+    }
+}
+
+impl Buf for BytesDeque {
+    fn remaining(&self) -> usize {
+        match &self.0 {
+            Inner::One(b) => b.remaining(),
+            Inner::Deque(d) => d.remaining(),
+        }
+    }
+
+    fn bytes(&self) -> &[u8] {
+        match &self.0 {
+            Inner::One(b) => b.bytes(),
+            Inner::Deque(d) => d.bytes(),
+        }
+    }
+
+    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+        match &self.0 {
+            Inner::One(b) => b.bytes_vectored(dst),
+            Inner::Deque(d) => d.bytes_vectored(dst),
+        }
+    }
+
+    fn advance(&mut self, cnt: usize) {
+        match &mut self.0 {
+            Inner::One(b) => b.advance(cnt),
+            Inner::Deque(d) => d.advance(cnt),
         }
     }
 }
