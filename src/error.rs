@@ -87,6 +87,7 @@ pub enum Error {
     PullStreamDied,
     PayloadTooLarge(u32, u32),
     RequestIsMadeUsingHttp1,
+    ListenAddrNotSpecified,
 }
 
 fn _assert_error_sync_send() {
@@ -228,6 +229,7 @@ impl fmt::Display for Error {
             Error::PullStreamDied => write!(f, "Pull stream died"),
             Error::PayloadTooLarge(_, _) => write!(f, "Payload too large"),
             Error::RequestIsMadeUsingHttp1 => write!(f, "Request is made using HTTP/1"),
+            Error::ListenAddrNotSpecified => write!(f, "Listen addr not specified"),
         }
     }
 }
