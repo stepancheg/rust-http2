@@ -61,12 +61,6 @@ impl WriteBuffer {
         self.extend_from_slice(&*data);
     }
 
-    pub fn extend_from_iter(&mut self, iter: impl Iterator<Item = u8>) {
-        // Could do something smarter
-        self.compact();
-        self.data.extend(iter);
-    }
-
     pub fn tail_vec(&mut self) -> WriteBufferTailVec {
         WriteBufferTailVec {
             data: &mut self.data,
