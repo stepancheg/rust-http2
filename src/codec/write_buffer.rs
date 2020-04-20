@@ -88,6 +88,12 @@ impl Buf for WriteBuffer {
     }
 }
 
+impl BufGetBytes for WriteBuffer {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
+        self.deque.get_bytes(cnt)
+    }
+}
+
 impl WriteBuffer {
     pub fn new() -> WriteBuffer {
         Default::default()

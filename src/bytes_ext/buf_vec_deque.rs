@@ -132,7 +132,7 @@ impl<B: BufGetBytes> BufGetBytes for BufVecDeque<B> {
         assert!(cnt <= self.remaining());
 
         match self.deque.front_mut() {
-            Some(front) if front.remaining() <= cnt => {
+            Some(front) if front.remaining() >= cnt => {
                 let r = if front.remaining() == cnt {
                     let mut front = self.deque.pop_front().unwrap();
                     front.get_bytes(cnt)
@@ -242,5 +242,15 @@ mod test {
         assert_eq!(3, d.remaining());
         assert_eq!(Bytes::copy_from_slice(b"cde"), d.get_bytes(3));
         assert_eq!(0, d.remaining());
+    }
+
+    #[test]
+    fn get_bytes_cross_boundary() {
+        let mut d = BufVecDeque::from(vec![
+            Bytes::copy_from_slice(b"ab"),
+            Bytes::copy_from_slice(b"cde"),
+        ]);
+        assert_eq!(Bytes::copy_from_slice(b"abc"), d.get_bytes(3));
+        assert_eq!(2, d.remaining());
     }
 }

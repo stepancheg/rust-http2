@@ -5,6 +5,7 @@ use std::mem;
 pub(crate) mod buf_get_bytes;
 pub(crate) mod buf_vec_deque;
 pub(crate) mod bytes_vec_deque;
+use crate::BufGetBytes;
 use bytes_vec_deque::BytesVecDeque;
 use std::io::IoSlice;
 
@@ -149,6 +150,15 @@ impl Buf for BytesDeque {
         match &mut self.0 {
             Inner::One(b) => b.advance(cnt),
             Inner::Deque(d) => d.advance(cnt),
+        }
+    }
+}
+
+impl BufGetBytes for BytesDeque {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
+        match &mut self.0 {
+            Inner::One(b) => b.get_bytes(cnt),
+            Inner::Deque(d) => d.get_bytes(cnt),
         }
     }
 }
