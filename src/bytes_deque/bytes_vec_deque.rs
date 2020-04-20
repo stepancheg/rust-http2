@@ -57,7 +57,7 @@ impl BytesVecDeque {
         if bytes.is_empty() {
             return;
         }
-        self.deque.extend(bytes);
+        self.deque.push_back(bytes);
     }
 }
 

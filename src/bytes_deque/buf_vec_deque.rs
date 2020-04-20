@@ -38,10 +38,7 @@ impl<B: Buf> BufVecDeque<B> {
         self.len
     }
 
-    pub fn extend(&mut self, bytes: B) {
-        if !bytes.has_remaining() {
-            return;
-        }
+    pub fn push_back(&mut self, bytes: B) {
         self.len += bytes.remaining();
         self.deque.push_back(bytes);
     }
@@ -152,8 +149,8 @@ mod test {
     #[test]
     fn back_mut() {
         let mut d = BufVecDeque::<VecDeque<u8>>::new();
-        d.extend(VecDeque::from(vec![3, 4]));
-        d.extend(VecDeque::from(vec![4, 6]));
+        d.push_back(VecDeque::from(vec![3, 4]));
+        d.push_back(VecDeque::from(vec![4, 6]));
         assert_eq!(4, d.remaining());
         d.back_mut().unwrap().push_back(7);
         assert_eq!(5, d.remaining());
