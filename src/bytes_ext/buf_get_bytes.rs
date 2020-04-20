@@ -10,6 +10,7 @@ use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
 use std::cmp;
+use std::io::Cursor;
 
 /// Get `Bytes` from `Buf`.
 pub trait BufGetBytes: Buf {
@@ -65,6 +66,8 @@ impl BufGetBytes for BytesMut {
 }
 
 impl BufGetBytes for &[u8] {}
+
+impl<A: AsRef<[u8]>> BufGetBytes for Cursor<A> {}
 
 impl<A: BufGetBytes, B: BufGetBytes> BufGetBytes for Chain<A, B> {
     fn get_bytes(&mut self, mut cnt: usize) -> Bytes {

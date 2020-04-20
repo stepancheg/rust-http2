@@ -1,3 +1,5 @@
+use crate::BufGetBytes;
+use bytes::buf::BufExt;
 use bytes::Buf;
 use bytes::BufMut;
 use bytes::Bytes;
@@ -125,6 +127,28 @@ impl<B: Buf> Buf for BufVecDeque<B> {
     }
 }
 
+impl<B: BufGetBytes> BufGetBytes for BufVecDeque<B> {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
+        assert!(cnt <= self.remaining());
+
+        match self.deque.front_mut() {
+            Some(front) if front.remaining() <= cnt => {
+                let r = if front.remaining() == cnt {
+                    let mut front = self.deque.pop_front().unwrap();
+                    front.get_bytes(cnt)
+                } else {
+                    front.get_bytes(cnt)
+                };
+
+                self.len -= cnt;
+                r
+            }
+            Some(_) => self.take(cnt).to_bytes(),
+            None => Bytes::new(),
+        }
+    }
+}
+
 impl<'a, B: Buf> IntoIterator for &'a BufVecDeque<B> {
     type Item = &'a B;
     type IntoIter = vec_deque::Iter<'a, B>;
@@ -203,5 +227,20 @@ mod test {
 
         d.pop_back().unwrap();
         assert_eq!(2, d.remaining());
+    }
+
+    #[test]
+    fn get_bytes() {
+        let mut d = BufVecDeque::from(vec![
+            Bytes::copy_from_slice(b"ab"),
+            Bytes::copy_from_slice(b"cde"),
+        ]);
+
+        assert_eq!(Bytes::copy_from_slice(b"a"), d.get_bytes(1));
+        assert_eq!(4, d.remaining());
+        assert_eq!(Bytes::copy_from_slice(b"b"), d.get_bytes(1));
+        assert_eq!(3, d.remaining());
+        assert_eq!(Bytes::copy_from_slice(b"cde"), d.get_bytes(3));
+        assert_eq!(0, d.remaining());
     }
 }

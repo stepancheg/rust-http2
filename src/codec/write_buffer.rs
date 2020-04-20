@@ -1,6 +1,7 @@
 use crate::bytes_ext::buf_vec_deque::BufVecDeque;
 use crate::codec::zeroes::Zeroes;
 use crate::solicit::frame::FrameHeaderBuffer;
+use crate::BufGetBytes;
 use bytes::Buf;
 use bytes::Bytes;
 use std::io::Cursor;
@@ -48,6 +49,17 @@ impl Buf for Item {
             Item::Bytes(b) => b.advance(cnt),
             Item::FrameHeaderBuffer(v) => v.advance(cnt),
             Item::Zeroes(z) => z.advance(cnt),
+        }
+    }
+}
+
+impl BufGetBytes for Item {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
+        match self {
+            Item::Vec(v) => v.get_bytes(cnt),
+            Item::Bytes(b) => b.get_bytes(cnt),
+            Item::FrameHeaderBuffer(v) => v.get_bytes(cnt),
+            Item::Zeroes(z) => z.get_bytes(cnt),
         }
     }
 }

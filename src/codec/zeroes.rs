@@ -1,4 +1,7 @@
+use crate::BufGetBytes;
+use bytes::buf::BufExt;
 use bytes::Buf;
+use bytes::Bytes;
 use std::cmp;
 use std::io::IoSlice;
 
@@ -34,6 +37,18 @@ impl Buf for Zeroes {
     fn advance(&mut self, cnt: usize) {
         assert!(cnt <= self.0);
         self.0 -= cnt;
+    }
+}
+
+impl BufGetBytes for Zeroes {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
+        assert!(cnt <= self.remaining());
+        if cnt <= ZEROES.len() {
+            self.0 -= cnt;
+            Bytes::from_static(&ZEROES[..cnt])
+        } else {
+            self.take(cnt).to_bytes()
+        }
     }
 }
 
@@ -92,5 +107,27 @@ mod test {
         assert_eq!(2, z.bytes_vectored(&mut s));
         assert_eq!(ZEROES, &*s[0]);
         assert_eq!(ZEROES, &*s[1]);
+    }
+
+    #[test]
+    fn buf_get_bytes() {
+        assert_eq!(ZEROES.as_ptr(), Zeroes(10).get_bytes(7).as_ptr());
+        assert_eq!(&ZEROES[..7], Zeroes(10).get_bytes(7));
+        assert_eq!(3, {
+            let mut z = Zeroes(10);
+            z.get_bytes(7);
+            z.remaining()
+        });
+
+        assert_eq!(
+            ZEROES.as_ptr(),
+            Zeroes(ZEROES.len() * 2 + 1).get_bytes(7).as_ptr()
+        );
+        assert_eq!(&ZEROES[..7], Zeroes(ZEROES.len() * 2 + 1).get_bytes(7));
+
+        assert_eq!(
+            vec![0; ZEROES.len() + 2],
+            Zeroes(ZEROES.len() * 2 + 1).get_bytes(ZEROES.len() + 2)
+        );
     }
 }
