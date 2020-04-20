@@ -1,29 +1,31 @@
-use bytes::{Buf, Bytes, BytesMut};
+use crate::bytes_deque::buf_vec_deque::BufVecDeque;
+use bytes::Buf;
+use bytes::Bytes;
+use bytes::BytesMut;
 use std::collections::VecDeque;
 use std::io::IoSlice;
 
 #[derive(Debug, Default)]
 pub(crate) struct BytesVecDeque {
-    deque: VecDeque<Bytes>,
-    len: usize,
+    deque: BufVecDeque<Bytes>,
 }
 
 impl<I: Into<VecDeque<Bytes>>> From<I> for BytesVecDeque {
     fn from(deque: I) -> Self {
-        let deque = deque.into();
-        let len = deque.iter().map(Bytes::len).sum();
-        BytesVecDeque { deque, len }
+        BytesVecDeque {
+            deque: deque.into().into(),
+        }
     }
 }
 
 impl Into<Bytes> for BytesVecDeque {
     fn into(self) -> Bytes {
-        if self.deque.is_empty() || self.len == 0 {
+        if !self.deque.has_remaining() {
             Bytes::new()
         } else if self.deque.len() == 1 {
             self.deque.into_iter().next().unwrap()
         } else {
-            let mut bytes_mut = BytesMut::with_capacity(self.len);
+            let mut bytes_mut = BytesMut::with_capacity(self.deque.remaining());
             for bytes in self.deque {
                 bytes_mut.extend_from_slice(&bytes);
             }
@@ -34,7 +36,7 @@ impl Into<Bytes> for BytesVecDeque {
 
 impl Into<Vec<u8>> for BytesVecDeque {
     fn into(self) -> Vec<u8> {
-        let mut v = Vec::with_capacity(self.len);
+        let mut v = Vec::with_capacity(self.remaining());
         for b in self.deque {
             v.extend_from_slice(b.as_ref());
         }
@@ -48,58 +50,29 @@ impl BytesVecDeque {
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        self.deque.remaining()
     }
 
     pub fn extend(&mut self, bytes: Bytes) {
-        if bytes.is_empty() {
-            return;
-        }
-        self.len += bytes.len();
-        self.deque.push_back(bytes);
+        self.deque.extend(bytes);
     }
 }
 
 impl Buf for BytesVecDeque {
     fn remaining(&self) -> usize {
-        self.len
+        self.deque.remaining()
     }
 
     fn bytes(&self) -> &[u8] {
-        match self.deque.iter().next() {
-            Some(b) => {
-                assert!(!b.is_empty());
-                b.as_ref()
-            }
-            None => &[],
-        }
+        self.deque.bytes()
     }
 
     fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
-        let mut n = 0;
-        for b in &self.deque {
-            if n == dst.len() {
-                break;
-            }
-            dst[n] = IoSlice::new(b.as_ref());
-            n += 1;
-        }
-        n
+        self.deque.bytes_vectored(dst)
     }
 
     fn advance(&mut self, mut cnt: usize) {
-        assert!(self.len >= cnt);
-        self.len -= cnt;
-
-        while cnt != 0 {
-            let front = self.deque.front_mut().unwrap();
-            if cnt < front.len() {
-                front.advance(cnt);
-                break;
-            }
-
-            cnt -= self.deque.pop_front().unwrap().len();
-        }
+        self.deque.advance(cnt)
     }
 }
 
