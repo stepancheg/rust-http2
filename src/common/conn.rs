@@ -5,8 +5,11 @@ use crate::error;
 use crate::result;
 use crate::AnySocketAddr;
 
-use crate::solicit::frame::settings::HttpSettings;
-use crate::solicit::frame::*;
+use crate::solicit::frame::GoawayFrame;
+use crate::solicit::frame::HttpFrameType;
+use crate::solicit::frame::HttpSettings;
+use crate::solicit::frame::RstStreamFrame;
+use crate::solicit::frame::WindowUpdateFrame;
 use crate::solicit::session::StreamState;
 use crate::solicit::session::StreamStateIdleOrClosed;
 use crate::solicit::DEFAULT_SETTINGS;

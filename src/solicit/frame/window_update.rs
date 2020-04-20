@@ -19,8 +19,11 @@ pub const WINDOW_UPDATE_FRAME_TYPE: u8 = 0x8;
 /// The struct represents the `WINDOW_UPDATE` HTTP/2 frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowUpdateFrame {
+    /// Frame field
     pub stream_id: StreamId,
+    /// Frame field
     pub increment: u32,
+    /// Frame field
     flags: Flags<NoFlag>,
 }
 

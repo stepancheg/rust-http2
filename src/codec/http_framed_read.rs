@@ -3,12 +3,12 @@ use bytes::BytesMut;
 
 use crate::error;
 use crate::result;
-use crate::solicit::frame::headers::HeadersFlag;
-use crate::solicit::frame::push_promise::PushPromiseFlag;
 use crate::solicit::frame::unpack_header_from_slice;
+use crate::solicit::frame::HeadersFlag;
 use crate::solicit::frame::HeadersFrame;
 use crate::solicit::frame::HttpFrame;
 use crate::solicit::frame::HttpFrameType;
+use crate::solicit::frame::PushPromiseFlag;
 use crate::solicit::frame::PushPromiseFrame;
 use crate::solicit::frame::RawFrame;
 use crate::solicit::frame::FRAME_HEADER_LEN;

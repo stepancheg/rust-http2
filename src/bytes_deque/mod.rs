@@ -75,9 +75,35 @@ impl BytesDeque {
     }
 }
 
+impl PartialEq<BytesDeque> for BytesDeque {
+    fn eq(&self, other: &BytesDeque) -> bool {
+        // TODO: slow
+        self.get_bytes() == other.get_bytes()
+    }
+}
+
+impl PartialEq<[u8]> for BytesDeque {
+    fn eq(&self, other: &[u8]) -> bool {
+        // TODO: slow
+        self.get_bytes() == other
+    }
+}
+
 impl From<Bytes> for BytesDeque {
     fn from(b: Bytes) -> Self {
         BytesDeque(Inner::One(b))
+    }
+}
+
+impl From<Vec<u8>> for BytesDeque {
+    fn from(v: Vec<u8>) -> Self {
+        BytesDeque::from(Bytes::from(v))
+    }
+}
+
+impl<'a> From<&'a str> for BytesDeque {
+    fn from(s: &'a str) -> Self {
+        BytesDeque::from(Bytes::copy_from_slice(s.as_bytes()))
     }
 }
 

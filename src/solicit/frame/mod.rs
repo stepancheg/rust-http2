@@ -37,36 +37,45 @@ fn parse_stream_id(buf: &[u8]) -> u32 {
 }
 
 pub mod builder;
-pub mod continuation;
-pub mod data;
-pub mod flags;
-pub mod goaway;
-pub mod headers;
-pub mod ping;
-pub mod priority;
-pub mod push_promise;
-pub mod rst_stream;
-pub mod settings;
-pub mod window_update;
+mod continuation;
+mod data;
+mod flags;
+mod goaway;
+mod headers;
+mod ping;
+mod priority;
+mod push_promise;
+mod rst_stream;
+mod settings;
+mod window_update;
 
-pub use self::builder::FrameBuilder;
+pub(crate) use self::builder::FrameBuilder;
 
+pub use self::continuation::ContinuationFlag;
 pub use self::continuation::ContinuationFrame;
-pub use self::data::{DataFlag, DataFrame};
+pub use self::data::DataFlag;
+pub use self::data::DataFrame;
+pub use self::flags::Flags;
 pub use self::goaway::GoawayFrame;
-pub use self::headers::{HeadersFlag, HeadersFrame};
+pub use self::headers::HeadersDecodedFrame;
+pub use self::headers::HeadersFlag;
+pub use self::headers::HeadersFrame;
+pub use self::headers::HeadersMultiFrame;
 pub use self::ping::PingFrame;
 pub use self::priority::PriorityFrame;
+pub use self::push_promise::PushPromiseFlag;
 pub use self::push_promise::PushPromiseFrame;
 pub use self::rst_stream::RstStreamFrame;
-pub use self::settings::{HttpSetting, SettingsFlag, SettingsFrame};
+pub use self::settings::HttpSetting;
+pub use self::settings::HttpSettings;
+pub use self::settings::SettingsFlag;
+pub use self::settings::SettingsFrame;
 pub use self::window_update::WindowUpdateFrame;
 use crate::codec::write_buffer::WriteBuffer;
 use crate::solicit::frame;
 use crate::solicit::frame::continuation::CONTINUATION_FRAME_TYPE;
 use crate::solicit::frame::data::DATA_FRAME_TYPE;
 use crate::solicit::frame::goaway::GOAWAY_FRAME_TYPE;
-use crate::solicit::frame::headers::HeadersDecodedFrame;
 use crate::solicit::frame::headers::HEADERS_FRAME_TYPE;
 use crate::solicit::frame::ping::PING_FRAME_TYPE;
 use crate::solicit::frame::priority::PRIORITY_FRAME_TYPE;
@@ -77,6 +86,7 @@ use crate::solicit::frame::window_update::WINDOW_UPDATE_FRAME_TYPE;
 use crate::solicit::stream_id::StreamId;
 use std::fmt;
 
+/// HTTP/2 header length is 9 bytes.
 pub const FRAME_HEADER_LEN: usize = 9;
 
 /// An alias for the 9-byte buffer that each HTTP/2 frame header must be stored
@@ -89,12 +99,16 @@ pub type FrameHeaderBuffer = [u8; FRAME_HEADER_LEN];
 pub struct FrameHeader {
     /// payload length
     pub payload_len: u32,
+    /// Frame type
     pub frame_type: u8,
+    /// Flags
     pub flags: u8,
+    /// Stream id
     pub stream_id: u32,
 }
 
 impl FrameHeader {
+    /// Create a header.
     pub fn new(payload_len: u32, frame_type: u8, flags: u8, stream_id: u32) -> FrameHeader {
         FrameHeader {
             payload_len,
@@ -105,6 +119,7 @@ impl FrameHeader {
     }
 }
 
+/// Unpack HTTP/2 header.
 #[inline]
 pub fn unpack_header_from_slice(header: &[u8]) -> FrameHeader {
     assert_eq!(FRAME_HEADER_LEN, header.len());
@@ -206,6 +221,7 @@ pub trait FrameIR: fmt::Debug {
     /// Write out the on-the-wire representation of the frame into the given `FrameBuilder`.
     fn serialize_into(self, builder: &mut WriteBuffer);
 
+    /// Serialize frame into a vec.
     fn serialize_into_vec(self) -> Vec<u8>
     where
         Self: Sized,
@@ -216,23 +232,38 @@ pub trait FrameIR: fmt::Debug {
     }
 }
 
+/// Parse frame errors.
 #[derive(Debug)]
 pub enum ParseFrameError {
+    /// Internal error.
     InternalError,
+    /// Frame is too short.
     BufMustBeAtLeast9Bytes(usize),
+    /// Incorrect payload length.
     IncorrectPayloadLen,
+    /// Zero stream id
     StreamIdMustBeNonZero,
+    /// Non-zero stream id.
     StreamIdMustBeZero(u32),
+    /// Stream depends on itself.
     StreamDependencyOnItself(u32),
+    /// Incorrect frame length.
     IncorrectFrameLength(u32),
+    /// Incorrect flags.
     IncorrectFlags(u8),
+    /// Incorrect settings push value.
     IncorrectSettingsPushValue(u32),
+    /// Incorrect settings max frame size.
     IncorrectSettingsMaxFrameSize(u32),
+    /// Window size is too large.
     WindowSizeTooLarge(u32),
+    /// Window update increment is invalid.
     WindowUpdateIncrementInvalid(u32),
-    ProtocolError, // generic error
+    /// Generic error.
+    ProtocolError,
 }
 
+/// Alias.
 pub type ParseFrameResult<T> = Result<T, ParseFrameError>;
 
 /// A trait that all HTTP/2 frame structs need to implement.
@@ -280,7 +311,9 @@ pub struct RawFrame {
     pub raw_content: Bytes,
 }
 
+/// Raw frame as a reference object.
 pub struct RawFrameRef<'a> {
+    /// Raw frame data.
     pub raw_content: &'a [u8],
 }
 
@@ -317,12 +350,14 @@ impl RawFrame {
         Ok(raw.into())
     }
 
+    /// As a frame ref.
     pub fn as_frame_ref(&self) -> RawFrameRef {
         RawFrameRef {
             raw_content: &self.raw_content,
         }
     }
 
+    /// Frame type.
     pub fn frame_type(&self) -> u8 {
         self.as_frame_ref().frame_type()
     }
@@ -350,6 +385,7 @@ impl RawFrame {
         })
     }
 
+    /// Get frame stream id.
     pub fn get_stream_id(&self) -> StreamId {
         self.header().stream_id
     }
@@ -361,6 +397,7 @@ impl RawFrame {
 }
 
 impl<'a> RawFrameRef<'a> {
+    /// Get frame type.
     pub fn frame_type(&self) -> u8 {
         self.raw_content[3]
     }
@@ -598,18 +635,30 @@ mod tests {
     }
 }
 
+/// All frame types.
 #[derive(Debug, PartialEq, Eq)]
 pub enum HttpFrameType {
+    /// `DATA`
     Data,
+    /// `HEADERS`
     Headers,
+    /// `PRIORITY`
     Priority,
+    /// `RST_STREAM`
     RstStream,
+    /// `SETTINGS`
     Settings,
+    /// `PUSH_PROMISE`
     PushPromise,
+    /// `PING`
     Ping,
+    /// `GOAWAY`
     Goaway,
+    /// `WINDOW_UPDATE`
     WindowUpdate,
+    /// `CONTINUATION`
     Continuation,
+    /// Unknown frame
     Unknown(u8),
 }
 
@@ -632,6 +681,7 @@ impl fmt::Display for HttpFrameType {
 }
 
 impl HttpFrameType {
+    /// Frame type as byte.
     pub fn frame_type(&self) -> u8 {
         match self {
             HttpFrameType::Data => DATA_FRAME_TYPE,
@@ -655,20 +705,32 @@ impl HttpFrameType {
 /// variant, which provides an owned representation of the underlying `RawFrame`
 #[derive(PartialEq, Debug, Clone)]
 pub enum HttpFrame {
+    /// `DATA`
     Data(DataFrame),
+    /// `HEADERS`
     Headers(HeadersFrame),
+    /// `PRIORITY`
     Priority(PriorityFrame),
+    /// `RST_STREAM`
     RstStream(RstStreamFrame),
+    /// `SETTINGS`
     Settings(SettingsFrame),
+    /// `PUSH_PROMISE`
     PushPromise(PushPromiseFrame),
+    /// `PING`
     Ping(PingFrame),
+    /// `GOAWAY`
     Goaway(GoawayFrame),
+    /// `WINDOW_UPDATE`
     WindowUpdate(WindowUpdateFrame),
+    /// `CONTINUATION`
     Continuation(ContinuationFrame),
+    /// Unknown frame
     Unknown(RawFrame),
 }
 
 impl HttpFrame {
+    /// Parse frame.
     // TODO: take by value
     pub fn from_raw(raw_frame: &RawFrame) -> ParseFrameResult<HttpFrame> {
         let frame = match raw_frame.header().frame_type {
@@ -733,6 +795,7 @@ impl HttpFrame {
         }
     }
 
+    /// Frame type.
     pub fn frame_type(&self) -> HttpFrameType {
         match self {
             &HttpFrame::Data(..) => HttpFrameType::Data,
@@ -828,16 +891,27 @@ impl From<ContinuationFrame> for HttpFrame {
     }
 }
 
+/// Decoded HTTP/2 frame
 #[derive(Debug, Clone)]
 pub enum HttpFrameDecoded {
+    /// `DATA`
     Data(DataFrame),
+    /// `HEADERS`
     Headers(HeadersDecodedFrame),
+    /// `PRIORITY`
     Priority(PriorityFrame),
+    /// `RST_STREAM`
     RstStream(RstStreamFrame),
+    /// `SETTINGS`
     Settings(SettingsFrame),
+    /// `PUSH_PROMISE`
     PushPromise(PushPromiseFrame),
+    /// `PING`
     Ping(PingFrame),
+    /// `GOAWAY`
     Goaway(GoawayFrame),
+    /// `WINDOW_UPDATE`
     WindowUpdate(WindowUpdateFrame),
+    /// Unknown frame
     Unknown(RawFrame),
 }

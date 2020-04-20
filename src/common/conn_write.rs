@@ -14,12 +14,12 @@ use crate::data_or_headers::DataOrHeaders;
 
 use crate::result;
 use crate::solicit::end_stream::EndStream;
-use crate::solicit::frame::flags::Flags;
-use crate::solicit::frame::headers::HeadersMultiFrame;
 use crate::solicit::frame::DataFlag;
 use crate::solicit::frame::DataFrame;
+use crate::solicit::frame::Flags;
 use crate::solicit::frame::GoawayFrame;
 use crate::solicit::frame::HeadersFlag;
+use crate::solicit::frame::HeadersMultiFrame;
 use crate::solicit::frame::HttpFrame;
 use crate::solicit::frame::RstStreamFrame;
 use crate::solicit::frame::SettingsFrame;

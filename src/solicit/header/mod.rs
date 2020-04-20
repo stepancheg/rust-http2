@@ -1,3 +1,5 @@
+//! HTTP/2 headers model.
+
 use std::fmt;
 use std::iter::FromIterator;
 use std::result;
@@ -28,6 +30,7 @@ pub(crate) mod value;
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Header {
     name: HeaderName,
+    /// Header value.
     pub value: HeaderValue,
 }
 
@@ -45,24 +48,40 @@ fn _assert_header_sync_send() {
     assert_send::<Header>();
 }
 
+/// Header error.
 #[derive(Debug)]
 pub enum HeaderError {
+    /// Unknown pseudo-header.
     UnknownPseudoHeader,
+    /// Empty header name.
     EmptyName,
+    /// Empty header value.
     EmptyValue(PseudoHeaderName),
+    /// Incorrect character in header name.
     IncorrectCharInName,
+    /// Incorrect character in header value.
     IncorrectCharInValue,
+    /// Header name is not ASCII.
     HeaderNameNotAscii,
+    /// Header value is not ASCII.
     HeaderValueNotAscii,
+    /// Unexpected pseudo-header
     UnexpectedPseudoHeader(PseudoHeaderName),
+    /// Pseudo-header in trailers.
     PseudoHeadersInTrailers,
+    /// Pseudo-header after regular headers.
     PseudoHeadersAfterRegularHeaders,
+    /// More than one pseudo-header.
     MoreThanOnePseudoHeader(PseudoHeaderName),
+    /// Missing required pseudo-header.
     MissingPseudoHeader(PseudoHeaderName),
+    /// Connection-specific header.
     ConnectionSpecificHeader(&'static str),
+    /// RE can only contain trailers.
     TeCanOnlyContainTrailer,
 }
 
+/// Type alias.
 pub type HeaderResult<T> = result::Result<T, HeaderError>;
 
 impl Header {
@@ -129,14 +148,17 @@ impl Header {
         )
     }
 
+    /// Header is pseudo header?
     pub fn is_preudo_header(&self) -> bool {
         self.name.is_pseudo()
     }
 
+    /// Pseudo header name.
     pub fn pseudo_header_name(&self) -> Option<PseudoHeaderName> {
         self.name.pseudo_header_name()
     }
 
+    /// Validate header as request or response header.
     pub fn validate(&self, req_or_resp: RequestOrResponse) -> HeaderResult<()> {
         if let Some(h) = self.pseudo_header_name() {
             if h.req_or_resp() != req_or_resp {
@@ -330,6 +352,7 @@ impl Headers {
         Ok(())
     }
 
+    /// Lookup header.
     pub fn get_opt<'a>(&'a self, name: &str) -> Option<&'a str> {
         let headers = if name.starts_with(':') {
             self.pseudo_headers()
@@ -342,27 +365,37 @@ impl Headers {
             .and_then(|h| str::from_utf8(h.value()).ok())
     }
 
+    /// Lookup header.
+    ///
+    /// # Panics
+    ///
+    /// If header is not found.
     pub fn get<'a>(&'a self, name: &str) -> &'a str {
         self.get_opt(name).unwrap()
     }
 
+    /// Lookup header.
     pub fn get_opt_parse<I: FromStr>(&self, name: &str) -> Option<I> {
         self.get_opt(name).and_then(|h| h.parse().ok())
     }
 
+    /// Status header value.
     pub fn status(&self) -> u32 {
         self.get_opt_parse(":status").unwrap()
     }
 
+    /// Path header.
     // TODO: return bytes, because headers it not require to be valid UTF-8
     pub fn path(&self) -> &str {
         self.get(":path")
     }
 
+    /// Method header.
     pub fn method(&self) -> &str {
         self.get(":method")
     }
 
+    /// Content-length header.
     pub fn content_length(&self) -> Option<u64> {
         match self.get_opt("content-length") {
             Some(v) => v.parse().ok(),

@@ -5,19 +5,26 @@ use bytes::Bytes;
 use bytes::BytesMut;
 use std::fmt;
 
+/// HTTP/2 pseudo header name.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum PseudoHeaderName {
     // 8.1.2.3 Request Pseudo-Header Fields
+    /// `:method`
     Method = 0,
+    /// `:scheme`
     Scheme = 1,
+    /// `:authority`
     Authority = 2,
+    /// `:path`
     Path = 3,
 
     // 8.1.2.4 Response Pseudo-Header Fields
+    /// `:status`
     Status = 4,
 }
 
 impl PseudoHeaderName {
+    /// Header name
     pub fn name(&self) -> &'static str {
         match *self {
             PseudoHeaderName::Method => ":method",
@@ -28,6 +35,7 @@ impl PseudoHeaderName {
         }
     }
 
+    /// Parse header name.
     pub fn parse(value: &[u8]) -> HeaderResult<PseudoHeaderName> {
         match value {
             b":method" => Ok(PseudoHeaderName::Method),
@@ -39,6 +47,7 @@ impl PseudoHeaderName {
         }
     }
 
+    /// Request or response header.
     pub fn req_or_resp(&self) -> RequestOrResponse {
         match *self {
             PseudoHeaderName::Method => RequestOrResponse::Request,
@@ -49,10 +58,12 @@ impl PseudoHeaderName {
         }
     }
 
+    /// Header name as [`Bytes`] object.
     pub fn name_bytes(&self) -> Bytes {
         Bytes::from_static(self.name().as_bytes())
     }
 
+    /// All pseudo header name for request or response.
     pub fn names(request_or_response: RequestOrResponse) -> &'static [PseudoHeaderName] {
         static REQUEST_HEADERS: &[PseudoHeaderName] = &[
             PseudoHeaderName::Method,
@@ -67,6 +78,7 @@ impl PseudoHeaderName {
         }
     }
 
+    /// All pseudo header names.
     pub fn all_names() -> &'static [PseudoHeaderName] {
         static ALL_HEADERS: &[PseudoHeaderName] = &[
             PseudoHeaderName::Method,

@@ -17,6 +17,7 @@ use crate::solicit::stream_id::StreamId;
 
 pub const PUSH_PROMISE_FRAME_TYPE: u8 = 0x5;
 
+/// `PUSH_PROMISE` frame.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PushPromiseFrame {
     /// The set of flags for the frame, packed into a single byte.
@@ -31,9 +32,12 @@ pub struct PushPromiseFrame {
     pub padding_len: u8,
 }
 
+/// `PUSH_PROMISE` frame flag.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum PushPromiseFlag {
+    /// Flag
     EndHeaders = 0x4,
+    /// Flag
     Padded = 0x8,
 }
 

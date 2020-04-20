@@ -1,9 +1,8 @@
 use crate::codec::http_framed_read::HttpFramedJoinContinuationRead;
 use crate::hpack;
 use crate::result;
-use crate::solicit::frame::headers::HeadersDecodedFrame;
-use crate::solicit::frame::HttpFrame;
 use crate::solicit::frame::HttpFrameDecoded;
+use crate::solicit::frame::{HeadersDecodedFrame, HttpFrame};
 use crate::solicit::stream_id::StreamId;
 use crate::ErrorCode;
 use crate::Header;

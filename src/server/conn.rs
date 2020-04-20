@@ -6,7 +6,8 @@ use crate::result;
 use crate::AnySocketAddr;
 
 use crate::solicit::end_stream::EndStream;
-use crate::solicit::frame::settings::*;
+use crate::solicit::frame::HttpSetting;
+use crate::solicit::frame::SettingsFrame;
 use crate::solicit::header::*;
 use crate::solicit::DEFAULT_SETTINGS;
 
@@ -16,14 +17,12 @@ use futures::FutureExt;
 use futures::TryFutureExt;
 
 use crate::common::types::Types;
-use tls_api;
 
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
 
 use tls_api::TlsAcceptor;
-use tls_api_stub;
 
 use crate::solicit_async::*;
 

@@ -13,19 +13,19 @@ use bytes::Bytes;
 
 use httpbis::for_test;
 use httpbis::for_test::hpack;
-use httpbis::for_test::solicit::frame::continuation::ContinuationFlag;
-use httpbis::for_test::solicit::frame::continuation::ContinuationFrame;
-use httpbis::for_test::solicit::frame::data::DataFlag;
-use httpbis::for_test::solicit::frame::data::DataFrame;
-use httpbis::for_test::solicit::frame::goaway::GoawayFrame;
-use httpbis::for_test::solicit::frame::headers::HeadersFlag;
-use httpbis::for_test::solicit::frame::headers::HeadersFrame;
-use httpbis::for_test::solicit::frame::rst_stream::RstStreamFrame;
-use httpbis::for_test::solicit::frame::settings::SettingsFrame;
-use httpbis::for_test::solicit::frame::window_update::WindowUpdateFrame;
+use httpbis::for_test::solicit::frame::ContinuationFlag;
+use httpbis::for_test::solicit::frame::ContinuationFrame;
+use httpbis::for_test::solicit::frame::DataFlag;
+use httpbis::for_test::solicit::frame::DataFrame;
 use httpbis::for_test::solicit::frame::FrameIR;
+use httpbis::for_test::solicit::frame::GoawayFrame;
+use httpbis::for_test::solicit::frame::HeadersFlag;
+use httpbis::for_test::solicit::frame::HeadersFrame;
 use httpbis::for_test::solicit::frame::HttpFrame;
 use httpbis::for_test::solicit::frame::RawFrame;
+use httpbis::for_test::solicit::frame::RstStreamFrame;
+use httpbis::for_test::solicit::frame::SettingsFrame;
+use httpbis::for_test::solicit::frame::WindowUpdateFrame;
 use httpbis::for_test::solicit::header::*;
 use httpbis::Client;
 use httpbis::ErrorCode;
@@ -475,7 +475,7 @@ impl HttpConnTester {
                 }
                 HttpFrame::Data(data_frame) => {
                     let end_of_stream = data_frame.is_end_of_stream();
-                    r.body.extend_from_slice(&data_frame.data);
+                    r.body.extend(data_frame.data);
                     end_of_stream
                 }
                 frame => panic!("expecting HEADERS or DATA, got: {:?}", frame),

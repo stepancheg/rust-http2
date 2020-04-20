@@ -38,28 +38,34 @@ impl Flag for NoFlag {
 pub struct Flags<F: Flag + 'static>(pub u8, marker::PhantomData<F>);
 
 impl<F: Flag> Flags<F> {
+    /// Create new flags object with given flags bitset.
     pub fn new(value: u8) -> Flags<F> {
         Flags(value, marker::PhantomData)
     }
 
+    /// Is flag set?
     pub fn is_set(&self, flag: F) -> bool {
         (self.0 & flag.bitmask()) != 0
     }
 
+    /// Set flag.
     pub fn set(&mut self, flag: F) {
         self.0 |= flag.bitmask()
     }
 
+    /// Unset flag.
     pub fn clear(&mut self, flag: F) {
         self.0 &= !flag.bitmask();
     }
 
+    /// Set flag.
     pub fn with(&self, flag: F) -> Flags<F> {
         let mut flags = self.clone();
         flags.set(flag);
         flags
     }
 
+    /// Unset flag.
     pub fn without(&self, flag: F) -> Flags<F> {
         let mut flags = self.clone();
         flags.clear(flag);

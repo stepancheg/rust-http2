@@ -8,6 +8,7 @@ use std::fmt;
 pub struct HeaderValue(Ascii);
 
 impl HeaderValue {
+    /// Validate and create header value from bytes.
     pub fn from_bytes(bs: Bytes) -> Result<HeaderValue, (HeaderError, Bytes)> {
         // https://svn.tools.ietf.org/svn/wg/httpbis/specs/rfc7230.html#header.fields
         //
@@ -46,14 +47,17 @@ impl HeaderValue {
         Ok(HeaderValue(unsafe { Ascii::from_bytes_unchecked(bs) }))
     }
 
+    /// Into underlying storage object.
     pub fn into_inner(self) -> Bytes {
         self.0.into_bytes()
     }
 
+    /// As bytes.
     pub fn as_slice(&self) -> &[u8] {
         self.0.as_bytes()
     }
 
+    /// Unsafe no-validation `const` constructor.
     pub const unsafe fn from_bytes_unchecked(bytes: Bytes) -> HeaderValue {
         HeaderValue(Ascii::from_bytes_unchecked(bytes))
     }

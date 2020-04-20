@@ -29,9 +29,13 @@ pub const HEADERS_FRAME_TYPE: u8 = 0x1;
 /// HTTP/2 spec, section 6.2.
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum HeadersFlag {
+    /// Flag
     EndStream = 0x1,
+    /// Flag
     EndHeaders = 0x4,
+    /// Flag
     Padded = 0x8,
+    /// Flag
     Priority = 0x20,
 }
 
@@ -217,6 +221,7 @@ impl HeadersFrame {
         self.header_fragment.len() as u32 + priority + padding
     }
 
+    /// Get header framement field
     pub fn header_fragment(&self) -> &[u8] {
         &self.header_fragment
     }
@@ -342,6 +347,7 @@ impl FrameIR for HeadersFrame {
     }
 }
 
+/// `HEADERS` frame after header decoding.
 #[derive(Debug, Clone)]
 pub struct HeadersDecodedFrame {
     /// The set of flags for the frame, packed into a single byte.
@@ -362,6 +368,7 @@ impl HeadersDecodedFrame {
         self.flags.is_set(HeadersFlag::EndStream)
     }
 
+    /// Get stream id
     pub fn get_stream_id(&self) -> StreamId {
         self.stream_id
     }
@@ -380,8 +387,9 @@ pub struct HeadersMultiFrame<'a> {
     /// The length of the padding, if any.
     pub padding_len: u8,
 
-    // state
+    /// Header encoder state.
     pub encoder: &'a mut hpack::Encoder,
+    /// Current max frame size for encoding.
     pub max_frame_size: u32,
 }
 

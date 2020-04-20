@@ -50,6 +50,7 @@ pub struct ContinuationFrame {
 }
 
 impl ContinuationFrame {
+    /// New `CONTINUATION` frame.
     pub fn new(fragment: Bytes, stream_id: StreamId) -> ContinuationFrame {
         ContinuationFrame {
             header_fragment: fragment,
@@ -58,7 +59,7 @@ impl ContinuationFrame {
         }
     }
 
-    pub fn new_conv<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
+    fn new_conv<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
         ContinuationFrame::new(fragment.into(), stream_id)
     }
 

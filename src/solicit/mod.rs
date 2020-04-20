@@ -1,10 +1,9 @@
 //! The module implements the framing layer of HTTP/2 and exposes an API for using it.
 
+use crate::solicit::frame::HttpSettings;
 use std::u32;
 
-use self::frame::settings::HttpSettings;
-
-pub mod end_stream;
+pub(crate) mod end_stream;
 pub(crate) mod error_code;
 pub mod frame;
 pub mod header;
@@ -12,6 +11,7 @@ pub mod session;
 pub(crate) mod stream_id;
 pub(crate) mod window_size;
 
+/// Default settings.
 // 6.5.2 Defined SETTINGS Parameters
 pub const DEFAULT_SETTINGS: HttpSettings = HttpSettings {
     header_table_size: 4_096,

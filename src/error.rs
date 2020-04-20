@@ -27,10 +27,15 @@ use void::Void;
 pub enum Error {
     /// The underlying IO layer raised an error
     IoError(io::Error),
+    /// TLS error.
     TlsError(tls_api::Error),
+    /// Error code error.
     CodeError(ErrorCode),
+    /// `RST_STREAM` received.
     RstStreamReceived(ErrorCode),
+    /// Address resolved to empty list.
     AddrResolvedToEmptyList,
+    /// Address resolved to more than one address.
     AddrResolvedToMoreThanOneAddr(Vec<SocketAddr>),
     /// The HTTP/2 connection received an invalid HTTP/2 frame
     InvalidFrame(String),
@@ -41,52 +46,95 @@ pub enum Error {
     /// Indicates that the local peer has discovered an overflow in the size of one of the
     /// connection flow control window, which is a connection error.
     WindowSizeOverflow,
+    /// Unknown stream id.
     UnknownStreamId,
+    /// Cannot connect.
     UnableToConnect,
+    /// Malformed response.
     MalformedResponse,
+    /// Connection timed out.
     ConnectionTimeout,
     /// Shutdown of local client or server
     Shutdown,
+    /// Request handler panicked.
     HandlerPanicked(String),
+    /// Failed to parse frame.
     ParseFrameError(ParseFrameError),
+    /// Generic internal error.
+    // TODO: get rid of it
     InternalError(String),
+    /// Something is not implemented
+    // TODO: implement it
     NotImplemented(&'static str),
+    /// User error
     User(String),
+    /// Std error
     StdError(Box<dyn std_Error + Sync + Send + 'static>),
+    /// Client died
+    // TODO: explain
     ClientDied(Option<Arc<Error>>),
+    /// Client died, reconnect failed
     ClientDiedAndReconnectFailed,
+    /// Client controller died.
     ClientControllerDied,
+    /// Channel died.
     // TODO: meaningless
     ChannelDied,
+    /// Connection died.
     ConnDied,
+    /// Client panicked.
     ClientPanicked(String),
+    /// Client completed without error.
     ClientCompletedWithoutError,
+    /// Send failed.
     SendError(SendError),
+    /// Stream dead.
     StreamDead(StreamDead),
+    /// Called died.
     CallerDied,
+    /// End of stream.
     // TODO: meaningless
     EofFromStream,
+    /// Expecting `CONTINUATION` frame.
+    // TODO: move to separate error type
     ExpectingContinuationGot(HttpFrameType),
+    /// Expecting `CONTINUATION` frame with different stream id.
     ExpectingContinuationGotDifferentStreamId(StreamId, StreamId),
+    /// `CONTINUATION` frame without headers.
     ContinuationFrameWithoutHeaders,
+    /// Wrong stream id.
     InitiatedStreamWithServerIdFromClient(StreamId),
+    /// Wrong stream id.
     StreamIdLeExistingStream(StreamId, StreamId),
+    /// Failed to send request to dump state.
     // TODO: reason
     FailedToSendReqToDumpState,
+    /// Need something better.
     // TODO: reason
     OneshotCancelled,
+    /// Stream id windows overflow.
     StreamInWindowOverflow(StreamId, i32, u32),
+    /// Connection in windows overflow.
     ConnInWindowOverflow(i32, u32),
+    /// Ping response wrong payload.
     PingAckOpaqueDataMismatch(u64, u64),
+    /// Goaway after goaway.
     GoawayAfterGoaway,
+    /// Got `SETTINGS` ack without `SETTINGS` sent.
     SettingsAckWithoutSettingsSent,
+    /// `GOAWAY`
     // TODO: explain
     Goaway,
+    /// Received `GOAWAY`
     GoawayReceived,
+    /// Stream died.
     // TODO: explain
     PullStreamDied,
+    /// Payload too large.
     PayloadTooLarge(u32, u32),
+    /// Request is made using HTTP/1
     RequestIsMadeUsingHttp1,
+    /// Listen address is not specified.
     ListenAddrNotSpecified,
 }
 

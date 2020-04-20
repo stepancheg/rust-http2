@@ -12,15 +12,16 @@ use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
 
+use crate::error;
 use crate::error::Error;
+use crate::result;
 use crate::result::Result;
-use crate::{error, result};
 
-use crate::solicit::frame::settings::SettingsFrame;
 use crate::solicit::frame::unpack_header;
 use crate::solicit::frame::FrameIR;
 use crate::solicit::frame::RawFrame;
 use crate::solicit::frame::RawFrameRef;
+use crate::solicit::frame::SettingsFrame;
 use crate::solicit::frame::FRAME_HEADER_LEN;
 
 use crate::misc::BsDebug;

@@ -20,11 +20,17 @@ pub const SETTINGS_FRAME_TYPE: u8 = 0x4;
 /// Each setting has a value that is a 32 bit unsigned integer (6.5.1.).
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum HttpSetting {
+    /// Setting
     HeaderTableSize(u32),
+    /// Setting
     EnablePush(bool),
+    /// Setting
     MaxConcurrentStreams(u32),
+    /// Setting
     InitialWindowSize(u32),
+    /// Setting
     MaxFrameSize(u32),
+    /// Setting
     MaxHeaderListSize(u32),
 }
 
@@ -129,17 +135,25 @@ impl HttpSetting {
     }
 }
 
+/// All known setting values
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct HttpSettings {
+    /// Setting
     pub header_table_size: u32,
+    /// Setting
     pub enable_push: bool,
+    /// Setting
     pub max_concurrent_streams: u32,
+    /// Setting
     pub initial_window_size: u32,
+    /// Setting
     pub max_frame_size: u32,
+    /// Setting
     pub max_header_list_size: u32,
 }
 
 impl HttpSettings {
+    /// Apply setting to this settings.
     pub fn apply(&mut self, setting: HttpSetting) {
         match setting {
             HttpSetting::HeaderTableSize(s) => self.header_table_size = s,
@@ -151,6 +165,7 @@ impl HttpSettings {
         }
     }
 
+    /// Apply all settings from `SETTINGS` frame.
     pub fn apply_from_frame(&mut self, frame: &SettingsFrame) {
         for s in &frame.settings {
             self.apply(*s);
@@ -165,6 +180,7 @@ impl HttpSettings {
 /// HTTP/2 spec, section 6.5.
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum SettingsFlag {
+    /// Flag
     Ack = 0x1,
 }
 
@@ -227,10 +243,10 @@ impl SettingsFrame {
         }
     }
 
-    // Create a SETTINGS frame with given list of settings
+    /// Create a `SETTINGS` frame from given list of settings
     pub fn from_settings(settings: Vec<HttpSetting>) -> SettingsFrame {
         SettingsFrame {
-            settings: settings,
+            settings,
             flags: Flags::default(),
         }
     }

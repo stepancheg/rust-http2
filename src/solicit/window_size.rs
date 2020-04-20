@@ -69,6 +69,7 @@ impl WindowSize {
         }
     }
 
+    /// Try decrease windows size, fail if decreases to negative.
     pub fn try_decrease_to_non_negative(&mut self, delta: i32) -> Result<(), ()> {
         match self.0.checked_sub(delta) {
             Some(new) if new >= 0 => {

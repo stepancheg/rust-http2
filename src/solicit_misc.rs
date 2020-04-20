@@ -1,5 +1,16 @@
-use crate::solicit::frame::headers::HeadersDecodedFrame;
-use crate::solicit::frame::*;
+use crate::solicit::frame::DataFrame;
+use crate::solicit::frame::Frame;
+use crate::solicit::frame::GoawayFrame;
+use crate::solicit::frame::HeadersDecodedFrame;
+use crate::solicit::frame::HttpFrame;
+use crate::solicit::frame::HttpFrameDecoded;
+use crate::solicit::frame::PingFrame;
+use crate::solicit::frame::PriorityFrame;
+use crate::solicit::frame::PushPromiseFrame;
+use crate::solicit::frame::RawFrame;
+use crate::solicit::frame::RstStreamFrame;
+use crate::solicit::frame::SettingsFrame;
+use crate::solicit::frame::WindowUpdateFrame;
 use crate::solicit::stream_id::StreamId;
 
 /// Frames with stream

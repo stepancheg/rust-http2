@@ -6,7 +6,7 @@ use crate::solicit::frame::FrameHeader;
 use crate::solicit::frame::FRAME_HEADER_LEN;
 
 /// A trait that provides additional methods for serializing HTTP/2 frames.
-pub trait FrameBuilder {
+pub(crate) trait FrameBuilder {
     fn reserve(&mut self, _additional: usize) {}
 
     fn write_slice(&mut self, bytes: &[u8]);

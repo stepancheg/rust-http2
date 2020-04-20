@@ -10,7 +10,8 @@ use crate::result;
 use crate::AnySocketAddr;
 
 use crate::solicit::end_stream::EndStream;
-use crate::solicit::frame::settings::*;
+use crate::solicit::frame::HttpSetting;
+use crate::solicit::frame::SettingsFrame;
 use crate::solicit::header::*;
 use crate::solicit::DEFAULT_SETTINGS;
 

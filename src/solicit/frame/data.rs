@@ -25,7 +25,9 @@ pub const DATA_FRAME_TYPE: u8 = 0x0;
 /// HTTP/2 spec, section 6.1.
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum DataFlag {
+    /// Flag
     EndStream = 0x1,
+    /// Flag
     Padded = 0x8,
 }
 
@@ -98,7 +100,7 @@ impl DataFrame {
         }
     }
 
-    pub fn with_data_conv<D: Into<Bytes>>(stream_id: StreamId, data: D) -> DataFrame {
+    fn with_data_conv<D: Into<Bytes>>(stream_id: StreamId, data: D) -> DataFrame {
         DataFrame::with_data(stream_id, data.into())
     }
 

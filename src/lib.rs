@@ -1,4 +1,6 @@
 #![deny(intra_doc_link_resolution_failure)]
+// TODO: add docs
+//#![deny(missing_docs)]
 
 //! Asynchnous HTTP/2 client and server implementation.
 //!
@@ -104,6 +106,8 @@ pub use crate::message::SimpleHttpMessage;
 pub use crate::error::Error;
 pub use crate::result::Result;
 
+pub use bytes_deque::BytesDeque;
+
 /// Functions used in tests
 #[doc(hidden)]
 pub mod for_test {
@@ -112,7 +116,7 @@ pub mod for_test {
     pub use crate::server::conn::ServerConn;
     pub use crate::solicit_async::recv_raw_frame_sync;
 
-    pub use crate::solicit::frame::settings::HttpSettings;
+    pub use crate::solicit::frame::HttpSettings;
     pub use crate::solicit::window_size::WindowSize;
     pub use crate::solicit::DEFAULT_SETTINGS;
 

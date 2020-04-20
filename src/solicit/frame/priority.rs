@@ -11,12 +11,18 @@ use crate::solicit::frame::ParseFrameResult;
 use crate::solicit::frame::RawFrame;
 use crate::solicit::stream_id::StreamId;
 
+/// `PRIORITY` frame.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct PriorityFrame {
+    /// Frame field
     flags: Flags<NoFlag>,
+    /// Frame field
     pub stream_id: StreamId,
+    /// Frame field
     pub exclusive: bool,
+    /// Frame field
     pub stream_dep: StreamId,
+    /// Frame field
     pub weight: u8,
 }
 

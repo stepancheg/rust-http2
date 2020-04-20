@@ -29,9 +29,9 @@ use futures::stream::StreamExt;
 
 use std::task::Poll;
 
-use httpbis::for_test::solicit::frame::headers::*;
-use httpbis::for_test::solicit::frame::settings::HttpSetting;
-use httpbis::for_test::solicit::frame::settings::SettingsFrame;
+use httpbis::for_test::solicit::frame::HeadersFlag;
+use httpbis::for_test::solicit::frame::HttpSetting;
+use httpbis::for_test::solicit::frame::SettingsFrame;
 use httpbis::for_test::solicit::DEFAULT_SETTINGS;
 use httpbis::*;
 
@@ -45,6 +45,7 @@ extern crate tempdir;
 extern crate unix_socket;
 
 use futures::task::Context;
+use httpbis::BytesDeque;
 use std::pin::Pin;
 use tokio::runtime::Runtime;
 #[cfg(unix)]
@@ -127,7 +128,7 @@ fn panic_in_handler() {
     {
         let resp = tester.get(1, "/hello");
         assert_eq!(200, resp.headers.status());
-        assert_eq!(&b"hi there"[..], &resp.body[..]);
+        assert_eq!(&b"hi there"[..], resp.body.get_bytes());
     }
 
     info!("test /panic");
@@ -142,7 +143,7 @@ fn panic_in_handler() {
     {
         let resp = tester.get(5, "/world");
         assert_eq!(200, resp.headers.status());
-        assert_eq!(&b"hi there"[..], &resp.body[..]);
+        assert_eq!(&b"hi there"[..], resp.body.get_bytes());
     }
 
     assert_eq!(0, server.dump_state().streams.len());
@@ -177,7 +178,7 @@ fn panic_in_stream() {
     {
         let resp = tester.get(1, "/hello");
         assert_eq!(200, resp.headers.status());
-        assert_eq!(&b"hi there"[..], &resp.body[..]);
+        assert_eq!(&b"hi there"[..], resp.body.get_bytes());
     }
 
     info!("test /panic");
@@ -193,7 +194,7 @@ fn panic_in_stream() {
     {
         let resp = tester.get(5, "/world");
         assert_eq!(200, resp.headers.status());
-        assert_eq!(&b"hi there"[..], &resp.body[..]);
+        assert_eq!(&b"hi there"[..], resp.body.get_bytes());
     }
 
     assert_eq!(0, server.dump_state().streams.len());
@@ -219,7 +220,7 @@ fn response_large() {
     let server = ServerOneConn::new_fn(0, move |_, _req, mut resp| {
         resp.send_message(SimpleHttpMessage {
             headers: Headers::ok_200(),
-            body: Bytes::from(large_resp_copy.clone()),
+            body: BytesDeque::from(large_resp_copy.clone()),
         })?;
         Ok(())
     });
@@ -236,7 +237,7 @@ fn response_large() {
     assert_eq!(large_resp.len(), resp.body.len());
     assert_eq!(
         (large_resp.len(), &large_resp[..]),
-        (resp.body.len(), &resp.body[..])
+        (resp.body.len(), &resp.body.get_bytes()[..])
     );
 
     assert_eq!(0, server.dump_state().streams.len());
@@ -476,7 +477,7 @@ pub fn server_sends_continuation_frame() {
     let server = ServerOneConn::new_fn(0, move |_, _req, mut resp| {
         resp.send_message(SimpleHttpMessage {
             headers: headers_copy.clone(),
-            body: Bytes::from("there"),
+            body: BytesDeque::from("there"),
         })?;
         Ok(())
     });
@@ -584,7 +585,7 @@ fn external_event_loop() {
         let resp = rt
             .block_on(client.start_get("/", "localhost").collect())
             .expect("ok");
-        assert_eq!(b"aabb", &resp.body[..]);
+        assert_eq!(&b"aabb"[..], resp.body.get_bytes());
     }
 
     info!("sending shutdown");

@@ -36,6 +36,7 @@ impl Flag for PingFlag {
 /// The struct represents the `PINg` HTTP/2 frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PingFrame {
+    /// `PING` frame payload.
     pub opaque_data: u64,
     flags: Flags<PingFlag>,
 }
@@ -65,10 +66,12 @@ impl PingFrame {
         }
     }
 
+    /// Check ask flag.
     pub fn is_ack(&self) -> bool {
         self.flags.is_set(PingFlag::Ack)
     }
 
+    /// Get payload.
     pub fn opaque_data(&self) -> u64 {
         self.opaque_data
     }

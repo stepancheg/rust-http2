@@ -25,9 +25,13 @@ pub const GOAWAY_FRAME_TYPE: u8 = 0x7;
 /// The struct represents the `GOAWAY` HTTP/2 frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GoawayFrame {
+    /// Last stream if frame field.
     pub last_stream_id: StreamId,
+    /// Erorr code frame field.
     pub(crate) error_code: ErrorCodeOrUnknown,
+    /// Debug data frame field.
     pub debug_data: Bytes,
+    /// Frame flags.
     flags: Flags<NoFlag>,
 }
 

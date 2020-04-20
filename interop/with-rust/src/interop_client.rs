@@ -13,8 +13,6 @@ use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use bytes::Bytes;
-
 use tls_api::Certificate;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
@@ -28,6 +26,7 @@ use httpbis_interop::PORT;
 
 use clap::App;
 use clap::Arg;
+use httpbis::BytesDeque;
 use tokio::runtime::Runtime;
 
 fn not_found(client: Client) {
@@ -44,7 +43,7 @@ fn found(client: Client) {
         .block_on(client.start_get("/200", "localhost").collect())
         .expect("get");
     assert_eq!(200, r.headers.status());
-    assert_eq!(Bytes::from("200 200 200"), r.body);
+    assert_eq!(BytesDeque::from("200 200 200"), r.body);
 }
 
 const TESTS: &'static [(&'static str, fn(Client))] = &[("not_found", not_found), ("found", found)];

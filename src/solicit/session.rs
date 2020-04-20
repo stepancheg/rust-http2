@@ -9,12 +9,19 @@
 /// Corresponds to [section 5.1.](http://http2.github.io/http2-spec/#rfc.section.5.1) of the spec.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StreamState {
+    /// State
     Idle,
+    /// State
     ReservedLocal,
+    /// State
     ReservedRemote,
+    /// State
     Open,
+    /// State
     HalfClosedRemote,
+    /// State
     HalfClosedLocal,
+    /// State
     Closed,
 }
 
@@ -43,8 +50,11 @@ impl StreamState {
     }
 }
 
+/// Stream state which is idle or closed.
 pub enum StreamStateIdleOrClosed {
+    /// Idle.
     Idle,
+    /// Closed.
     Closed,
 }
 
