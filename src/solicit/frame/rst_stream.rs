@@ -1,9 +1,13 @@
 //! The module contains the implementation of the `RST_STREAM` frame.
 
 use crate::solicit::frame::flags::*;
+use crate::solicit::frame::Frame;
+use crate::solicit::frame::FrameBuilder;
+use crate::solicit::frame::FrameHeader;
+use crate::solicit::frame::FrameIR;
 use crate::solicit::frame::ParseFrameError;
 use crate::solicit::frame::ParseFrameResult;
-use crate::solicit::frame::{Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame};
+use crate::solicit::frame::RawFrame;
 
 use crate::codec::write_buffer::WriteBuffer;
 use crate::solicit::error_code::ErrorCodeOrUnknown;
