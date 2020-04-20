@@ -29,6 +29,14 @@ impl Buf for Item {
         }
     }
 
+    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+        match self {
+            Item::Vec(v) => v.bytes_vectored(dst),
+            Item::Bytes(b) => b.bytes_vectored(dst),
+            Item::FrameHeaderBuffer(c) => c.bytes_vectored(dst),
+        }
+    }
+
     fn advance(&mut self, cnt: usize) {
         match self {
             Item::Vec(v) => v.advance(cnt),
