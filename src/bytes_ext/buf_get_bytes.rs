@@ -70,7 +70,7 @@ impl BufGetBytes for &[u8] {}
 impl<A: AsRef<[u8]>> BufGetBytes for Cursor<A> {}
 
 impl<A: BufGetBytes, B: BufGetBytes> BufGetBytes for Chain<A, B> {
-    fn get_bytes(&mut self, mut cnt: usize) -> Bytes {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
         let a_rem = self.first_mut().remaining();
         if a_rem >= cnt {
             self.first_mut().get_bytes(cnt)
@@ -88,7 +88,7 @@ impl<A: BufGetBytes, B: BufGetBytes> BufGetBytes for Chain<A, B> {
 }
 
 impl<A: BufGetBytes> BufGetBytes for Take<A> {
-    fn get_bytes(&mut self, mut cnt: usize) -> Bytes {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
         assert!(cnt <= self.remaining());
         let ret = self.get_mut().get_bytes(cnt);
         self.set_limit(self.limit() - cnt);
