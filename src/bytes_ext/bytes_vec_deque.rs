@@ -1,4 +1,5 @@
 use crate::bytes_ext::buf_vec_deque::BufVecDeque;
+use crate::BufGetBytes;
 use bytes::Buf;
 use bytes::Bytes;
 use bytes::BytesMut;
@@ -82,6 +83,12 @@ impl Buf for BytesVecDeque {
 
     fn to_bytes(&mut self) -> Bytes {
         self.deque.to_bytes()
+    }
+}
+
+impl BufGetBytes for BytesVecDeque {
+    fn get_bytes(&mut self, cnt: usize) -> Bytes {
+        self.deque.get_bytes(cnt)
     }
 }
 
