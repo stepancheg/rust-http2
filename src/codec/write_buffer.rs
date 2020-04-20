@@ -1,4 +1,5 @@
 use crate::bytes_deque::buf_vec_deque::BufVecDeque;
+use crate::solicit::frame::FrameHeaderBuffer;
 use bytes::Buf;
 use bytes::Bytes;
 use std::io::Cursor;
@@ -7,24 +8,28 @@ use std::mem;
 
 enum Item {
     Vec(Cursor<Vec<u8>>),
+    FrameHeaderBuffer(Cursor<FrameHeaderBuffer>),
 }
 
 impl Buf for Item {
     fn remaining(&self) -> usize {
         match self {
             Item::Vec(v) => v.remaining(),
+            Item::FrameHeaderBuffer(c) => c.remaining(),
         }
     }
 
     fn bytes(&self) -> &[u8] {
         match self {
             Item::Vec(v) => v.bytes(),
+            Item::FrameHeaderBuffer(c) => c.bytes(),
         }
     }
 
     fn advance(&mut self, cnt: usize) {
         match self {
             Item::Vec(v) => v.advance(cnt),
+            Item::FrameHeaderBuffer(v) => v.advance(cnt),
         }
     }
 }
@@ -74,6 +79,11 @@ impl WriteBuffer {
         self.extend_from_slice(&*data);
     }
 
+    pub fn extend_frame_header_buffer(&mut self, buffer: FrameHeaderBuffer) {
+        self.deque
+            .push_back(Item::FrameHeaderBuffer(Cursor::new(buffer)));
+    }
+
     pub fn tail_vec(&mut self) -> WriteBufferTailVec {
         match self.deque.pop_back() {
             Some(Item::Vec(cursor)) => WriteBufferTailVec {
@@ -81,11 +91,16 @@ impl WriteBuffer {
                 position: cursor.position() as usize,
                 data: cursor.into_inner(),
             },
-            None => WriteBufferTailVec {
-                write_buffer: self,
-                data: Vec::new(),
-                position: 0,
-            },
+            o => {
+                if let Some(v) = o {
+                    self.deque.push_back(v);
+                }
+                WriteBufferTailVec {
+                    write_buffer: self,
+                    data: Vec::new(),
+                    position: 0,
+                }
+            }
         }
     }
 }
