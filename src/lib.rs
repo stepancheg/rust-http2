@@ -61,7 +61,7 @@ mod exec;
 
 mod log_ndc_future;
 
-pub(crate) mod bytes_deque;
+pub(crate) mod bytes_ext;
 
 pub use crate::socket::AnySocketAddr;
 
@@ -106,7 +106,7 @@ pub use crate::message::SimpleHttpMessage;
 pub use crate::error::Error;
 pub use crate::result::Result;
 
-pub use bytes_deque::BytesDeque;
+pub use bytes_ext::BytesDeque;
 
 /// Functions used in tests
 #[doc(hidden)]

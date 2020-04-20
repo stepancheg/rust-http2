@@ -1,4 +1,4 @@
-use crate::bytes_deque::buf_vec_deque::BufVecDeque;
+use crate::bytes_ext::buf_vec_deque::BufVecDeque;
 use bytes::Buf;
 use bytes::Bytes;
 use bytes::BytesMut;

@@ -1,6 +1,6 @@
 use crate::solicit::header::*;
 
-use crate::bytes_deque::BytesDeque;
+use crate::bytes_ext::BytesDeque;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 

@@ -1,4 +1,4 @@
-use crate::bytes_deque::buf_vec_deque::BufVecDeque;
+use crate::bytes_ext::buf_vec_deque::BufVecDeque;
 use crate::codec::zeroes::Zeroes;
 use crate::solicit::frame::FrameHeaderBuffer;
 use bytes::Buf;
