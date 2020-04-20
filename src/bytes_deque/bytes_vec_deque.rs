@@ -79,6 +79,10 @@ impl Buf for BytesVecDeque {
     fn advance(&mut self, cnt: usize) {
         self.deque.advance(cnt)
     }
+
+    fn to_bytes(&mut self) -> Bytes {
+        self.deque.to_bytes()
+    }
 }
 
 #[cfg(test)]

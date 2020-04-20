@@ -1,4 +1,7 @@
 use bytes::Buf;
+use bytes::BufMut;
+use bytes::Bytes;
+use bytes::BytesMut;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::io::IoSlice;
@@ -106,6 +109,18 @@ impl<B: Buf> Buf for BufVecDeque<B> {
             self.deque.pop_front().unwrap();
 
             cnt -= front_remaining;
+        }
+    }
+
+    fn to_bytes(&mut self) -> Bytes {
+        if !self.has_remaining() {
+            Bytes::new()
+        } else if self.deque.len() == 1 {
+            mem::take(self).into_iter().next().unwrap().to_bytes()
+        } else {
+            let mut ret = BytesMut::with_capacity(self.remaining());
+            ret.put(self);
+            ret.freeze()
         }
     }
 }
