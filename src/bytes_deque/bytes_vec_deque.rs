@@ -59,6 +59,18 @@ impl BytesVecDeque {
         }
         self.deque.push_back(bytes);
     }
+
+    pub fn get_bytes(&self) -> Bytes {
+        let mut bytes_mut = BytesMut::with_capacity(self.remaining());
+        for b in &self.deque {
+            bytes_mut.extend_from_slice(b);
+        }
+        bytes_mut.freeze()
+    }
+
+    pub fn into_bytes(mut self) -> Bytes {
+        self.to_bytes()
+    }
 }
 
 impl Buf for BytesVecDeque {

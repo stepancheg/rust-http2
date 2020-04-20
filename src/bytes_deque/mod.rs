@@ -13,13 +13,23 @@ enum Inner {
     Deque(BytesVecDeque),
 }
 
+impl Default for Inner {
+    fn default() -> Self {
+        Inner::One(Bytes::new())
+    }
+}
+
 /// `VecDeque<Bytes>` but slightly more efficient.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BytesDeque(Inner);
 
 impl BytesDeque {
     pub fn new() -> BytesDeque {
-        BytesDeque(Inner::One(Bytes::new()))
+        Default::default()
+    }
+
+    pub fn copy_from_slice(bytes: &[u8]) -> BytesDeque {
+        BytesDeque::from(Bytes::copy_from_slice(bytes))
     }
 
     pub fn len(&self) -> usize {
@@ -49,14 +59,31 @@ impl BytesDeque {
             }
         }
     }
+
+    pub fn get_bytes(&self) -> Bytes {
+        match &self.0 {
+            Inner::One(b) => b.clone(),
+            Inner::Deque(d) => d.get_bytes(),
+        }
+    }
+
+    pub fn into_bytes(self) -> Bytes {
+        match self.0 {
+            Inner::One(b) => b,
+            Inner::Deque(d) => d.into_bytes(),
+        }
+    }
+}
+
+impl From<Bytes> for BytesDeque {
+    fn from(b: Bytes) -> Self {
+        BytesDeque(Inner::One(b))
+    }
 }
 
 impl Into<Bytes> for BytesDeque {
     fn into(self) -> Bytes {
-        match self.0 {
-            Inner::One(b) => b,
-            Inner::Deque(d) => d.into(),
-        }
+        self.into_bytes()
     }
 }
 

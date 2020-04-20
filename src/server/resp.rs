@@ -97,7 +97,7 @@ impl ServerResponse {
 
     pub fn send_message(&mut self, message: SimpleHttpMessage) -> Result<(), SendError> {
         self.send_headers(message.headers)?;
-        self.send_data_end_of_stream(message.body)?;
+        self.send_data_end_of_stream(message.body.into_bytes())?;
         Ok(())
     }
 

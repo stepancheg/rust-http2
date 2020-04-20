@@ -110,6 +110,15 @@ impl<B: Buf> Buf for BufVecDeque<B> {
     }
 }
 
+impl<'a, B: Buf> IntoIterator for &'a BufVecDeque<B> {
+    type Item = &'a B;
+    type IntoIter = vec_deque::Iter<'a, B>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.deque.iter()
+    }
+}
+
 impl<B: Buf> IntoIterator for BufVecDeque<B> {
     type Item = B;
     type IntoIter = vec_deque::IntoIter<B>;
