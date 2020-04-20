@@ -30,11 +30,7 @@ pub trait FrameBuilder {
     /// Other `FrameBuilder` implementations could implement it more efficiently (e.g. if it is
     /// known that the `FrameBuilder` is backed by a zeroed buffer, there's no need to write
     /// anything, only increment a cursor/offset).
-    fn write_padding(&mut self, padding_length: u8) {
-        for _ in 0..padding_length {
-            self.write_slice(&[0]);
-        }
-    }
+    fn write_padding(&mut self, padding_length: u8);
 
     /// Write the given unsigned 32 bit integer to the underlying stream. The integer is written as
     /// four bytes in network endian style.
@@ -55,5 +51,9 @@ impl FrameBuilder for WriteBuffer {
 
     fn write_header(&mut self, header: FrameHeader) {
         self.extend_frame_header_buffer(pack_header(&header));
+    }
+
+    fn write_padding(&mut self, padding_length: u8) {
+        self.extend_with_zeroes(padding_length as usize);
     }
 }

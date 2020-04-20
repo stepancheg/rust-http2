@@ -1,4 +1,5 @@
 use crate::bytes_deque::buf_vec_deque::BufVecDeque;
+use crate::codec::zeroes::Zeroes;
 use crate::solicit::frame::FrameHeaderBuffer;
 use bytes::Buf;
 use bytes::Bytes;
@@ -10,6 +11,7 @@ enum Item {
     Vec(Cursor<Vec<u8>>),
     Bytes(Bytes),
     FrameHeaderBuffer(Cursor<FrameHeaderBuffer>),
+    Zeroes(Zeroes),
 }
 
 impl Buf for Item {
@@ -18,6 +20,7 @@ impl Buf for Item {
             Item::Vec(v) => v.remaining(),
             Item::Bytes(b) => b.remaining(),
             Item::FrameHeaderBuffer(c) => c.remaining(),
+            Item::Zeroes(z) => z.remaining(),
         }
     }
 
@@ -26,6 +29,7 @@ impl Buf for Item {
             Item::Vec(v) => v.bytes(),
             Item::Bytes(b) => b.bytes(),
             Item::FrameHeaderBuffer(c) => c.bytes(),
+            Item::Zeroes(z) => z.bytes(),
         }
     }
 
@@ -34,6 +38,7 @@ impl Buf for Item {
             Item::Vec(v) => v.bytes_vectored(dst),
             Item::Bytes(b) => b.bytes_vectored(dst),
             Item::FrameHeaderBuffer(c) => c.bytes_vectored(dst),
+            Item::Zeroes(z) => z.bytes_vectored(dst),
         }
     }
 
@@ -42,6 +47,7 @@ impl Buf for Item {
             Item::Vec(v) => v.advance(cnt),
             Item::Bytes(b) => b.advance(cnt),
             Item::FrameHeaderBuffer(v) => v.advance(cnt),
+            Item::Zeroes(z) => z.advance(cnt),
         }
     }
 }
@@ -89,6 +95,13 @@ impl WriteBuffer {
     pub fn extend_frame_header_buffer(&mut self, buffer: FrameHeaderBuffer) {
         self.deque
             .push_back(Item::FrameHeaderBuffer(Cursor::new(buffer)));
+    }
+
+    pub fn extend_with_zeroes(&mut self, zeroes: usize) {
+        if zeroes == 0 {
+            return;
+        }
+        self.deque.push_back(Item::Zeroes(Zeroes(zeroes)));
     }
 
     pub fn tail_vec(&mut self) -> WriteBufferTailVec {
