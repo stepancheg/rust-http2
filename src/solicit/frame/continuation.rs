@@ -59,10 +59,6 @@ impl ContinuationFrame {
         }
     }
 
-    fn new_conv<B: Into<Bytes>>(fragment: B, stream_id: StreamId) -> ContinuationFrame {
-        ContinuationFrame::new(fragment.into(), stream_id)
-    }
-
     /// Returns the length of the payload of the current frame, including any
     /// possible padding in the number of bytes.
     fn payload_len(&self) -> u32 {

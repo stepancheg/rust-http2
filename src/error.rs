@@ -15,6 +15,7 @@ use crate::display_comma_separated::DisplayCommaSeparated;
 use crate::solicit::error_code::ErrorCode;
 use crate::solicit::frame::HttpFrameType;
 use crate::solicit::frame::ParseFrameError;
+use crate::solicit::frame::RawHttpFrameType;
 use crate::StreamDead;
 use crate::StreamId;
 use std::net::SocketAddr;
@@ -97,7 +98,7 @@ pub enum Error {
     EofFromStream,
     /// Expecting `CONTINUATION` frame.
     // TODO: move to separate error type
-    ExpectingContinuationGot(HttpFrameType),
+    ExpectingContinuationGot(RawHttpFrameType),
     /// Expecting `CONTINUATION` frame with different stream id.
     ExpectingContinuationGotDifferentStreamId(StreamId, StreamId),
     /// `CONTINUATION` frame without headers.

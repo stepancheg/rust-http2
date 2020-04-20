@@ -7,10 +7,10 @@ use crate::solicit::frame::unpack_header_from_slice;
 use crate::solicit::frame::HeadersFlag;
 use crate::solicit::frame::HeadersFrame;
 use crate::solicit::frame::HttpFrame;
-use crate::solicit::frame::HttpFrameType;
 use crate::solicit::frame::PushPromiseFlag;
 use crate::solicit::frame::PushPromiseFrame;
 use crate::solicit::frame::RawFrame;
+use crate::solicit::frame::RawHttpFrameType;
 use crate::solicit::frame::FRAME_HEADER_LEN;
 use crate::solicit::stream_id::StreamId;
 use crate::ErrorCode;
@@ -194,7 +194,7 @@ impl<R: AsyncRead + Unpin> HttpFramedJoinContinuationRead<R> {
                 HttpFrame::Headers(h) => {
                     if let Some(_) = self.header_opt {
                         return Poll::Ready(Err(error::Error::ExpectingContinuationGot(
-                            HttpFrameType::Headers,
+                            RawHttpFrameType::HEADERS,
                         )));
                     } else {
                         if h.flags.is_set(HeadersFlag::EndHeaders) {
@@ -208,7 +208,7 @@ impl<R: AsyncRead + Unpin> HttpFramedJoinContinuationRead<R> {
                 HttpFrame::PushPromise(p) => {
                     if let Some(_) = self.header_opt {
                         return Poll::Ready(Err(error::Error::ExpectingContinuationGot(
-                            HttpFrameType::PushPromise,
+                            RawHttpFrameType::PUSH_PROMISE,
                         )));
                     } else {
                         if p.flags.is_set(PushPromiseFlag::EndHeaders) {

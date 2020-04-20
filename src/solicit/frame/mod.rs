@@ -40,6 +40,7 @@ pub mod builder;
 mod continuation;
 mod data;
 mod flags;
+mod frame_type;
 mod goaway;
 mod headers;
 mod ping;
@@ -56,6 +57,8 @@ pub use self::continuation::ContinuationFrame;
 pub use self::data::DataFlag;
 pub use self::data::DataFrame;
 pub use self::flags::Flags;
+pub use self::frame_type::HttpFrameType;
+pub use self::frame_type::RawHttpFrameType;
 pub use self::goaway::GoawayFrame;
 pub use self::headers::HeadersDecodedFrame;
 pub use self::headers::HeadersFlag;
@@ -73,16 +76,6 @@ pub use self::settings::SettingsFrame;
 pub use self::window_update::WindowUpdateFrame;
 use crate::codec::write_buffer::WriteBuffer;
 use crate::solicit::frame;
-use crate::solicit::frame::continuation::CONTINUATION_FRAME_TYPE;
-use crate::solicit::frame::data::DATA_FRAME_TYPE;
-use crate::solicit::frame::goaway::GOAWAY_FRAME_TYPE;
-use crate::solicit::frame::headers::HEADERS_FRAME_TYPE;
-use crate::solicit::frame::ping::PING_FRAME_TYPE;
-use crate::solicit::frame::priority::PRIORITY_FRAME_TYPE;
-use crate::solicit::frame::push_promise::PUSH_PROMISE_FRAME_TYPE;
-use crate::solicit::frame::rst_stream::RST_STREAM_FRAME_TYPE;
-use crate::solicit::frame::settings::SETTINGS_FRAME_TYPE;
-use crate::solicit::frame::window_update::WINDOW_UPDATE_FRAME_TYPE;
 use crate::solicit::stream_id::StreamId;
 use std::fmt;
 
@@ -635,70 +628,6 @@ mod tests {
     }
 }
 
-/// All frame types.
-#[derive(Debug, PartialEq, Eq)]
-pub enum HttpFrameType {
-    /// `DATA`
-    Data,
-    /// `HEADERS`
-    Headers,
-    /// `PRIORITY`
-    Priority,
-    /// `RST_STREAM`
-    RstStream,
-    /// `SETTINGS`
-    Settings,
-    /// `PUSH_PROMISE`
-    PushPromise,
-    /// `PING`
-    Ping,
-    /// `GOAWAY`
-    Goaway,
-    /// `WINDOW_UPDATE`
-    WindowUpdate,
-    /// `CONTINUATION`
-    Continuation,
-    /// Unknown frame
-    Unknown(u8),
-}
-
-impl fmt::Display for HttpFrameType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            HttpFrameType::Data => write!(f, "DATA"),
-            HttpFrameType::Headers => write!(f, "HEADERS"),
-            HttpFrameType::Priority => write!(f, "PRIORITY"),
-            HttpFrameType::RstStream => write!(f, "RST_STREAM"),
-            HttpFrameType::Settings => write!(f, "SETTINGS"),
-            HttpFrameType::PushPromise => write!(f, "PUSH_PROMISE"),
-            HttpFrameType::Ping => write!(f, "PING"),
-            HttpFrameType::Goaway => write!(f, "GOAWAY"),
-            HttpFrameType::WindowUpdate => write!(f, "WINDOW_UPDATE"),
-            HttpFrameType::Continuation => write!(f, "CONTINUATION"),
-            HttpFrameType::Unknown(u) => write!(f, "UNKNOWN({})", u),
-        }
-    }
-}
-
-impl HttpFrameType {
-    /// Frame type as byte.
-    pub fn frame_type(&self) -> u8 {
-        match self {
-            HttpFrameType::Data => DATA_FRAME_TYPE,
-            HttpFrameType::Headers => HEADERS_FRAME_TYPE,
-            HttpFrameType::Priority => PRIORITY_FRAME_TYPE,
-            HttpFrameType::RstStream => RST_STREAM_FRAME_TYPE,
-            HttpFrameType::Settings => SETTINGS_FRAME_TYPE,
-            HttpFrameType::PushPromise => PUSH_PROMISE_FRAME_TYPE,
-            HttpFrameType::Ping => PING_FRAME_TYPE,
-            HttpFrameType::Goaway => GOAWAY_FRAME_TYPE,
-            HttpFrameType::WindowUpdate => WINDOW_UPDATE_FRAME_TYPE,
-            HttpFrameType::Continuation => CONTINUATION_FRAME_TYPE,
-            HttpFrameType::Unknown(t) => *t,
-        }
-    }
-}
-
 /// An enum representing all frame variants that can be returned by an `HttpConnection` can handle.
 ///
 /// The variants wrap the appropriate `Frame` implementation, except for the `UnknownFrame`
@@ -796,19 +725,19 @@ impl HttpFrame {
     }
 
     /// Frame type.
-    pub fn frame_type(&self) -> HttpFrameType {
+    pub fn frame_type(&self) -> RawHttpFrameType {
         match self {
-            &HttpFrame::Data(..) => HttpFrameType::Data,
-            &HttpFrame::Headers(..) => HttpFrameType::Headers,
-            &HttpFrame::Priority(..) => HttpFrameType::Priority,
-            &HttpFrame::RstStream(..) => HttpFrameType::RstStream,
-            &HttpFrame::Settings(..) => HttpFrameType::Settings,
-            &HttpFrame::PushPromise(..) => HttpFrameType::PushPromise,
-            &HttpFrame::Ping(..) => HttpFrameType::Ping,
-            &HttpFrame::Goaway(..) => HttpFrameType::Goaway,
-            &HttpFrame::WindowUpdate(..) => HttpFrameType::WindowUpdate,
-            &HttpFrame::Continuation(..) => HttpFrameType::Continuation,
-            &HttpFrame::Unknown(ref f) => HttpFrameType::Unknown(f.frame_type()),
+            &HttpFrame::Data(..) => RawHttpFrameType::DATA,
+            &HttpFrame::Headers(..) => RawHttpFrameType::HEADERS,
+            &HttpFrame::Priority(..) => RawHttpFrameType::PRIORITY,
+            &HttpFrame::RstStream(..) => RawHttpFrameType::RST_STREAM,
+            &HttpFrame::Settings(..) => RawHttpFrameType::SETTINGS,
+            &HttpFrame::PushPromise(..) => RawHttpFrameType::PUSH_PROMISE,
+            &HttpFrame::Ping(..) => RawHttpFrameType::PING,
+            &HttpFrame::Goaway(..) => RawHttpFrameType::GOAWAY,
+            &HttpFrame::WindowUpdate(..) => RawHttpFrameType::WINDOW_UPDATE,
+            &HttpFrame::Continuation(..) => RawHttpFrameType::CONTINUATION,
+            &HttpFrame::Unknown(ref f) => RawHttpFrameType(f.frame_type()),
         }
     }
 }
