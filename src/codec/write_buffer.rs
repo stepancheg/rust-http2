@@ -8,6 +8,7 @@ use std::mem;
 
 enum Item {
     Vec(Cursor<Vec<u8>>),
+    Bytes(Bytes),
     FrameHeaderBuffer(Cursor<FrameHeaderBuffer>),
 }
 
@@ -15,6 +16,7 @@ impl Buf for Item {
     fn remaining(&self) -> usize {
         match self {
             Item::Vec(v) => v.remaining(),
+            Item::Bytes(b) => b.remaining(),
             Item::FrameHeaderBuffer(c) => c.remaining(),
         }
     }
@@ -22,6 +24,7 @@ impl Buf for Item {
     fn bytes(&self) -> &[u8] {
         match self {
             Item::Vec(v) => v.bytes(),
+            Item::Bytes(b) => b.bytes(),
             Item::FrameHeaderBuffer(c) => c.bytes(),
         }
     }
@@ -29,6 +32,7 @@ impl Buf for Item {
     fn advance(&mut self, cnt: usize) {
         match self {
             Item::Vec(v) => v.advance(cnt),
+            Item::Bytes(b) => b.advance(cnt),
             Item::FrameHeaderBuffer(v) => v.advance(cnt),
         }
     }
@@ -67,16 +71,11 @@ impl WriteBuffer {
         self.tail_vec().extend_from_slice(data);
     }
 
-    pub fn extend_from_vec(&mut self, data: Vec<u8>) {
-        self.extend_from_slice(&data);
-    }
-
     pub fn extend_from_bytes(&mut self, data: Bytes) {
-        self.extend_from_slice(&data);
-    }
-
-    pub fn extend_from_bytes_ref(&mut self, data: &Bytes) {
-        self.extend_from_slice(&*data);
+        if data.is_empty() {
+            return;
+        }
+        self.deque.push_back(Item::Bytes(data));
     }
 
     pub fn extend_frame_header_buffer(&mut self, buffer: FrameHeaderBuffer) {
