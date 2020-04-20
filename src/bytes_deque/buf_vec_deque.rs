@@ -1,6 +1,10 @@
 use bytes::Buf;
-use std::collections::{vec_deque, VecDeque};
+use std::collections::vec_deque;
+use std::collections::VecDeque;
 use std::io::IoSlice;
+use std::mem;
+use std::ops::Deref;
+use std::ops::DerefMut;
 
 #[derive(Debug)]
 pub(crate) struct BufVecDeque<B: Buf> {
@@ -41,6 +45,17 @@ impl<B: Buf> BufVecDeque<B> {
         self.len += bytes.remaining();
         self.deque.push_back(bytes);
     }
+
+    pub fn back_mut(&mut self) -> Option<BufVecDequeBackMut<B>> {
+        match self.deque.pop_back() {
+            Some(back) => Some(BufVecDequeBackMut {
+                deque: self,
+                remaining: back.remaining(),
+                back: Some(back),
+            }),
+            None => None,
+        }
+    }
 }
 
 impl<B: Buf> Buf for BufVecDeque<B> {
@@ -49,13 +64,13 @@ impl<B: Buf> Buf for BufVecDeque<B> {
     }
 
     fn bytes(&self) -> &[u8] {
-        match self.deque.iter().next() {
-            Some(b) => {
-                assert!(b.has_remaining());
-                b.bytes()
+        for b in &self.deque {
+            let bytes = b.bytes();
+            if !bytes.is_empty() {
+                return bytes;
             }
-            None => &[],
         }
+        &[]
     }
 
     fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
@@ -94,5 +109,58 @@ impl<B: Buf> IntoIterator for BufVecDeque<B> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.deque.into_iter()
+    }
+}
+
+pub struct BufVecDequeBackMut<'a, B: Buf> {
+    deque: &'a mut BufVecDeque<B>,
+    back: Option<B>,
+    remaining: usize,
+}
+
+impl<'a, B: Buf> Deref for BufVecDequeBackMut<'a, B> {
+    type Target = B;
+
+    fn deref(&self) -> &Self::Target {
+        self.back.as_ref().unwrap()
+    }
+}
+
+impl<'a, B: Buf> DerefMut for BufVecDequeBackMut<'a, B> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.back.as_mut().unwrap()
+    }
+}
+
+impl<'a, B: Buf> Drop for BufVecDequeBackMut<'a, B> {
+    fn drop(&mut self) {
+        let back = mem::take(&mut self.back).unwrap();
+        let new_remaining = back.remaining();
+        if new_remaining > self.remaining {
+            self.deque.len += new_remaining - self.remaining;
+        } else {
+            self.deque.len -= self.remaining - new_remaining;
+        }
+        self.deque.deque.push_back(back);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn back_mut() {
+        let mut d = BufVecDeque::<VecDeque<u8>>::new();
+        d.extend(VecDeque::from(vec![3, 4]));
+        d.extend(VecDeque::from(vec![4, 6]));
+        assert_eq!(4, d.remaining());
+        d.back_mut().unwrap().push_back(7);
+        assert_eq!(5, d.remaining());
+        d.back_mut().unwrap().pop_back();
+        assert_eq!(4, d.remaining());
+        d.back_mut().unwrap().pop_back();
+        d.back_mut().unwrap().pop_back();
+        assert_eq!(2, d.remaining());
     }
 }

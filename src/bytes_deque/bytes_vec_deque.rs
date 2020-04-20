@@ -54,6 +54,9 @@ impl BytesVecDeque {
     }
 
     pub fn extend(&mut self, bytes: Bytes) {
+        if bytes.is_empty() {
+            return;
+        }
         self.deque.extend(bytes);
     }
 }
