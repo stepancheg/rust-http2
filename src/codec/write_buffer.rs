@@ -131,7 +131,8 @@ impl Into<Vec<u8>> for WriteBuffer {
         while self.has_remaining() {
             let bytes = self.bytes();
             v.extend_from_slice(bytes);
-            self.advance(bytes.len());
+            let len = bytes.len();
+            self.advance(len);
         }
         v
     }
