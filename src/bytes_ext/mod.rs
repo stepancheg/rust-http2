@@ -2,6 +2,7 @@ use bytes::Buf;
 use bytes::Bytes;
 use std::mem;
 
+pub(crate) mod buf_get_bytes;
 pub(crate) mod buf_vec_deque;
 pub(crate) mod bytes_vec_deque;
 use bytes_vec_deque::BytesVecDeque;

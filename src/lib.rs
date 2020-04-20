@@ -106,6 +106,7 @@ pub use crate::message::SimpleHttpMessage;
 pub use crate::error::Error;
 pub use crate::result::Result;
 
+pub use bytes_ext::buf_get_bytes::BufGetBytes;
 pub use bytes_ext::BytesDeque;
 
 /// Functions used in tests
