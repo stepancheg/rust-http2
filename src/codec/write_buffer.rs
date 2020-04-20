@@ -38,7 +38,7 @@ impl WriteBuffer {
         self.data.reserve(additional);
     }
 
-    pub fn compact(&mut self) {
+    fn compact(&mut self) {
         self.data.drain(..self.position);
         self.position = 0;
     }
@@ -47,12 +47,6 @@ impl WriteBuffer {
         // Could do something smarter
         self.reserve(data.len());
         self.data.extend_from_slice(data);
-    }
-
-    /// Pos is relative to "data"
-    pub fn patch_buf(&mut self, pos: usize, data: &[u8]) {
-        let patch_pos = self.position + pos;
-        (&mut self.data[patch_pos..patch_pos + data.len()]).copy_from_slice(data);
     }
 
     pub fn extend_from_vec(&mut self, data: Vec<u8>) {
@@ -72,6 +66,13 @@ impl WriteBuffer {
         self.compact();
         self.data.extend(iter);
     }
+
+    pub fn tail_vec(&mut self) -> WriteBufferTailVec {
+        WriteBufferTailVec {
+            data: &mut self.data,
+            position: &mut self.position,
+        }
+    }
 }
 
 impl Into<Vec<u8>> for WriteBuffer {
@@ -85,6 +86,48 @@ impl Into<Bytes> for WriteBuffer {
     fn into(self) -> Bytes {
         Bytes::from(Into::<Vec<u8>>::into(self))
     }
+}
+
+pub struct WriteBufferTailVec<'a> {
+    data: &'a mut Vec<u8>,
+    position: &'a mut usize,
+}
+
+impl<'a> WriteBufferTailVec<'a> {
+    /// Size of data in the buffer
+    pub fn remaining(&self) -> usize {
+        debug_assert!(*self.position <= self.data.len());
+        self.data.len() - *self.position
+    }
+
+    /// Pos is relative to "data"
+    pub fn patch_buf(&mut self, pos: usize, data: &[u8]) {
+        let patch_pos = *self.position + pos;
+        (&mut self.data[patch_pos..patch_pos + data.len()]).copy_from_slice(data);
+    }
+
+    pub fn extend_from_slice(&mut self, data: &[u8]) {
+        // Could do something smarter
+        self.reserve(data.len());
+        self.data.extend_from_slice(data);
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        if self.remaining() >= additional {
+            return;
+        }
+        self.compact();
+        self.data.reserve(additional);
+    }
+
+    pub fn compact(&mut self) {
+        self.data.drain(..*self.position);
+        *self.position = 0;
+    }
+}
+
+impl<'a> Drop for WriteBufferTailVec<'a> {
+    fn drop(&mut self) {}
 }
 
 #[cfg(test)]

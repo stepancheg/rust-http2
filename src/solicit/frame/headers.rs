@@ -1,9 +1,8 @@
 //! The module contains the implementation of the `HEADERS` frame and associated flags.
 
-use bytes::Buf;
 use bytes::Bytes;
 
-use crate::codec::write_buffer::WriteBuffer;
+use crate::codec::write_buffer::{WriteBuffer, WriteBufferTailVec};
 use crate::hpack;
 use crate::hpack::encoder::EncodeBuf;
 use crate::solicit::frame::continuation::ContinuationFlag;
@@ -436,7 +435,7 @@ struct EncodeBufForHeadersMultiFrame<'a> {
     current_frame_offset: usize,
     stream_id: StreamId,
     flags: Flags<HeadersFlag>,
-    builder: &'a mut WriteBuffer,
+    builder: WriteBufferTailVec<'a>,
     max_frame_size: u32,
 }
 
@@ -506,12 +505,14 @@ impl<'a> FrameIR for HeadersMultiFrame<'a> {
     fn serialize_into(self, builder: &mut WriteBuffer) {
         assert!(!self.flags.is_set(HeadersFlag::EndHeaders));
 
+        let tail_vec = builder.tail_vec();
+
         let mut buf = EncodeBufForHeadersMultiFrame {
             flags: self.flags,
             stream_id: self.stream_id,
             current_frame_type: HeadersFrameType::Headers,
-            current_frame_offset: builder.remaining(),
-            builder,
+            current_frame_offset: tail_vec.remaining(),
+            builder: tail_vec,
             max_frame_size: self.max_frame_size,
         };
 

@@ -71,7 +71,7 @@ impl Buf for BytesVecDeque {
         self.deque.bytes_vectored(dst)
     }
 
-    fn advance(&mut self, mut cnt: usize) {
+    fn advance(&mut self, cnt: usize) {
         self.deque.advance(cnt)
     }
 }
