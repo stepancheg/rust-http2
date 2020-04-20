@@ -20,17 +20,7 @@ impl<I: Into<VecDeque<Bytes>>> From<I> for BytesVecDeque {
 
 impl Into<Bytes> for BytesVecDeque {
     fn into(self) -> Bytes {
-        if !self.deque.has_remaining() {
-            Bytes::new()
-        } else if self.deque.len() == 1 {
-            self.deque.into_iter().next().unwrap()
-        } else {
-            let mut bytes_mut = BytesMut::with_capacity(self.deque.remaining());
-            for bytes in self.deque {
-                bytes_mut.extend_from_slice(&bytes);
-            }
-            bytes_mut.freeze()
-        }
+        self.into_bytes()
     }
 }
 
