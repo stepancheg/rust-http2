@@ -1,27 +1,55 @@
+use crate::bytes_deque::buf_vec_deque::BufVecDeque;
 use bytes::Buf;
 use bytes::Bytes;
+use std::io::Cursor;
+use std::io::IoSlice;
+use std::mem;
 
-// TODO: some tests
+enum Item {
+    Vec(Cursor<Vec<u8>>),
+}
+
+impl Buf for Item {
+    fn remaining(&self) -> usize {
+        match self {
+            Item::Vec(v) => v.remaining(),
+        }
+    }
+
+    fn bytes(&self) -> &[u8] {
+        match self {
+            Item::Vec(v) => v.bytes(),
+        }
+    }
+
+    fn advance(&mut self, cnt: usize) {
+        match self {
+            Item::Vec(v) => v.advance(cnt),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct WriteBuffer {
-    data: Vec<u8>,
-    position: usize, // must be `<= data.len()`
+    deque: BufVecDeque<Item>,
 }
 
 impl Buf for WriteBuffer {
     /// Size of data in the buffer
     fn remaining(&self) -> usize {
-        debug_assert!(self.position <= self.data.len());
-        self.data.len() - self.position
+        self.deque.remaining()
     }
 
     fn bytes(&self) -> &[u8] {
-        &self.data[self.position..]
+        self.deque.bytes()
+    }
+
+    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+        self.deque.bytes_vectored(dst)
     }
 
     fn advance(&mut self, cnt: usize) {
-        assert!(cnt <= self.remaining());
-        self.position += cnt;
+        self.deque.advance(cnt)
     }
 }
 
@@ -30,23 +58,8 @@ impl WriteBuffer {
         Default::default()
     }
 
-    pub fn reserve(&mut self, additional: usize) {
-        if self.remaining() >= additional {
-            return;
-        }
-        self.compact();
-        self.data.reserve(additional);
-    }
-
-    fn compact(&mut self) {
-        self.data.drain(..self.position);
-        self.position = 0;
-    }
-
     pub fn extend_from_slice(&mut self, data: &[u8]) {
-        // Could do something smarter
-        self.reserve(data.len());
-        self.data.extend_from_slice(data);
+        self.tail_vec().extend_from_slice(data);
     }
 
     pub fn extend_from_vec(&mut self, data: Vec<u8>) {
@@ -62,17 +75,30 @@ impl WriteBuffer {
     }
 
     pub fn tail_vec(&mut self) -> WriteBufferTailVec {
-        WriteBufferTailVec {
-            data: &mut self.data,
-            position: &mut self.position,
+        match self.deque.pop_back() {
+            Some(Item::Vec(cursor)) => WriteBufferTailVec {
+                write_buffer: self,
+                position: cursor.position() as usize,
+                data: cursor.into_inner(),
+            },
+            None => WriteBufferTailVec {
+                write_buffer: self,
+                data: Vec::new(),
+                position: 0,
+            },
         }
     }
 }
 
 impl Into<Vec<u8>> for WriteBuffer {
     fn into(mut self) -> Vec<u8> {
-        self.compact();
-        self.data
+        let mut v = Vec::with_capacity(self.remaining());
+        while self.has_remaining() {
+            let bytes = self.bytes();
+            v.extend_from_slice(bytes);
+            self.advance(bytes.len());
+        }
+        v
     }
 }
 
@@ -83,20 +109,29 @@ impl Into<Bytes> for WriteBuffer {
 }
 
 pub struct WriteBufferTailVec<'a> {
-    data: &'a mut Vec<u8>,
-    position: &'a mut usize,
+    write_buffer: &'a mut WriteBuffer,
+    data: Vec<u8>,
+    position: usize,
+}
+
+impl<'a> Drop for WriteBufferTailVec<'a> {
+    fn drop(&mut self) {
+        let mut cursor = Cursor::new(mem::take(&mut self.data));
+        cursor.set_position(self.position as u64);
+        self.write_buffer.deque.push_back(Item::Vec(cursor))
+    }
 }
 
 impl<'a> WriteBufferTailVec<'a> {
     /// Size of data in the buffer
     pub fn remaining(&self) -> usize {
-        debug_assert!(*self.position <= self.data.len());
-        self.data.len() - *self.position
+        debug_assert!(self.position <= self.data.len());
+        self.data.len() - self.position
     }
 
     /// Pos is relative to "data"
     pub fn patch_buf(&mut self, pos: usize, data: &[u8]) {
-        let patch_pos = *self.position + pos;
+        let patch_pos = self.position + pos;
         (&mut self.data[patch_pos..patch_pos + data.len()]).copy_from_slice(data);
     }
 
@@ -115,13 +150,9 @@ impl<'a> WriteBufferTailVec<'a> {
     }
 
     pub fn compact(&mut self) {
-        self.data.drain(..*self.position);
-        *self.position = 0;
+        self.data.drain(..self.position);
+        self.position = 0;
     }
-}
-
-impl<'a> Drop for WriteBufferTailVec<'a> {
-    fn drop(&mut self) {}
 }
 
 #[cfg(test)]

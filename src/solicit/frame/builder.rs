@@ -49,9 +49,7 @@ pub trait FrameBuilder {
 }
 
 impl FrameBuilder for WriteBuffer {
-    fn reserve(&mut self, additional: usize) {
-        self.reserve(additional);
-    }
+    fn reserve(&mut self, additional: usize) {}
 
     fn write_slice(&mut self, bytes: &[u8]) {
         self.extend_from_slice(bytes);
