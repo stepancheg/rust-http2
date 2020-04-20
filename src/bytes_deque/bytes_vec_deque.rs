@@ -151,16 +151,16 @@ mod test {
         d.extend(Bytes::from_static(b"ab"));
         d.extend(Bytes::from_static(b"cde"));
 
-        let mut v = [IoSlice::new(&[]); 1];
+        let mut v = [IoSlice::new(&[])];
         assert_eq!(1, d.bytes_vectored(&mut v));
         assert_eq!(b"ab", &*v[0]);
 
-        let mut v = [IoSlice::new(&[]); 2];
+        let mut v = [IoSlice::new(&[]), IoSlice::new(&[])];
         assert_eq!(2, d.bytes_vectored(&mut v));
         assert_eq!(b"ab", &*v[0]);
         assert_eq!(b"cde", &*v[1]);
 
-        let mut v = [IoSlice::new(&[]); 3];
+        let mut v = [IoSlice::new(&[]), IoSlice::new(&[]), IoSlice::new(&[])];
         assert_eq!(2, d.bytes_vectored(&mut v));
         assert_eq!(b"ab", &*v[0]);
         assert_eq!(b"cde", &*v[1]);
