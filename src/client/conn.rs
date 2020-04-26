@@ -361,7 +361,7 @@ impl ClientConn {
             .map_ok(move |socket| {
                 info!("connected to {}", addr);
 
-                if socketc.is_tcp() {
+                if socket.is_tcp() {
                     socket
                         .set_nodelay(no_delay)
                         .expect("failed to set TCP_NODELAY");
