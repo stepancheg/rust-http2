@@ -1,4 +1,4 @@
-use crate::client::increase_in_window::ClientIncreaseInWindow;
+use crate::client::resp::ClientResponse;
 use crate::common::stream_handler::StreamHandlerInternal;
 use crate::error;
 use crate::result;
@@ -10,11 +10,7 @@ use bytes::Bytes;
 /// Called once when stream is created
 pub trait ClientStreamCreatedHandler: Send + 'static {
     /// Called when stream is created
-    fn request_created(
-        &mut self,
-        req: ClientRequest,
-        increase_in_window: ClientIncreaseInWindow,
-    ) -> result::Result<Box<dyn ClientResponseStreamHandler>>;
+    fn request_created(&mut self, req: ClientRequest, resp: ClientResponse) -> crate::Result<()>;
 }
 
 /// Synchrnous callback of incoming data

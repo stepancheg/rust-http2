@@ -24,9 +24,8 @@ use tls_api;
 use crate::solicit_async::*;
 
 use crate::assert_types::assert_send_future;
-use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::req::ClientRequest;
-use crate::client::stream_handler::ClientResponseStreamHandlerHolder;
+
 use crate::client::stream_handler::ClientStreamCreatedHandler;
 use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
@@ -39,7 +38,6 @@ use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
-use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::sender::CommonSender;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -62,6 +60,7 @@ use futures::FutureExt;
 use futures::TryFutureExt;
 use std::pin::Pin;
 
+use crate::client::resp::ClientResponse;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::runtime::Handle;
@@ -168,12 +167,6 @@ where
                 .in_window_size
                 .size() as u32;
 
-            let increase_in_window = ClientIncreaseInWindow(IncreaseInWindow {
-                stream_id,
-                in_window_size,
-                to_write_tx: self.to_write_tx.clone(),
-            });
-
             let req = ClientRequest {
                 common: if end_stream {
                     CommonSender::new_done(stream_id)
@@ -183,7 +176,15 @@ where
                 drop_callback: None,
             };
 
-            match stream_handler.request_created(req, increase_in_window) {
+            let mut handler = None;
+            let resp = ClientResponse {
+                stream_handler: &mut handler,
+                in_window_size,
+                stream_id,
+                to_write_tx: &self.to_write_tx,
+            };
+
+            match stream_handler.request_created(req, resp) {
                 Err(e) => {
                     warn!("client cancelled request: {:?}", e);
                     // Should be fine to cancel before start, but TODO: check
@@ -192,9 +193,9 @@ where
                         .unwrap()
                         .close_outgoing(ErrorCode::InternalError);
                 }
-                Ok(handler) => {
+                Ok(()) => {
                     let mut stream = self.streams.get_mut(stream_id).unwrap();
-                    stream.stream().peer_tx = Some(ClientResponseStreamHandlerHolder(handler));
+                    stream.stream().peer_tx = handler;
 
                     stream.push_back(DataOrHeaders::Headers(headers));
                     if let Some(body) = body {

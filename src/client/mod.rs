@@ -2,6 +2,7 @@ pub(crate) mod conf;
 pub(crate) mod conn;
 pub(crate) mod increase_in_window;
 pub(crate) mod req;
+pub(crate) mod resp;
 pub(crate) mod stream_handler;
 pub(crate) mod tls;
 pub(crate) mod types;
@@ -10,8 +11,6 @@ use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::thread;
-
-use crate::common::stream_queue_sync::stream_queue_sync;
 
 use bytes::Bytes;
 
@@ -46,16 +45,17 @@ use crate::client::conf::ClientConf;
 use crate::client::conn::ClientConn;
 use crate::client::conn::ClientConnCallbacks;
 use crate::client::conn::StartRequestMessage;
-use crate::client::increase_in_window::ClientIncreaseInWindow;
+
 use crate::client::req::ClientRequest;
-use crate::client::stream_handler::ClientResponseStreamHandler;
+
 use crate::client::stream_handler::ClientStreamCreatedHandler;
 pub use crate::client::tls::ClientTlsOption;
-use crate::client::types::ClientTypes;
+
 use crate::client_died_error_holder::ClientDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::ConnStateSnapshot;
-use crate::common::stream_from_network::StreamFromNetwork;
+
+use crate::client::resp::ClientResponse;
 use crate::result;
 use crate::socket_unix::SocketAddrUnix;
 use crate::solicit::stream_id::StreamId;
@@ -304,22 +304,15 @@ impl Client {
             fn request_created(
                 &mut self,
                 req: ClientRequest,
-                increase_in_window: ClientIncreaseInWindow,
-            ) -> result::Result<Box<dyn ClientResponseStreamHandler>> {
+                resp: ClientResponse,
+            ) -> result::Result<()> {
                 let tx = self.tx.take().unwrap();
 
-                let (inc_tx, inc_rx) = stream_queue_sync::<ClientTypes>();
-
-                let stream_from_network = StreamFromNetwork {
-                    rx: inc_rx,
-                    increase_in_window: increase_in_window.0,
-                };
-                let resp = Response::from_stream(stream_from_network);
-
-                if let Err(_) = tx.send((req, resp)) {
+                if let Err(_) = tx.send((req, resp.make_stream())) {
                     return Err(error::Error::CallerDied);
                 }
-                Ok(Box::new(inc_tx))
+
+                Ok(())
             }
         }
 
