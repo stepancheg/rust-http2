@@ -58,7 +58,8 @@ impl<B: Buf> BufVecDeque<B> {
         }
     }
 
-    pub fn _back_mut(&mut self) -> Option<BufVecDequeBackMut<B>> {
+    #[cfg(test)]
+    pub fn back_mut(&mut self) -> Option<BufVecDequeBackMut<B>> {
         match self.deque.pop_back() {
             Some(back) => Some(BufVecDequeBackMut {
                 deque: self,
@@ -206,7 +207,7 @@ mod test {
 
     #[test]
     fn back_mut() {
-        let mut d = BufVecDeque::<VecDeque<u8>>::new();
+        let mut d = BufVecDeque::<VecDeque<u8>>::default();
         d.push_back(VecDeque::from(vec![3, 4]));
         d.push_back(VecDeque::from(vec![4, 6]));
         assert_eq!(4, d.remaining());
@@ -221,7 +222,7 @@ mod test {
 
     #[test]
     fn pop_back() {
-        let mut d = BufVecDeque::<VecDeque<u8>>::new();
+        let mut d = BufVecDeque::<VecDeque<u8>>::default();
         d.push_back(VecDeque::from(vec![3, 4]));
         d.push_back(VecDeque::from(vec![4, 6, 7]));
 

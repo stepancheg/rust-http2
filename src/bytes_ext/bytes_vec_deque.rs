@@ -109,7 +109,7 @@ mod test {
 
     #[test]
     fn buf_empty() {
-        let d = BytesVecDeque::new();
+        let d = BytesVecDeque::default();
         assert_eq!(&[0u8; 0], Buf::bytes(&d));
         assert_eq!(0, Buf::remaining(&d));
         assert_eq!(false, Buf::has_remaining(&d));
@@ -117,7 +117,7 @@ mod test {
 
     #[test]
     fn buf_advance_full() {
-        let mut d = BytesVecDeque::new();
+        let mut d = BytesVecDeque::default();
         d.extend(Bytes::from_static(b"ab"));
         d.extend(Bytes::from_static(b"cde"));
 
@@ -131,7 +131,7 @@ mod test {
 
     #[test]
     fn buf_advance() {
-        let mut d = BytesVecDeque::new();
+        let mut d = BytesVecDeque::default();
         d.extend(Bytes::from_static(b"ab"));
         d.extend(Bytes::from_static(b"cde"));
 
@@ -147,7 +147,7 @@ mod test {
 
     #[test]
     fn buf_bytes_vectored() {
-        let mut d = BytesVecDeque::new();
+        let mut d = BytesVecDeque::default();
         d.extend(Bytes::from_static(b"ab"));
         d.extend(Bytes::from_static(b"cde"));
 
