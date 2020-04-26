@@ -100,10 +100,6 @@ impl DataFrame {
         }
     }
 
-    fn with_data_conv<D: Into<Bytes>>(stream_id: StreamId, data: D) -> DataFrame {
-        DataFrame::with_data(stream_id, data.into())
-    }
-
     /// Returns `true` if the DATA frame is padded, otherwise false.
     pub fn is_padded(&self) -> bool {
         self.flags.is_set(DataFlag::Padded)
