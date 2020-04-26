@@ -48,8 +48,8 @@ use crate::client::conn::ClientConnCallbacks;
 use crate::client::conn::StartRequestMessage;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::req::ClientRequest;
+use crate::client::stream_handler::ClientResponseStreamHandler;
 use crate::client::stream_handler::ClientStreamCreatedHandler;
-use crate::client::stream_handler::ClientStreamHandler;
 pub use crate::client::tls::ClientTlsOption;
 use crate::client::types::ClientTypes;
 use crate::client_died_error_holder::ClientDiedType;
@@ -305,7 +305,7 @@ impl Client {
                 &mut self,
                 req: ClientRequest,
                 increase_in_window: ClientIncreaseInWindow,
-            ) -> result::Result<Box<dyn ClientStreamHandler>> {
+            ) -> result::Result<Box<dyn ClientResponseStreamHandler>> {
                 let tx = self.tx.take().unwrap();
 
                 let (inc_tx, inc_rx) = stream_queue_sync::<ClientTypes>();

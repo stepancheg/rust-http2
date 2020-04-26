@@ -14,11 +14,11 @@ pub trait ClientStreamCreatedHandler: Send + 'static {
         &mut self,
         req: ClientRequest,
         increase_in_window: ClientIncreaseInWindow,
-    ) -> result::Result<Box<dyn ClientStreamHandler>>;
+    ) -> result::Result<Box<dyn ClientResponseStreamHandler>>;
 }
 
 /// Synchrnous callback of incoming data
-pub trait ClientStreamHandler: Send + 'static {
+pub trait ClientResponseStreamHandler: Send + 'static {
     /// Response HEADERS frame received
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()>;
     /// DATA frame received
@@ -31,9 +31,11 @@ pub trait ClientStreamHandler: Send + 'static {
     fn error(&mut self, error: error::Error) -> result::Result<()>;
 }
 
-pub(crate) struct ClientStreamHandlerHolder(pub(crate) Box<dyn ClientStreamHandler>);
+pub(crate) struct ClientResponseStreamHandlerHolder(
+    pub(crate) Box<dyn ClientResponseStreamHandler>,
+);
 
-impl StreamHandlerInternal for ClientStreamHandlerHolder {
+impl StreamHandlerInternal for ClientResponseStreamHandlerHolder {
     fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
         self.0.data_frame(data, end_stream)
     }

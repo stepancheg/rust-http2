@@ -95,7 +95,7 @@ pub use crate::server::handler_paths::ServerHandlerPaths;
 pub use crate::server::increase_in_window::ServerIncreaseInWindow;
 pub use crate::server::req::ServerRequest;
 pub use crate::server::resp::ServerResponse;
-pub use crate::server::stream_handler::ServerStreamHandler;
+pub use crate::server::stream_handler::ServerRequestStreamHandler;
 pub use crate::server::tls::ServerTlsOption;
 pub use crate::server::Server;
 pub use crate::server::ServerBuilder;

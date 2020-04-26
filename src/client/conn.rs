@@ -26,8 +26,8 @@ use crate::solicit_async::*;
 use crate::assert_types::assert_send_future;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::req::ClientRequest;
+use crate::client::stream_handler::ClientResponseStreamHandlerHolder;
 use crate::client::stream_handler::ClientStreamCreatedHandler;
-use crate::client::stream_handler::ClientStreamHandlerHolder;
 use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
@@ -194,7 +194,7 @@ where
                 }
                 Ok(handler) => {
                     let mut stream = self.streams.get_mut(stream_id).unwrap();
-                    stream.stream().peer_tx = Some(ClientStreamHandlerHolder(handler));
+                    stream.stream().peer_tx = Some(ClientResponseStreamHandlerHolder(handler));
 
                     stream.push_back(DataOrHeaders::Headers(headers));
                     if let Some(body) = body {

@@ -8,13 +8,13 @@ use std::task::Poll;
 
 use crate::error;
 
-use crate::client::stream_handler::ClientStreamHandler;
+use crate::client::stream_handler::ClientResponseStreamHandler;
 use crate::client::types::ClientTypes;
 use crate::common::types::Types;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::result;
-use crate::server::stream_handler::ServerStreamHandler;
+use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::types::ServerTypes;
 use crate::ErrorCode;
 use crate::Headers;
@@ -45,7 +45,7 @@ impl<T: Types> StreamQueueSyncSender<T> {
     }
 }
 
-impl ServerStreamHandler for StreamQueueSyncSender<ServerTypes> {
+impl ServerRequestStreamHandler for StreamQueueSyncSender<ServerTypes> {
     fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
@@ -69,7 +69,7 @@ impl ServerStreamHandler for StreamQueueSyncSender<ServerTypes> {
     }
 }
 
-impl ClientStreamHandler for StreamQueueSyncSender<ClientTypes> {
+impl ClientResponseStreamHandler for StreamQueueSyncSender<ClientTypes> {
     fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
