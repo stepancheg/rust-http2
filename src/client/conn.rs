@@ -355,8 +355,13 @@ impl ClientConn {
 
         let domain = domain.to_owned();
 
+        let no_delay = conf.no_delay.unwrap_or(true);
         let connect = addr
             .connect(&lh)
+            .map_ok(move |c| {
+                c.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
+                c
+            })
             .map(move |c| {
                 info!("connected to {}", addr);
                 c
