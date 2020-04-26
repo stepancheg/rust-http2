@@ -35,11 +35,11 @@ impl<B: Buf, I: Into<VecDeque<B>>> From<I> for BufVecDeque<B> {
 }
 
 impl<B: Buf> BufVecDeque<B> {
-    pub fn new() -> BufVecDeque<B> {
+    pub fn _new() -> BufVecDeque<B> {
         Default::default()
     }
 
-    pub fn len(&self) -> usize {
+    pub fn _len(&self) -> usize {
         self.len
     }
 
@@ -58,7 +58,7 @@ impl<B: Buf> BufVecDeque<B> {
         }
     }
 
-    pub fn back_mut(&mut self) -> Option<BufVecDequeBackMut<B>> {
+    pub fn _back_mut(&mut self) -> Option<BufVecDequeBackMut<B>> {
         match self.deque.pop_back() {
             Some(back) => Some(BufVecDequeBackMut {
                 deque: self,

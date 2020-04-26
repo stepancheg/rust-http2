@@ -1,10 +1,12 @@
-use crate::bytes_ext::buf_vec_deque::BufVecDeque;
-use crate::BufGetBytes;
+use std::collections::{vec_deque, VecDeque};
+use std::io::IoSlice;
+
 use bytes::Buf;
 use bytes::Bytes;
 use bytes::BytesMut;
-use std::collections::VecDeque;
-use std::io::IoSlice;
+
+use crate::bytes_ext::buf_vec_deque::BufVecDeque;
+use crate::BufGetBytes;
 
 #[derive(Debug, Default)]
 pub(crate) struct BytesVecDeque {
@@ -36,7 +38,7 @@ impl Into<Vec<u8>> for BytesVecDeque {
 }
 
 impl BytesVecDeque {
-    pub fn new() -> BytesVecDeque {
+    pub fn _new() -> BytesVecDeque {
         Default::default()
     }
 
@@ -89,6 +91,15 @@ impl Buf for BytesVecDeque {
 impl BufGetBytes for BytesVecDeque {
     fn get_bytes(&mut self, cnt: usize) -> Bytes {
         self.deque.get_bytes(cnt)
+    }
+}
+
+impl<'a> IntoIterator for &'a BytesVecDeque {
+    type Item = &'a Bytes;
+    type IntoIter = vec_deque::Iter<'a, Bytes>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.deque).into_iter()
     }
 }
 
