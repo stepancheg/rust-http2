@@ -359,7 +359,9 @@ impl ClientConn {
         let connect = addr
             .connect(&lh)
             .map_ok(move |c| {
-                c.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
+                if c.is_tcp() {
+                    c.set_nodelay(no_delay).expect("failed to set TCP_NODELAY");
+                }
                 c
             })
             .map(move |c| {
