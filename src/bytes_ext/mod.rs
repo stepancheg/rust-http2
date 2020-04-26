@@ -26,14 +26,17 @@ impl Default for Inner {
 pub struct BytesDeque(Inner);
 
 impl BytesDeque {
+    /// Empty deque.
     pub fn new() -> BytesDeque {
         Default::default()
     }
 
+    /// Create a deque by copying from bytes slice.
     pub fn copy_from_slice(bytes: &[u8]) -> BytesDeque {
         BytesDeque::from(Bytes::copy_from_slice(bytes))
     }
 
+    /// Length in bytes.
     pub fn len(&self) -> usize {
         match &self.0 {
             Inner::One(b) => b.len(),
@@ -41,6 +44,7 @@ impl BytesDeque {
         }
     }
 
+    /// Append [`Bytes`] to this deque.
     pub fn extend(&mut self, bytes: Bytes) {
         if bytes.is_empty() {
             return;
@@ -62,6 +66,10 @@ impl BytesDeque {
         }
     }
 
+    /// Get deque contents as [`Bytes`] object.
+    ///
+    /// This operation is cheap if this deque contains only single [`Bytes`] object,
+    /// otherwise it allocates memory and copies data.
     pub fn get_bytes(&self) -> Bytes {
         match &self.0 {
             Inner::One(b) => b.clone(),
@@ -69,6 +77,9 @@ impl BytesDeque {
         }
     }
 
+    /// Convert contents into [`Bytes`] object.
+    ///
+    /// This function tries to avoid memory allocation when possible.
     pub fn into_bytes(self) -> Bytes {
         match self.0 {
             Inner::One(b) => b,

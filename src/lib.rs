@@ -5,6 +5,9 @@
 //! Asynchnous HTTP/2 client and server implementation.
 //!
 //! Based on futures/tokio.
+//!
+//! This crate is used to implement [`grpc` crate](https://github.com/stepancheg/grpc-rust),
+//! and probably not usable for anything else.
 
 #[macro_use]
 extern crate log;
