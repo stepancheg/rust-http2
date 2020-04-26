@@ -183,7 +183,7 @@ mod test {
     #[test]
     fn chain_to_bytes_first_empty() {
         let mut cd = Bytes::copy_from_slice(b"cd");
-        let cd_ptr = cd.as_ptr();
+        //let cd_ptr = cd.as_ptr();
         let mut chain = Bytes::new().chain(&mut cd);
         let cd_to_bytes = chain.to_bytes();
         assert_eq!(b"cd", cd_to_bytes.as_ref());
@@ -196,7 +196,7 @@ mod test {
     #[test]
     fn chain_to_bytes_second_empty() {
         let mut ab = Bytes::copy_from_slice(b"ab");
-        let ab_ptr = ab.as_ptr();
+        //let ab_ptr = ab.as_ptr();
         let mut chain = (&mut ab).chain(Bytes::new());
         let ab_to_bytes = chain.to_bytes();
         assert_eq!(b"ab", ab_to_bytes.as_ref());
@@ -230,7 +230,7 @@ mod test {
     #[test]
     fn take_to_bytes() {
         let mut abcd = Bytes::copy_from_slice(b"abcd");
-        let abcd_ptr = abcd.as_ptr();
+        //let abcd_ptr = abcd.as_ptr();
         let mut take = (&mut abcd).take(2);
         let ab = take.to_bytes();
         assert_eq!(Bytes::copy_from_slice(b"ab"), ab);
