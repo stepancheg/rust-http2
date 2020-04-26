@@ -355,11 +355,18 @@ impl ClientConn {
 
         let domain = domain.to_owned();
 
+        let no_delay = conf.no_delay.unwrap_or(true);
         let connect = addr
             .connect(&lh)
-            .map(move |c| {
+            .map_ok(move |socket| {
                 info!("connected to {}", addr);
-                c
+
+                if socket.is_tcp() {
+                    socket
+                        .set_nodelay(no_delay)
+                        .expect("failed to set TCP_NODELAY");
+                }
+                socket
             })
             .map_err(|e| error::Error::from(e));
 
