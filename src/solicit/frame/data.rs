@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn test_data_frame_serialize_no_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
-        let frame = DataFrame::with_data_conv(1, Bytes::copy_from_slice(&data[..]));
+        let frame = DataFrame::with_data(1, Bytes::copy_from_slice(&data[..]));
         let expected = {
             let headers = pack_header(&FrameHeader::new(6, 0, 0, 1));
             let mut res: Vec<u8> = Vec::new();
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     fn test_data_frame_serialize_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
-        let mut frame = DataFrame::with_data_conv(1, Bytes::copy_from_slice(&data[..]));
+        let mut frame = DataFrame::with_data(1, Bytes::copy_from_slice(&data[..]));
         frame.set_padding(5);
         let expected = {
             let headers = pack_header(&FrameHeader::new(6 + 1 + 5, 0, 8, 1));
@@ -480,7 +480,7 @@ mod tests {
     fn test_data_frame_serialize_null_padding() {
         let data = vec![1, 2, 3, 4, 5, 100];
         let cloned = data.clone();
-        let mut frame = DataFrame::with_data_conv(1, data);
+        let mut frame = DataFrame::with_data(1, data.into());
         frame.set_flag(DataFlag::Padded);
         let expected = {
             let headers = pack_header(&FrameHeader::new(6 + 1, 0, 8, 1));
