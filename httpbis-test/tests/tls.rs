@@ -1,13 +1,5 @@
 //! Test client and server TLS connected with TLS.
 
-extern crate bytes;
-extern crate futures;
-extern crate httpbis;
-extern crate regex;
-extern crate tls_api;
-extern crate tls_api_native_tls;
-
-extern crate httpbis_test;
 use httpbis_test::*;
 
 use std::sync::Arc;

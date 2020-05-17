@@ -1,7 +1,3 @@
-extern crate bytes;
-extern crate futures;
-extern crate httpbis;
-
 use bytes::Bytes;
 use futures::stream::StreamExt;
 use futures::stream::TryStreamExt;

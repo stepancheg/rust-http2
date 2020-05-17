@@ -1,5 +1,3 @@
-extern crate httpbis;
-
 use httpbis::ServerHandler;
 use httpbis::ServerHandlerContext;
 use httpbis::ServerRequest;

@@ -1,14 +1,3 @@
-extern crate bytes;
-extern crate env_logger;
-extern crate futures;
-extern crate log;
-extern crate regex;
-extern crate tls_api;
-extern crate tls_api_openssl;
-
-extern crate httpbis;
-extern crate httpbis_interop;
-
 use std::sync::Arc;
 use std::thread;
 

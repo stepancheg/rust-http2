@@ -11,15 +11,6 @@
 
 #[macro_use]
 extern crate log;
-extern crate log_ndc;
-
-extern crate tls_api;
-extern crate tls_api_stub;
-
-extern crate bytes;
-extern crate net2;
-extern crate rand;
-extern crate void;
 
 mod solicit;
 

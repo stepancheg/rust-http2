@@ -1,14 +1,8 @@
 //! Tests for server.
 
-extern crate bytes;
 #[macro_use]
 extern crate log;
-extern crate futures;
 
-extern crate httpbis;
-extern crate regex;
-
-extern crate httpbis_test;
 use httpbis_test::*;
 
 use std::sync::atomic::AtomicUsize;
@@ -38,11 +32,6 @@ use httpbis::*;
 use std::iter::FromIterator;
 use std::net::TcpStream;
 use std::sync::mpsc;
-
-#[cfg(unix)]
-extern crate tempdir;
-#[cfg(unix)]
-extern crate unix_socket;
 
 use futures::task::Context;
 use httpbis::BytesDeque;

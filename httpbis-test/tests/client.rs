@@ -4,13 +4,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-extern crate bytes;
-extern crate futures;
-extern crate httpbis;
-extern crate log;
-extern crate regex;
-
-extern crate httpbis_test;
 use httpbis_test::*;
 
 use bytes::Bytes;

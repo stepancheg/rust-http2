@@ -1,13 +1,5 @@
-extern crate bytes;
-extern crate futures;
-extern crate httpbis;
-extern crate httpbis_interop;
 #[macro_use]
 extern crate log;
-extern crate clap;
-extern crate env_logger;
-extern crate tls_api;
-extern crate tls_api_openssl;
 
 use std::net::IpAddr;
 use std::net::SocketAddr;

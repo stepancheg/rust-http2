@@ -1,9 +1,3 @@
-extern crate futures;
-extern crate httpbis;
-extern crate tls_api;
-extern crate tls_api_openssl;
-extern crate url;
-
 use std::env;
 use std::process;
 use tokio::runtime::Runtime;

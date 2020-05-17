@@ -1,7 +1,3 @@
-extern crate env_logger;
-extern crate httpbis;
-extern crate httpbis_h2spec_test;
-
 use std::io;
 use std::sync::Arc;
 

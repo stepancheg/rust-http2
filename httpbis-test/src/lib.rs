@@ -1,14 +1,5 @@
 #[macro_use]
 extern crate log;
-extern crate log_ndc_env_logger;
-
-extern crate regex;
-
-extern crate bytes;
-
-extern crate futures;
-
-extern crate httpbis;
 
 use std::sync::Once;
 

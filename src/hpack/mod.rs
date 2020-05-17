@@ -2,9 +2,6 @@
 //! performing the encoding and decoding of header sets, according to the
 //! HPACK spec.
 
-//#[cfg(feature="interop_tests")]
-//extern crate rustc_serialize;
-
 // Re-export the main HPACK API entry points.
 pub use self::decoder::Decoder;
 pub use self::encoder::Encoder;

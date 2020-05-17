@@ -1,7 +1,3 @@
-extern crate httpbis;
-extern crate tls_api;
-extern crate tls_api_openssl;
-
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
 use httpbis::ServerHandlerContext;

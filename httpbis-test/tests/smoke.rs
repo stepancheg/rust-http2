@@ -1,13 +1,6 @@
-extern crate bytes;
-extern crate futures;
-extern crate httpbis;
 #[macro_use]
 extern crate log;
-extern crate regex;
-#[cfg(unix)]
-extern crate tempdir;
 
-extern crate httpbis_test;
 use httpbis_test::*;
 
 use std::sync::Arc;

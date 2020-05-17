@@ -1,8 +1,3 @@
-extern crate bytes;
-extern crate futures;
-extern crate httpbis;
-extern crate regex;
-
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
