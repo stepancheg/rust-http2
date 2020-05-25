@@ -29,6 +29,3 @@ url                = "1"
 tempdir            = "0.3"
 
 httpbis = { path = ".." }
-
-[target.'cfg(unix)'.dependencies]
-unix_socket     = "0.5"

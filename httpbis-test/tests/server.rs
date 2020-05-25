@@ -35,10 +35,9 @@ use std::sync::mpsc;
 
 use futures::task::Context;
 use httpbis::BytesDeque;
+use std::os::unix::net::UnixStream;
 use std::pin::Pin;
 use tokio::runtime::Runtime;
-#[cfg(unix)]
-use unix_socket::UnixStream;
 
 #[test]
 fn simple_new() {
