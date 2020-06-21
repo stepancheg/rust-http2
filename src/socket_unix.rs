@@ -155,7 +155,7 @@ impl ToClientStream for SocketAddrUnix {
     fn connect(
         &self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Box<dyn StreamItem + Send>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
         use futures::future;
         Box::pin(future::err(io::Error::new(
             io::ErrorKind::Other,
