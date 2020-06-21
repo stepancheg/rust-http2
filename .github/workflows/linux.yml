@@ -1,0 +1,61 @@
+on: [push, pull_request]
+
+name: Jobs
+
+jobs:
+    test:
+        name: ${{ matrix.channel }}
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                channel: [stable, beta, nightly]
+        steps:
+            - name: Checkout sources
+              uses: actions/checkout@v2
+
+            - name: Install toolchain
+              uses: actions-rs/toolchain@v1
+              with:
+                  profile: minimal
+                  toolchain: ${{ matrix.channel }}
+                  override: true
+
+            - name: cargo test
+              uses: actions-rs/cargo@v1
+              with:
+                  # Use one thread for better errors
+                  command: test
+                  args: --all --all-targets -- --test-threads=1
+
+            # `--all-targets` does not include doctests
+            # https://github.com/rust-lang/cargo/issues/6669
+            - name: cargo test --doc
+              uses: actions-rs/cargo@v1
+              with:
+                  command: test
+                  args: --doc
+
+            # Check the docs
+            - name: doc
+              uses: actions-rs/cargo@v1
+              with:
+                  command: doc
+
+    h2spec:
+        name: h2spec
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout sources
+              uses: actions/checkout@v2
+
+            - name: Install h2spec
+              run: ci/install-h2spec.sh
+
+            - name: Build h2spec test
+              uses: actions-rs/cargo@v1
+              with:
+                  command: build
+                  args: --manifest-path h2spec-test/Cargo.toml --bin the_test
+
+            - name: Run h2spec test
+              run: PATH="$(pwd):$PATH" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test
