@@ -1,7 +1,7 @@
 # rust-http2
 
 <!-- https://travis-ci.org/stepancheg/rust-http2.png -->
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/stepancheg/rust-http2/Jobs)](https://github.com/stepancheg/rust-http2/actions)
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/stepancheg/rust-http2/Jobs)](https://github.com/stepancheg/rust-http2/actions?query=workflow%3AJobs)
 [![License](https://img.shields.io/crates/l/httpbis.svg)](https://github.com/stepancheg/rust-http2/blob/master/LICENSE.txt)
 [![crates.io](https://img.shields.io/crates/v/httpbis.svg)](https://crates.io/crates/httpbis) 
 
