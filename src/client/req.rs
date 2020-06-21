@@ -57,7 +57,7 @@ impl ClientRequest {
     }
 
     pub fn clear_drop_callback(&mut self) {
-        mem::replace(&mut self.drop_callback, None);
+        self.drop_callback = None;
     }
 
     /// Wait for stream to be ready to accept data.

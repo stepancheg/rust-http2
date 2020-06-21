@@ -57,7 +57,7 @@ impl ServerResponse {
     }
 
     pub fn clear_drop_callback(&mut self) {
-        mem::replace(&mut self.drop_callback, None);
+        self.drop_callback = None;
     }
 
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), StreamDead>> {
