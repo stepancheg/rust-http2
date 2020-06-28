@@ -1,26 +1,23 @@
-use crate::ghwf::{Step, Job};
-use crate::yaml::{Yaml, YamlWriter};
+use crate::actions::cargo_build;
+use crate::actions::cargo_doc;
+use crate::actions::cargo_test;
+use crate::actions::checkout_sources;
+use crate::actions::rust_install_toolchain;
+use crate::actions::RustToolchain;
+use crate::ghwf::Env;
+use crate::ghwf::Job;
+use crate::ghwf::Step;
+use crate::yaml::Yaml;
+use crate::yaml::YamlWriter;
 use std::fs::File;
 use std::io::Write;
-use crate::actions::{checkout_sources, cargo_test, cargo_build, cargo_doc};
 
+mod actions;
 mod ghwf;
 mod yaml;
-mod actions;
 
-fn steps(channel: &str) -> Vec<Step> {
-    let mut r = vec![
-        checkout_sources(),
-        Step::uses_with(
-            "Install toolchain",
-            "actions-rs/toolchain@v1",
-            Yaml::map(vec![
-                ("profile", "minimal"),
-                ("toolchain", channel),
-                ("override", "true"),
-            ]),
-        ),
-    ];
+fn steps(channel: RustToolchain) -> Vec<Step> {
+    let mut r = vec![checkout_sources(), rust_install_toolchain(channel)];
     // Use one thread for better errors
     r.push(cargo_test(
         &format!("cargo test"),
@@ -36,23 +33,27 @@ fn steps(channel: &str) -> Vec<Step> {
 #[derive(PartialEq, Eq, Copy, Clone)]
 struct Os {
     name: &'static str,
-    ghwf: &'static str,
+    ghwf: Env,
 }
 
 const LINUX: Os = Os {
     name: "linux",
-    ghwf: "ubuntu-latest",
+    ghwf: Env::UbuntuLatest,
 };
 const MACOS: Os = Os {
     name: "macos",
-    ghwf: "macos-latest",
+    ghwf: Env::MacosLatest,
 };
 
 fn jobs() -> Yaml {
     let mut r = Vec::new();
-    for &channel in &["stable", "beta", "nightly"] {
+    for &channel in &[
+        RustToolchain::Stable,
+        RustToolchain::Beta,
+        RustToolchain::Nightly,
+    ] {
         for &os in &[LINUX, MACOS] {
-            if channel != "stable" && os == MACOS {
+            if channel != RustToolchain::Stable && os == MACOS {
                 // skip some jobs because macos is expensive
                 continue;
             }

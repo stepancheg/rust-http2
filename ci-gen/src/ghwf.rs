@@ -1,4 +1,23 @@
 use crate::yaml::Yaml;
+use std::fmt;
+
+#[allow(dead_code)]
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum Env {
+    WindowsLatest,
+    UbuntuLatest,
+    MacosLatest,
+}
+
+impl fmt::Display for Env {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Env::WindowsLatest => write!(f, "windows-latest"),
+            Env::UbuntuLatest => write!(f, "ubuntu-latest"),
+            Env::MacosLatest => write!(f, "macos-latest"),
+        }
+    }
+}
 
 /// Github workflow step
 pub struct Step(pub Yaml);
@@ -30,7 +49,7 @@ impl Into<Yaml> for Step {
 pub struct Job {
     pub id: String,
     pub name: String,
-    pub runs_on: String,
+    pub runs_on: Env,
     pub steps: Vec<Step>,
 }
 
@@ -40,7 +59,7 @@ impl Into<(String, Yaml)> for Job {
             self.id,
             Yaml::map(vec![
                 ("name", Yaml::string(self.name)),
-                ("runs-on", Yaml::string(self.runs_on)),
+                ("runs-on", Yaml::string(format!("{}", self.runs_on))),
                 ("steps", Yaml::list(self.steps)),
             ]),
         )
