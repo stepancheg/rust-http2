@@ -30,4 +30,4 @@ tls-api-openssl = "0.4.0"
 url             = "1"
 
 [workspace]
-members = ["interop/with-rust", "h2spec-test", "httpbis-test"]
+members = ["interop/with-rust", "h2spec-test", "httpbis-test", "ci-gen"]
