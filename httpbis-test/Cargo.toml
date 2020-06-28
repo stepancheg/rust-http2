@@ -28,4 +28,4 @@ regex              = "0.2"
 url                = "1"
 tempdir            = "0.3"
 
-httpbis = { path = ".." }
+httpbis = { path = "../httpbis" }

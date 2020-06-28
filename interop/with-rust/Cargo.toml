@@ -17,7 +17,7 @@ name = "http2-rust-interop-client"
 path = "src/interop_client.rs"
 
 [dependencies.httpbis]
-path = "../.."
+path = "../../httpbis"
 
 [dependencies]
 

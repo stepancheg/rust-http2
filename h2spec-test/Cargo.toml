@@ -10,7 +10,7 @@ keywords = ["http2"]
 edition = "2018"
 
 [dependencies]
-httpbis = { path = ".." }
+httpbis = { path = "../httpbis" }
 env_logger = "~0.5"
 log-ndc-env-logger = "0.2.*"
 futures            = "0.3.1"
