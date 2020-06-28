@@ -16,20 +16,6 @@ mod actions;
 mod ghwf;
 mod yaml;
 
-fn steps(channel: RustToolchain) -> Vec<Step> {
-    let mut r = vec![checkout_sources(), rust_install_toolchain(channel)];
-    // Use one thread for better errors
-    r.push(cargo_test(
-        &format!("cargo test"),
-        "--all --all-targets -- --test-threads=1",
-    ));
-    // `--all-targets` does not include doctests
-    // https://github.com/rust-lang/cargo/issues/6669
-    r.push(cargo_test("cargo test --doc", "--doc"));
-    r.push(cargo_doc("doc", ""));
-    r
-}
-
 #[derive(PartialEq, Eq, Copy, Clone)]
 struct Os {
     name: &'static str,
@@ -44,6 +30,41 @@ const MACOS: Os = Os {
     name: "macos",
     ghwf: Env::MacosLatest,
 };
+const WINDOWS: Os = Os {
+    name: "windows",
+    ghwf: Env::WindowsLatest,
+};
+
+fn steps(os: Os, channel: RustToolchain) -> Vec<Step> {
+    let mut r = vec![];
+    r.push(checkout_sources());
+    r.push(rust_install_toolchain(channel));
+
+    // Slow as death
+    if false && os.ghwf == Env::WindowsLatest {
+        r.push(Step::run(
+            "Install OpenSSL",
+            "vcpkg install openssl:x64-windows",
+        ));
+    }
+
+    if os.ghwf == Env::WindowsLatest {
+        // It's too hard to install OpenSSL on Windows, so build main crate only
+
+        r.push(cargo_build("cargo build main crate only", "-p httpbis"));
+    } else {
+        // Use one thread for better errors
+        r.push(cargo_test(
+            &format!("cargo test"),
+            "--all --all-targets -- --test-threads=1",
+        ));
+        // `--all-targets` does not include doctests
+        // https://github.com/rust-lang/cargo/issues/6669
+        r.push(cargo_test("cargo test --doc", "--doc"));
+        r.push(cargo_doc("doc", ""));
+    }
+    r
+}
 
 fn jobs() -> Yaml {
     let mut r = Vec::new();
@@ -52,16 +73,22 @@ fn jobs() -> Yaml {
         RustToolchain::Beta,
         RustToolchain::Nightly,
     ] {
-        for &os in &[LINUX, MACOS] {
-            if channel != RustToolchain::Stable && os == MACOS {
-                // skip some jobs because macos is expensive
+        for &os in &[LINUX, MACOS, WINDOWS] {
+            if channel != RustToolchain::Stable && os != LINUX {
+                // skip some jobs because macos and windows are expensive
                 continue;
             }
             r.push(Job {
                 id: format!("{}-{}", os.name, channel),
                 name: format!("{} {}", os.name, channel),
                 runs_on: os.ghwf.to_owned(),
-                steps: steps(channel),
+                steps: steps(os, channel),
+                env: if os == WINDOWS {
+                    vec![("VCPKGRS_DYNAMIC".to_owned(), "1".to_owned())]
+                } else {
+                    Vec::new()
+                },
+                ..Default::default()
             });
         }
     }
@@ -79,6 +106,7 @@ fn jobs() -> Yaml {
                 "PATH=\"$(pwd):$PATH\" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test",
             )
         ],
+        ..Default::default()
     });
 
     Yaml::map(r.into_iter().map(Job::into))

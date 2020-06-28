@@ -11,6 +11,12 @@ impl From<&Yaml> for Yaml {
     }
 }
 
+impl From<String> for Yaml {
+    fn from(s: String) -> Self {
+        Yaml::String(s)
+    }
+}
+
 impl From<&str> for Yaml {
     fn from(s: &str) -> Self {
         Yaml::String(s.to_owned())
