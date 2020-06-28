@@ -9,6 +9,12 @@ pub enum Env {
     MacosLatest,
 }
 
+impl Default for Env {
+    fn default() -> Self {
+        Env::UbuntuLatest
+    }
+}
+
 impl fmt::Display for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -46,22 +52,25 @@ impl Into<Yaml> for Step {
     }
 }
 
+#[derive(Default)]
 pub struct Job {
     pub id: String,
     pub name: String,
     pub runs_on: Env,
     pub steps: Vec<Step>,
+    pub env: Vec<(String, String)>,
 }
 
 impl Into<(String, Yaml)> for Job {
     fn into(self) -> (String, Yaml) {
-        (
-            self.id,
-            Yaml::map(vec![
-                ("name", Yaml::string(self.name)),
-                ("runs-on", Yaml::string(format!("{}", self.runs_on))),
-                ("steps", Yaml::list(self.steps)),
-            ]),
-        )
+        let mut entries = vec![
+            ("name", Yaml::string(self.name)),
+            ("runs-on", Yaml::string(format!("{}", self.runs_on))),
+        ];
+        if !self.env.is_empty() {
+            entries.push(("env", Yaml::map(self.env)));
+        }
+        entries.push(("steps", Yaml::list(self.steps)));
+        (self.id, Yaml::map(entries))
     }
 }

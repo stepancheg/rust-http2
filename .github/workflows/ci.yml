@@ -57,6 +57,25 @@ jobs:
               uses: actions-rs/cargo@v1
               with:
                   command: doc
+    windows-stable:
+        name: windows stable
+        runs-on: windows-latest
+        env:
+            VCPKGRS_DYNAMIC: 1
+        steps:
+            - name: Checkout sources
+              uses: actions/checkout@v2
+            - name: Install toolchain
+              uses: actions-rs/toolchain@v1
+              with:
+                  profile: minimal
+                  toolchain: stable
+                  override: true
+            - name: cargo build main crate only
+              uses: actions-rs/cargo@v1
+              with:
+                  command: build
+                  args: -p httpbis
     linux-beta:
         name: linux beta
         runs-on: ubuntu-latest
