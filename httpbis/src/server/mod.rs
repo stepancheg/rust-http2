@@ -25,7 +25,6 @@ use futures::future;
 use futures::future::try_join;
 use futures::future::FutureExt;
 use futures::future::TryFutureExt;
-use futures::stream::StreamExt;
 
 use crate::error::Error;
 use crate::result::Result;
@@ -298,16 +297,20 @@ where
 {
     let service = Arc::new(service);
 
-    let tokio_listener = listen.to_tokio_listener(&handle);
+    let mut tokio_listener = listen.to_tokio_listener(&handle);
 
     if conn_handles.is_empty() {
         conn_handles.push(handle.clone());
     }
 
     let loop_run = async move {
-        let mut incoming = tokio_listener.incoming();
-        while let Some(r) = incoming.next().await {
-            let (socket, peer_addr) = r?;
+        if false {
+            // type hint
+            return Ok(());
+        }
+
+        loop {
+            let (socket, peer_addr) = tokio_listener.as_mut().accept().await?;
 
             info!("accepted connection from {}", peer_addr);
 
@@ -355,9 +358,6 @@ where
                 })
             });
         }
-        unreachable!();
-        #[allow(unreachable_code)]
-        Ok(())
     };
 
     let (done_tx, done_rx) = oneshot::channel();

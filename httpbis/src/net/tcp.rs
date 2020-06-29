@@ -6,12 +6,9 @@ use tokio::net::TcpStream;
 
 use futures::future::Future;
 use futures::future::TryFutureExt;
-use futures::stream;
-use futures::stream::Stream;
 
 use net2;
 
-use crate::assert_types::assert_send_stream;
 use crate::net::addr::AnySocketAddr;
 use crate::net::connect::ToClientStream;
 use crate::net::listen::ToServerStream;
@@ -66,8 +63,8 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 }
 
 impl ToTokioListener for ::std::net::TcpListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Box<dyn ToServerStream> {
-        handle.enter(|| Box::new(TcpListener::from_std(*self).unwrap()))
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn ToServerStream>> {
+        handle.enter(|| Box::pin(TcpListener::from_std(*self).unwrap()))
     }
 
     fn local_addr(&self) -> io::Result<AnySocketAddr> {
@@ -76,33 +73,22 @@ impl ToTokioListener for ::std::net::TcpListener {
 }
 
 impl ToServerStream for TcpListener {
-    fn incoming(
-        self: Box<Self>,
+    fn accept<'a>(
+        self: Pin<&'a mut Self>,
     ) -> Pin<
         Box<
-            dyn Stream<Item = io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>>
-                + Send,
+            dyn Future<Output = io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>>
+                + Send
+                + 'a,
         >,
     > {
-        let tcp_listener = *self;
-
-        let stream = stream::unfold(tcp_listener, |mut tcp_listener| async move {
-            let r = match tcp_listener.accept().await {
-                Ok((socket, addr)) => Ok((
-                    Box::pin(socket) as Pin<Box<dyn SocketStream + Send>>,
-                    AnySocketAddr::Inet(addr),
-                )),
-                Err(e) => Err(e),
-            };
-            Some((r, tcp_listener))
-        });
-
-        let stream = assert_send_stream::<
-            io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>,
-            _,
-        >(stream);
-
-        Box::pin(stream)
+        Box::pin(async move {
+            let (socket, peer_addr) = TcpListener::accept(Pin::get_mut(self)).await?;
+            Ok((
+                Box::pin(socket) as Pin<Box<dyn SocketStream + Send>>,
+                AnySocketAddr::Inet(peer_addr),
+            ))
+        })
     }
 }
 

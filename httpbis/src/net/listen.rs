@@ -1,6 +1,6 @@
 use crate::net::socket::SocketStream;
 use crate::{AnySocketAddr, ServerConf};
-use futures::Stream;
+use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use tokio::runtime::Handle;
@@ -12,18 +12,19 @@ pub trait ToSocketListener {
 }
 
 pub trait ToTokioListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Box<dyn ToServerStream>;
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn ToServerStream>>;
 
     fn local_addr(&self) -> io::Result<AnySocketAddr>;
 }
 
 pub trait ToServerStream: Send {
-    fn incoming(
-        self: Box<Self>,
+    fn accept<'a>(
+        self: Pin<&'a mut Self>,
     ) -> Pin<
         Box<
-            dyn Stream<Item = io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>>
-                + Send,
+            dyn Future<Output = io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>>
+                + Send
+                + 'a,
         >,
     >;
 }
