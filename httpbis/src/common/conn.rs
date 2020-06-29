@@ -46,12 +46,11 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::task::Context;
 
+use crate::net::socket::SocketStream;
 use std::mem;
 use std::sync::Arc;
 use std::task::Poll;
 use tokio::io::split;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
 use tokio::io::ReadHalf;
 use tokio::io::WriteHalf;
 use tokio::runtime::Handle;
@@ -60,7 +59,7 @@ use tokio::runtime::Handle;
 pub trait ConnSpecific: Send + 'static {}
 
 /// HTTP/2 connection state with socket and streams
-pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
+pub(crate) struct Conn<T: Types, I: SocketStream> {
     pub peer_addr: AnySocketAddr,
 
     pub conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
@@ -105,7 +104,11 @@ pub(crate) struct Conn<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> {
     pub our_settings_sent: Option<HttpSettings>,
 }
 
-impl<T: Types, I: AsyncWrite + AsyncRead + Send + 'static> Drop for Conn<T, I> {
+impl<T, I> Drop for Conn<T, I>
+where
+    T: Types,
+    I: SocketStream,
+{
     fn drop(&mut self) {
         mem::take(&mut self.streams).conn_died(|| self.conn_died_error_holder.error());
     }
@@ -136,7 +139,7 @@ where
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     pub fn new(
         loop_handle: Handle,

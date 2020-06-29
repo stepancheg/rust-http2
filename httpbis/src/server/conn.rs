@@ -18,8 +18,6 @@ use futures::TryFutureExt;
 
 use crate::common::types::Types;
 
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
 
 use tls_api::TlsAcceptor;
@@ -93,7 +91,7 @@ type ServerInner<I> = Conn<ServerTypes, I>;
 
 impl<I> ServerInner<I>
 where
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     fn new_stream_from_client(
         &mut self,
@@ -193,7 +191,7 @@ impl From<CommonToWriteMessage> for ServerToWriteMessage {
 
 impl<I> ConnWriteSideCustom for Conn<ServerTypes, I>
 where
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     type Types = ServerTypes;
 
@@ -206,7 +204,7 @@ where
 
 impl<I> ConnReadSideCustom for Conn<ServerTypes, I>
 where
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     type Types = ServerTypes;
 
@@ -263,7 +261,7 @@ impl ServerConn {
     ) -> (ServerConn, HttpFutureSend<()>)
     where
         F: ServerHandler,
-        I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        I: SocketStream,
     {
         let lh = lh.clone();
 

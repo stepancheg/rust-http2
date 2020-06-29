@@ -96,9 +96,9 @@ impl ToClientStream for SocketAddr {
     fn connect(
         &self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
         let future = TcpStream::connect(self.clone())
-            .map_ok(|stream| Box::pin(stream) as Pin<Box<dyn SocketStream + Send>>);
+            .map_ok(|stream| Box::pin(stream) as Pin<Box<dyn SocketStream>>);
         Box::pin(future)
     }
 

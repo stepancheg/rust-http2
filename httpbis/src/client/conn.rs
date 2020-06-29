@@ -61,8 +61,6 @@ use futures::TryFutureExt;
 use std::pin::Pin;
 
 use crate::client::resp::ClientResponse;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
 use tokio::runtime::Handle;
 use tokio::time;
 
@@ -115,7 +113,7 @@ impl From<CommonToWriteMessage> for ClientToWriteMessage {
 
 impl<I> ConnWriteSideCustom for Conn<ClientTypes, I>
 where
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     type Types = ClientTypes;
 
@@ -134,7 +132,7 @@ where
 
 impl<I> Conn<ClientTypes, I>
 where
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     fn process_start(&mut self, start: ClientStartRequestMessage) -> result::Result<()> {
         let ClientStartRequestMessage {
@@ -231,7 +229,7 @@ impl ClientConn {
         callbacks: C,
     ) -> Self
     where
-        I: AsyncWrite + AsyncRead + Unpin + Send + 'static,
+        I: SocketStream,
         C: ClientConnCallbacks,
     {
         let conn_died_error_holder = SomethingDiedErrorHolder::new();
@@ -310,7 +308,7 @@ impl ClientConn {
 
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = TryFutureExt::map_err(addr.connect(&lh), error::Error::from);
-        let map_callback = move |socket: Pin<Box<dyn SocketStream + Send>>| {
+        let map_callback = move |socket: Pin<Box<dyn SocketStream>>| {
             info!("connected to {}", addr);
 
             if socket.is_tcp() {
@@ -323,7 +321,7 @@ impl ClientConn {
         };
 
         let connect: Pin<
-            Box<dyn Future<Output = result::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>,
+            Box<dyn Future<Output = result::Result<Pin<Box<dyn SocketStream>>>> + Send>,
         > = if let Some(timeout) = conf.connection_timeout {
             Box::pin(time::timeout(timeout, connect).map(|r| match r {
                 Ok(r) => r,
@@ -334,7 +332,7 @@ impl ClientConn {
         };
 
         let connect = Box::pin(
-            connect.map_ok(move |socket: Pin<Box<dyn SocketStream + Send>>| map_callback(socket)),
+            connect.map_ok(move |socket: Pin<Box<dyn SocketStream>>| map_callback(socket)),
         );
 
         ClientConn::spawn_connected(lh, connect, addr_struct, conf, callbacks)
@@ -461,7 +459,7 @@ impl ClientInterface for ClientConn {
 
 impl<I> ConnReadSideCustom for Conn<ClientTypes, I>
 where
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     type Types = ClientTypes;
 

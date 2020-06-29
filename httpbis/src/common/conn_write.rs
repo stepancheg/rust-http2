@@ -32,9 +32,8 @@ use futures::channel::oneshot;
 use futures::task::Context;
 use std::cmp;
 
+use crate::net::socket::SocketStream;
 use std::task::Poll;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
 
 pub(crate) trait ConnWriteSideCustom {
     type Types: Types;
@@ -51,7 +50,7 @@ where
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
-    I: AsyncWrite + AsyncRead + Send + 'static,
+    I: SocketStream,
 {
     fn write_part_data(&mut self, stream_id: StreamId, data: Bytes, end_stream: EndStream) {
         let max_frame_size = self.peer_settings.max_frame_size as usize;

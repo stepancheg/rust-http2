@@ -135,16 +135,14 @@ impl ToClientStream for SocketAddrUnix {
     fn connect(
         &self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
         // TODO: async connect
         let stream = match std::os::unix::net::UnixStream::connect(&self.0) {
             Ok(stream) => stream,
             Err(e) => return Box::pin(async { Err(e) }),
         };
         match handle.enter(|| UnixStream::from_std(stream)) {
-            Ok(stream) => {
-                Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn SocketStream + Send>>) })
-            }
+            Ok(stream) => Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn SocketStream>>) }),
             Err(e) => return Box::pin(async { Err(e) }),
         }
     }
@@ -153,7 +151,7 @@ impl ToClientStream for SocketAddrUnix {
     fn connect(
         &self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
         use futures::future;
         Box::pin(future::err(io::Error::new(
             io::ErrorKind::Other,

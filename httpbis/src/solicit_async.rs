@@ -25,6 +25,7 @@ use crate::solicit::frame::SettingsFrame;
 use crate::solicit::frame::FRAME_HEADER_LEN;
 
 use crate::misc::BsDebug;
+use crate::net::socket::SocketStream;
 use std::pin::Pin;
 use std::task::Context;
 
@@ -88,7 +89,7 @@ async fn send_settings<W: AsyncWrite + Unpin + Send + 'static>(
     send_frame(conn, settings).await
 }
 
-pub async fn client_handshake<I: AsyncWrite + AsyncRead + Unpin + Send + 'static>(
+pub async fn client_handshake<I: SocketStream>(
     conn: &mut I,
     settings: SettingsFrame,
 ) -> result::Result<()> {
