@@ -25,9 +25,7 @@ use futures::future;
 use futures::future::try_join;
 use futures::future::FutureExt;
 use futures::future::TryFutureExt;
-use futures::stream;
 use futures::stream::StreamExt;
-use futures::stream::TryStreamExt;
 
 use crate::error::Error;
 use crate::result::Result;
@@ -306,59 +304,61 @@ where
         conn_handles.push(handle.clone());
     }
 
-    let stuff = stream::repeat((conn_handles, service, state, tls, conf));
+    let loop_run = async move {
+        let mut incoming = tokio_listener.incoming();
+        while let Some(r) = incoming.next().await {
+            let (socket, peer_addr) = r?;
 
-    let loop_run = tokio_listener
-        .incoming()
-        .map_err(Error::from)
-        .zip(stuff)
-        .map(|(r, stuff)| match r {
-            Ok(s) => Ok((s, stuff)),
-            Err(e) => Err(e),
-        })
-        .try_for_each(
-            move |((socket, peer_addr), (conn_handles, service, state, tls, conf))| {
-                info!("accepted connection from {}", peer_addr);
+            info!("accepted connection from {}", peer_addr);
 
-                if socket.is_tcp() {
-                    let no_delay = conf.no_delay.unwrap_or(true);
-                    socket
-                        .set_nodelay(no_delay)
-                        .expect("failed to set TCP_NODELAY");
-                }
+            if socket.is_tcp() {
+                let no_delay = conf.no_delay.unwrap_or(true);
+                socket
+                    .set_nodelay(no_delay)
+                    .expect("failed to set TCP_NODELAY");
+            }
 
-                // TODO: implement smarter selection
-                let handle = conn_handles[thread_rng().gen_range(0, conn_handles.len())].clone();
-                let handle_clone = handle.clone();
-                handle.spawn({
-                    let (conn, future) =
-                        ServerConn::new(&handle_clone, socket, peer_addr, tls, conf, service);
+            // TODO: implement smarter selection
+            let handle = conn_handles[thread_rng().gen_range(0, conn_handles.len())].clone();
+            let handle_clone = handle.clone();
+            let state_clone = state.clone();
+            handle.spawn({
+                let (conn, future) = ServerConn::new(
+                    &handle_clone,
+                    socket,
+                    peer_addr,
+                    tls.clone(),
+                    conf.clone(),
+                    service.clone(),
+                );
 
-                    let conn_id = {
-                        let mut g = state.lock().expect("lock");
-                        g.last_conn_id += 1;
-                        let conn_id = g.last_conn_id;
-                        let prev = g.conns.insert(conn_id, conn);
-                        assert!(prev.is_none());
-                        conn_id
-                    };
+                let conn_id = {
+                    let mut g = state_clone.lock().expect("lock");
+                    g.last_conn_id += 1;
+                    let conn_id = g.last_conn_id;
+                    let prev = g.conns.insert(conn_id, conn);
+                    assert!(prev.is_none());
+                    conn_id
+                };
 
-                    let future = assert_send_future::<result::Result<()>, _>(future);
+                let future = assert_send_future::<result::Result<()>, _>(future);
 
-                    FutureExt::then(future, move |r| {
-                        let mut g = state.lock().expect("lock");
-                        let removed = g.conns.remove(&conn_id);
-                        assert!(removed.is_some());
-                        future::ready(r)
-                    })
-                    .map_err(|e| {
-                        warn!("connection end: {:?}", e);
-                        ()
-                    })
-                });
-                future::ok(())
-            },
-        );
+                FutureExt::then(future, move |r| {
+                    let mut g = state_clone.lock().expect("lock");
+                    let removed = g.conns.remove(&conn_id);
+                    assert!(removed.is_some());
+                    future::ready(r)
+                })
+                .map_err(|e| {
+                    warn!("connection end: {:?}", e);
+                    ()
+                })
+            });
+        }
+        unreachable!();
+        #[allow(unreachable_code)]
+        Ok(())
+    };
 
     let (done_tx, done_rx) = oneshot::channel();
 

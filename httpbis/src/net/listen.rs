@@ -17,7 +17,7 @@ pub trait ToTokioListener {
     fn local_addr(&self) -> io::Result<AnySocketAddr>;
 }
 
-pub trait ToServerStream {
+pub trait ToServerStream: Send {
     fn incoming(
         self: Box<Self>,
     ) -> Pin<
