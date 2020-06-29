@@ -1,12 +1,32 @@
 use crate::net::unix::SocketAddrUnix;
+use std::fmt;
+use std::io;
 use std::net::SocketAddr;
-use std::{fmt, io};
 
 // Any socket address: TCP or Unix
 #[derive(Clone, Debug, PartialEq)]
 pub enum AnySocketAddr {
     Inet(SocketAddr),
     Unix(SocketAddrUnix),
+}
+
+impl From<SocketAddr> for AnySocketAddr {
+    fn from(inet: SocketAddr) -> Self {
+        AnySocketAddr::Inet(inet)
+    }
+}
+
+impl From<SocketAddrUnix> for AnySocketAddr {
+    fn from(unix: SocketAddrUnix) -> Self {
+        AnySocketAddr::Unix(unix)
+    }
+}
+
+#[cfg(unix)]
+impl From<std::os::unix::net::SocketAddr> for AnySocketAddr {
+    fn from(unix: std::os::unix::net::SocketAddr) -> Self {
+        AnySocketAddr::Unix(SocketAddrUnix::from(unix))
+    }
 }
 
 impl fmt::Display for AnySocketAddr {

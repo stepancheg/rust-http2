@@ -1,6 +1,7 @@
 use std::fmt;
 use std::io;
 
+use crate::AnySocketAddr;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 
@@ -11,4 +12,6 @@ pub trait SocketStream: AsyncRead + AsyncWrite + fmt::Debug + Send + Sync + 'sta
 
     /// Set no delay for TCP socket, return error for non-TCP socket.
     fn set_tcp_nodelay(&self, no_delay: bool) -> io::Result<()>;
+
+    fn peer_addr(&self) -> io::Result<AnySocketAddr>;
 }

@@ -47,6 +47,12 @@ impl From<&str> for SocketAddrUnix {
     }
 }
 
+impl From<&String> for SocketAddrUnix {
+    fn from(p: &String) -> Self {
+        SocketAddrUnix(p.into())
+    }
+}
+
 impl From<String> for SocketAddrUnix {
     fn from(p: String) -> Self {
         SocketAddrUnix(p.into())
@@ -171,5 +177,37 @@ impl SocketStream for UnixStream {
             io::ErrorKind::Other,
             "Cannot set nodelay on unix domain socket",
         ))
+    }
+
+    fn peer_addr(&self) -> io::Result<AnySocketAddr> {
+        Ok(AnySocketAddr::from(UnixStream::peer_addr(self)?))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::net::connect::ToClientStream;
+    use crate::net::unix::SocketAddrUnix;
+    use crate::AnySocketAddr;
+    use std::path::PathBuf;
+    use tokio::runtime::Runtime;
+
+    #[cfg(unix)]
+    #[test]
+    fn peer_addr() {
+        let mut lp = Runtime::new().unwrap();
+        let h = lp.handle().clone();
+
+        let dir = tempdir::TempDir::new("peer_addr").unwrap();
+        let p = format!("{}/s", dir.path().display());
+        let _server = std::os::unix::net::UnixListener::bind(&p).unwrap();
+
+        let client =
+            lp.block_on(async { SocketAddrUnix(PathBuf::from(&p)).connect(&h).await.unwrap() });
+
+        assert_eq!(
+            AnySocketAddr::Unix(SocketAddrUnix::from(&p)),
+            client.peer_addr().unwrap()
+        );
     }
 }
