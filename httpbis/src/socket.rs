@@ -108,6 +108,7 @@ pub trait ToClientStream: Display + Send + Sync {
     fn socket_addr(&self) -> AnySocketAddr;
 }
 
+/// TCP stream or socket stream; basically any async stream useable in http2
 pub trait SocketStream: AsyncRead + AsyncWrite + Debug + Send + Sync {
     fn is_tcp(&self) -> bool;
 
