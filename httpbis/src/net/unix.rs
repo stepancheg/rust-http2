@@ -166,7 +166,7 @@ impl SocketStream for UnixStream {
         false
     }
 
-    fn set_nodelay(&self, _no_delay: bool) -> io::Result<()> {
+    fn set_tcp_nodelay(&self, _no_delay: bool) -> io::Result<()> {
         Err(io::Error::new(
             io::ErrorKind::Other,
             "Cannot set nodelay on unix domain socket",

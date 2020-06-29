@@ -315,7 +315,7 @@ impl ClientConn {
 
             if socket.is_tcp() {
                 socket
-                    .set_nodelay(no_delay)
+                    .set_tcp_nodelay(no_delay)
                     .expect("failed to set TCP_NODELAY");
             }
 
@@ -364,7 +364,7 @@ impl ClientConn {
 
                 if socket.is_tcp() {
                     socket
-                        .set_nodelay(no_delay)
+                        .set_tcp_nodelay(no_delay)
                         .expect("failed to set TCP_NODELAY");
                 }
                 socket

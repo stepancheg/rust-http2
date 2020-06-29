@@ -112,7 +112,7 @@ impl SocketStream for TcpStream {
         true
     }
 
-    fn set_nodelay(&self, no_delay: bool) -> io::Result<()> {
+    fn set_tcp_nodelay(&self, no_delay: bool) -> io::Result<()> {
         self.set_nodelay(no_delay)
     }
 }

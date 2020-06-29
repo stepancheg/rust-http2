@@ -317,7 +317,7 @@ where
             if socket.is_tcp() {
                 let no_delay = conf.no_delay.unwrap_or(true);
                 socket
-                    .set_nodelay(no_delay)
+                    .set_tcp_nodelay(no_delay)
                     .expect("failed to set TCP_NODELAY");
             }
 
