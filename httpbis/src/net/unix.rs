@@ -69,13 +69,13 @@ impl From<SocketAddr> for SocketAddrUnix {
 
 impl ToSocketListener for SocketAddrUnix {
     #[cfg(unix)]
-    fn to_listener(&self, _conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
+    fn listen(&self, _conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         debug!("binding socket to {}", self);
         Ok(Box::new(::std::os::unix::net::UnixListener::bind(&self.0)?))
     }
 
     #[cfg(not(unix))]
-    fn to_listener(&self, _conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
+    fn listen(&self, _conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         Err(io::Error::new(
             io::ErrorKind::Other,
             "cannot use unix sockets on non-unix",
@@ -92,7 +92,7 @@ impl ToSocketListener for SocketAddrUnix {
 
 #[cfg(unix)]
 impl ToTokioListener for ::std::os::unix::net::UnixListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
+    fn into_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
         handle.enter(|| Box::pin(UnixListener::from_std(*self).unwrap()))
     }
 

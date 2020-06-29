@@ -20,7 +20,7 @@ use std::pin::Pin;
 use tokio::runtime::Handle;
 
 impl ToSocketListener for SocketAddr {
-    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
+    fn listen(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         Ok(Box::new(listener(self, conf)?))
     }
 
@@ -63,7 +63,7 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 }
 
 impl ToTokioListener for ::std::net::TcpListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
+    fn into_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
         handle.enter(|| Box::pin(TcpListener::from_std(*self).unwrap()))
     }
 

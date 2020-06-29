@@ -151,7 +151,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
         let (_done_tx, done_rx) = oneshot::channel();
 
         let listen = match self.addr {
-            Some(addr) => addr.to_listener(&self.conf)?,
+            Some(addr) => addr.listen(&self.conf)?,
             None => return Err(Error::ListenAddrNotSpecified),
         };
 
@@ -297,7 +297,7 @@ where
 {
     let service = Arc::new(service);
 
-    let mut tokio_listener = listen.to_tokio_listener(&handle);
+    let mut tokio_listener = listen.into_tokio_listener(&handle);
 
     if conn_handles.is_empty() {
         conn_handles.push(handle.clone());

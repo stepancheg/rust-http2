@@ -5,14 +5,16 @@ use std::io;
 use std::pin::Pin;
 use tokio::runtime::Handle;
 
+/// Create a listener socket.
 pub trait ToSocketListener {
-    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>>;
+    fn listen(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>>;
 
     fn cleanup(&self);
 }
 
+/// Convert a listening socket to tokio-compatible socket listener.
 pub trait ToTokioListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>>;
+    fn into_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>>;
 
     fn local_addr(&self) -> io::Result<AnySocketAddr>;
 }
@@ -30,10 +32,10 @@ pub trait SocketListener: Send {
 }
 
 impl ToSocketListener for AnySocketAddr {
-    fn to_listener(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
+    fn listen(&self, conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         match self {
-            &AnySocketAddr::Inet(ref inet_addr) => inet_addr.to_listener(conf),
-            &AnySocketAddr::Unix(ref unix_addr) => unix_addr.to_listener(conf),
+            &AnySocketAddr::Inet(ref inet_addr) => inet_addr.listen(conf),
+            &AnySocketAddr::Unix(ref unix_addr) => unix_addr.listen(conf),
         }
     }
 
