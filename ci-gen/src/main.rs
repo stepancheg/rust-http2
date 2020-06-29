@@ -61,7 +61,11 @@ fn steps(os: Os, channel: RustToolchain) -> Vec<Step> {
         // `--all-targets` does not include doctests
         // https://github.com/rust-lang/cargo/issues/6669
         r.push(cargo_test("cargo test --doc", "--doc"));
-        r.push(cargo_doc("doc", ""));
+
+        // No need to waste time generating docs everywhere
+        if os.ghwf == Env::UbuntuLatest {
+            r.push(cargo_doc("doc", ""));
+        }
     }
     r
 }

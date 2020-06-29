@@ -53,10 +53,6 @@ jobs:
               with:
                   command: test
                   args: --doc
-            - name: doc
-              uses: actions-rs/cargo@v1
-              with:
-                  command: doc
     windows-stable:
         name: windows stable
         runs-on: windows-latest
