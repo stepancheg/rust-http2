@@ -31,7 +31,7 @@ use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
-use crate::common::conn::ConnSpecific;
+use crate::common::conn::SideSpecific;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn_command_channel::conn_command_channel;
 use crate::common::conn_command_channel::ConnCommandSender;
@@ -78,7 +78,7 @@ pub struct ClientConnData {
     _callbacks: Box<dyn ClientConnCallbacks>,
 }
 
-impl ConnSpecific for ClientConnData {}
+impl SideSpecific for ClientConnData {}
 
 pub struct ClientConn {
     write_tx: ConnCommandSender<ClientTypes>,

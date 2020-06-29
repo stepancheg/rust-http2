@@ -1,5 +1,5 @@
 use crate::common::client_or_server::ClientOrServer;
-use crate::common::conn::ConnSpecific;
+use crate::common::conn::SideSpecific;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::init_where::InitWhere;
 use crate::common::stream::HttpStreamData;
@@ -13,7 +13,7 @@ use crate::solicit::stream_id::StreamId;
 pub(crate) trait Types: Default + Clone + Unpin + 'static {
     type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific: HttpStreamDataSpecific;
-    type ConnSpecific: ConnSpecific;
+    type SideSpecific: SideSpecific;
     type StreamHandlerHolder: StreamHandlerInternal;
     // Message sent to write loop
     type ToWriteMessage: From<CommonToWriteMessage> + Send;

@@ -13,7 +13,7 @@ pub(crate) struct ServerTypes;
 impl Types for ServerTypes {
     type HttpStreamData = ServerStream;
     type HttpStreamSpecific = ServerStreamData;
-    type ConnSpecific = ServerConnData;
+    type SideSpecific = ServerConnData;
     type StreamHandlerHolder = ServerRequestStreamHandlerHolder;
     type ToWriteMessage = ServerToWriteMessage;
 

@@ -56,7 +56,7 @@ use tokio::io::WriteHalf;
 use tokio::runtime::Handle;
 
 /// Client or server fields of connection
-pub trait ConnSpecific: Send + 'static {}
+pub trait SideSpecific: Send + 'static {}
 
 /// HTTP/2 connection state with socket and streams
 pub(crate) struct Conn<T: Types, I: SocketStream> {
@@ -65,7 +65,7 @@ pub(crate) struct Conn<T: Types, I: SocketStream> {
     pub conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 
     /// Client or server specific data
-    pub specific: T::ConnSpecific,
+    pub specific: T::SideSpecific,
     /// Messages to be sent to write loop
     pub to_write_tx: ConnCommandSender<T>,
     /// Reactor we are using
@@ -143,7 +143,7 @@ where
 {
     pub fn new(
         loop_handle: Handle,
-        specific: T::ConnSpecific,
+        specific: T::SideSpecific,
         _conf: CommonConf,
         sent_settings: HttpSettings,
         to_write_tx: ConnCommandSender<T>,

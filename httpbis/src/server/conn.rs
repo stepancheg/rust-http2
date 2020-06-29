@@ -31,7 +31,7 @@ use crate::common::init_where::InitWhere;
 use crate::assert_types::assert_send_future;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
-use crate::common::conn::ConnSpecific;
+use crate::common::conn::SideSpecific;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn_command_channel::conn_command_channel;
 use crate::common::conn_command_channel::ConnCommandSender;
@@ -84,7 +84,7 @@ pub(crate) struct ServerConnData {
     factory: Arc<dyn ServerHandler>,
 }
 
-impl ConnSpecific for ServerConnData {}
+impl SideSpecific for ServerConnData {}
 
 #[allow(dead_code)] // https://github.com/rust-lang/rust/issues/42303
 type ServerInner<I> = Conn<ServerTypes, I>;

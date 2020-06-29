@@ -13,7 +13,7 @@ pub struct ClientTypes;
 impl Types for ClientTypes {
     type HttpStreamData = ClientStream;
     type HttpStreamSpecific = ClientStreamData;
-    type ConnSpecific = ClientConnData;
+    type SideSpecific = ClientConnData;
     type StreamHandlerHolder = ClientResponseStreamHandlerHolder;
     type ToWriteMessage = ClientToWriteMessage;
 
