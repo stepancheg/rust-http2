@@ -79,7 +79,7 @@ impl ToSocketListener for SocketAddrUnix {
     }
 
     #[cfg(not(unix))]
-    fn to_listener(&self, _conf: &ServerConf) -> io::Result<Box<ToTokioListener + Send>> {
+    fn to_listener(&self, _conf: &ServerConf) -> io::Result<Box<dyn ToTokioListener + Send>> {
         Err(io::Error::new(
             io::ErrorKind::Other,
             "cannot use unix sockets on non-unix",
