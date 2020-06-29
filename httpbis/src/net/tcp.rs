@@ -28,7 +28,7 @@ impl ToSocketListener for SocketAddr {
 }
 
 #[cfg(not(windows))]
-fn configure_tcp(tcp: &net2::TcpBuilder, _conf: &ServerConf) -> io::Result<()> {
+fn configure_tcp(tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
     use net2::unix::UnixTcpBuilderExt;
     if let Some(reuse_port) = conf.reuse_port {
         tcp.reuse_port(reuse_port)?;
@@ -37,7 +37,7 @@ fn configure_tcp(tcp: &net2::TcpBuilder, _conf: &ServerConf) -> io::Result<()> {
 }
 
 #[cfg(windows)]
-fn configure_tcp(_tcp: &net2::TcpBuilder, conf: &ServerConf) -> io::Result<()> {
+fn configure_tcp(_tcp: &net2::TcpBuilder, _conf: &ServerConf) -> io::Result<()> {
     Ok(())
 }
 
