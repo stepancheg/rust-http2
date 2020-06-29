@@ -84,6 +84,7 @@ impl ToSocketListener for SocketAddrUnix {
 
     fn cleanup(&self) {
         if self.0.exists() {
+            // TODO: do not panic
             fs::remove_file(&self.0).expect("removing socket during shutdown");
         }
     }

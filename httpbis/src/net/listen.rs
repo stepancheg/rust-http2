@@ -40,10 +40,7 @@ impl ToSocketListener for AnySocketAddr {
     fn cleanup(&self) {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.cleanup(),
-            #[cfg(unix)]
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.cleanup(),
-            #[cfg(not(unix))]
-            &AnySocketAddr::Unix(..) => {}
         }
     }
 }
