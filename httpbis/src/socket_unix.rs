@@ -14,7 +14,7 @@ use futures::Future;
 
 use crate::assert_types::assert_send_stream;
 use crate::socket::AnySocketAddr;
-use crate::socket::StreamItem;
+use crate::socket::SocketStream;
 use crate::socket::ToClientStream;
 use crate::socket::ToServerStream;
 use crate::socket::ToSocketListener;
@@ -108,14 +108,17 @@ impl ToServerStream for UnixListener {
     fn incoming(
         self: Box<Self>,
     ) -> Pin<
-        Box<dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>> + Send>,
+        Box<
+            dyn Stream<Item = io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>>
+                + Send,
+        >,
     > {
         let unix_listener = *self;
 
         let stream = stream::unfold(unix_listener, |mut unix_listener_listener| async {
             let r = match unix_listener_listener.accept().await {
                 Ok((socket, addr)) => Ok((
-                    Box::pin(socket) as Pin<Box<dyn StreamItem + Send>>,
+                    Box::pin(socket) as Pin<Box<dyn SocketStream + Send>>,
                     AnySocketAddr::Unix(addr.into()),
                 )),
                 Err(e) => Err(e),
@@ -124,7 +127,7 @@ impl ToServerStream for UnixListener {
         });
 
         let stream = assert_send_stream::<
-            io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>,
+            io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>,
             _,
         >(stream);
 
@@ -137,7 +140,7 @@ impl ToClientStream for SocketAddrUnix {
     fn connect(
         &self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>> {
         // TODO: async connect
         let stream = match std::os::unix::net::UnixStream::connect(&self.0) {
             Ok(stream) => stream,
@@ -145,7 +148,7 @@ impl ToClientStream for SocketAddrUnix {
         };
         match handle.enter(|| UnixStream::from_std(stream)) {
             Ok(stream) => {
-                Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn StreamItem + Send>>) })
+                Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn SocketStream + Send>>) })
             }
             Err(e) => return Box::pin(async { Err(e) }),
         }
@@ -155,7 +158,7 @@ impl ToClientStream for SocketAddrUnix {
     fn connect(
         &self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>> {
         use futures::future;
         Box::pin(future::err(io::Error::new(
             io::ErrorKind::Other,
@@ -169,7 +172,7 @@ impl ToClientStream for SocketAddrUnix {
 }
 
 #[cfg(unix)]
-impl StreamItem for UnixStream {
+impl SocketStream for UnixStream {
     fn is_tcp(&self) -> bool {
         false
     }

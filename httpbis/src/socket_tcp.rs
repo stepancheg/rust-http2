@@ -13,7 +13,7 @@ use net2;
 
 use crate::assert_types::assert_send_stream;
 use crate::socket::AnySocketAddr;
-use crate::socket::StreamItem;
+use crate::socket::SocketStream;
 use crate::socket::ToClientStream;
 use crate::socket::ToServerStream;
 use crate::socket::ToSocketListener;
@@ -79,14 +79,17 @@ impl ToServerStream for TcpListener {
     fn incoming(
         self: Box<Self>,
     ) -> Pin<
-        Box<dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>> + Send>,
+        Box<
+            dyn Stream<Item = io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>>
+                + Send,
+        >,
     > {
         let tcp_listener = *self;
 
         let stream = stream::unfold(tcp_listener, |mut tcp_listener| async move {
             let r = match tcp_listener.accept().await {
                 Ok((socket, addr)) => Ok((
-                    Box::pin(socket) as Pin<Box<dyn StreamItem + Send>>,
+                    Box::pin(socket) as Pin<Box<dyn SocketStream + Send>>,
                     AnySocketAddr::Inet(addr),
                 )),
                 Err(e) => Err(e),
@@ -95,7 +98,7 @@ impl ToServerStream for TcpListener {
         });
 
         let stream = assert_send_stream::<
-            io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>,
+            io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>,
             _,
         >(stream);
 
@@ -107,9 +110,9 @@ impl ToClientStream for SocketAddr {
     fn connect(
         &self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>> {
         let future = TcpStream::connect(self.clone())
-            .map_ok(|stream| Box::pin(stream) as Pin<Box<dyn StreamItem + Send>>);
+            .map_ok(|stream| Box::pin(stream) as Pin<Box<dyn SocketStream + Send>>);
         Box::pin(future)
     }
 
@@ -118,7 +121,7 @@ impl ToClientStream for SocketAddr {
     }
 }
 
-impl StreamItem for TcpStream {
+impl SocketStream for TcpStream {
     fn is_tcp(&self) -> bool {
         true
     }

@@ -48,7 +48,7 @@ use crate::common::stream_map::HttpStreamRef;
 use crate::data_or_headers::DataOrHeaders;
 use crate::headers_place::HeadersPlace;
 use crate::req_resp::RequestOrResponse;
-use crate::socket::StreamItem;
+use crate::socket::SocketStream;
 use crate::socket::ToClientStream;
 use crate::solicit::stream_id::StreamId;
 use crate::ClientConf;
@@ -310,7 +310,7 @@ impl ClientConn {
 
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = TryFutureExt::map_err(addr.connect(&lh), error::Error::from);
-        let map_callback = move |socket: Pin<Box<dyn StreamItem + Send>>| {
+        let map_callback = move |socket: Pin<Box<dyn SocketStream + Send>>| {
             info!("connected to {}", addr);
 
             if socket.is_tcp() {
@@ -323,7 +323,7 @@ impl ClientConn {
         };
 
         let connect: Pin<
-            Box<dyn Future<Output = result::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>,
+            Box<dyn Future<Output = result::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>,
         > = if let Some(timeout) = conf.connection_timeout {
             Box::pin(time::timeout(timeout, connect).map(|r| match r {
                 Ok(r) => r,
@@ -334,7 +334,7 @@ impl ClientConn {
         };
 
         let connect = Box::pin(
-            connect.map_ok(move |socket: Pin<Box<dyn StreamItem + Send>>| map_callback(socket)),
+            connect.map_ok(move |socket: Pin<Box<dyn SocketStream + Send>>| map_callback(socket)),
         );
 
         ClientConn::spawn_connected(lh, connect, addr_struct, conf, callbacks)

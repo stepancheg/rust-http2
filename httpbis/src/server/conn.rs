@@ -26,7 +26,7 @@ use tls_api::TlsAcceptor;
 
 use crate::solicit_async::*;
 
-use crate::socket::StreamItem;
+use crate::socket::SocketStream;
 
 use crate::common::init_where::InitWhere;
 
@@ -307,7 +307,7 @@ impl ServerConn {
 
     pub fn new<S, A>(
         lh: &Handle,
-        socket: Pin<Box<dyn StreamItem>>,
+        socket: Pin<Box<dyn SocketStream>>,
         peer_addr: AnySocketAddr,
         tls: ServerTlsOption<A>,
         conf: ServerConf,

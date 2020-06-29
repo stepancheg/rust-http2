@@ -70,7 +70,7 @@ impl ToClientStream for AnySocketAddr {
     fn connect(
         &self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>> {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
@@ -92,7 +92,10 @@ pub trait ToServerStream {
     fn incoming(
         self: Box<Self>,
     ) -> Pin<
-        Box<dyn Stream<Item = io::Result<(Pin<Box<dyn StreamItem + Send>>, AnySocketAddr)>> + Send>,
+        Box<
+            dyn Stream<Item = io::Result<(Pin<Box<dyn SocketStream + Send>>, AnySocketAddr)>>
+                + Send,
+        >,
     >;
 }
 
@@ -100,12 +103,12 @@ pub trait ToClientStream: Display + Send + Sync {
     fn connect(
         &self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn StreamItem + Send>>>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream + Send>>>> + Send>>;
 
     fn socket_addr(&self) -> AnySocketAddr;
 }
 
-pub trait StreamItem: AsyncRead + AsyncWrite + Debug + Send + Sync {
+pub trait SocketStream: AsyncRead + AsyncWrite + Debug + Send + Sync {
     fn is_tcp(&self) -> bool;
 
     fn set_nodelay(&self, no_delay: bool) -> io::Result<()>;
