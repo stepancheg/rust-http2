@@ -11,7 +11,7 @@ use futures::Future;
 
 use crate::net::addr::AnySocketAddr;
 use crate::net::connect::ToClientStream;
-use crate::net::listen::ToServerStream;
+use crate::net::listen::SocketListener;
 use crate::net::listen::ToSocketListener;
 use crate::net::listen::ToTokioListener;
 use crate::net::socket::SocketStream;
@@ -91,7 +91,7 @@ impl ToSocketListener for SocketAddrUnix {
 
 #[cfg(unix)]
 impl ToTokioListener for ::std::os::unix::net::UnixListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn ToServerStream>> {
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
         handle.enter(|| Box::pin(UnixListener::from_std(*self).unwrap()))
     }
 
@@ -103,7 +103,7 @@ impl ToTokioListener for ::std::os::unix::net::UnixListener {
 }
 
 #[cfg(unix)]
-impl ToServerStream for UnixListener {
+impl SocketListener for UnixListener {
     fn accept<'a>(
         self: Pin<&'a mut Self>,
     ) -> Pin<

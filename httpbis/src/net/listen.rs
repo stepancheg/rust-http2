@@ -12,12 +12,12 @@ pub trait ToSocketListener {
 }
 
 pub trait ToTokioListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn ToServerStream>>;
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>>;
 
     fn local_addr(&self) -> io::Result<AnySocketAddr>;
 }
 
-pub trait ToServerStream: Send {
+pub trait SocketListener: Send {
     fn accept<'a>(
         self: Pin<&'a mut Self>,
     ) -> Pin<

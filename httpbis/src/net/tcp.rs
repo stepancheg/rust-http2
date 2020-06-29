@@ -11,7 +11,7 @@ use net2;
 
 use crate::net::addr::AnySocketAddr;
 use crate::net::connect::ToClientStream;
-use crate::net::listen::ToServerStream;
+use crate::net::listen::SocketListener;
 use crate::net::listen::ToSocketListener;
 use crate::net::listen::ToTokioListener;
 use crate::net::socket::SocketStream;
@@ -63,7 +63,7 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 }
 
 impl ToTokioListener for ::std::net::TcpListener {
-    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn ToServerStream>> {
+    fn to_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
         handle.enter(|| Box::pin(TcpListener::from_std(*self).unwrap()))
     }
 
@@ -72,7 +72,7 @@ impl ToTokioListener for ::std::net::TcpListener {
     }
 }
 
-impl ToServerStream for TcpListener {
+impl SocketListener for TcpListener {
     fn accept<'a>(
         self: Pin<&'a mut Self>,
     ) -> Pin<
