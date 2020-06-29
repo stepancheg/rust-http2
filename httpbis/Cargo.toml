@@ -25,6 +25,7 @@ bytes = "0.5"
 rand = "~0.5"
 
 [dev-dependencies]
+test-cert-gen = "0.1.0"
 
 tls-api-openssl = "0.4.0"
 url             = "1"

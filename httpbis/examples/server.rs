@@ -64,9 +64,12 @@ impl httpbis::ServerHandler for ServiceImpl {
 }
 
 fn main() {
-    let pkcs12 = include_bytes!("../../httpbis-test/tests/identity.p12");
-    let mut tls_acceptor = tls_api_openssl::TlsAcceptorBuilder::from_pkcs12(pkcs12, "mypass")
-        .expect("acceptor builder");
+    let server_keys = &test_cert_gen::keys().server;
+    let mut tls_acceptor = tls_api_openssl::TlsAcceptorBuilder::from_pkcs12(
+        &server_keys.pkcs12,
+        &server_keys.pkcs12_password,
+    )
+    .expect("acceptor builder");
     tls_acceptor
         .set_alpn_protocols(&[b"h2"])
         .expect("set_alpn_protocols");
