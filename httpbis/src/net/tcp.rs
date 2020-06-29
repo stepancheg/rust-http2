@@ -12,12 +12,12 @@ use futures::stream::Stream;
 use net2;
 
 use crate::assert_types::assert_send_stream;
-use crate::socket::AnySocketAddr;
-use crate::socket::SocketStream;
-use crate::socket::ToClientStream;
-use crate::socket::ToServerStream;
-use crate::socket::ToSocketListener;
-use crate::socket::ToTokioListener;
+use crate::net::addr::AnySocketAddr;
+use crate::net::connect::ToClientStream;
+use crate::net::listen::ToServerStream;
+use crate::net::listen::ToSocketListener;
+use crate::net::listen::ToTokioListener;
+use crate::net::socket::SocketStream;
 use crate::ServerConf;
 use std::pin::Pin;
 use tokio::runtime::Handle;

@@ -39,19 +39,19 @@ use crate::futures_misc::*;
 use tls_api::TlsAcceptor;
 use tls_api_stub;
 
-use crate::socket::AnySocketAddr;
-use crate::socket::ToSocketListener;
-use crate::socket::ToTokioListener;
+use crate::net::addr::AnySocketAddr;
+use crate::net::listen::ToSocketListener;
+use crate::net::listen::ToTokioListener;
 
 pub use self::tls::ServerTlsOption;
 use crate::assert_types::assert_send_future;
 use crate::common::conn::ConnStateSnapshot;
+use crate::net::unix::SocketAddrUnix;
 use crate::result;
 pub use crate::server::conf::ServerConf;
 pub use crate::server::conn::ServerConn;
 use crate::server::handler::ServerHandler;
 use crate::server::handler_paths::ServerHandlerPaths;
-use crate::socket_unix::SocketAddrUnix;
 use rand::thread_rng;
 use rand::Rng;
 use std::fmt;

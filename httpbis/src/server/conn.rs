@@ -26,7 +26,7 @@ use tls_api::TlsAcceptor;
 
 use crate::solicit_async::*;
 
-use crate::socket::SocketStream;
+use crate::net::socket::SocketStream;
 
 use crate::common::init_where::InitWhere;
 

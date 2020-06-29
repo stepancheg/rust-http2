@@ -38,8 +38,8 @@ use crate::solicit::HttpScheme;
 
 use crate::solicit_async::*;
 
-use crate::socket::AnySocketAddr;
-use crate::socket::ToClientStream;
+use crate::net::addr::AnySocketAddr;
+use crate::net::connect::ToClientStream;
 
 use crate::client::conf::ClientConf;
 use crate::client::conn::ClientConn;
@@ -56,12 +56,13 @@ use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::ConnStateSnapshot;
 
 use crate::client::resp::ClientResponse;
+use crate::net::unix::SocketAddrUnix;
 use crate::result;
-use crate::socket_unix::SocketAddrUnix;
 use crate::solicit::stream_id::StreamId;
 use crate::Response;
 use std::fmt;
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::Handle;
+use tokio::runtime::Runtime;
 
 /// Builder for HTTP/2 client.
 ///

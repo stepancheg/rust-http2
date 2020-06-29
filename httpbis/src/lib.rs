@@ -20,10 +20,6 @@ mod result;
 mod client;
 mod codec;
 mod server;
-mod socket;
-mod socket_tcp;
-
-mod socket_unix;
 
 mod ascii;
 
@@ -55,9 +51,11 @@ mod exec;
 
 mod log_ndc_future;
 
+pub(crate) mod net;
+
 pub(crate) mod bytes_ext;
 
-pub use crate::socket::AnySocketAddr;
+pub use crate::net::addr::AnySocketAddr;
 
 pub use crate::solicit::error_code::ErrorCode;
 pub use crate::solicit::header::name::HeaderName;

@@ -13,12 +13,12 @@ use futures::stream::Stream;
 use futures::Future;
 
 use crate::assert_types::assert_send_stream;
-use crate::socket::AnySocketAddr;
-use crate::socket::SocketStream;
-use crate::socket::ToClientStream;
-use crate::socket::ToServerStream;
-use crate::socket::ToSocketListener;
-use crate::socket::ToTokioListener;
+use crate::net::addr::AnySocketAddr;
+use crate::net::connect::ToClientStream;
+use crate::net::listen::ToServerStream;
+use crate::net::listen::ToSocketListener;
+use crate::net::listen::ToTokioListener;
+use crate::net::socket::SocketStream;
 use crate::ServerConf;
 use std::fmt;
 #[cfg(unix)]
@@ -27,6 +27,9 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use tokio::runtime::Handle;
 
+/// Unix socket address, which is filesystem path.
+///
+/// Note although this type is available on Windows, unix sockets don't work on Windows.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SocketAddrUnix(pub(crate) PathBuf);
 
