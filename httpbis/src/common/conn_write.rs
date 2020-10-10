@@ -61,7 +61,7 @@ where
             let mut frame = DataFrame::with_data(stream_id, Bytes::new());
             frame.set_flag(DataFlag::EndStream);
 
-            debug!("sending frame {:?}", frame);
+            trace!("sending frame {:?}", frame);
 
             self.queued_write.queue_not_goaway(frame);
 
