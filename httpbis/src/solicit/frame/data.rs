@@ -61,17 +61,6 @@ pub struct DataFrame {
     padding_len: u8,
 }
 
-impl fmt::Debug for DataFrame {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("DataFrame")
-            .field("flags", &self.flags)
-            .field("stream_id", &self.stream_id)
-            .field("data", &BsDebug(&self.data[..]))
-            .field("padding_len", &self.padding_len)
-            .finish()
-    }
-}
-
 impl DataFrame {
     /// Creates a new empty `DataFrame`, associated to the stream with the
     /// given ID.
@@ -147,6 +136,10 @@ impl DataFrame {
     /// Sets the given flag for the frame.
     pub fn set_flag(&mut self, flag: DataFlag) {
         self.flags.0 |= flag.bitmask();
+    }
+
+    pub(crate) fn debug_no_data(&self) -> DataFrameDebugNoData {
+        DataFrameDebugNoData(self)
     }
 }
 
@@ -225,6 +218,31 @@ impl FrameIR for DataFrame {
         } else {
             b.extend_from_bytes(self.data);
         }
+    }
+}
+
+/// [`DataFrame`] debug wrapper which does not expose secret data.
+pub(crate) struct DataFrameDebugNoData<'a>(&'a DataFrame);
+
+impl fmt::Debug for DataFrame {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DataFrame")
+            .field("flags", &self.flags)
+            .field("stream_id", &self.stream_id)
+            .field("data", &BsDebug(&self.data[..]))
+            .field("padding_len", &self.padding_len)
+            .finish()
+    }
+}
+
+impl<'a> fmt::Debug for DataFrameDebugNoData<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DataFrame")
+            .field("flags", &self.0.flags)
+            .field("stream_id", &self.0.stream_id)
+            .field("data", &format_args!("{} bytes", self.0.data.len()))
+            .field("padding_len", &self.0.padding_len)
+            .finish()
     }
 }
 

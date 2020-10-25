@@ -414,7 +414,11 @@ where
     }
 
     fn process_http_frame(&mut self, frame: HttpFrameDecoded) -> result::Result<()> {
-        debug!("received frame: {:?}", frame);
+        if log_enabled!(log::Level::Trace) {
+            debug!("received frame: {:?}", frame);
+        } else {
+            debug!("received frame: {:?}", frame.debug_no_data());
+        }
         match HttpFrameClassified::from(frame) {
             HttpFrameClassified::Conn(f) => self.process_conn_frame(f),
             HttpFrameClassified::Stream(f) => self.process_stream_frame(f),

@@ -76,6 +76,7 @@ pub use self::settings::SettingsFrame;
 pub use self::window_update::WindowUpdateFrame;
 use crate::codec::write_buffer::WriteBuffer;
 use crate::solicit::frame;
+use crate::solicit::frame::data::DataFrameDebugNoData;
 use crate::solicit::stream_id::StreamId;
 use std::fmt;
 
@@ -843,4 +844,46 @@ pub enum HttpFrameDecoded {
     WindowUpdate(WindowUpdateFrame),
     /// Unknown frame
     Unknown(RawFrame),
+}
+
+impl HttpFrameDecoded {
+    pub(crate) fn debug_no_data(&self) -> HttpFrameDecodedDebugNoData {
+        match self {
+            HttpFrameDecoded::Data(data) => HttpFrameDecodedDebugNoData::Data(data.debug_no_data()),
+            HttpFrameDecoded::Headers(f) => HttpFrameDecodedDebugNoData::Headers(f),
+            HttpFrameDecoded::Priority(f) => HttpFrameDecodedDebugNoData::Priority(f),
+            HttpFrameDecoded::RstStream(f) => HttpFrameDecodedDebugNoData::RstStream(f),
+            HttpFrameDecoded::Settings(f) => HttpFrameDecodedDebugNoData::Settings(f),
+            HttpFrameDecoded::PushPromise(f) => HttpFrameDecodedDebugNoData::PushPromise(f),
+            HttpFrameDecoded::Ping(f) => HttpFrameDecodedDebugNoData::Ping(f),
+            HttpFrameDecoded::Goaway(f) => HttpFrameDecodedDebugNoData::Goaway(f),
+            HttpFrameDecoded::WindowUpdate(f) => HttpFrameDecodedDebugNoData::WindowUpdate(f),
+            HttpFrameDecoded::Unknown(f) => HttpFrameDecodedDebugNoData::Unknown(f),
+        }
+    }
+}
+
+/// [`HttpFrameDecoded`] debug wrapper which does not expose secret data.
+#[derive(Debug)]
+pub(crate) enum HttpFrameDecodedDebugNoData<'a> {
+    /// `DATA`
+    Data(DataFrameDebugNoData<'a>),
+    /// `HEADERS`
+    Headers(&'a HeadersDecodedFrame),
+    /// `PRIORITY`
+    Priority(&'a PriorityFrame),
+    /// `RST_STREAM`
+    RstStream(&'a RstStreamFrame),
+    /// `SETTINGS`
+    Settings(&'a SettingsFrame),
+    /// `PUSH_PROMISE`
+    PushPromise(&'a PushPromiseFrame),
+    /// `PING`
+    Ping(&'a PingFrame),
+    /// `GOAWAY`
+    Goaway(&'a GoawayFrame),
+    /// `WINDOW_UPDATE`
+    WindowUpdate(&'a WindowUpdateFrame),
+    /// Unknown frame
+    Unknown(&'a RawFrame),
 }
