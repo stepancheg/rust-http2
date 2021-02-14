@@ -40,9 +40,9 @@ impl<B: Buf, I: Iterator<Item = B>> Buf for IterBuf<B, I> {
         self.rem
     }
 
-    fn bytes(&self) -> &[u8] {
+    fn chunk(&self) -> &[u8] {
         match &self.next {
-            Some(buf) => buf.bytes(),
+            Some(buf) => buf.chunk(),
             None => &[],
         }
     }

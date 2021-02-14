@@ -112,7 +112,7 @@ fn seq_long() {
 
     let mut sum_len = 0;
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let mut parts_filter_data = parts.filter_data();
 
@@ -172,7 +172,7 @@ fn seq_slow() {
     )
     .expect("client");
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let (headers, resp) = rt
         .block_on(client.start_get("/gfgfg", "localhost").0)

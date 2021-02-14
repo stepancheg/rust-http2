@@ -192,7 +192,7 @@ fn panic_in_stream() {
 fn response_large() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let mut large_resp = Vec::new();
     while large_resp.len() < 100_000 {
@@ -324,7 +324,7 @@ fn exceed_window_size() {
 fn stream_window_gt_conn_window() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let server = ServerTest::new();
 
@@ -528,7 +528,7 @@ pub fn http_1_1_unix() {
 fn external_event_loop() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let (tx, rx) = mpsc::channel();
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -536,7 +536,7 @@ fn external_event_loop() {
     let t = thread::Builder::new()
         .name("servers".to_owned())
         .spawn(move || {
-            let mut core = Runtime::new().expect("Runtime::new");
+            let core = Runtime::new().expect("Runtime::new");
 
             let mut servers = Vec::new();
             for _ in 0..2 {

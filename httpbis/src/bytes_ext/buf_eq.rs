@@ -7,8 +7,8 @@ pub fn buf_eq<B1: Buf, B2: Buf>(mut b1: B1, mut b2: B2) -> bool {
         if !b1.has_remaining() || !b2.has_remaining() {
             return b1.has_remaining() == b2.has_remaining();
         }
-        let s1 = b1.bytes();
-        let s2 = b2.bytes();
+        let s1 = b1.chunk();
+        let s2 = b2.chunk();
         let min = cmp::min(s1.len(), s2.len());
         if &s1[..min] != &s2[..min] {
             return false;
@@ -21,7 +21,6 @@ pub fn buf_eq<B1: Buf, B2: Buf>(mut b1: B1, mut b2: B2) -> bool {
 #[cfg(test)]
 mod test {
     use super::*;
-    use bytes::buf::ext::Chain;
 
     #[test]
     fn test() {
@@ -31,15 +30,15 @@ mod test {
         assert!(!buf_eq(b"abc".as_ref(), b"ab".as_ref()));
 
         assert!(buf_eq(
-            Chain::new(b"".as_ref(), b"ab".as_ref()),
+            Buf::chain(b"".as_ref(), b"ab".as_ref()),
             b"ab".as_ref()
         ));
         assert!(buf_eq(
-            Chain::new(b"a".as_ref(), b"b".as_ref()),
+            Buf::chain(b"a".as_ref(), b"b".as_ref()),
             b"ab".as_ref()
         ));
         assert!(!buf_eq(
-            Chain::new(b"a".as_ref(), b"bc".as_ref()),
+            Buf::chain(b"a".as_ref(), b"bc".as_ref()),
             b"ab".as_ref()
         ));
     }

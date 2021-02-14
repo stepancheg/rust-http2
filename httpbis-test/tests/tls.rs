@@ -9,12 +9,11 @@ use httpbis::*;
 
 use httpbis::AnySocketAddr;
 
-use tls_api::Certificate;
+use tls_api::TlsAcceptor as tls_api_TlsAcceptor;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
 use tls_api_native_tls::TlsAcceptor;
-use tls_api_native_tls::TlsAcceptorBuilder;
 use tls_api_native_tls::TlsConnector;
 use tokio::runtime::Runtime;
 
@@ -22,7 +21,8 @@ fn test_tls_acceptor() -> TlsAcceptor {
     let server_keys = &httpbis_test::openssl_test_key_gen::keys().server;
 
     let builder =
-        TlsAcceptorBuilder::from_pkcs12(&server_keys.pkcs12, &server_keys.pkcs12_password).unwrap();
+        TlsAcceptor::builder_from_pkcs12(&server_keys.pkcs12, &server_keys.pkcs12_password)
+            .unwrap();
     builder.build().unwrap()
 }
 
@@ -31,7 +31,7 @@ fn test_tls_connector() -> TlsConnector {
 
     let mut builder = TlsConnector::builder().unwrap();
     builder
-        .add_root_certificate(Certificate::from_der(client_keys.cert_der.clone()))
+        .add_root_certificate(&client_keys.cert_der)
         .expect("add_root_certificate");
     builder.build().unwrap()
 }
@@ -40,7 +40,7 @@ fn test_tls_connector() -> TlsConnector {
 fn tls() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     struct ServiceImpl {}
 

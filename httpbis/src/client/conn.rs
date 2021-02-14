@@ -371,8 +371,9 @@ impl ClientConn {
 
         let connect = assert_send_future(connect);
 
-        let tls_conn = connect
-            .and_then(move |conn| async move { Ok(connector.connect(&domain, conn).await?) });
+        let tls_conn = connect.and_then(move |conn| async move {
+            Ok(connector.connect_with_socket(&domain, conn).await?)
+        });
 
         let tls_conn = assert_send_future(tls_conn);
 

@@ -64,7 +64,8 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 
 impl ToTokioListener for ::std::net::TcpListener {
     fn into_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
-        handle.enter(|| Box::pin(TcpListener::from_std(*self).unwrap()))
+        let _g = handle.enter();
+        Box::pin(TcpListener::from_std(*self).unwrap())
     }
 
     fn local_addr(&self) -> io::Result<AnySocketAddr> {

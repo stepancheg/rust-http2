@@ -8,7 +8,8 @@ use std::task::Poll;
 
 use bytes::Bytes;
 
-use crate::{error, result};
+use crate::error;
+use crate::result;
 
 use crate::solicit::header::Headers;
 

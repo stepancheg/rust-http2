@@ -1,4 +1,6 @@
-use futures::{future, TryFutureExt, TryStreamExt};
+use futures::future;
+use futures::TryFutureExt;
+use futures::TryStreamExt;
 
 use futures::stream;
 use futures::stream::Stream;

@@ -398,9 +398,12 @@ impl FrameIR for SettingsFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{HttpSetting, SettingsFrame};
+    use super::HttpSetting;
+    use super::SettingsFrame;
+    use crate::solicit::frame::pack_header;
+    use crate::solicit::frame::Frame;
+    use crate::solicit::frame::FrameHeader;
     use crate::solicit::frame::FrameIR;
-    use crate::solicit::frame::{pack_header, Frame, FrameHeader};
     use crate::solicit::tests::common::raw_frame_from_parts;
 
     /// Tests that a `SettingsFrame` correctly handles a SETTINGS frame with

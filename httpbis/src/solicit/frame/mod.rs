@@ -431,7 +431,10 @@ impl FrameIR for RawFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{pack_header, unpack_header, FrameHeader, RawFrame};
+    use super::pack_header;
+    use super::unpack_header;
+    use super::FrameHeader;
+    use super::RawFrame;
 
     /// Tests that the `unpack_header` function correctly returns the
     /// components of HTTP/2 frame headers.

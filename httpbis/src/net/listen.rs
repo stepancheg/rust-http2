@@ -1,5 +1,6 @@
 use crate::net::socket::SocketStream;
-use crate::{AnySocketAddr, ServerConf};
+use crate::AnySocketAddr;
+use crate::ServerConf;
 use std::future::Future;
 use std::io;
 use std::pin::Pin;

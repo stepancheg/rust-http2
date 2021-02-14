@@ -7,9 +7,8 @@ use futures::stream;
 
 use regex::Regex;
 
-use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
-use tls_api_openssl::TlsAcceptor;
-use tls_api_openssl::TlsAcceptorBuilder;
+use tls_api::TlsAcceptor;
+use tls_api::TlsAcceptorBuilder;
 
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
@@ -58,9 +57,9 @@ impl ServerHandler for Blocks {
     }
 }
 
-fn test_tls_acceptor() -> TlsAcceptor {
+fn test_tls_acceptor() -> tls_api_openssl::TlsAcceptor {
     let pkcs12 = include_bytes!("../../identity.p12");
-    let mut builder = TlsAcceptorBuilder::from_pkcs12(pkcs12, "mypass").unwrap();
+    let mut builder = tls_api_openssl::TlsAcceptor::builder_from_pkcs12(pkcs12, "mypass").unwrap();
     builder
         .set_alpn_protocols(&[b"h2"])
         .expect("set_alpn_protocols");

@@ -52,7 +52,8 @@ use crate::server::handler_paths::ServerHandlerPaths;
 use rand::thread_rng;
 use rand::Rng;
 use std::fmt;
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::Handle;
+use tokio::runtime::Runtime;
 
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub conf: ServerConf,
@@ -189,7 +190,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
                         .to_string(),
                 )
                 .spawn(move || {
-                    let mut lp = Runtime::new().expect("http2server");
+                    let lp = Runtime::new().expect("http2server");
                     lp.block_on(
                         spawn_server_event_loop(
                             lp.handle().clone(),

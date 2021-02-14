@@ -37,7 +37,9 @@ impl<W: AsyncWrite + Unpin> HttpFramedWrite<W> {
                 return Poll::Ready(Ok(()));
             }
 
-            if let Poll::Pending = Pin::new(&mut self.write).poll_write_buf(cx, &mut self.buf)? {
+            if let Poll::Pending =
+                tokio_util::io::poll_write_buf(Pin::new(&mut self.write), cx, &mut self.buf)?
+            {
                 return Poll::Pending;
             }
         }

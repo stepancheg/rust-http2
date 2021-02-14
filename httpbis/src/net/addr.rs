@@ -29,6 +29,13 @@ impl From<std::os::unix::net::SocketAddr> for AnySocketAddr {
     }
 }
 
+#[cfg(unix)]
+impl From<tokio::net::unix::SocketAddr> for AnySocketAddr {
+    fn from(unix: tokio::net::unix::SocketAddr) -> Self {
+        AnySocketAddr::Unix(SocketAddrUnix::from(unix))
+    }
+}
+
 impl fmt::Display for AnySocketAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {

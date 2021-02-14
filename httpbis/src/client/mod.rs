@@ -118,7 +118,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
     pub fn set_tls(&mut self, host: &str) -> Result<()> {
         let mut tls_connector = C::builder()?;
 
-        if C::supports_alpn() {
+        if C::SUPPORTS_ALPN {
             // TODO: check negotiated protocol after connect
             tls_connector.set_alpn_protocols(&[b"h2"])?;
         }
@@ -179,7 +179,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
                 .name(thread_name)
                 .spawn(move || {
                     // Create an event loop.
-                    let mut lp: Runtime = Runtime::new().expect("Core::new");
+                    let lp: Runtime = Runtime::new().expect("Core::new");
 
                     spawn_client_event_loop(
                         lp.handle().clone(),

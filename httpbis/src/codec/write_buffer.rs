@@ -25,21 +25,21 @@ impl Buf for Item {
         }
     }
 
-    fn bytes(&self) -> &[u8] {
+    fn chunk(&self) -> &[u8] {
         match self {
-            Item::Vec(v) => v.bytes(),
-            Item::Bytes(b) => b.bytes(),
-            Item::FrameHeaderBuffer(c) => c.bytes(),
-            Item::Zeroes(z) => z.bytes(),
+            Item::Vec(v) => v.chunk(),
+            Item::Bytes(b) => b.chunk(),
+            Item::FrameHeaderBuffer(c) => c.chunk(),
+            Item::Zeroes(z) => z.chunk(),
         }
     }
 
-    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+    fn chunks_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
         match self {
-            Item::Vec(v) => v.bytes_vectored(dst),
-            Item::Bytes(b) => b.bytes_vectored(dst),
-            Item::FrameHeaderBuffer(c) => c.bytes_vectored(dst),
-            Item::Zeroes(z) => z.bytes_vectored(dst),
+            Item::Vec(v) => v.chunks_vectored(dst),
+            Item::Bytes(b) => b.chunks_vectored(dst),
+            Item::FrameHeaderBuffer(c) => c.chunks_vectored(dst),
+            Item::Zeroes(z) => z.chunks_vectored(dst),
         }
     }
 
@@ -75,12 +75,12 @@ impl Buf for WriteBuffer {
         self.deque.remaining()
     }
 
-    fn bytes(&self) -> &[u8] {
-        self.deque.bytes()
+    fn chunk(&self) -> &[u8] {
+        self.deque.chunk()
     }
 
-    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
-        self.deque.bytes_vectored(dst)
+    fn chunks_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+        self.deque.chunks_vectored(dst)
     }
 
     fn advance(&mut self, cnt: usize) {
@@ -147,7 +147,7 @@ impl Into<Vec<u8>> for WriteBuffer {
     fn into(mut self) -> Vec<u8> {
         let mut v = Vec::with_capacity(self.remaining());
         while self.has_remaining() {
-            let bytes = self.bytes();
+            let bytes = self.chunk();
             v.extend_from_slice(bytes);
             let len = bytes.len();
             self.advance(len);

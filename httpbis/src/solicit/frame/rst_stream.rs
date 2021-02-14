@@ -118,8 +118,10 @@ impl FrameIR for RstStreamFrame {
 mod tests {
     use super::RstStreamFrame;
 
+    use crate::solicit::frame::pack_header;
+    use crate::solicit::frame::Frame;
+    use crate::solicit::frame::FrameHeader;
     use crate::solicit::frame::FrameIR;
-    use crate::solicit::frame::{pack_header, Frame, FrameHeader};
     use crate::ErrorCode;
 
     /// A helper function that creates a new Vec containing the serialized representation of the

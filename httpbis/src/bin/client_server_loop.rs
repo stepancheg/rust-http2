@@ -122,7 +122,7 @@ fn ping_pong() {
     assert_eq!(200, header.status());
 
     let mut body = response.filter_data();
-    let mut runtime = Runtime::new().unwrap();
+    let runtime = Runtime::new().unwrap();
 
     let mut i = 0u32;
     forever(move || {

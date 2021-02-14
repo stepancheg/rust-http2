@@ -1,3 +1,4 @@
+use tls_api::TlsAcceptor;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
 use httpbis::ServerHandlerContext;
@@ -65,7 +66,7 @@ impl httpbis::ServerHandler for ServiceImpl {
 
 fn main() {
     let server_keys = &test_cert_gen::keys().server;
-    let mut tls_acceptor = tls_api_openssl::TlsAcceptorBuilder::from_pkcs12(
+    let mut tls_acceptor = tls_api_openssl::TlsAcceptor::builder_from_pkcs12(
         &server_keys.pkcs12,
         &server_keys.pkcs12_password,
     )

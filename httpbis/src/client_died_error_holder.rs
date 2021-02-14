@@ -6,8 +6,9 @@ use futures::future;
 
 use std::future::Future;
 
+use crate::error;
 use crate::misc::any_to_string;
-use crate::{error, result};
+use crate::result;
 use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 

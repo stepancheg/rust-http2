@@ -1518,13 +1518,16 @@ mod tests {
 #[cfg(test)]
 mod interop_tests {
     use std::collections::HashMap;
-    use std::fs::{self, File};
+    use std::fs::File;
+    use std::fs::{self};
     use std::io::Read;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
+    use std::path::PathBuf;
 
     use rustc_serialize::hex::FromHex;
+    use rustc_serialize::json;
+    use rustc_serialize::Decodable;
     use rustc_serialize::Decoder as JsonDecoder;
-    use rustc_serialize::{json, Decodable};
 
     use super::Decoder;
 

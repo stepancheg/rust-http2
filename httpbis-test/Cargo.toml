@@ -15,14 +15,15 @@ Moved into separate crate so tests could have a library to use (this library)
 log                = "0.4"
 log-ndc-env-logger = "0.2.*"
 
-bytes              = "0.5"
+bytes              = "1.0.1"
 futures            = "0.3.1"
 # rt-threaded: https://github.com/tokio-rs/tokio/issues/2058
-tokio = { version = "~0.2.6", features = ["net", "rt-threaded"] }
+# , "rt-threaded"
+tokio = { version = "1.2.0", features = ["net"] }
 
-tls-api            = "0.4.0"
-tls-api-native-tls = "0.4.0"
-tls-api-openssl    = "0.4.0"
+tls-api            = "0.5.0"
+tls-api-native-tls = "0.5.0"
+tls-api-openssl    = "0.5.0"
 
 regex              = "0.2"
 url                = "1"

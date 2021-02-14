@@ -1,5 +1,4 @@
 use crate::BufGetBytes;
-use bytes::buf::BufExt;
 use bytes::Buf;
 use bytes::Bytes;
 use std::cmp;
@@ -17,16 +16,16 @@ impl Buf for Zeroes {
         self.0
     }
 
-    fn bytes(&self) -> &[u8] {
+    fn chunk(&self) -> &[u8] {
         let len = cmp::min(self.0, ZEROES.len());
         &ZEROES[..len]
     }
 
-    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+    fn chunks_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
         let mut c = self.clone();
         let mut n = 0;
         while c.0 != 0 && n != dst.len() {
-            let len = c.bytes().len();
+            let len = c.chunk().len();
             dst[n] = IoSlice::new(&ZEROES[..len]);
             c.0 -= len;
             n += 1;
@@ -47,7 +46,7 @@ impl BufGetBytes for Zeroes {
             self.0 -= cnt;
             Bytes::from_static(&ZEROES[..cnt])
         } else {
-            self.take(cnt).to_bytes()
+            self.take(cnt).get_bytes(cnt)
         }
     }
 }
@@ -59,11 +58,11 @@ mod test {
     #[test]
     fn buf_small() {
         let mut z = Zeroes(5);
-        assert_eq!(&[0, 0, 0, 0, 0], z.bytes());
+        assert_eq!(&[0, 0, 0, 0, 0], z.chunk());
         assert_eq!(5, z.remaining());
         z.advance(3);
         assert_eq!(2, z.remaining());
-        assert_eq!(&[0, 0], z.bytes());
+        assert_eq!(&[0, 0], z.chunk());
         z.advance(2);
         assert_eq!(0, z.remaining());
     }
@@ -71,7 +70,7 @@ mod test {
     #[test]
     fn buf_large() {
         let mut z = Zeroes(10000);
-        assert_eq!(ZEROES, z.bytes());
+        assert_eq!(ZEROES, z.chunk());
         z.advance(ZEROES.len());
         assert_eq!(10000 - ZEROES.len(), z.remaining());
     }
@@ -81,16 +80,16 @@ mod test {
         let z = Zeroes(ZEROES.len() + 1);
 
         let mut s = [IoSlice::new(&[])];
-        assert_eq!(1, z.bytes_vectored(&mut s));
+        assert_eq!(1, z.chunks_vectored(&mut s));
         assert_eq!(ZEROES, &*s[0]);
 
         let mut s = [IoSlice::new(&[]), IoSlice::new(&[])];
-        assert_eq!(2, z.bytes_vectored(&mut s));
+        assert_eq!(2, z.chunks_vectored(&mut s));
         assert_eq!(ZEROES, &*s[0]);
         assert_eq!(&[0], &*s[1]);
 
         let mut s = [IoSlice::new(&[]), IoSlice::new(&[]), IoSlice::new(&[])];
-        assert_eq!(2, z.bytes_vectored(&mut s));
+        assert_eq!(2, z.chunks_vectored(&mut s));
         assert_eq!(ZEROES, &*s[0]);
         assert_eq!(&[0], &*s[1]);
     }
@@ -100,11 +99,11 @@ mod test {
         let z = Zeroes(10000);
 
         let mut s = [IoSlice::new(&[])];
-        assert_eq!(1, z.bytes_vectored(&mut s));
+        assert_eq!(1, z.chunks_vectored(&mut s));
         assert_eq!(ZEROES, &*s[0]);
 
         let mut s = [IoSlice::new(&[]), IoSlice::new(&[])];
-        assert_eq!(2, z.bytes_vectored(&mut s));
+        assert_eq!(2, z.chunks_vectored(&mut s));
         assert_eq!(ZEROES, &*s[0]);
         assert_eq!(ZEROES, &*s[1]);
     }

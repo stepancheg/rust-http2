@@ -3,7 +3,7 @@ use std::process;
 use tokio::runtime::Runtime;
 
 fn main() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let args = env::args();
     let args: Vec<_> = args.collect();

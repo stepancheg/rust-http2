@@ -46,7 +46,7 @@ fn stream_count() {
 
     server_tester.send_data(1, b"aabb", true);
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let message = rt.block_on(req).expect("r");
     assert_eq!((b"aabb"[..]).to_owned(), message.body.get_bytes());
@@ -69,7 +69,7 @@ fn rst_is_error() {
     server_tester.send_headers(1, Headers::ok_200(), false);
     server_tester.send_rst(1, ErrorCode::InadequateSecurity);
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     match rt.block_on(req) {
         Ok(..) => panic!("expected error"),
@@ -99,7 +99,7 @@ fn handle_1xx_headers() {
 
     server_tester.send_data(1, b"hello", true);
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     rt.block_on(req).expect("Should be OK");
 
@@ -123,7 +123,7 @@ fn client_call_dropped() {
         server_tester.send_headers(1, Headers::ok_200(), true);
     }
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     {
         let req = client.start_get("/fgfg", "localhost").collect();
@@ -145,7 +145,7 @@ fn reconnect_on_disconnect() {
 
     let mut server_tester = server.accept_xchg();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     {
         let req = client.start_get("/111", "localhost").collect();
@@ -183,7 +183,7 @@ fn reconnect_on_goaway() {
 
     let (server, client) = HttpServerTester::new_with_client();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     {
         let mut server_tester = server.accept_xchg();
@@ -219,7 +219,7 @@ fn reconnect_on_goaway() {
 pub fn issue_89() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
@@ -257,7 +257,7 @@ pub fn issue_89() {
 fn external_event_loop() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let server = ServerTest::new();
 
@@ -267,7 +267,7 @@ fn external_event_loop() {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
     let t = thread::spawn(move || {
-        let mut core = Runtime::new().expect("Core::new");
+        let core = Runtime::new().expect("Core::new");
 
         let mut clients = Vec::new();
         for _ in 0..2 {
@@ -300,7 +300,7 @@ fn external_event_loop() {
 pub fn sink_poll() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
@@ -336,7 +336,7 @@ pub fn sink_poll() {
     assert_eq!(0, client.stream_state(1).out_window_size);
     assert_eq!(0, client.stream_state(1).pump_out_window_size);
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let sender = rt.block_on(future::lazy(move |cx| {
         assert_eq!(Poll::Pending, sender.poll(cx));
@@ -391,7 +391,7 @@ pub fn sink_poll() {
 fn sink_reset_by_peer() {
     init_logger();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 

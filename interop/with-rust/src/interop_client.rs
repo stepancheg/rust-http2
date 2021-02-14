@@ -5,7 +5,6 @@ use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tls_api::Certificate;
 use tls_api::TlsConnector as tls_api_TlsConnector;
 use tls_api::TlsConnectorBuilder;
 use tls_api_openssl::TlsConnector;
@@ -22,7 +21,7 @@ use httpbis::BytesDeque;
 use tokio::runtime::Runtime;
 
 fn not_found(client: Client) {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let r = rt
         .block_on(client.start_get("/404", "localhost").collect())
         .expect("get");
@@ -30,7 +29,7 @@ fn not_found(client: Client) {
 }
 
 fn found(client: Client) {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let r = rt
         .block_on(client.start_get("/200", "localhost").collect())
         .expect("get");
@@ -51,7 +50,6 @@ fn find_test_case(name: &str) -> Option<fn(Client)> {
 
 fn test_tls_connector() -> TlsConnector {
     let root_ca = include_bytes!("../../root-ca.der");
-    let root_ca = Certificate::from_der(root_ca.to_vec());
 
     let mut builder = TlsConnector::builder().unwrap();
     builder

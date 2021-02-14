@@ -134,12 +134,15 @@ where
             loop {
                 // Read byte-by-byte
                 // Note it could be slow
-                let mut buf = [0];
-                let count = match Pin::new(&mut self.conn).poll_read(cx, &mut buf) {
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Ok(count)) => count,
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e.into())),
-                };
+                let mut buf = [0u8];
+                let mut buf_ptr: &mut [u8] = &mut buf;
+                let count =
+                    match tokio_util::io::poll_read_buf(Pin::new(&mut self.conn), cx, &mut buf_ptr)
+                    {
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(Ok(count)) => count,
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e.into())),
+                    };
 
                 if count == 0 {
                     let io_error = io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected EOF");

@@ -59,9 +59,9 @@ impl ServerOneConn {
         let join_handle: JoinHandle<()> = thread::Builder::new()
             .name("server_one_conn".to_owned())
             .spawn(move || {
-                let mut lp = Runtime::new().unwrap();
+                let lp = Runtime::new().unwrap();
 
-                let mut listener = lp
+                let listener = lp
                     .block_on(tokio::net::TcpListener::bind(
                         &(BIND_HOST, port).to_socket_addrs().unwrap().next().unwrap(),
                     ))

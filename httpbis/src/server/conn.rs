@@ -321,7 +321,8 @@ impl ServerConn {
                 ServerConn::connected(lh, socket, peer_addr, conf, service)
             }
             ServerTlsOption::Tls(acceptor) => {
-                let socket = Box::pin(async move { Ok(acceptor.accept(socket).await?) });
+                let socket =
+                    Box::pin(async move { Ok(acceptor.accept_with_socket(socket).await?) });
                 ServerConn::connected(lh, socket, peer_addr, conf, service)
             }
         }

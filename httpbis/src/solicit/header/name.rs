@@ -1,6 +1,7 @@
 use crate::ascii::Ascii;
 use crate::req_resp::RequestOrResponse;
-use crate::solicit::header::{HeaderError, HeaderResult};
+use crate::solicit::header::HeaderError;
+use crate::solicit::header::HeaderResult;
 use bytes::Bytes;
 use bytes::BytesMut;
 use std::fmt;

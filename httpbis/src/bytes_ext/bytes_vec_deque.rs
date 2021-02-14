@@ -1,4 +1,5 @@
-use std::collections::{vec_deque, VecDeque};
+use std::collections::vec_deque;
+use std::collections::VecDeque;
 use std::io::IoSlice;
 
 use bytes::Buf;
@@ -62,7 +63,8 @@ impl BytesVecDeque {
     }
 
     pub fn into_bytes(mut self) -> Bytes {
-        self.to_bytes()
+        let rem = self.remaining();
+        BufGetBytes::get_bytes(&mut self, rem)
     }
 }
 
@@ -71,20 +73,20 @@ impl Buf for BytesVecDeque {
         self.deque.remaining()
     }
 
-    fn bytes(&self) -> &[u8] {
-        self.deque.bytes()
+    fn chunk(&self) -> &[u8] {
+        self.deque.chunk()
     }
 
-    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
-        self.deque.bytes_vectored(dst)
+    fn chunks_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+        self.deque.chunks_vectored(dst)
     }
 
     fn advance(&mut self, cnt: usize) {
         self.deque.advance(cnt)
     }
 
-    fn to_bytes(&mut self) -> Bytes {
-        self.deque.to_bytes()
+    fn copy_to_bytes(&mut self, len: usize) -> Bytes {
+        BufGetBytes::get_bytes(self, len)
     }
 }
 
@@ -110,7 +112,7 @@ mod test {
     #[test]
     fn buf_empty() {
         let d = BytesVecDeque::default();
-        assert_eq!(&[0u8; 0], Buf::bytes(&d));
+        assert_eq!(&[0u8; 0], Buf::chunk(&d));
         assert_eq!(0, Buf::remaining(&d));
         assert_eq!(false, Buf::has_remaining(&d));
     }
@@ -121,9 +123,9 @@ mod test {
         d.extend(Bytes::from_static(b"ab"));
         d.extend(Bytes::from_static(b"cde"));
 
-        assert_eq!(b"ab", Buf::bytes(&d));
+        assert_eq!(b"ab", Buf::chunk(&d));
         Buf::advance(&mut d, 2);
-        assert_eq!(b"cde", Buf::bytes(&d));
+        assert_eq!(b"cde", Buf::chunk(&d));
         Buf::advance(&mut d, 3);
         assert_eq!(0, Buf::remaining(&d));
         assert_eq!(false, Buf::has_remaining(&d));
@@ -135,11 +137,11 @@ mod test {
         d.extend(Bytes::from_static(b"ab"));
         d.extend(Bytes::from_static(b"cde"));
 
-        assert_eq!(b"ab", Buf::bytes(&d));
+        assert_eq!(b"ab", Buf::chunk(&d));
         Buf::advance(&mut d, 1);
-        assert_eq!(b"b", Buf::bytes(&d));
+        assert_eq!(b"b", Buf::chunk(&d));
         Buf::advance(&mut d, 3);
-        assert_eq!(b"e", Buf::bytes(&d));
+        assert_eq!(b"e", Buf::chunk(&d));
         Buf::advance(&mut d, 1);
         assert_eq!(0, Buf::remaining(&d));
         assert_eq!(false, Buf::has_remaining(&d));
@@ -152,16 +154,16 @@ mod test {
         d.extend(Bytes::from_static(b"cde"));
 
         let mut v = [IoSlice::new(&[])];
-        assert_eq!(1, d.bytes_vectored(&mut v));
+        assert_eq!(1, d.chunks_vectored(&mut v));
         assert_eq!(b"ab", &*v[0]);
 
         let mut v = [IoSlice::new(&[]), IoSlice::new(&[])];
-        assert_eq!(2, d.bytes_vectored(&mut v));
+        assert_eq!(2, d.chunks_vectored(&mut v));
         assert_eq!(b"ab", &*v[0]);
         assert_eq!(b"cde", &*v[1]);
 
         let mut v = [IoSlice::new(&[]), IoSlice::new(&[]), IoSlice::new(&[])];
-        assert_eq!(2, d.bytes_vectored(&mut v));
+        assert_eq!(2, d.chunks_vectored(&mut v));
         assert_eq!(b"ab", &*v[0]);
         assert_eq!(b"cde", &*v[1]);
     }

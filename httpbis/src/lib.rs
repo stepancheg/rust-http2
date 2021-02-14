@@ -1,10 +1,10 @@
-#![deny(intra_doc_link_resolution_failure)]
+#![deny(broken_intra_doc_links)]
 // TODO: add docs
 //#![deny(missing_docs)]
 
 //! Asynchnous HTTP/2 client and server implementation.
 //!
-//! Based on futures/tokio.
+//! Based on tokio.
 //!
 //! This crate is used to implement [`grpc` crate](https://github.com/stepancheg/grpc-rust),
 //! and probably not usable for anything else.

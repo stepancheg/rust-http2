@@ -1,6 +1,7 @@
 use futures::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::Context;
+use std::task::Poll;
 
 /// Similar to `select`, but does not require `Unpin`
 #[allow(dead_code)]

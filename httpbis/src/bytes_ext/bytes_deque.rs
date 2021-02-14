@@ -144,17 +144,17 @@ impl Buf for BytesDeque {
         }
     }
 
-    fn bytes(&self) -> &[u8] {
+    fn chunk(&self) -> &[u8] {
         match &self.0 {
-            Inner::One(b) => b.bytes(),
-            Inner::Deque(d) => d.bytes(),
+            Inner::One(b) => b.chunk(),
+            Inner::Deque(d) => d.chunk(),
         }
     }
 
-    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+    fn chunks_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
         match &self.0 {
-            Inner::One(b) => b.bytes_vectored(dst),
-            Inner::Deque(d) => d.bytes_vectored(dst),
+            Inner::One(b) => b.chunks_vectored(dst),
+            Inner::Deque(d) => d.chunks_vectored(dst),
         }
     }
 

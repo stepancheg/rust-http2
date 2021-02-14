@@ -36,7 +36,11 @@ impl<R: AsyncRead + Unpin> HttpFramedRead<R> {
     fn fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
         let mut_self = self.get_mut();
         mut_self.buf.reserve(8192);
-        let n = match Pin::new(&mut mut_self.read).poll_read_buf(cx, &mut mut_self.buf)? {
+        let n = match tokio_util::io::poll_read_buf(
+            Pin::new(&mut mut_self.read),
+            cx,
+            &mut mut_self.buf,
+        )? {
             Poll::Ready(n) => n,
             Poll::Pending => return Poll::Pending,
         };

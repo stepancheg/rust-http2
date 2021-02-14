@@ -17,8 +17,6 @@ use crate::net::listen::ToTokioListener;
 use crate::net::socket::SocketStream;
 use crate::ServerConf;
 use std::fmt;
-#[cfg(unix)]
-use std::os::unix::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use tokio::runtime::Handle;
@@ -66,8 +64,16 @@ impl fmt::Display for SocketAddrUnix {
 }
 
 #[cfg(unix)]
-impl From<SocketAddr> for SocketAddrUnix {
-    fn from(s: SocketAddr) -> Self {
+impl From<std::os::unix::net::SocketAddr> for SocketAddrUnix {
+    fn from(s: std::os::unix::net::SocketAddr) -> Self {
+        // can be unnamed
+        SocketAddrUnix(s.as_pathname().unwrap_or(Path::new("")).to_owned())
+    }
+}
+
+#[cfg(unix)]
+impl From<tokio::net::unix::SocketAddr> for SocketAddrUnix {
+    fn from(s: tokio::net::unix::SocketAddr) -> Self {
         // can be unnamed
         SocketAddrUnix(s.as_pathname().unwrap_or(Path::new("")).to_owned())
     }
@@ -99,7 +105,8 @@ impl ToSocketListener for SocketAddrUnix {
 #[cfg(unix)]
 impl ToTokioListener for ::std::os::unix::net::UnixListener {
     fn into_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
-        handle.enter(|| Box::pin(UnixListener::from_std(*self).unwrap()))
+        let _g = handle.enter();
+        Box::pin(UnixListener::from_std(*self).unwrap())
     }
 
     fn local_addr(&self) -> io::Result<AnySocketAddr> {
@@ -141,7 +148,8 @@ impl ToClientStream for SocketAddrUnix {
             Ok(stream) => stream,
             Err(e) => return Box::pin(async { Err(e) }),
         };
-        match handle.enter(|| UnixStream::from_std(stream)) {
+        let _g = handle.enter();
+        match UnixStream::from_std(stream) {
             Ok(stream) => Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn SocketStream>>) }),
             Err(e) => return Box::pin(async { Err(e) }),
         }
@@ -193,7 +201,7 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn peer_addr() {
-        let mut lp = Runtime::new().unwrap();
+        let lp = Runtime::new().unwrap();
         let h = lp.handle().clone();
 
         let dir = tempdir::TempDir::new("peer_addr").unwrap();

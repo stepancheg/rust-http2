@@ -2,19 +2,23 @@
 
 use bytes::Bytes;
 
-use crate::codec::write_buffer::{WriteBuffer, WriteBufferTailVec};
+use crate::codec::write_buffer::WriteBuffer;
+use crate::codec::write_buffer::WriteBufferTailVec;
 use crate::hpack;
 use crate::hpack::encoder::EncodeBuf;
 use crate::solicit::frame::continuation::ContinuationFlag;
 use crate::solicit::frame::flags::*;
 use crate::solicit::frame::pack_header;
+use crate::solicit::frame::parse_padded_payload;
+use crate::solicit::frame::Frame;
+use crate::solicit::frame::FrameBuilder;
+use crate::solicit::frame::FrameHeader;
+use crate::solicit::frame::FrameIR;
 use crate::solicit::frame::HttpFrameType;
 use crate::solicit::frame::ParseFrameError;
 use crate::solicit::frame::ParseFrameResult;
+use crate::solicit::frame::RawFrame;
 use crate::solicit::frame::FRAME_HEADER_LEN;
-use crate::solicit::frame::{
-    parse_padded_payload, Frame, FrameBuilder, FrameHeader, FrameIR, RawFrame,
-};
 use crate::solicit::stream_id::StreamId;
 use crate::Headers;
 use std::cmp;
@@ -539,17 +543,20 @@ impl<'a> FrameIR for HeadersMultiFrame<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeadersFlag, HeadersFrame, StreamDependency};
+    use super::HeadersFlag;
+    use super::HeadersFrame;
+    use super::StreamDependency;
     use crate::hpack;
     use crate::solicit::frame::continuation::ContinuationFlag;
     use crate::solicit::frame::flags::Flags;
     use crate::solicit::frame::headers::HeadersMultiFrame;
+    use crate::solicit::frame::pack_header;
     use crate::solicit::frame::tests::build_padded_frame_payload;
     use crate::solicit::frame::unpack_frames_for_test;
+    use crate::solicit::frame::Frame;
     use crate::solicit::frame::FrameHeader;
     use crate::solicit::frame::FrameIR;
     use crate::solicit::frame::HttpFrame;
-    use crate::solicit::frame::{pack_header, Frame};
     use crate::solicit::tests::common::raw_frame_from_parts;
     use crate::Headers;
 

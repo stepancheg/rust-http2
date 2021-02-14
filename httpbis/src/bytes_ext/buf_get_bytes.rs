@@ -2,9 +2,8 @@
 //!
 //! See also [this PR](https://github.com/tokio-rs/bytes/pull/363).
 
-use bytes::buf::ext::BufExt;
-use bytes::buf::ext::Chain;
-use bytes::buf::ext::Take;
+use bytes::buf::Chain;
+use bytes::buf::Take;
 use bytes::Buf;
 use bytes::BufMut;
 use bytes::Bytes;
@@ -13,6 +12,7 @@ use std::cmp;
 use std::io::Cursor;
 
 /// Get `Bytes` from `Buf`.
+// TODO: get rid of, newer bytes has a very similar function
 pub trait BufGetBytes: Buf {
     /// Consumes requested number of bytes from `self`.
     ///
@@ -42,7 +42,7 @@ pub trait BufGetBytes: Buf {
         let mut ret = BytesMut::with_capacity(cnt);
 
         while cnt != 0 {
-            let bytes = self.bytes();
+            let bytes = self.chunk();
             let step = cmp::min(bytes.len(), cnt);
             ret.put_slice(&bytes[..step]);
             self.advance(step);
@@ -50,6 +50,10 @@ pub trait BufGetBytes: Buf {
         }
 
         ret.freeze()
+    }
+
+    fn to_bytes(&mut self) -> Bytes {
+        self.get_bytes(self.remaining())
     }
 }
 
@@ -105,7 +109,6 @@ impl<A: BufGetBytes> BufGetBytes for &mut A {
 #[cfg(test)]
 mod test {
     use crate::bytes_ext::buf_get_bytes::BufGetBytes;
-    use bytes::buf::BufExt;
     use bytes::Buf;
     use bytes::Bytes;
     use bytes::BytesMut;
@@ -113,7 +116,7 @@ mod test {
     #[test]
     fn get_to_bytes() {
         let mut buf = &b"abcd"[..];
-        assert_eq!(Bytes::copy_from_slice(b"abcd"), buf.to_bytes());
+        assert_eq!(Bytes::copy_from_slice(b"abcd"), buf.get_bytes(4));
         assert_eq!(b"", buf);
     }
 
@@ -175,7 +178,7 @@ mod test {
         let mut ab = Bytes::copy_from_slice(b"ab");
         let mut cd = Bytes::copy_from_slice(b"cd");
         let mut chain = (&mut ab).chain(&mut cd);
-        assert_eq!(Bytes::copy_from_slice(b"abcd"), chain.to_bytes());
+        assert_eq!(Bytes::copy_from_slice(b"abcd"), chain.get_bytes(4));
         assert_eq!(Bytes::new(), ab);
         assert_eq!(Bytes::new(), cd);
     }

@@ -1,9 +1,6 @@
 use crate::BufGetBytes;
-use bytes::buf::BufExt;
 use bytes::Buf;
-use bytes::BufMut;
 use bytes::Bytes;
-use bytes::BytesMut;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::io::IoSlice;
@@ -76,9 +73,9 @@ impl<B: Buf> Buf for BufVecDeque<B> {
         self.len
     }
 
-    fn bytes(&self) -> &[u8] {
+    fn chunk(&self) -> &[u8] {
         for b in &self.deque {
-            let bytes = b.bytes();
+            let bytes = b.chunk();
             if !bytes.is_empty() {
                 return bytes;
             }
@@ -86,13 +83,13 @@ impl<B: Buf> Buf for BufVecDeque<B> {
         &[]
     }
 
-    fn bytes_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
+    fn chunks_vectored<'a>(&'a self, dst: &mut [IoSlice<'a>]) -> usize {
         let mut n = 0;
         for b in &self.deque {
             if n == dst.len() {
                 break;
             }
-            n += b.bytes_vectored(&mut dst[n..]);
+            n += b.chunks_vectored(&mut dst[n..]);
         }
         n
     }
@@ -115,15 +112,23 @@ impl<B: Buf> Buf for BufVecDeque<B> {
         }
     }
 
-    fn to_bytes(&mut self) -> Bytes {
-        if !self.has_remaining() {
-            Bytes::new()
-        } else if self.deque.len() == 1 {
-            mem::take(self).into_iter().next().unwrap().to_bytes()
-        } else {
-            let mut ret = BytesMut::with_capacity(self.remaining());
-            ret.put(self);
-            ret.freeze()
+    fn copy_to_bytes(&mut self, cnt: usize) -> Bytes {
+        assert!(cnt <= self.remaining());
+
+        match self.deque.front_mut() {
+            Some(front) if front.remaining() >= cnt => {
+                let r = if front.remaining() == cnt {
+                    let mut front = self.deque.pop_front().unwrap();
+                    front.copy_to_bytes(cnt)
+                } else {
+                    front.copy_to_bytes(cnt)
+                };
+
+                self.len -= cnt;
+                r
+            }
+            Some(_) => self.take(cnt).copy_to_bytes(cnt),
+            None => Bytes::new(),
         }
     }
 }
@@ -144,7 +149,7 @@ impl<B: BufGetBytes> BufGetBytes for BufVecDeque<B> {
                 self.len -= cnt;
                 r
             }
-            Some(_) => self.take(cnt).to_bytes(),
+            Some(_) => self.take(cnt).copy_to_bytes(cnt),
             None => Bytes::new(),
         }
     }

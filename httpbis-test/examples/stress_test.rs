@@ -40,7 +40,7 @@ fn new_server() -> Server {
         let (tx, rx) = mpsc::channel(1);
 
         thread::spawn(move || {
-            let mut rt = Runtime::new().unwrap();
+            let rt = Runtime::new().unwrap();
 
             let mut tx = tx;
 
@@ -70,7 +70,7 @@ fn spawn<F: FnOnce(Client, Arc<AtomicBool>) + Send + 'static>(port: u16, f: F) -
 }
 
 fn get_200(client: Client, still_alive: Arc<AtomicBool>) {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     loop {
         still_alive.store(true, Ordering::SeqCst);
         let r = rt
@@ -81,7 +81,7 @@ fn get_200(client: Client, still_alive: Arc<AtomicBool>) {
 }
 
 fn inf_impl(client: Client, still_alive: Arc<AtomicBool>, path: &str, size: usize) {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     loop {
         let (headers, resp) = rt
             .block_on(client.start_get(path, "localhost").0)
