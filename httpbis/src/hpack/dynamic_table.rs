@@ -168,11 +168,11 @@ mod test {
     fn test_dynamic_table_size_calculation_simple() {
         let mut table = DynamicTable::new();
         // Sanity check
-        assert_eq!(0, table.get_size());
+        assert_eq!(0, table.size);
 
         table.add_header_for_test(b"a".to_vec(), b"b".to_vec());
 
-        assert_eq!(32 + 2, table.get_size());
+        assert_eq!(32 + 2, table.size);
     }
 
     #[test]
@@ -183,7 +183,7 @@ mod test {
         table.add_header_for_test(b"123".to_vec(), b"456".to_vec());
         table.add_header_for_test(b"a".to_vec(), b"b".to_vec());
 
-        assert_eq!(3 * 32 + 2 + 6 + 2, table.get_size());
+        assert_eq!(3 * 32 + 2 + 6 + 2, table.size);
     }
 
     /// Tests that the `DynamicTable` gets correctly resized (by evicting old
@@ -192,12 +192,12 @@ mod test {
     fn test_dynamic_table_auto_resize() {
         let mut table = DynamicTable::with_size(38);
         table.add_header_for_test(b"a".to_vec(), b"b".to_vec());
-        assert_eq!(32 + 2, table.get_size());
+        assert_eq!(32 + 2, table.size);
 
         table.add_header_for_test(b"123".to_vec(), b"456".to_vec());
 
         // Resized?
-        assert_eq!(32 + 6, table.get_size());
+        assert_eq!(32 + 6, table.size);
         // Only has the second header?
         assert_eq!(
             table.to_vec_of_vec(),
@@ -211,12 +211,12 @@ mod test {
     fn test_dynamic_table_auto_resize_into_empty() {
         let mut table = DynamicTable::with_size(38);
         table.add_header_for_test(b"a".to_vec(), b"b".to_vec());
-        assert_eq!(32 + 2, table.get_size());
+        assert_eq!(32 + 2, table.size);
 
         table.add_header_for_test(b"123".to_vec(), b"4567".to_vec());
 
         // Resized and empty?
-        assert_eq!(0, table.get_size());
+        assert_eq!(0, table.size);
         assert_eq!(0, table.to_vec_of_bytes().len());
     }
 
@@ -229,11 +229,11 @@ mod test {
         table.add_header_for_test(b"a".to_vec(), b"b".to_vec());
         table.add_header_for_test(b"123".to_vec(), b"456".to_vec());
         table.add_header_for_test(b"c".to_vec(), b"d".to_vec());
-        assert_eq!(3 * 32 + 2 + 6 + 2, table.get_size());
+        assert_eq!(3 * 32 + 2 + 6 + 2, table.size);
 
         table.set_max_table_size(38);
 
-        assert_eq!(32 + 2, table.get_size());
+        assert_eq!(32 + 2, table.size);
         assert_eq!(table.to_vec_of_vec(), vec![(b"c".to_vec(), b"d".to_vec())]);
     }
 
@@ -245,13 +245,13 @@ mod test {
         table.add_header_for_test(b"a".to_vec(), b"b".to_vec());
         table.add_header_for_test(b"123".to_vec(), b"456".to_vec());
         table.add_header_for_test(b"c".to_vec(), b"d".to_vec());
-        assert_eq!(3 * 32 + 2 + 6 + 2, table.get_size());
+        assert_eq!(3 * 32 + 2 + 6 + 2, table.size);
 
         table.set_max_table_size(0);
 
         assert_eq!(0, table.len());
         assert_eq!(0, table.to_vec_of_bytes().len());
-        assert_eq!(0, table.get_size());
+        assert_eq!(0, table.size);
         assert_eq!(0, table.get_max_table_size());
     }
 
@@ -265,7 +265,7 @@ mod test {
 
         assert_eq!(0, table.len());
         assert_eq!(0, table.to_vec_of_bytes().len());
-        assert_eq!(0, table.get_size());
+        assert_eq!(0, table.size);
         assert_eq!(0, table.get_max_table_size());
     }
 
