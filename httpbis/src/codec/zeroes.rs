@@ -1,6 +1,8 @@
 use crate::BufGetBytes;
 use bytes::Buf;
+use bytes::BufMut;
 use bytes::Bytes;
+use bytes::BytesMut;
 use std::cmp;
 use std::io::IoSlice;
 
@@ -46,7 +48,11 @@ impl BufGetBytes for Zeroes {
             self.0 -= cnt;
             Bytes::from_static(&ZEROES[..cnt])
         } else {
-            self.take(cnt).get_bytes(cnt)
+            let mut bytes_mut = BytesMut::with_capacity(cnt);
+            while bytes_mut.len() < cnt {
+                bytes_mut.put_slice(&ZEROES[..cmp::min(cnt - bytes_mut.len(), ZEROES.len())]);
+            }
+            bytes_mut.freeze()
         }
     }
 }
