@@ -77,6 +77,11 @@ impl Step {
             ..Default::default()
         }
     }
+
+    pub fn with_timeout(mut self, timeout_minutes: u32) -> Step {
+        self.timeout_minutes = Some(timeout_minutes);
+        self
+    }
 }
 
 impl Step {

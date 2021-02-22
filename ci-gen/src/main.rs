@@ -108,7 +108,7 @@ fn jobs() -> Yaml {
             Step::run(
                 "Run h2spec test",
                 "PATH=\"$(pwd):$PATH\" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test",
-            )
+            ).with_timeout(5)
         ],
         ..Default::default()
     });

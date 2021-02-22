@@ -141,3 +141,4 @@ jobs:
             - name: Run h2spec test
               run: PATH="$(pwd):$PATH" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test
               shell: bash
+              timeout-minutes: 5
