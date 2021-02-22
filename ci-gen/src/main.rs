@@ -54,10 +54,13 @@ fn steps(os: Os, channel: RustToolchain) -> Vec<Step> {
         r.push(cargo_build("cargo build main crate only", "-p httpbis"));
     } else {
         // Use one thread for better errors
-        r.push(cargo_test(
-            &format!("cargo test"),
-            "--all --all-targets -- --test-threads=1",
-        ));
+        r.push(
+            cargo_test(
+                &format!("cargo test"),
+                "--all --all-targets -- --test-threads=1",
+            )
+            .with_timeout_minutes(5),
+        );
         // `--all-targets` does not include doctests
         // https://github.com/rust-lang/cargo/issues/6669
         r.push(cargo_test("cargo test --doc", "--doc"));
@@ -108,7 +111,7 @@ fn jobs() -> Yaml {
             Step::run(
                 "Run h2spec test",
                 "PATH=\"$(pwd):$PATH\" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test",
-            ).with_timeout(5)
+            ).with_timeout_minutes(5)
         ],
         ..Default::default()
     });

@@ -78,7 +78,7 @@ impl Step {
         }
     }
 
-    pub fn with_timeout(mut self, timeout_minutes: u32) -> Step {
+    pub fn with_timeout_minutes(mut self, timeout_minutes: u32) -> Step {
         self.timeout_minutes = Some(timeout_minutes);
         self
     }
