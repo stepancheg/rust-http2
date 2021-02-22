@@ -1,5 +1,7 @@
 //! Tests for client.
 
+use log::info;
+
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -279,16 +281,20 @@ fn external_event_loop() {
 
         tx.send(clients).expect("send clients");
 
+        info!("block_on...");
         core.block_on(shutdown_rx.map_err(|_| panic!("aaa")))
             .expect("run");
+        info!("block_on done.");
     });
 
     for client in rx.recv().expect("rx") {
+        info!("client.start_get...");
         let get = client.start_get("/echo", "localhost");
         assert_eq!(
             200,
             rt.block_on(get.collect()).expect("get").headers.status()
         );
+        info!("client.start_get done.");
     }
 
     shutdown_tx.send(()).expect("send");

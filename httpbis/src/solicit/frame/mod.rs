@@ -352,7 +352,7 @@ impl RawFrame {
     }
 
     /// Frame type.
-    pub fn frame_type(&self) -> u8 {
+    pub fn frame_type(&self) -> RawHttpFrameType {
         self.as_frame_ref().frame_type()
     }
 
@@ -392,8 +392,8 @@ impl RawFrame {
 
 impl<'a> RawFrameRef<'a> {
     /// Get frame type.
-    pub fn frame_type(&self) -> u8 {
-        self.raw_content[3]
+    pub fn frame_type(&self) -> RawHttpFrameType {
+        RawHttpFrameType(self.raw_content[3])
     }
 }
 
@@ -741,7 +741,7 @@ impl HttpFrame {
             &HttpFrame::Goaway(..) => RawHttpFrameType::GOAWAY,
             &HttpFrame::WindowUpdate(..) => RawHttpFrameType::WINDOW_UPDATE,
             &HttpFrame::Continuation(..) => RawHttpFrameType::CONTINUATION,
-            &HttpFrame::Unknown(ref f) => RawHttpFrameType(f.frame_type()),
+            &HttpFrame::Unknown(ref f) => f.frame_type(),
         }
     }
 }

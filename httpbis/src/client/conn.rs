@@ -251,7 +251,7 @@ impl ClientConn {
         let future = connect.and_then(move |mut conn| async move {
             client_handshake(&mut conn, settings_frame).await?;
 
-            debug!("handshake done");
+            debug!("client handshake done");
 
             let conn_data = Conn::<ClientTypes, _>::new(
                 lh_copy,
