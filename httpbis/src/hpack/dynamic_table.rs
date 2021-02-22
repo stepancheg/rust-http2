@@ -50,12 +50,6 @@ impl DynamicTable {
         }
     }
 
-    /// Returns the current size of the table in octets, as defined by the IETF
-    /// HPACK spec.
-    pub fn get_size(&self) -> usize {
-        self.size
-    }
-
     /// Returns an `Iterator` through the headers stored in the `DynamicTable`.
     ///
     /// The iterator will yield elements of type `(&[u8], &[u8])`,
@@ -97,7 +91,6 @@ impl DynamicTable {
         // a magic number determined by them (under reasonable assumptions of
         // how the table is stored).
         self.size += name.len() + value.len() + 32;
-        debug!("New dynamic table size {}", self.size);
         // Now add it to the internal buffer
         self.table.push_front((name, value));
         // ...and make sure we're not over the maximum size.

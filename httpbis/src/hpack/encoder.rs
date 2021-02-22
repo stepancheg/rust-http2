@@ -303,7 +303,6 @@ mod tests {
 
         let result = encoder.encode_for_test(headers.iter().map(|h| (&h.0[..], &h.1[..])));
 
-        debug!("{:?}", result);
         assert!(is_decodable(&result, &headers));
     }
 
