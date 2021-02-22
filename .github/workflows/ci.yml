@@ -132,6 +132,7 @@ jobs:
               uses: actions/checkout@v2
             - name: Install h2spec
               run: ci/install-h2spec.sh
+              shell: bash
             - name: Build h2spec test
               uses: actions-rs/cargo@v1
               with:
@@ -139,3 +140,4 @@ jobs:
                   args: --manifest-path h2spec-test/Cargo.toml --bin the_test
             - name: Run h2spec test
               run: PATH="$(pwd):$PATH" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test
+              shell: bash

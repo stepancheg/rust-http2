@@ -26,29 +26,99 @@ impl fmt::Display for Env {
 }
 
 /// Github workflow step
-pub struct Step(pub Yaml);
+#[derive(Default)]
+pub struct Step {
+    pub name: String,
+    pub uses: Option<String>,
+    pub with: Option<Yaml>,
+    pub run: Option<String>,
+    pub shell: Option<String>,
+    pub env: Vec<(String, String)>,
+    pub timeout_minutes: Option<u32>,
+}
 
 impl Step {
     pub fn uses(name: &str, uses: &str) -> Step {
-        Step(Yaml::map(vec![("name", name), ("uses", uses)]))
+        Step {
+            name: name.to_owned(),
+            uses: Some(uses.to_owned()),
+            ..Default::default()
+        }
     }
 
     pub fn uses_with(name: &str, uses: &str, with: Yaml) -> Step {
-        Step(Yaml::map(vec![
-            ("name", Yaml::string(name)),
-            ("uses", Yaml::string(uses)),
-            ("with", with),
-        ]))
+        Step {
+            name: name.to_owned(),
+            uses: Some(uses.to_owned()),
+            with: Some(with),
+            ..Default::default()
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn uses_env_with(name: &str, uses: &str, env: &[(&str, &str)], with: Yaml) -> Step {
+        Step {
+            name: name.to_owned(),
+            uses: Some(uses.to_owned()),
+            env: env
+                .into_iter()
+                .map(|(k, v)| (String::from(*k), String::from(*v)))
+                .collect(),
+            with: Some(with),
+            ..Default::default()
+        }
     }
 
     pub fn run(name: &str, run: &str) -> Step {
-        Step(Yaml::map(vec![("name", name), ("run", run)]))
+        Step {
+            name: name.to_owned(),
+            run: Some(run.to_owned()),
+            shell: Some("bash".to_owned()),
+            ..Default::default()
+        }
+    }
+}
+
+impl Step {
+    #[allow(dead_code)]
+    pub fn env(mut self, name: &str, value: &str) -> Self {
+        self.env.push((name.to_owned(), value.to_owned()));
+        self
     }
 }
 
 impl Into<Yaml> for Step {
     fn into(self) -> Yaml {
-        self.0
+        let Step {
+            name,
+            uses,
+            with,
+            run,
+            shell,
+            env,
+            timeout_minutes,
+        } = self;
+        let mut entries = Vec::new();
+        entries.push(("name", Yaml::string(name)));
+        if let Some(uses) = uses {
+            entries.push(("uses", Yaml::string(uses)));
+        }
+        if let Some(with) = with {
+            entries.push(("with", with));
+        }
+        if let Some(run) = run {
+            entries.push(("run", Yaml::string(run)));
+        }
+        if let Some(shell) = shell {
+            entries.push(("shell", Yaml::string(shell)));
+        }
+        if !env.is_empty() {
+            entries.push(("env", Yaml::map(env)));
+        }
+        if let Some(timeout_minutes) = timeout_minutes {
+            entries.push(("timeout-minutes", Yaml::String(timeout_minutes.to_string())));
+        }
+        Yaml::map(entries)
     }
 }
 
@@ -59,6 +129,14 @@ pub struct Job {
     pub runs_on: Env,
     pub steps: Vec<Step>,
     pub env: Vec<(String, String)>,
+}
+
+impl Job {
+    #[allow(dead_code)]
+    pub fn step(mut self, step: Step) -> Self {
+        self.steps.push(step);
+        self
+    }
 }
 
 impl Into<(String, Yaml)> for Job {
