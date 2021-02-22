@@ -11,6 +11,5 @@ edition = "2018"
 
 [dependencies]
 httpbis = { path = "../httpbis" }
-env_logger = "0.8.3"
-log-ndc-env-logger = "0.2.*"
+log-ndc-env-logger = "0.3.*"
 futures            = "0.3.1"

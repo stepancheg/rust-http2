@@ -67,7 +67,7 @@ fn test_tls_acceptor() -> tls_api_openssl::TlsAcceptor {
 }
 
 fn main() {
-    env_logger::init();
+    log_ndc_env_logger::init();
 
     let mut server = ServerBuilder::new();
     server.set_port(PORT);

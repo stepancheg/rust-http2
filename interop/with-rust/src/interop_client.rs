@@ -80,7 +80,7 @@ fn run_all_test_cases() {
 }
 
 fn main() {
-    env_logger::init();
+    log_ndc_env_logger::init();
 
     let options = App::new("http2 interop client")
         .arg(
