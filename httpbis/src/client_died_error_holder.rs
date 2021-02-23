@@ -78,15 +78,18 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
                     holder.set_once(e);
                 }
             }
-            future::ok::<(), ()>(())
+            future::ready(())
         });
 
         let holder = self.clone();
         let future = AssertUnwindSafe(future).catch_unwind().then(move |r| {
-            if let Err(e) = r {
-                let message = any_to_string(e);
-                warn!("{} panicked: {}", D::what(), message);
-                holder.set_once(error::Error::ClientPanicked(message));
+            match r {
+                Err(e) => {
+                    let message = any_to_string(e);
+                    warn!("{} panicked: {}", D::what(), message);
+                    holder.set_once(error::Error::ClientPanicked(message));
+                }
+                Ok(()) => {}
             }
             future::ready(())
         });
