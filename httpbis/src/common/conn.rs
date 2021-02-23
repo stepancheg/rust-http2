@@ -69,7 +69,7 @@ pub(crate) struct Conn<T: Types, I: SocketStream> {
     /// Client or server specific data
     pub specific: T::SideSpecific,
     /// Messages to be sent to write loop
-    pub to_write_tx: DeathAwareSender<T::ToWriteMessage>,
+    pub to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
     /// Reactor we are using
     pub loop_handle: Handle,
     /// Known streams
@@ -147,7 +147,7 @@ where
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
-        to_write_tx: DeathAwareSender<T::ToWriteMessage>,
+        to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
         write_rx: DeathAwareReceiver<T::ToWriteMessage>,
         mut socket: I,
         peer_addr: AnySocketAddr,

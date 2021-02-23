@@ -1,4 +1,4 @@
-use crate::client_died_error_holder::ConnDiedType;
+use crate::client_died_error_holder::DiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use futures::channel::mpsc;
 use futures::channel::mpsc::UnboundedReceiver;
@@ -8,16 +8,16 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-pub(crate) struct DeathAwareSender<T> {
+pub(crate) struct DeathAwareSender<T, D: DiedType> {
     tx: UnboundedSender<T>,
-    conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
+    conn_died_error_holder: SomethingDiedErrorHolder<D>,
 }
 
 pub(crate) struct DeathAwareReceiver<T> {
     rx: UnboundedReceiver<T>,
 }
 
-impl<T> Clone for DeathAwareSender<T> {
+impl<T, D: DiedType> Clone for DeathAwareSender<T, D> {
     fn clone(&self) -> Self {
         DeathAwareSender {
             tx: self.tx.clone(),
@@ -26,7 +26,7 @@ impl<T> Clone for DeathAwareSender<T> {
     }
 }
 
-impl<T> DeathAwareSender<T> {
+impl<T, D: DiedType> DeathAwareSender<T, D> {
     pub fn unbounded_send_recover(&self, msg: T) -> Result<(), (T, crate::Error)> {
         self.tx
             .unbounded_send(msg)
@@ -46,9 +46,9 @@ impl<T> Stream for DeathAwareReceiver<T> {
     }
 }
 
-pub(crate) fn death_aware_channel<T>(
-    conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
-) -> (DeathAwareSender<T>, DeathAwareReceiver<T>) {
+pub(crate) fn death_aware_channel<T, D: DiedType>(
+    conn_died_error_holder: SomethingDiedErrorHolder<D>,
+) -> (DeathAwareSender<T, D>, DeathAwareReceiver<T>) {
     let (tx, rx) = mpsc::unbounded();
     let tx = DeathAwareSender {
         tx,

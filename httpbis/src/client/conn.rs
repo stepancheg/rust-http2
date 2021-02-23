@@ -26,6 +26,7 @@ use crate::client::req::ClientRequest;
 use crate::client::stream_handler::ClientStreamCreatedHandler;
 use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
+use crate::client_died_error_holder::ConnDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
@@ -78,7 +79,7 @@ pub struct ClientConnData {
 impl SideSpecific for ClientConnData {}
 
 pub struct ClientConn {
-    write_tx: DeathAwareSender<ClientToWriteMessage>,
+    write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
 }
 
 unsafe impl Sync for ClientConn {}
@@ -93,7 +94,7 @@ pub(crate) struct StartRequestMessage {
 
 pub struct ClientStartRequestMessage {
     start: StartRequestMessage,
-    write_tx: DeathAwareSender<ClientToWriteMessage>,
+    write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
 }
 
 pub(crate) enum ClientToWriteMessage {

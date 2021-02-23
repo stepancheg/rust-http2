@@ -26,6 +26,7 @@ use crate::net::socket::SocketStream;
 use crate::common::init_where::InitWhere;
 
 use crate::assert_types::assert_send_future;
+use crate::client_died_error_holder::ConnDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
@@ -245,7 +246,7 @@ where
 }
 
 pub struct ServerConn {
-    write_tx: DeathAwareSender<ServerToWriteMessage>,
+    write_tx: DeathAwareSender<ServerToWriteMessage, ConnDiedType>,
 }
 
 impl ServerConn {
