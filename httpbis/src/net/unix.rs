@@ -106,6 +106,7 @@ impl ToSocketListener for SocketAddrUnix {
 impl ToTokioListener for ::std::os::unix::net::UnixListener {
     fn into_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
         let _g = handle.enter();
+        self.set_nonblocking(true).unwrap();
         Box::pin(UnixListener::from_std(*self).unwrap())
     }
 
@@ -149,6 +150,7 @@ impl ToClientStream for SocketAddrUnix {
             Err(e) => return Box::pin(async { Err(e) }),
         };
         let _g = handle.enter();
+        stream.set_nonblocking(true).unwrap();
         match UnixStream::from_std(stream) {
             Ok(stream) => Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn SocketStream>>) }),
             Err(e) => return Box::pin(async { Err(e) }),
