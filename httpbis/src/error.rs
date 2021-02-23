@@ -25,6 +25,7 @@ use void::Void;
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
 /// connection.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     /// The underlying IO layer raised an error
     IoError(io::Error),
@@ -71,9 +72,10 @@ pub enum Error {
     User(String),
     /// Std error
     StdError(Box<dyn std_Error + Sync + Send + 'static>),
+    /// Client/connection died, but reason is not known
+    DeathReasonUnknown,
     /// Client died
-    // TODO: explain
-    ClientDied(Option<Arc<Error>>),
+    ClientDied(Arc<Error>),
     /// Client died, reconnect failed
     ClientDiedAndReconnectFailed,
     /// Client controller died.
@@ -213,7 +215,8 @@ impl fmt::Display for Error {
             Error::ParseFrameError(_) => write!(f, "Failed to parse frame"),
             Error::NotImplemented(_) => write!(f, "Not implemented"),
             Error::InternalError(_) => write!(f, "Internal error"),
-            Error::ClientDied(_) => write!(f, "Client died"),
+            Error::ClientDied(e) => write!(f, "Client died: {}", e),
+            Error::DeathReasonUnknown => write!(f, "Death reason unknown"),
             Error::ClientPanicked(_) => write!(f, "Client panicked"),
             Error::ClientCompletedWithoutError => write!(f, "Client completed without error"),
             Error::SendError(_) => write!(f, "Failed to write message to stream"),

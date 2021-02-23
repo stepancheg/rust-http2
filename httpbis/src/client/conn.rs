@@ -440,7 +440,7 @@ impl ClientInterface for ClientConn {
         };
 
         if let Err((_, e)) = self.start_request_with_resp_sender(start) {
-            return Err(error::Error::ClientDied(Some(Arc::new(e))));
+            return Err(error::Error::ClientDied(Arc::new(e)));
         }
 
         Ok(())

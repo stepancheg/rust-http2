@@ -44,9 +44,11 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
         Default::default()
     }
 
-    pub fn client_died_error(&self) -> Option<Arc<error::Error>> {
+    fn client_died_error(&self) -> Arc<error::Error> {
         let lock = self.error.lock().unwrap();
-        (*lock).clone()
+        (*lock)
+            .clone()
+            .unwrap_or_else(|| Arc::new(crate::Error::DeathReasonUnknown))
     }
 
     pub fn error(&self) -> error::Error {

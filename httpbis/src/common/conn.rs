@@ -458,8 +458,7 @@ where
             Poll::Pending => {}
             Poll::Ready(Some(m)) => return Poll::Ready(Ok(LoopEvent::ToWriteMessage(m))),
             Poll::Ready(None) => {
-                // TODO: reason
-                return Poll::Ready(Err(error::Error::ClientDied(None)));
+                return Poll::Ready(Err(self.conn_died_error_holder.error()));
             }
         };
 
