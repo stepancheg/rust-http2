@@ -484,7 +484,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
         self.conn = Arc::new(conn);
     }
 
-    fn iter(mut self, cmd: ControllerCommand) -> ControllerState<T, C> {
+    fn iter(&mut self, cmd: ControllerCommand) {
         match cmd {
             ControllerCommand::GoAway => {
                 self.init_conn();
@@ -513,14 +513,15 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                 self.conn.dump_state_with_resp_sender(tx);
             }
         }
-        self
     }
 
-    fn run(self, rx: DeathAwareReceiver<ControllerCommand>) -> HttpFutureSend<()> {
-        // TODO: we never receive channel died
-        let r = rx.fold(self, |state, cmd| future::ready(state.iter(cmd)));
-        let r = r.map(|_| Ok(()));
-        Box::pin(r)
+    async fn run(mut self, mut rx: DeathAwareReceiver<ControllerCommand>) {
+        loop {
+            match rx.next().await {
+                None => return,
+                Some(cmd) => self.iter(cmd),
+            }
+        }
     }
 }
 
@@ -576,7 +577,7 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
 
     // Wait for either completion of connection (i. e. error)
     // or shutdown signal.
-    let done = future::try_join(controller_future, shutdown_future);
+    let done = future::try_join(controller_future.map(Ok), shutdown_future);
 
     let done = done.map_ok(|((), ())| ());
 
