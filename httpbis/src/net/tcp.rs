@@ -65,6 +65,7 @@ fn listener(addr: &SocketAddr, conf: &ServerConf) -> io::Result<::std::net::TcpL
 impl ToTokioListener for ::std::net::TcpListener {
     fn into_tokio_listener(self: Box<Self>, handle: &Handle) -> Pin<Box<dyn SocketListener>> {
         let _g = handle.enter();
+        self.set_nonblocking(true).unwrap();
         Box::pin(TcpListener::from_std(*self).unwrap())
     }
 
