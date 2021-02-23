@@ -559,8 +559,8 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
     let init = ControllerState {
         handle: handle.clone(),
         socket_addr: socket_addr.clone(),
-        tls: tls,
-        conf: conf,
+        tls,
+        conf,
         conn: Arc::new(http_conn),
         tx: controller_tx,
     };
