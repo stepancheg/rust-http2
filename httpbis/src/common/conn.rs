@@ -41,6 +41,7 @@ use crate::solicit::window_size::WindowSize;
 use crate::ErrorCode;
 use futures::channel::oneshot;
 use futures::future;
+use futures::FutureExt;
 
 use crate::common::loop_event::LoopEvent;
 use crate::log_ndc_future::log_ndc_future;
@@ -69,7 +70,7 @@ pub(crate) struct Conn<T: Types, I: SocketStream> {
     /// Client or server specific data
     pub specific: T::SideSpecific,
     /// Messages to be sent to write loop
-    pub to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
+    pub to_write_tx: DeathAwareSender<T::ToWriteMessage>,
     /// Reactor we are using
     pub loop_handle: Handle,
     /// Known streams
@@ -147,7 +148,7 @@ where
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
-        to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
+        to_write_tx: DeathAwareSender<T::ToWriteMessage>,
         write_rx: DeathAwareReceiver<T::ToWriteMessage>,
         mut socket: I,
         peer_addr: AnySocketAddr,
@@ -486,8 +487,22 @@ where
         }
     }
 
-    pub fn run(self) -> impl Future<Output = result::Result<()>> + Send {
-        let ndc = Arc::new(format!("{} {}", T::CONN_NDC, self.peer_addr));
-        log_ndc_future(ndc, self.run_loop())
+    pub fn run(self) -> impl Future<Output = ()> + Send {
+        let peer_addr = self.peer_addr.clone();
+        let conn_died_error_holder = self.conn_died_error_holder.clone();
+        let f = self.run_loop();
+        let f = f.then(|r| match r {
+            Ok(()) => {
+                debug!("conn finished");
+                future::ok(())
+            }
+            Err(e) => {
+                warn!("conn died: {}", e);
+                future::err(e)
+            }
+        });
+        let f = conn_died_error_holder.wrap_future(f);
+        let ndc = Arc::new(format!("{} {}", T::CONN_NDC, peer_addr));
+        log_ndc_future(ndc, f)
     }
 }

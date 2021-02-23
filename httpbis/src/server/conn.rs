@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::error;
 use crate::result;
 use crate::AnySocketAddr;
+use crate::Error;
 
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
@@ -36,6 +37,7 @@ use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
 use crate::common::death_aware_channel::death_aware_channel;
 use crate::common::death_aware_channel::DeathAwareSender;
+use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::common::sender::CommonSender;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -181,6 +183,14 @@ pub enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
 }
 
+impl ErrorAwareDrop for ServerToWriteMessage {
+    type DiedType = ConnDiedType;
+
+    fn drop_with_error(self, _error: Error) {
+        // TODO
+    }
+}
+
 impl From<CommonToWriteMessage> for ServerToWriteMessage {
     fn from(m: CommonToWriteMessage) -> Self {
         ServerToWriteMessage::Common(m)
@@ -246,7 +256,7 @@ where
 }
 
 pub struct ServerConn {
-    write_tx: DeathAwareSender<ServerToWriteMessage, ConnDiedType>,
+    write_tx: DeathAwareSender<ServerToWriteMessage>,
 }
 
 impl ServerConn {
@@ -282,7 +292,7 @@ impl ServerConn {
             )
             .await?;
 
-            conn_data.run().await
+            Ok(conn_data.run().await)
         });
 
         let run = assert_send_future(run);

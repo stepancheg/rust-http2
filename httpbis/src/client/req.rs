@@ -45,6 +45,14 @@ fn _assert_types() {
 }
 
 impl ClientRequest {
+    pub fn new_error() -> ClientRequest {
+        ClientRequest {
+            // TODO: figure out
+            common: CommonSender::new_done(0),
+            drop_callback: None,
+        }
+    }
+
     pub fn state(&self) -> SenderState {
         self.common.state()
     }

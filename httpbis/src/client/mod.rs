@@ -56,6 +56,7 @@ use crate::client::resp::ClientResponse;
 use crate::common::death_aware_channel::death_aware_channel;
 use crate::common::death_aware_channel::DeathAwareReceiver;
 use crate::common::death_aware_channel::DeathAwareSender;
+use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::net::unix::SocketAddrUnix;
 use crate::result;
 use crate::solicit::stream_id::StreamId;
@@ -222,7 +223,7 @@ enum Completion {
 /// in `ClientBuilder`). When connection fails (because of network error
 /// or protocol error) client is reconnected.
 pub struct Client {
-    controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
+    controller_tx: DeathAwareSender<ControllerCommand>,
     join: Option<Completion>,
     http_scheme: HttpScheme,
     // used only once to send shutdown signal
@@ -299,37 +300,39 @@ impl Client {
         let (tx, rx) = oneshot::channel();
 
         struct Impl {
-            tx: Option<oneshot::Sender<(ClientRequest, Response)>>,
+            tx: oneshot::Sender<crate::Result<(ClientRequest, Response)>>,
         }
 
         impl ClientStreamCreatedHandler for Impl {
             fn request_created(
-                &mut self,
+                self: Box<Self>,
                 req: ClientRequest,
                 resp: ClientResponse,
             ) -> result::Result<()> {
-                let tx = self.tx.take().unwrap();
-
-                if let Err(_) = tx.send((req, resp.make_stream())) {
+                if let Err(_) = self.tx.send(Ok((req, resp.make_stream()))) {
                     return Err(error::Error::CallerDied);
                 }
 
                 Ok(())
             }
+
+            fn error(self: Box<Self>, error: crate::Error) {
+                let _ = self.tx.send(Err(error));
+            }
         }
 
-        if let Err(e) = self.start_request_low_level(
-            headers,
-            body,
-            trailers,
-            end_stream,
-            Box::new(Impl { tx: Some(tx) }),
-        ) {
+        if let Err(e) =
+            self.start_request_low_level(headers, body, trailers, end_stream, Box::new(Impl { tx }))
+        {
             return Box::pin(future::err(e));
         }
 
         let client_error = self.client_died_error_holder.clone();
-        let resp_rx = rx.map_err(move |oneshot::Canceled| client_error.error());
+        let resp_rx = rx.then(move |r| match r {
+            Ok(Ok(r)) => future::ok(r),
+            Ok(Err(e)) => future::err(e),
+            Err(oneshot::Canceled) => future::err(client_error.error()),
+        });
 
         Box::pin(resp_rx)
     }
@@ -459,6 +462,23 @@ enum ControllerCommand {
     DumpState(oneshot::Sender<ConnStateSnapshot>),
 }
 
+impl ErrorAwareDrop for ControllerCommand {
+    type DiedType = ClientDiedType;
+
+    fn drop_with_error(self, error: Error) {
+        match self {
+            ControllerCommand::GoAway => {}
+            ControllerCommand::StartRequest(start) => start.stream_handler.error(error),
+            ControllerCommand::WaitForConnect(_) => {
+                // TODO
+            }
+            ControllerCommand::DumpState(_) => {
+                // TODO
+            }
+        }
+    }
+}
+
 struct ControllerState<T: ToClientStream, C: TlsConnector> {
     handle: Handle,
     socket_addr: T,
@@ -466,7 +486,7 @@ struct ControllerState<T: ToClientStream, C: TlsConnector> {
     conf: ClientConf,
     // current connection
     conn: Arc<ClientConn>,
-    tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
+    tx: DeathAwareSender<ControllerCommand>,
 }
 
 impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C> {
@@ -492,9 +512,9 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
             ControllerCommand::StartRequest(start) => {
                 if let Err((start, _)) = self.conn.start_request_with_resp_sender(start) {
                     self.init_conn();
-                    if let Err(_start) = self.conn.start_request_with_resp_sender(start) {
+                    if let Err((start, e)) = self.conn.start_request_with_resp_sender(start) {
                         warn!("client died and reconnect failed");
-                        // TODO: invoke a callback to report about the error
+                        start.stream_handler.error(e);
                     }
                 }
             }
@@ -526,7 +546,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
 }
 
 struct CallbacksImpl {
-    tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
+    tx: DeathAwareSender<ControllerCommand>,
 }
 
 impl ClientConnCallbacks for CallbacksImpl {
@@ -543,7 +563,7 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
     tls: ClientTlsOption<C>,
     conf: ClientConf,
     done_tx: oneshot::Sender<()>,
-    controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
+    controller_tx: DeathAwareSender<ControllerCommand>,
     controller_rx: DeathAwareReceiver<ControllerCommand>,
     client_died_error_holder: SomethingDiedErrorHolder<ClientDiedType>,
 ) {

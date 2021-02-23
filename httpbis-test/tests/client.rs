@@ -2,6 +2,7 @@
 
 use log::info;
 
+use std::io;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -454,4 +455,32 @@ fn sink_reset_by_peer() {
     assert_eq!(65535, client.conn_state().in_window_size);
     assert_eq!(0, client.conn_state().out_window_size);
     assert_eq!(0, client.conn_state().pump_out_window_size);
+}
+
+#[test]
+fn connection_refused() {
+    init_logger();
+
+    let rt = Runtime::new().unwrap();
+
+    let client = Client::new_plain(BIND_HOST, 1, ClientConf::default()).unwrap();
+
+    let err = rt
+        .block_on(async { client.start_get("/test", "localhost").collect().await })
+        .err()
+        .unwrap();
+    match err {
+        httpbis::Error::ConnDied(e) => match &*e {
+            httpbis::Error::IoError(e) => {
+                assert_eq!(
+                    io::ErrorKind::ConnectionRefused,
+                    e.kind(),
+                    "wrong io error: {:?}",
+                    e
+                );
+            }
+            e => panic!("wrong conn died error: {:?}", e),
+        },
+        e => panic!("wrong conn error: {:?}", e),
+    }
 }

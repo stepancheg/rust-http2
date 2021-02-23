@@ -14,7 +14,6 @@ use crate::StreamDead;
 use bytes::Bytes;
 use futures::stream::Stream;
 
-use crate::client_died_error_holder::ConnDiedType;
 use futures::task::Context;
 use std::sync::Arc;
 use std::task::Poll;
@@ -33,7 +32,7 @@ pub enum SendError {
 }
 
 struct CanSendData<T: Types> {
-    write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
+    write_tx: DeathAwareSender<T::ToWriteMessage>,
     out_window: StreamOutWindowReceiver,
     seen_headers: bool,
 }
@@ -47,7 +46,7 @@ pub(crate) struct CommonSender<T: Types> {
 impl<T: Types> CommonSender<T> {
     pub fn new(
         stream_id: StreamId,
-        write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
+        write_tx: DeathAwareSender<T::ToWriteMessage>,
         out_window: StreamOutWindowReceiver,
         seen_headers: bool,
     ) -> Self {

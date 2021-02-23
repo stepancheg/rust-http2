@@ -1,4 +1,3 @@
-use crate::client_died_error_holder::ConnDiedType;
 use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::stream_from_network::StreamFromNetwork;
@@ -20,7 +19,7 @@ pub struct ServerRequest<'a> {
     /// Stream in window size at the moment of request start
     pub(crate) in_window_size: u32,
     pub(crate) stream_handler: &'a mut Option<ServerRequestStreamHandlerHolder>,
-    pub(crate) to_write_tx: &'a DeathAwareSender<ServerToWriteMessage, ConnDiedType>,
+    pub(crate) to_write_tx: &'a DeathAwareSender<ServerToWriteMessage>,
 }
 
 impl<'a> ServerRequest<'a> {

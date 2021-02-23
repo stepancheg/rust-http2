@@ -12,13 +12,12 @@ use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::HttpStreamAfterHeaders;
 
-use crate::client_died_error_holder::ConnDiedType;
 use std::panic::AssertUnwindSafe;
 
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {
     // TODO: this is not thread-safe
-    pub to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
+    pub to_write_tx: DeathAwareSender<T::ToWriteMessage>,
     pub stream_id: StreamId,
     pub out_window: window_size::StreamOutWindowReceiver,
     pub stream: HttpStreamAfterHeaders,

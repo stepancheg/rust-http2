@@ -10,7 +10,13 @@ use bytes::Bytes;
 /// Called once when stream is created
 pub trait ClientStreamCreatedHandler: Send + 'static {
     /// Called when stream is created
-    fn request_created(&mut self, req: ClientRequest, resp: ClientResponse) -> crate::Result<()>;
+    fn request_created(
+        self: Box<Self>,
+        req: ClientRequest,
+        resp: ClientResponse,
+    ) -> crate::Result<()>;
+
+    fn error(self: Box<Self>, error: crate::Error);
 }
 
 /// Synchrnous callback of incoming data

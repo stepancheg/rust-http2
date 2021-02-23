@@ -1,6 +1,7 @@
 use crate::common::client_or_server::ClientOrServer;
 use crate::common::conn::SideSpecific;
 use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::common::init_where::InitWhere;
 use crate::common::stream::HttpStreamData;
 use crate::common::stream::HttpStreamDataSpecific;
@@ -20,7 +21,7 @@ pub(crate) trait Types: Default + Clone + Unpin + 'static {
     type SideSpecific: SideSpecific;
     type StreamHandlerHolder: StreamHandlerInternal;
     // Message sent to write loop
-    type ToWriteMessage: From<CommonToWriteMessage> + Send;
+    type ToWriteMessage: From<CommonToWriteMessage> + ErrorAwareDrop + Send;
 
     /// Runtime check if this type is constructed for client or server
     const CLIENT_OR_SERVER: ClientOrServer;

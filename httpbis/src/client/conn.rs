@@ -20,6 +20,7 @@ use tls_api;
 
 use crate::solicit_async::*;
 
+use crate::assert_types::assert_future_output;
 use crate::assert_types::assert_send_future;
 use crate::client::req::ClientRequest;
 
@@ -36,6 +37,7 @@ use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
 use crate::common::death_aware_channel::death_aware_channel;
 use crate::common::death_aware_channel::DeathAwareSender;
+use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::common::sender::CommonSender;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -79,7 +81,7 @@ pub struct ClientConnData {
 impl SideSpecific for ClientConnData {}
 
 pub struct ClientConn {
-    write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
+    write_tx: DeathAwareSender<ClientToWriteMessage>,
 }
 
 unsafe impl Sync for ClientConn {}
@@ -94,13 +96,31 @@ pub(crate) struct StartRequestMessage {
 
 pub struct ClientStartRequestMessage {
     start: StartRequestMessage,
-    write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
+    write_tx: DeathAwareSender<ClientToWriteMessage>,
 }
 
 pub(crate) enum ClientToWriteMessage {
     Start(ClientStartRequestMessage),
     WaitForHandshake(oneshot::Sender<result::Result<()>>),
     Common(CommonToWriteMessage),
+}
+
+impl ErrorAwareDrop for ClientToWriteMessage {
+    type DiedType = ConnDiedType;
+
+    fn drop_with_error(self, error: Error) {
+        match self {
+            ClientToWriteMessage::Start(start) => {
+                start.start.stream_handler.error(error);
+            }
+            ClientToWriteMessage::WaitForHandshake(_) => {
+                // TODO: error
+            }
+            ClientToWriteMessage::Common(_) => {
+                // TODO: error
+            }
+        }
+    }
 }
 
 impl From<CommonToWriteMessage> for ClientToWriteMessage {
@@ -140,7 +160,7 @@ where
                     body,
                     trailers,
                     end_stream,
-                    mut stream_handler,
+                    stream_handler,
                 },
             write_tx,
         } = start;
@@ -240,26 +260,28 @@ impl ClientConn {
 
         let lh_copy = lh.clone();
 
-        let conn_died_error_holder_copy = conn_died_error_holder.clone();
+        let connect = conn_died_error_holder.wrap_future_keep_result(connect);
 
         let future = connect.and_then(move |conn| async move {
-            let conn_data = Conn::<ClientTypes, _>::new(
-                lh_copy,
-                ClientConnData {
-                    _callbacks: Box::new(callbacks),
-                },
-                conf.common,
-                to_write_tx,
-                to_write_rx,
-                conn,
-                peer_addr,
-                conn_died_error_holder,
-            )
-            .await?;
-            conn_data.run().await
+            let conn_data = conn_died_error_holder
+                .clone()
+                .wrap_future_keep_result(Conn::<ClientTypes, _>::new(
+                    lh_copy,
+                    ClientConnData {
+                        _callbacks: Box::new(callbacks),
+                    },
+                    conf.common,
+                    to_write_tx,
+                    to_write_rx,
+                    conn,
+                    peer_addr,
+                    conn_died_error_holder,
+                ))
+                .await?;
+            Ok(conn_data.run().await)
         });
 
-        let future = conn_died_error_holder_copy.wrap_future(future);
+        let future = assert_future_output::<Result<(), ()>, _>(future);
 
         lh.spawn(future);
 

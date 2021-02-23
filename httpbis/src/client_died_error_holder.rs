@@ -8,11 +8,10 @@ use std::future::Future;
 
 use crate::error;
 use crate::misc::any_to_string;
-use crate::result;
 use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 
-pub(crate) trait DiedType: Default + Clone + Send {
+pub(crate) trait DiedType: Default + Clone + Unpin + Send {
     fn what() -> &'static str;
 
     fn wrap_error(e: Arc<crate::Error>) -> crate::Error;
@@ -72,38 +71,53 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
         }
     }
 
-    pub fn wrap_future<F>(&self, future: F) -> impl Future<Output = ()> + Send
+    pub fn wrap_future_keep_result<R, F>(
+        &self,
+        future: F,
+    ) -> impl Future<Output = Result<R, ()>> + Send
     where
-        F: Future<Output = result::Result<()>> + Send,
+        R: Send,
+        F: Future<Output = crate::Result<R>> + Send,
     {
         let holder = self.clone();
-        let future = future.then(move |r| {
-            match r {
-                Ok(()) => {
-                    info!("{} completed without errors", D::what());
-                    holder.set_once(error::Error::ClientCompletedWithoutError);
-                }
-                Err(e) => {
-                    warn!("{} completed with error: {:?}", D::what(), e);
-                    holder.set_once(e);
-                }
+        let future = future.then(move |r| match r {
+            Ok(r) => {
+                holder.set_once(error::Error::ClientCompletedWithoutError);
+                future::ok(r)
             }
-            future::ready(())
+            Err(e) => {
+                warn!("{} completed with error: {:?}", D::what(), e);
+                holder.set_once(e);
+                future::err(())
+            }
         });
 
         let holder = self.clone();
-        let future = AssertUnwindSafe(future).catch_unwind().then(move |r| {
-            match r {
+        let future = AssertUnwindSafe(future)
+            .catch_unwind()
+            .then(move |r| match r {
                 Err(e) => {
                     let message = any_to_string(e);
                     warn!("{} panicked: {}", D::what(), message);
                     holder.set_once(error::Error::ClientPanicked(message));
+                    future::err(())
                 }
-                Ok(()) => {}
-            }
-            future::ready(())
-        });
+                Ok(r) => future::ready(r),
+            });
 
         future
+    }
+
+    pub fn wrap_future<F>(&self, future: F) -> impl Future<Output = ()> + Send
+    where
+        F: Future<Output = crate::Result<()>> + Send,
+    {
+        self.wrap_future_keep_result(future).then(|r| match r {
+            Ok(()) => {
+                info!("{} completed without errors", D::what());
+                future::ready(())
+            }
+            Err(()) => future::ready(()),
+        })
     }
 }
