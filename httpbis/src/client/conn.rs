@@ -376,7 +376,7 @@ impl ClientConn {
     pub(crate) fn start_request_with_resp_sender(
         &self,
         start: StartRequestMessage,
-    ) -> Result<(), StartRequestMessage> {
+    ) -> Result<(), (StartRequestMessage, error::Error)> {
         let client_start = ClientStartRequestMessage {
             start,
             write_tx: self.write_tx.clone(),
@@ -384,8 +384,8 @@ impl ClientConn {
 
         self.write_tx
             .unbounded_send_recover(ClientToWriteMessage::Start(client_start))
-            .map_err(|send_error| match send_error {
-                ClientToWriteMessage::Start(start) => start.start,
+            .map_err(|(sent_message, e)| match sent_message {
+                ClientToWriteMessage::Start(start) => (start.start, e),
                 _ => unreachable!(),
             })
     }
@@ -415,7 +415,7 @@ impl ClientConn {
     ) -> std_Result<(), oneshot::Sender<result::Result<()>>> {
         self.write_tx
             .unbounded_send_recover(ClientToWriteMessage::WaitForHandshake(tx))
-            .map_err(|send_error| match send_error {
+            .map_err(|(send_message, _)| match send_message {
                 ClientToWriteMessage::WaitForHandshake(tx) => tx,
                 _ => unreachable!(),
             })
@@ -439,8 +439,8 @@ impl ClientInterface for ClientConn {
             stream_handler,
         };
 
-        if let Err(_) = self.start_request_with_resp_sender(start) {
-            return Err(error::Error::ClientDied(None));
+        if let Err((_, e)) = self.start_request_with_resp_sender(start) {
+            return Err(error::Error::ClientDied(Some(Arc::new(e))));
         }
 
         Ok(())

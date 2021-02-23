@@ -488,7 +488,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                 self.init_conn();
             }
             ControllerCommand::StartRequest(start) => {
-                if let Err(start) = self.conn.start_request_with_resp_sender(start) {
+                if let Err((start, _)) = self.conn.start_request_with_resp_sender(start) {
                     self.init_conn();
                     if let Err(_start) = self.conn.start_request_with_resp_sender(start) {
                         warn!("client died and reconnect failed");

@@ -1,7 +1,6 @@
 use crate::client_died_error_holder::ConnDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::types::Types;
-use crate::result;
 use futures::channel::mpsc;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::channel::mpsc::UnboundedSender;
@@ -15,6 +14,10 @@ pub(crate) struct ConnCommandSender<T: Types> {
     conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
 
+pub(crate) struct ConnCommandReceiver<T: Types> {
+    rx: UnboundedReceiver<T::ToWriteMessage>,
+}
+
 impl<T: Types> Clone for ConnCommandSender<T> {
     fn clone(&self) -> Self {
         ConnCommandSender {
@@ -25,20 +28,18 @@ impl<T: Types> Clone for ConnCommandSender<T> {
 }
 
 impl<T: Types> ConnCommandSender<T> {
-    pub fn unbounded_send_recover(&self, msg: T::ToWriteMessage) -> Result<(), T::ToWriteMessage> {
-        self.tx.unbounded_send(msg).map_err(|e| e.into_inner())
+    pub fn unbounded_send_recover(
+        &self,
+        msg: T::ToWriteMessage,
+    ) -> Result<(), (T::ToWriteMessage, crate::Error)> {
+        self.tx
+            .unbounded_send(msg)
+            .map_err(|e| (e.into_inner(), self.conn_died_error_holder.error()))
     }
 
-    pub fn unbounded_send(&self, msg: T::ToWriteMessage) -> result::Result<()> {
-        match self.tx.unbounded_send(msg) {
-            Ok(()) => Ok(()),
-            Err(_) => Err(self.conn_died_error_holder.error()),
-        }
+    pub fn unbounded_send(&self, msg: T::ToWriteMessage) -> crate::Result<()> {
+        self.unbounded_send_recover(msg).map_err(|(_, e)| e)
     }
-}
-
-pub(crate) struct ConnCommandReceiver<T: Types> {
-    rx: UnboundedReceiver<T::ToWriteMessage>,
 }
 
 impl<T: Types> Stream for ConnCommandReceiver<T> {
