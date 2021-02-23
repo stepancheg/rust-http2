@@ -7,8 +7,10 @@ use crate::AnySocketAddr;
 
 use crate::solicit::frame::GoawayFrame;
 use crate::solicit::frame::HttpFrameType;
+use crate::solicit::frame::HttpSetting;
 use crate::solicit::frame::HttpSettings;
 use crate::solicit::frame::RstStreamFrame;
+use crate::solicit::frame::SettingsFrame;
 use crate::solicit::frame::WindowUpdateFrame;
 use crate::solicit::session::StreamState;
 use crate::solicit::session::StreamStateIdleOrClosed;
@@ -101,7 +103,7 @@ pub(crate) struct Conn<T: Types, I: SocketStream> {
     /// Last our settings acknowledged
     pub our_settings_ack: HttpSettings,
     /// Last our settings sent
-    pub our_settings_sent: Option<HttpSettings>,
+    pub our_settings_sent: HttpSettings,
 }
 
 impl<T, I> Drop for Conn<T, I>
@@ -141,17 +143,26 @@ where
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
     I: SocketStream,
 {
-    pub fn new(
+    pub async fn new(
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
-        sent_settings: HttpSettings,
         to_write_tx: ConnCommandSender<T>,
         write_rx: ConnCommandReceiver<T>,
-        socket: I,
+        mut socket: I,
         peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
-    ) -> Self {
+    ) -> crate::Result<Self> {
+        let handshake_settings_frame =
+            SettingsFrame::from_settings(vec![HttpSetting::EnablePush(false)]);
+
+        let mut sent_settings = DEFAULT_SETTINGS;
+        sent_settings.apply_from_frame(&handshake_settings_frame);
+
+        T::handshake(&mut socket, handshake_settings_frame).await?;
+
+        debug!("HTTP/2 handshake done");
+
         let in_window_size =
             NonNegativeWindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
         let out_window_size = WindowSize::new(DEFAULT_SETTINGS.initial_window_size as i32);
@@ -163,7 +174,7 @@ where
         let framed_read = HttpDecodeRead::new(read);
         let queued_write = QueuedWrite::new(write);
 
-        Conn {
+        Ok(Conn {
             peer_addr,
             conn_died_error_holder,
             specific,
@@ -185,8 +196,8 @@ where
             out_window_size,
             peer_settings: DEFAULT_SETTINGS,
             our_settings_ack: DEFAULT_SETTINGS,
-            our_settings_sent: Some(sent_settings),
-        }
+            our_settings_sent: sent_settings,
+        })
     }
 
     /// Allocate stream id for locally initiated stream
@@ -236,11 +247,7 @@ where
     }
 
     pub fn our_settings_sent(&self) -> &HttpSettings {
-        if let Some(ref sent) = self.our_settings_sent {
-            &sent
-        } else {
-            &self.our_settings_ack
-        }
+        &self.our_settings_sent
     }
 
     /// Internal helper method that decreases the outbound flow control window size.

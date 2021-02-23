@@ -217,12 +217,8 @@ where
     fn process_settings_ack(&mut self, frame: SettingsFrame) -> result::Result<()> {
         assert!(frame.is_ack());
 
-        if let Some(settings) = self.our_settings_sent.take() {
-            self.our_settings_ack = settings;
-            Ok(())
-        } else {
-            Err(error::Error::SettingsAckWithoutSettingsSent)
-        }
+        self.our_settings_ack = self.our_settings_sent;
+        Ok(())
     }
 
     fn process_settings_req(&mut self, frame: SettingsFrame) -> result::Result<()> {

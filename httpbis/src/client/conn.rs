@@ -10,10 +10,7 @@ use crate::result;
 use crate::AnySocketAddr;
 
 use crate::solicit::end_stream::EndStream;
-use crate::solicit::frame::HttpSetting;
-use crate::solicit::frame::SettingsFrame;
 use crate::solicit::header::*;
-use crate::solicit::DEFAULT_SETTINGS;
 
 use std::future::Future;
 
@@ -240,32 +237,24 @@ impl ClientConn {
             write_tx: to_write_tx.clone(),
         };
 
-        let settings_frame = SettingsFrame::from_settings(vec![HttpSetting::EnablePush(false)]);
-        let mut settings = DEFAULT_SETTINGS;
-        settings.apply_from_frame(&settings_frame);
-
         let lh_copy = lh.clone();
 
         let conn_died_error_holder_copy = conn_died_error_holder.clone();
 
-        let future = connect.and_then(move |mut conn| async move {
-            client_handshake(&mut conn, settings_frame).await?;
-
-            debug!("client handshake done");
-
+        let future = connect.and_then(move |conn| async move {
             let conn_data = Conn::<ClientTypes, _>::new(
                 lh_copy,
                 ClientConnData {
                     _callbacks: Box::new(callbacks),
                 },
                 conf.common,
-                settings,
                 to_write_tx.clone(),
                 to_write_rx,
                 conn,
                 peer_addr,
                 conn_died_error_holder,
-            );
+            )
+            .await?;
             conn_data.run().await
         });
 

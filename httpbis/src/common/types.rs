@@ -5,8 +5,12 @@ use crate::common::init_where::InitWhere;
 use crate::common::stream::HttpStreamData;
 use crate::common::stream::HttpStreamDataSpecific;
 use crate::common::stream_handler::StreamHandlerInternal;
+use crate::net::socket::SocketStream;
 use crate::req_resp::RequestOrResponse;
+use crate::solicit::frame::SettingsFrame;
 use crate::solicit::stream_id::StreamId;
+use std::future::Future;
+use std::pin::Pin;
 
 /// Client or server type names for connection and stream
 // Note `Default` and `Clone` are needed only for derive to work
@@ -35,4 +39,9 @@ pub(crate) trait Types: Default + Clone + Unpin + 'static {
             false => InitWhere::Peer,
         }
     }
+
+    fn handshake<'a, I: SocketStream>(
+        conn: &'a mut I,
+        settings_frame: SettingsFrame,
+    ) -> Pin<Box<dyn Future<Output = crate::Result<()>> + Send + 'a>>;
 }

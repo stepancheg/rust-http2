@@ -6,10 +6,7 @@ use crate::result;
 use crate::AnySocketAddr;
 
 use crate::solicit::end_stream::EndStream;
-use crate::solicit::frame::HttpSetting;
-use crate::solicit::frame::SettingsFrame;
 use crate::solicit::header::*;
-use crate::solicit::DEFAULT_SETTINGS;
 
 use futures::channel::oneshot;
 use futures::future;
@@ -269,26 +266,20 @@ impl ServerConn {
 
         let (write_tx, write_rx) = conn_command_channel(conn_died_error_holder.clone());
 
-        let settings_frame = SettingsFrame::from_settings(vec![HttpSetting::EnablePush(false)]);
-        let mut settings = DEFAULT_SETTINGS;
-        settings.apply_from_frame(&settings_frame);
-
         let write_tx_copy = write_tx.clone();
 
-        let run = socket.and_then(move |mut conn| async move {
-            server_handshake(&mut conn, settings_frame).await?;
-
+        let run = socket.and_then(move |conn| async move {
             let conn_data = Conn::<ServerTypes, I>::new(
                 lh,
                 ServerConnData { factory: service },
                 conf.common,
-                settings,
                 write_tx_copy,
                 write_rx,
                 conn,
                 peer_addr,
                 conn_died_error_holder,
-            );
+            )
+            .await?;
 
             conn_data.run().await
         });
