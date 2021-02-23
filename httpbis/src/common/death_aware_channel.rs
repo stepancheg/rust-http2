@@ -1,6 +1,5 @@
 use crate::client_died_error_holder::ConnDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
-use crate::common::types::Types;
 use futures::channel::mpsc;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::channel::mpsc::UnboundedSender;
@@ -9,58 +8,52 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-pub(crate) struct ConnCommandSender<T: Types> {
-    tx: UnboundedSender<T::ToWriteMessage>,
+pub(crate) struct DeathAwareSender<T> {
+    tx: UnboundedSender<T>,
     conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
 
-pub(crate) struct ConnCommandReceiver<T: Types> {
-    rx: UnboundedReceiver<T::ToWriteMessage>,
+pub(crate) struct DeathAwareReceiver<T> {
+    rx: UnboundedReceiver<T>,
 }
 
-impl<T: Types> Clone for ConnCommandSender<T> {
+impl<T> Clone for DeathAwareSender<T> {
     fn clone(&self) -> Self {
-        ConnCommandSender {
+        DeathAwareSender {
             tx: self.tx.clone(),
             conn_died_error_holder: self.conn_died_error_holder.clone(),
         }
     }
 }
 
-impl<T: Types> ConnCommandSender<T> {
-    pub fn unbounded_send_recover(
-        &self,
-        msg: T::ToWriteMessage,
-    ) -> Result<(), (T::ToWriteMessage, crate::Error)> {
+impl<T> DeathAwareSender<T> {
+    pub fn unbounded_send_recover(&self, msg: T) -> Result<(), (T, crate::Error)> {
         self.tx
             .unbounded_send(msg)
             .map_err(|e| (e.into_inner(), self.conn_died_error_holder.error()))
     }
 
-    pub fn unbounded_send(&self, msg: T::ToWriteMessage) -> crate::Result<()> {
+    pub fn unbounded_send(&self, msg: T) -> crate::Result<()> {
         self.unbounded_send_recover(msg).map_err(|(_, e)| e)
     }
 }
 
-impl<T: Types> Stream for ConnCommandReceiver<T> {
-    type Item = T::ToWriteMessage;
+impl<T> Stream for DeathAwareReceiver<T> {
+    type Item = T;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<T::ToWriteMessage>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
         Pin::new(&mut self.rx).poll_next(cx)
     }
 }
 
-pub(crate) fn conn_command_channel<T: Types>(
+pub(crate) fn death_aware_channel<T>(
     conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
-) -> (ConnCommandSender<T>, ConnCommandReceiver<T>) {
+) -> (DeathAwareSender<T>, DeathAwareReceiver<T>) {
     let (tx, rx) = mpsc::unbounded();
-    let tx = ConnCommandSender {
+    let tx = DeathAwareSender {
         tx,
         conn_died_error_holder,
     };
-    let rx = ConnCommandReceiver { rx };
+    let rx = DeathAwareReceiver { rx };
     (tx, rx)
 }

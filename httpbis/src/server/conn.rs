@@ -30,11 +30,11 @@ use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn::SideSpecific;
-use crate::common::conn_command_channel::conn_command_channel;
-use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
+use crate::common::death_aware_channel::death_aware_channel;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::sender::CommonSender;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -245,7 +245,7 @@ where
 }
 
 pub struct ServerConn {
-    write_tx: ConnCommandSender<ServerTypes>,
+    write_tx: DeathAwareSender<ServerToWriteMessage>,
 }
 
 impl ServerConn {
@@ -264,7 +264,7 @@ impl ServerConn {
 
         let conn_died_error_holder = SomethingDiedErrorHolder::new();
 
-        let (write_tx, write_rx) = conn_command_channel(conn_died_error_holder.clone());
+        let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
 
         let write_tx_copy = write_tx.clone();
 

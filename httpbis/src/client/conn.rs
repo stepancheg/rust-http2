@@ -30,11 +30,11 @@ use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn::SideSpecific;
-use crate::common::conn_command_channel::conn_command_channel;
-use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
+use crate::common::death_aware_channel::death_aware_channel;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::sender::CommonSender;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -78,7 +78,7 @@ pub struct ClientConnData {
 impl SideSpecific for ClientConnData {}
 
 pub struct ClientConn {
-    write_tx: ConnCommandSender<ClientTypes>,
+    write_tx: DeathAwareSender<ClientToWriteMessage>,
 }
 
 unsafe impl Sync for ClientConn {}
@@ -93,7 +93,7 @@ pub(crate) struct StartRequestMessage {
 
 pub struct ClientStartRequestMessage {
     start: StartRequestMessage,
-    write_tx: ConnCommandSender<ClientTypes>,
+    write_tx: DeathAwareSender<ClientToWriteMessage>,
 }
 
 pub(crate) enum ClientToWriteMessage {
@@ -231,7 +231,7 @@ impl ClientConn {
     {
         let conn_died_error_holder = SomethingDiedErrorHolder::new();
 
-        let (to_write_tx, to_write_rx) = conn_command_channel(conn_died_error_holder.clone());
+        let (to_write_tx, to_write_rx) = death_aware_channel(conn_died_error_holder.clone());
 
         let c = ClientConn {
             write_tx: to_write_tx.clone(),

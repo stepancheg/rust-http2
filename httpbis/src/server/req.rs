@@ -1,11 +1,11 @@
-use crate::common::conn_command_channel::ConnCommandSender;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
+use crate::server::conn::ServerToWriteMessage;
 use crate::server::increase_in_window::ServerIncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::stream_handler::ServerRequestStreamHandlerHolder;
-use crate::server::types::ServerTypes;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use crate::StreamId;
@@ -19,7 +19,7 @@ pub struct ServerRequest<'a> {
     /// Stream in window size at the moment of request start
     pub(crate) in_window_size: u32,
     pub(crate) stream_handler: &'a mut Option<ServerRequestStreamHandlerHolder>,
-    pub(crate) to_write_tx: &'a ConnCommandSender<ServerTypes>,
+    pub(crate) to_write_tx: &'a DeathAwareSender<ServerToWriteMessage>,
 }
 
 impl<'a> ServerRequest<'a> {

@@ -2,8 +2,8 @@ use futures::future::FutureExt;
 use futures::stream::StreamExt;
 
 use super::*;
-use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::types::Types;
 use crate::misc::any_to_string;
 use crate::solicit::stream_id::StreamId;
@@ -17,7 +17,7 @@ use std::panic::AssertUnwindSafe;
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {
     // TODO: this is not thread-safe
-    pub to_write_tx: ConnCommandSender<T>,
+    pub to_write_tx: DeathAwareSender<T::ToWriteMessage>,
     pub stream_id: StreamId,
     pub out_window: window_size::StreamOutWindowReceiver,
     pub stream: HttpStreamAfterHeaders,

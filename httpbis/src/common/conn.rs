@@ -29,10 +29,10 @@ use crate::client_died_error_holder::ConnDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::codec::http_decode_read::HttpDecodeRead;
 use crate::codec::queued_write::QueuedWrite;
-use crate::common::conn_command_channel::ConnCommandReceiver;
-use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::ConnWriteSideCustom;
+use crate::common::death_aware_channel::DeathAwareReceiver;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::init_where::InitWhere;
 use crate::hpack;
 use crate::solicit::stream_id::StreamId;
@@ -69,7 +69,7 @@ pub(crate) struct Conn<T: Types, I: SocketStream> {
     /// Client or server specific data
     pub specific: T::SideSpecific,
     /// Messages to be sent to write loop
-    pub to_write_tx: ConnCommandSender<T>,
+    pub to_write_tx: DeathAwareSender<T::ToWriteMessage>,
     /// Reactor we are using
     pub loop_handle: Handle,
     /// Known streams
@@ -96,7 +96,7 @@ pub(crate) struct Conn<T: Types, I: SocketStream> {
     pub queued_write: QueuedWrite<WriteHalf<I>>,
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder,
-    pub write_rx: ConnCommandReceiver<T>,
+    pub write_rx: DeathAwareReceiver<T::ToWriteMessage>,
 
     /// Last known peer settings
     pub peer_settings: HttpSettings,
@@ -147,8 +147,8 @@ where
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
-        to_write_tx: ConnCommandSender<T>,
-        write_rx: ConnCommandReceiver<T>,
+        to_write_tx: DeathAwareSender<T::ToWriteMessage>,
+        write_rx: DeathAwareReceiver<T::ToWriteMessage>,
         mut socket: I,
         peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,

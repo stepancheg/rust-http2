@@ -1,8 +1,8 @@
+use crate::client::conn::ClientToWriteMessage;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::stream_handler::ClientResponseStreamHandler;
 use crate::client::stream_handler::ClientResponseStreamHandlerHolder;
-use crate::client::types::ClientTypes;
-use crate::common::conn_command_channel::ConnCommandSender;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
@@ -13,7 +13,7 @@ pub struct ClientResponse<'a> {
     pub(crate) stream_handler: &'a mut Option<ClientResponseStreamHandlerHolder>,
     pub(crate) in_window_size: u32,
     pub(crate) stream_id: StreamId,
-    pub(crate) to_write_tx: &'a ConnCommandSender<ClientTypes>,
+    pub(crate) to_write_tx: &'a DeathAwareSender<ClientToWriteMessage>,
 }
 
 impl<'a> ClientResponse<'a> {

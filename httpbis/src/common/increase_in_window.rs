@@ -1,5 +1,5 @@
-use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::types::Types;
 use crate::result;
 use crate::solicit::stream_id::StreamId;
@@ -8,7 +8,7 @@ use crate::solicit::DEFAULT_SETTINGS;
 pub(crate) struct IncreaseInWindow<T: Types> {
     pub stream_id: StreamId,
     pub in_window_size: u32,
-    pub to_write_tx: ConnCommandSender<T>,
+    pub to_write_tx: DeathAwareSender<T::ToWriteMessage>,
 }
 
 impl<T: Types> IncreaseInWindow<T> {

@@ -1,5 +1,5 @@
-use crate::common::conn_command_channel::ConnCommandSender;
 use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::types::Types;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
@@ -32,7 +32,7 @@ pub enum SendError {
 }
 
 struct CanSendData<T: Types> {
-    write_tx: ConnCommandSender<T>,
+    write_tx: DeathAwareSender<T::ToWriteMessage>,
     out_window: StreamOutWindowReceiver,
     seen_headers: bool,
 }
@@ -46,7 +46,7 @@ pub(crate) struct CommonSender<T: Types> {
 impl<T: Types> CommonSender<T> {
     pub fn new(
         stream_id: StreamId,
-        write_tx: ConnCommandSender<T>,
+        write_tx: DeathAwareSender<T::ToWriteMessage>,
         out_window: StreamOutWindowReceiver,
         seen_headers: bool,
     ) -> Self {
