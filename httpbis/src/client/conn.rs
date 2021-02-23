@@ -248,7 +248,7 @@ impl ClientConn {
                     _callbacks: Box::new(callbacks),
                 },
                 conf.common,
-                to_write_tx.clone(),
+                to_write_tx,
                 to_write_rx,
                 conn,
                 peer_addr,
