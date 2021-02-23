@@ -76,6 +76,8 @@ pub enum Error {
     DeathReasonUnknown,
     /// Client died
     ClientDied(Arc<Error>),
+    /// Connection died.
+    ConnDied(Arc<Error>),
     /// Client died, reconnect failed
     ClientDiedAndReconnectFailed,
     /// Client controller died.
@@ -83,8 +85,6 @@ pub enum Error {
     /// Channel died.
     // TODO: meaningless
     ChannelDied,
-    /// Connection died.
-    ConnDied,
     /// Client panicked.
     ClientPanicked(String),
     /// Client completed without error.
@@ -233,7 +233,7 @@ impl fmt::Display for Error {
             Error::ClientDiedAndReconnectFailed => write!(f, "Client died and reconnect failed"),
             Error::ClientControllerDied => write!(f, "Client controller died"),
             Error::ChannelDied => write!(f, "Channel died"),
-            Error::ConnDied => write!(f, "Conn died"),
+            Error::ConnDied(e) => write!(f, "Conn died: {}", e),
             Error::EofFromStream => write!(f, "EOF from stream"),
             Error::ExpectingContinuationGot(t) => {
                 write!(f, "Expecting {} got {}", HttpFrameType::Continuation, t)

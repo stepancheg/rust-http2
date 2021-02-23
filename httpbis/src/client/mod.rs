@@ -14,9 +14,6 @@ use std::thread;
 
 use bytes::Bytes;
 
-use futures::channel::mpsc::unbounded;
-use futures::channel::mpsc::UnboundedReceiver;
-use futures::channel::mpsc::UnboundedSender;
 use futures::channel::oneshot;
 use futures::future;
 use futures::future::FutureExt;
@@ -56,6 +53,9 @@ use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::ConnStateSnapshot;
 
 use crate::client::resp::ClientResponse;
+use crate::common::death_aware_channel::death_aware_channel;
+use crate::common::death_aware_channel::DeathAwareReceiver;
+use crate::common::death_aware_channel::DeathAwareSender;
 use crate::net::unix::SocketAddrUnix;
 use crate::result;
 use crate::solicit::stream_id::StreamId;
@@ -131,6 +131,8 @@ impl<C: TlsConnector> ClientBuilder<C> {
     }
 
     pub fn build(self) -> Result<Client> {
+        let client_died_error_holder = SomethingDiedErrorHolder::new();
+
         let addr = self.addr.expect("addr is not specified");
         let addr_copy = addr.clone();
 
@@ -139,11 +141,10 @@ impl<C: TlsConnector> ClientBuilder<C> {
         // Create a channel to receive shutdown signal.
         let (shutdown_signal, shutdown_future) = shutdown_signal();
 
-        let (controller_tx, controller_rx) = unbounded();
+        let (controller_tx, controller_rx) = death_aware_channel(client_died_error_holder.clone());
 
         let (done_tx, done_rx) = oneshot::channel();
 
-        let client_died_error_holder = SomethingDiedErrorHolder::new();
         let client_died_error_holder_copy = client_died_error_holder.clone();
 
         let join = if let Some(remote) = self.event_loop {
@@ -221,7 +222,7 @@ enum Completion {
 /// in `ClientBuilder`). When connection fails (because of network error
 /// or protocol error) client is reconnected.
 pub struct Client {
-    controller_tx: UnboundedSender<ControllerCommand>,
+    controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
     join: Option<Completion>,
     http_scheme: HttpScheme,
     // used only once to send shutdown signal
@@ -390,7 +391,7 @@ impl Client {
             self.controller_tx
                 .unbounded_send(ControllerCommand::DumpState(tx)),
         );
-        Box::pin(rx.map_err(|_| error::Error::ConnDied))
+        Box::pin(rx.map_err(|_| crate::Error::ConnDied(Arc::new(crate::Error::DeathReasonUnknown))))
     }
 
     /// Create a future which waits for successful connection.
@@ -401,9 +402,10 @@ impl Client {
             self.controller_tx
                 .unbounded_send(ControllerCommand::WaitForConnect(tx)),
         );
-        // TODO: return client death reason
+        // TODO: no need to clone
+        let client_died_error_holder = self.client_died_error_holder.clone();
         Box::pin(
-            rx.map_err(|_| error::Error::ConnDied)
+            rx.map_err(move |_| client_died_error_holder.error())
                 .and_then(|r| future::ready(r)),
         )
     }
@@ -464,7 +466,7 @@ struct ControllerState<T: ToClientStream, C: TlsConnector> {
     conf: ClientConf,
     // current connection
     conn: Arc<ClientConn>,
-    tx: UnboundedSender<ControllerCommand>,
+    tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
 }
 
 impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C> {
@@ -514,7 +516,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
         self
     }
 
-    fn run(self, rx: UnboundedReceiver<ControllerCommand>) -> HttpFutureSend<()> {
+    fn run(self, rx: DeathAwareReceiver<ControllerCommand>) -> HttpFutureSend<()> {
         // TODO: we never receive channel died
         let r = rx.fold(self, |state, cmd| future::ready(state.iter(cmd)));
         let r = r.map(|_| Ok(()));
@@ -523,7 +525,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
 }
 
 struct CallbacksImpl {
-    tx: UnboundedSender<ControllerCommand>,
+    tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
 }
 
 impl ClientConnCallbacks for CallbacksImpl {
@@ -540,8 +542,8 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
     tls: ClientTlsOption<C>,
     conf: ClientConf,
     done_tx: oneshot::Sender<()>,
-    controller_tx: UnboundedSender<ControllerCommand>,
-    controller_rx: UnboundedReceiver<ControllerCommand>,
+    controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
+    controller_rx: DeathAwareReceiver<ControllerCommand>,
     client_died_error_holder: SomethingDiedErrorHolder<ClientDiedType>,
 ) {
     let http_conn = ClientConn::spawn(

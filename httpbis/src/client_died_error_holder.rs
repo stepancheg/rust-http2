@@ -14,6 +14,8 @@ use std::panic::AssertUnwindSafe;
 
 pub(crate) trait DiedType: Default + Clone + Send {
     fn what() -> &'static str;
+
+    fn wrap_error(e: Arc<crate::Error>) -> crate::Error;
 }
 
 #[derive(Copy, Clone, Default)]
@@ -25,11 +27,19 @@ impl DiedType for ClientDiedType {
     fn what() -> &'static str {
         "client"
     }
+
+    fn wrap_error(e: Arc<crate::Error>) -> crate::Error {
+        crate::Error::ClientDied(e)
+    }
 }
 
 impl DiedType for ConnDiedType {
     fn what() -> &'static str {
         "connection"
+    }
+
+    fn wrap_error(e: Arc<crate::Error>) -> crate::Error {
+        crate::Error::ConnDied(e)
     }
 }
 
@@ -44,7 +54,7 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
         Default::default()
     }
 
-    fn client_died_error(&self) -> Arc<error::Error> {
+    fn raw_error(&self) -> Arc<error::Error> {
         let lock = self.error.lock().unwrap();
         (*lock)
             .clone()
@@ -52,7 +62,7 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
     }
 
     pub fn error(&self) -> error::Error {
-        error::Error::ClientDied(self.client_died_error())
+        D::wrap_error(self.raw_error())
     }
 
     fn set_once(&self, error: error::Error) {
