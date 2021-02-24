@@ -18,9 +18,7 @@ use tls_api;
 
 use crate::solicit_async::*;
 
-use crate::assert_types::assert_send_future;
 use crate::client::req::ClientRequest;
-
 use crate::client::stream_handler::ClientStreamCreatedHandler;
 use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
@@ -331,37 +329,25 @@ impl ClientConn {
         C: TlsConnector + Sync,
     {
         let addr_struct = addr.socket_addr();
-
         let domain = domain.to_owned();
-
         let no_delay = conf.no_delay.unwrap_or(true);
-        let connect = addr
-            .connect(&lh)
-            .map_ok(move |socket| {
-                info!("connected to {}", addr);
+        let lh_copy = lh.clone();
+        let tls_conn = async move {
+            // TODO: connect timeout
+            let socket = addr.connect(&lh_copy).await?;
+            info!("connected to {}", addr);
 
-                if socket.is_tcp() {
-                    socket
-                        .set_tcp_nodelay(no_delay)
-                        .expect("failed to set TCP_NODELAY");
-                }
-                socket
-            })
-            .map_err(|e| error::Error::from(e));
+            if socket.is_tcp() {
+                socket.set_tcp_nodelay(no_delay)?;
+            }
 
-        let connect = assert_send_future(connect);
+            connector
+                .connect_with_socket(&domain, socket)
+                .await
+                .map_err(crate::Error::from)
+        };
 
-        let tls_conn = connect.and_then(move |conn| async move {
-            Ok(connector.connect_with_socket(&domain, conn).await?)
-        });
-
-        let tls_conn = assert_send_future(tls_conn);
-
-        let tls_conn = tls_conn.map_err(Error::from);
-
-        let tls_conn = assert_send_future(tls_conn);
-
-        ClientConn::spawn_connected(lh, Box::pin(tls_conn), addr_struct, conf, callbacks)
+        ClientConn::spawn_connected(lh, tls_conn, addr_struct, conf, callbacks)
     }
 
     pub(crate) fn start_request_with_resp_sender(
