@@ -260,9 +260,7 @@ impl ClientConn {
 
         let lh_copy = lh.clone();
 
-        let connect = conn_died_error_holder.wrap_future_keep_result(connect);
-
-        let future = connect.and_then(move |conn| async move {
+        let future = async move {
             let conn_data = Conn::<ClientTypes, _>::new(
                 lh_copy,
                 ClientConnData {
@@ -271,13 +269,13 @@ impl ClientConn {
                 conf.common,
                 to_write_tx,
                 to_write_rx,
-                async move { Ok(conn) },
+                connect,
                 peer_addr,
                 conn_died_error_holder,
             )
             .await?;
             Ok(conn_data.run().await)
-        });
+        };
 
         let future = assert_future_output::<Result<(), ()>, _>(future);
 
