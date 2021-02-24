@@ -288,7 +288,7 @@ impl ClientConn {
         let addr_struct = addr.socket_addr();
 
         let no_delay = conf.no_delay.unwrap_or(true);
-        let connect = addr.connect_with_timeout(&lh, conf.connection_timeout);
+        let connect = addr.connect_with_timeout(&lh, conf.connect_timeout);
 
         let addr_copy = addr_struct.clone();
         let connect = async move {
@@ -322,7 +322,7 @@ impl ClientConn {
         let domain = domain.to_owned();
         let no_delay = conf.no_delay.unwrap_or(true);
         let lh_copy = lh.clone();
-        let connect_timeout = conf.connection_timeout;
+        let connect_timeout = conf.connect_timeout;
         let tls_conn = async move {
             let socket = addr.connect_with_timeout(&lh_copy, connect_timeout).await?;
             info!("connected to {}", addr);

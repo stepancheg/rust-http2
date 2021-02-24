@@ -8,8 +8,8 @@ pub struct ClientConf {
     pub no_delay: Option<bool>,
     /// Thread name.
     pub thread_name: Option<String>,
-    /// Connection timeout.
-    pub connection_timeout: Option<Duration>,
+    /// Connect timeout.
+    pub connect_timeout: Option<Duration>,
 
     /// Common client/server conf.
     pub common: CommonConf,
