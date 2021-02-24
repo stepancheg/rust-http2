@@ -55,7 +55,6 @@ use std::pin::Pin;
 use crate::client::resp::ClientResponse;
 use std::future::Future;
 use tokio::runtime::Handle;
-use tokio::time;
 
 pub struct ClientStreamData {}
 
@@ -289,20 +288,11 @@ impl ClientConn {
         let addr_struct = addr.socket_addr();
 
         let no_delay = conf.no_delay.unwrap_or(true);
-        let connect = TryFutureExt::map_err(addr.connect(&lh), error::Error::from);
-
-        let connect_timeout = conf.connection_timeout;
+        let connect = addr.connect_with_timeout(&lh, conf.connection_timeout);
 
         let addr_copy = addr_struct.clone();
         let connect = async move {
-            let socket = if let Some(timeout) = connect_timeout {
-                match time::timeout(timeout, connect).await {
-                    Ok(r) => r?,
-                    Err(_) => return Err(error::Error::ConnectionTimeout),
-                }
-            } else {
-                connect.await?
-            };
+            let socket = connect.await?;
 
             info!("connected to {}", addr_copy);
 
@@ -320,7 +310,7 @@ impl ClientConn {
         lh: Handle,
         domain: &str,
         connector: Arc<C>,
-        addr: Pin<Box<dyn ToClientStream + Send>>,
+        addr: Pin<Box<dyn ToClientStream>>,
         conf: ClientConf,
         callbacks: H,
     ) -> Self
@@ -332,9 +322,9 @@ impl ClientConn {
         let domain = domain.to_owned();
         let no_delay = conf.no_delay.unwrap_or(true);
         let lh_copy = lh.clone();
+        let connect_timeout = conf.connection_timeout;
         let tls_conn = async move {
-            // TODO: connect timeout
-            let socket = addr.connect(&lh_copy).await?;
+            let socket = addr.connect_with_timeout(&lh_copy, connect_timeout).await?;
             info!("connected to {}", addr);
 
             if socket.is_tcp() {
