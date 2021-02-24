@@ -1,4 +1,5 @@
 /// Better `unwrap`
+#[allow(unused_macros)]
 macro_rules! t {
     ($e:expr) => {
         match $e {

@@ -11,7 +11,6 @@ mod bytes_ext;
 mod client;
 #[path = "../../httpbis/src/misc.rs"]
 mod misc;
-pub mod openssl_test_key_gen;
 mod server_one_conn;
 mod server_test;
 mod task;

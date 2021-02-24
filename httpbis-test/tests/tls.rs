@@ -18,20 +18,22 @@ use tls_api_native_tls::TlsConnector;
 use tokio::runtime::Runtime;
 
 fn test_tls_acceptor() -> TlsAcceptor {
-    let server_keys = &httpbis_test::openssl_test_key_gen::keys().server;
+    let server_keys = &test_cert_gen::keys().server;
 
-    let builder =
-        TlsAcceptor::builder_from_pkcs12(&server_keys.pkcs12, &server_keys.pkcs12_password)
-            .unwrap();
+    let builder = TlsAcceptor::builder_from_pkcs12(
+        &server_keys.cert_and_key_pkcs12.pkcs12.0,
+        &server_keys.cert_and_key_pkcs12.password,
+    )
+    .unwrap();
     builder.build().unwrap()
 }
 
 fn test_tls_connector() -> TlsConnector {
-    let client_keys = &httpbis_test::openssl_test_key_gen::keys().client;
+    let client_keys = &test_cert_gen::keys().client;
 
     let mut builder = TlsConnector::builder().unwrap();
     builder
-        .add_root_certificate(&client_keys.cert_der)
+        .add_root_certificate(client_keys.ca.get_der())
         .expect("add_root_certificate");
     builder.build().unwrap()
 }
