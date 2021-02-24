@@ -55,6 +55,7 @@ use futures::TryFutureExt;
 use std::pin::Pin;
 
 use crate::client::resp::ClientResponse;
+use std::future::Future;
 use tokio::runtime::Handle;
 use tokio::time;
 
@@ -235,7 +236,7 @@ pub trait ClientConnCallbacks: Send + 'static {
 impl ClientConn {
     fn spawn_connected<I, C>(
         lh: Handle,
-        connect: HttpFutureSend<I>,
+        connect: impl Future<Output = crate::Result<I>> + Send + 'static,
         peer_addr: AnySocketAddr,
         conf: ClientConf,
         callbacks: C,
@@ -314,7 +315,7 @@ impl ClientConn {
             Ok(socket)
         };
 
-        ClientConn::spawn_connected(lh, Box::pin(connect), addr_struct, conf, callbacks)
+        ClientConn::spawn_connected(lh, connect, addr_struct, conf, callbacks)
     }
 
     pub fn spawn_tls<H, C>(
