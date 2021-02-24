@@ -31,6 +31,7 @@ use crate::codec::http_decode_read::HttpDecodeRead;
 use crate::codec::queued_write::QueuedWrite;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::ConnWriteSideCustom;
+use crate::common::death_aware_channel::death_aware_channel;
 use crate::common::death_aware_channel::DeathAwareReceiver;
 use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::init_where::InitWhere;
@@ -144,7 +145,7 @@ where
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
     I: SocketStream,
 {
-    pub async fn new_run(
+    async fn init(
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
@@ -215,6 +216,35 @@ where
         }
         .run()
         .await
+    }
+
+    pub fn new(
+        loop_handle: Handle,
+        specific: T::SideSpecific,
+        _conf: CommonConf,
+        socket: impl Future<Output = crate::Result<I>> + Send,
+        peer_addr: AnySocketAddr,
+    ) -> (
+        impl Future<Output = ()> + Send,
+        DeathAwareSender<T::ToWriteMessage>,
+    ) {
+        let conn_died_error_holder = SomethingDiedErrorHolder::new();
+
+        let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
+
+        (
+            Self::init(
+                loop_handle,
+                specific,
+                _conf,
+                write_tx.clone(),
+                write_rx,
+                socket,
+                peer_addr,
+                conn_died_error_holder,
+            ),
+            write_tx,
+        )
     }
 
     /// Allocate stream id for locally initiated stream

@@ -26,14 +26,12 @@ use crate::net::socket::SocketStream;
 use crate::common::init_where::InitWhere;
 
 use crate::client_died_error_holder::ConnDiedType;
-use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn::SideSpecific;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
-use crate::common::death_aware_channel::death_aware_channel;
 use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::common::sender::CommonSender;
@@ -270,22 +268,15 @@ impl ServerConn {
         F: ServerHandler,
         I: SocketStream,
     {
-        let conn_died_error_holder = SomethingDiedErrorHolder::new();
-
-        let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
-
-        let run = Conn::<ServerTypes, I>::new_run(
+        let (future, write_tx) = Conn::<ServerTypes, I>::new(
             lh.clone(),
             ServerConnData { factory: service },
             conf.common,
-            write_tx.clone(),
-            write_rx,
             socket,
             peer_addr,
-            conn_died_error_holder,
         );
 
-        (ServerConn { write_tx }, run)
+        (ServerConn { write_tx }, future)
     }
 
     pub fn new<S, A>(

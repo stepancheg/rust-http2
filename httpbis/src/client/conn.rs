@@ -27,14 +27,12 @@ use crate::client::stream_handler::ClientStreamCreatedHandler;
 use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
 use crate::client_died_error_holder::ConnDiedType;
-use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn::SideSpecific;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
-use crate::common::death_aware_channel::death_aware_channel;
 use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::common::sender::CommonSender;
@@ -249,21 +247,14 @@ impl ClientConn {
         I: SocketStream,
         C: ClientConnCallbacks,
     {
-        let conn_died_error_holder = SomethingDiedErrorHolder::new();
-
-        let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
-
-        let future = Conn::<ClientTypes, _>::new_run(
+        let (future, write_tx) = Conn::<ClientTypes, _>::new(
             lh.clone(),
             ClientConnData {
                 _callbacks: Box::new(callbacks),
             },
             conf.common,
-            write_tx.clone(),
-            write_rx,
             connect,
             peer_addr,
-            conn_died_error_holder,
         );
 
         lh.spawn(future);
