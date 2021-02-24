@@ -279,6 +279,9 @@ impl ServerConn {
 
         let write_tx_copy = write_tx.clone();
 
+        // TODO: handle error
+        //let connect = conn_died_error_holder.wrap_future_keep_result(connect);
+
         let run = socket.and_then(move |conn| async move {
             let conn_data = Conn::<ServerTypes, I>::new(
                 lh,
