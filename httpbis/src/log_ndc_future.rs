@@ -6,7 +6,7 @@ use std::task::Context;
 
 pub(crate) fn log_ndc_future<N, F>(ndc: N, f: F) -> LogNdcFuture<N, F>
 where
-    N: Into<Ndc>,
+    N: Into<Ndc> + Clone,
     F: Future,
 {
     LogNdcFuture { ndc, f }
