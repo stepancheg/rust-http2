@@ -12,8 +12,6 @@ use crate::AnySocketAddr;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
 
-use std::future::Future;
-
 use tls_api::TlsConnector;
 
 use tls_api;
@@ -53,7 +51,6 @@ use crate::ClientTlsOption;
 use crate::ErrorCode;
 use bytes::Bytes;
 use futures::channel::oneshot;
-use futures::FutureExt;
 use futures::TryFutureExt;
 use std::pin::Pin;
 
@@ -294,34 +291,30 @@ impl ClientConn {
 
         let no_delay = conf.no_delay.unwrap_or(true);
         let connect = TryFutureExt::map_err(addr.connect(&lh), error::Error::from);
-        let map_callback = move |socket: Pin<Box<dyn SocketStream>>| {
-            info!("connected to {}", addr);
+
+        let connect_timeout = conf.connection_timeout;
+
+        let addr_copy = addr_struct.clone();
+        let connect = async move {
+            let socket = if let Some(timeout) = connect_timeout {
+                match time::timeout(timeout, connect).await {
+                    Ok(r) => r?,
+                    Err(_) => return Err(error::Error::ConnectionTimeout),
+                }
+            } else {
+                connect.await?
+            };
+
+            info!("connected to {}", addr_copy);
 
             if socket.is_tcp() {
-                socket
-                    .set_tcp_nodelay(no_delay)
-                    .expect("failed to set TCP_NODELAY");
+                socket.set_tcp_nodelay(no_delay)?;
             }
 
-            socket
+            Ok(socket)
         };
 
-        let connect: Pin<
-            Box<dyn Future<Output = result::Result<Pin<Box<dyn SocketStream>>>> + Send>,
-        > = if let Some(timeout) = conf.connection_timeout {
-            Box::pin(time::timeout(timeout, connect).map(|r| match r {
-                Ok(r) => r,
-                Err(_) => Err(error::Error::ConnectionTimeout),
-            }))
-        } else {
-            Box::pin(connect)
-        };
-
-        let connect = Box::pin(
-            connect.map_ok(move |socket: Pin<Box<dyn SocketStream>>| map_callback(socket)),
-        );
-
-        ClientConn::spawn_connected(lh, connect, addr_struct, conf, callbacks)
+        ClientConn::spawn_connected(lh, Box::pin(connect), addr_struct, conf, callbacks)
     }
 
     pub fn spawn_tls<H, C>(
