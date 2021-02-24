@@ -57,6 +57,8 @@ use crate::death::channel::death_aware_channel;
 use crate::death::channel::DeathAwareReceiver;
 use crate::death::channel::DeathAwareSender;
 use crate::death::channel::ErrorAwareDrop;
+use crate::death::oneshot::death_aware_oneshot;
+use crate::death::oneshot::DeathAwareOneshotSender;
 use crate::net::unix::SocketAddrUnix;
 use crate::result;
 use crate::solicit::stream_id::StreamId;
@@ -388,13 +390,13 @@ impl Client {
     /// For tests
     #[doc(hidden)]
     pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
-        let (tx, rx) = oneshot::channel();
+        let (tx, rx) = death_aware_oneshot(self.client_died_error_holder.clone());
         // ignore error
         drop(
             self.controller_tx
                 .unbounded_send(ControllerCommand::DumpState(tx)),
         );
-        Box::pin(rx.map_err(|_| crate::Error::ConnDied(Arc::new(crate::Error::DeathReasonUnknown))))
+        Box::pin(rx)
     }
 
     /// Create a future which waits for successful connection.
@@ -459,7 +461,7 @@ enum ControllerCommand {
     GoAway,
     StartRequest(StartRequestMessage),
     WaitForConnect(oneshot::Sender<Result<()>>),
-    DumpState(oneshot::Sender<ConnStateSnapshot>),
+    DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ClientDiedType>),
 }
 
 impl ErrorAwareDrop for ControllerCommand {
@@ -472,9 +474,7 @@ impl ErrorAwareDrop for ControllerCommand {
             ControllerCommand::WaitForConnect(_) => {
                 // TODO
             }
-            ControllerCommand::DumpState(_) => {
-                // TODO
-            }
+            ControllerCommand::DumpState(_) => {}
         }
     }
 }
@@ -530,7 +530,17 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                 }
             }
             ControllerCommand::DumpState(tx) => {
-                self.conn.dump_state_with_resp_sender(tx);
+                let (conn_tx, conn_rx) =
+                    death_aware_oneshot(self.conn.conn_died_error_holder.clone());
+                self.conn.dump_state_with_resp_sender(conn_tx);
+                self.handle.spawn(async move {
+                    match conn_rx.await {
+                        Ok(snapshot) => tx.send(snapshot),
+                        Err(_) => {
+                            // TODO: pass it
+                        }
+                    }
+                });
             }
         }
     }

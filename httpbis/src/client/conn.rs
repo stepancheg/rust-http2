@@ -1,6 +1,5 @@
 //! Single client connection
 
-use std::io;
 use std::result::Result as std_Result;
 use std::sync::Arc;
 
@@ -39,6 +38,7 @@ use crate::data_or_headers::DataOrHeaders;
 use crate::death::channel::DeathAwareSender;
 use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::headers_place::HeadersPlace;
 use crate::net::connect::ToClientStream;
 use crate::net::socket::SocketStream;
@@ -49,10 +49,11 @@ use crate::ClientTlsOption;
 use crate::ErrorCode;
 use bytes::Bytes;
 use futures::channel::oneshot;
-use futures::TryFutureExt;
 use std::pin::Pin;
 
 use crate::client::resp::ClientResponse;
+use crate::death::oneshot::death_aware_oneshot;
+use crate::death::oneshot::DeathAwareOneshotSender;
 use std::future::Future;
 use tokio::runtime::Handle;
 
@@ -74,6 +75,7 @@ impl SideSpecific for ClientConnData {}
 
 pub struct ClientConn {
     write_tx: DeathAwareSender<ClientToWriteMessage>,
+    pub(crate) conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
 
 unsafe impl Sync for ClientConn {}
@@ -242,7 +244,7 @@ impl ClientConn {
         I: SocketStream,
         C: ClientConnCallbacks,
     {
-        let (future, write_tx) = Conn::<ClientTypes, _>::new(
+        let (future, write_tx, conn_died_error_holder) = Conn::<ClientTypes, _>::new(
             lh.clone(),
             ClientConnData {
                 _callbacks: Box::new(callbacks),
@@ -254,7 +256,10 @@ impl ClientConn {
 
         lh.spawn(future);
 
-        ClientConn { write_tx }
+        ClientConn {
+            write_tx,
+            conn_died_error_holder,
+        }
     }
 
     pub fn spawn<H, C>(
@@ -357,7 +362,10 @@ impl ClientConn {
             })
     }
 
-    pub fn dump_state_with_resp_sender(&self, tx: oneshot::Sender<ConnStateSnapshot>) {
+    pub(crate) fn dump_state_with_resp_sender(
+        &self,
+        tx: DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>,
+    ) {
         let message = ClientToWriteMessage::Common(CommonToWriteMessage::DumpState(tx));
         // ignore error
         drop(self.write_tx.unbounded_send(message));
@@ -366,12 +374,9 @@ impl ClientConn {
     /// For tests
     #[doc(hidden)]
     pub fn _dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
-        let (tx, rx) = oneshot::channel();
+        let (tx, rx) = death_aware_oneshot(self.conn_died_error_holder.clone());
 
         self.dump_state_with_resp_sender(tx);
-
-        let rx =
-            rx.map_err(|_| Error::from(io::Error::new(io::ErrorKind::Other, "oneshot canceled")));
 
         Box::pin(rx)
     }

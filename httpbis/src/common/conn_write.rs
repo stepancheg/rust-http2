@@ -28,10 +28,11 @@ use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use bytes::Bytes;
-use futures::channel::oneshot;
 use futures::task::Context;
 use std::cmp;
 
+use crate::death::error_holder::ConnDiedType;
+use crate::death::oneshot::DeathAwareOneshotSender;
 use crate::net::socket::SocketStream;
 use std::task::Poll;
 
@@ -280,10 +281,10 @@ where
 
 // Message sent to write loop.
 // Processed while write loop is not handling network I/O.
-pub enum CommonToWriteMessage {
+pub(crate) enum CommonToWriteMessage {
     IncreaseInWindow(StreamId, u32),
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),
     StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
     Pull(StreamId, HttpStreamAfterHeaders, StreamOutWindowReceiver),
-    DumpState(oneshot::Sender<ConnStateSnapshot>),
+    DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>),
 }

@@ -4,6 +4,7 @@ use std::pin::Pin;
 use crate::error;
 use crate::result;
 use crate::AnySocketAddr;
+use crate::Error;
 
 use crate::solicit::frame::GoawayFrame;
 use crate::solicit::frame::HttpFrameType;
@@ -33,6 +34,7 @@ use crate::common::init_where::InitWhere;
 use crate::death::channel::death_aware_channel;
 use crate::death::channel::DeathAwareReceiver;
 use crate::death::channel::DeathAwareSender;
+use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::hpack;
@@ -40,7 +42,6 @@ use crate::solicit::stream_id::StreamId;
 use crate::solicit::window_size::NonNegativeWindowSize;
 use crate::solicit::window_size::WindowSize;
 use crate::ErrorCode;
-use futures::channel::oneshot;
 use futures::future;
 use futures::FutureExt;
 
@@ -50,6 +51,7 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::task::Context;
 
+use crate::death::oneshot::DeathAwareOneshotSender;
 use crate::net::socket::SocketStream;
 use std::mem;
 use std::sync::Arc;
@@ -126,6 +128,14 @@ pub struct ConnStateSnapshot {
     pub pump_out_window_size: isize,
     pub out_buf_bytes: usize,
     pub streams: HashMap<StreamId, HttpStreamStateSnapshot>,
+}
+
+impl ErrorAwareDrop for ConnStateSnapshot {
+    type DiedType = ConnDiedType;
+
+    fn drop_with_error(self, error: Error) {
+        drop(error);
+    }
 }
 
 impl ConnStateSnapshot {
@@ -227,6 +237,7 @@ where
     ) -> (
         impl Future<Output = ()> + Send,
         DeathAwareSender<T::ToWriteMessage>,
+        SomethingDiedErrorHolder<ConnDiedType>,
     ) {
         let conn_died_error_holder = SomethingDiedErrorHolder::new();
 
@@ -240,10 +251,14 @@ where
             write_rx,
             socket,
             peer_addr.clone(),
-            conn_died_error_holder,
+            conn_died_error_holder.clone(),
         );
         let ndc = Arc::new(format!("{} {}", T::CONN_NDC, peer_addr));
-        (log_ndc_future(ndc, future), write_tx)
+        (
+            log_ndc_future(ndc, future),
+            write_tx,
+            conn_died_error_holder,
+        )
     }
 
     /// Allocate stream id for locally initiated stream
@@ -328,7 +343,7 @@ where
 
     pub fn process_dump_state(
         &mut self,
-        sender: oneshot::Sender<ConnStateSnapshot>,
+        sender: DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>,
     ) -> result::Result<()> {
         // ignore send error, client might be already dead
         drop(sender.send(self.dump_state()));

@@ -112,9 +112,6 @@ pub enum Error {
     /// Failed to send request to dump state.
     // TODO: reason
     FailedToSendReqToDumpState,
-    /// Need something better.
-    // TODO: reason
-    OneshotCancelled,
     /// Stream id windows overflow.
     StreamInWindowOverflow(StreamId, i32, u32),
     /// Connection in windows overflow.
@@ -260,7 +257,6 @@ impl fmt::Display for Error {
             ),
             Error::StreamIdLeExistingStream(_, _) => write!(f, "Stream id <= existing stream"),
             Error::FailedToSendReqToDumpState => write!(f, "Failed to send request to dump state"),
-            Error::OneshotCancelled => write!(f, "Oneshot cancelled"),
             Error::StreamInWindowOverflow(stream_id, _, _) => {
                 write!(f, "Stream {} in windows overflow", stream_id)
             }

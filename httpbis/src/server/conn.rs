@@ -9,9 +9,7 @@ use crate::Error;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
 
-use futures::channel::oneshot;
 use futures::future;
-use futures::TryFutureExt;
 
 use crate::common::types::Types;
 
@@ -41,6 +39,8 @@ use crate::common::stream_map::HttpStreamRef;
 use crate::death::channel::DeathAwareSender;
 use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
+use crate::death::oneshot::death_aware_oneshot;
 use crate::headers_place::HeadersPlace;
 use crate::misc::any_to_string;
 use crate::req_resp::RequestOrResponse;
@@ -176,7 +176,7 @@ where
     }
 }
 
-pub enum ServerToWriteMessage {
+pub(crate) enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
 }
 
@@ -254,6 +254,7 @@ where
 
 pub struct ServerConn {
     write_tx: DeathAwareSender<ServerToWriteMessage>,
+    conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
 
 impl ServerConn {
@@ -268,7 +269,7 @@ impl ServerConn {
         F: ServerHandler,
         I: SocketStream,
     {
-        let (future, write_tx) = Conn::<ServerTypes, I>::new(
+        let (future, write_tx, conn_died_error_holder) = Conn::<ServerTypes, I>::new(
             lh.clone(),
             ServerConnData { factory: service },
             conf.common,
@@ -276,7 +277,13 @@ impl ServerConn {
             peer_addr,
         );
 
-        (ServerConn { write_tx }, future)
+        (
+            ServerConn {
+                write_tx,
+                conn_died_error_holder,
+            },
+            future,
+        )
     }
 
     pub fn new<S, A>(
@@ -366,15 +373,13 @@ impl ServerConn {
 
     /// For tests
     pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
-        let (tx, rx) = oneshot::channel();
+        let (tx, rx) = death_aware_oneshot(self.conn_died_error_holder.clone());
 
         if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(
             CommonToWriteMessage::DumpState(tx),
         )) {
             return Box::pin(future::err(error::Error::FailedToSendReqToDumpState));
         }
-
-        let rx = rx.map_err(|_| error::Error::OneshotCancelled);
 
         Box::pin(rx)
     }
