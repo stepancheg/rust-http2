@@ -26,6 +26,8 @@ pub(crate) struct DeathAwareReceiver<T: ErrorAwareDrop> {
 
 impl<T: ErrorAwareDrop> Drop for DeathAwareReceiver<T> {
     fn drop(&mut self) {
+        self.rx.close();
+
         while let Ok(Some(m)) = self.rx.try_next() {
             m.drop_with_error(self.conn_died_error_holder.error());
         }
