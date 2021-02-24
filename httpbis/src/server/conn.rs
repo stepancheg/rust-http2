@@ -270,22 +270,15 @@ impl ServerConn {
         F: ServerHandler,
         I: SocketStream,
     {
-        let lh = lh.clone();
-
         let conn_died_error_holder = SomethingDiedErrorHolder::new();
 
         let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
 
-        let write_tx_copy = write_tx.clone();
-
-        // TODO: handle error
-        //let connect = conn_died_error_holder.wrap_future_keep_result(connect);
-
         let run = Conn::<ServerTypes, I>::new_run(
-            lh,
+            lh.clone(),
             ServerConnData { factory: service },
             conf.common,
-            write_tx_copy,
+            write_tx.clone(),
             write_rx,
             socket,
             peer_addr,

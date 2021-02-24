@@ -251,22 +251,16 @@ impl ClientConn {
     {
         let conn_died_error_holder = SomethingDiedErrorHolder::new();
 
-        let (to_write_tx, to_write_rx) = death_aware_channel(conn_died_error_holder.clone());
-
-        let c = ClientConn {
-            write_tx: to_write_tx.clone(),
-        };
-
-        let lh_copy = lh.clone();
+        let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
 
         let future = Conn::<ClientTypes, _>::new_run(
-            lh_copy,
+            lh.clone(),
             ClientConnData {
                 _callbacks: Box::new(callbacks),
             },
             conf.common,
-            to_write_tx,
-            to_write_rx,
+            write_tx.clone(),
+            write_rx,
             connect,
             peer_addr,
             conn_died_error_holder,
@@ -274,7 +268,7 @@ impl ClientConn {
 
         lh.spawn(future);
 
-        c
+        ClientConn { write_tx }
     }
 
     pub fn spawn<H, C>(
