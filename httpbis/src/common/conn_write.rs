@@ -240,22 +240,19 @@ where
     pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
         match common {
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
-                self.process_stream_end(stream_id, error_code)?;
+                self.process_stream_end(stream_id, error_code)
             }
             CommonToWriteMessage::StreamEnqueue(stream_id, part) => {
-                self.process_stream_enqueue(stream_id, part)?;
+                self.process_stream_enqueue(stream_id, part)
             }
             CommonToWriteMessage::Pull(stream_id, stream, out_window_receiver) => {
-                self.process_stream_pull(stream_id, stream, out_window_receiver)?;
+                self.process_stream_pull(stream_id, stream, out_window_receiver)
             }
             CommonToWriteMessage::IncreaseInWindow(stream_id, increase) => {
-                self.increase_in_window(stream_id, increase)?;
+                self.increase_in_window(stream_id, increase)
             }
-            CommonToWriteMessage::DumpState(sender) => {
-                self.process_dump_state(sender)?;
-            }
+            CommonToWriteMessage::DumpState(sender) => self.process_dump_state(sender),
         }
-        Ok(())
     }
 
     pub fn send_goaway(&mut self, error_code: ErrorCode) -> result::Result<()> {
