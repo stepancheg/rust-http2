@@ -150,17 +150,31 @@ where
         _conf: CommonConf,
         to_write_tx: DeathAwareSender<T::ToWriteMessage>,
         write_rx: DeathAwareReceiver<T::ToWriteMessage>,
-        mut socket: I,
+        socket: impl Future<Output = crate::Result<I>> + Send,
         peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
-    ) -> crate::Result<Self> {
+    ) -> Result<Self, ()> {
+        let mut socket = match socket.await {
+            Ok(socket) => socket,
+            Err(e) => {
+                // connect failure or TLS handshake failure
+                warn!("create connection for HTTP/2 failed: {}", e);
+                conn_died_error_holder.set_once(e);
+                return Err(());
+            }
+        };
+
         let handshake_settings_frame =
             SettingsFrame::from_settings(vec![HttpSetting::EnablePush(false)]);
 
         let mut sent_settings = DEFAULT_SETTINGS;
         sent_settings.apply_from_frame(&handshake_settings_frame);
 
-        T::handshake(&mut socket, handshake_settings_frame).await?;
+        if let Err(e) = T::handshake(&mut socket, handshake_settings_frame).await {
+            warn!("HTTP/2 handshake failed: {}", e);
+            conn_died_error_holder.set_once(e);
+            return Err(());
+        }
 
         debug!("HTTP/2 handshake done");
 

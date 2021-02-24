@@ -263,21 +263,19 @@ impl ClientConn {
         let connect = conn_died_error_holder.wrap_future_keep_result(connect);
 
         let future = connect.and_then(move |conn| async move {
-            let conn_data = conn_died_error_holder
-                .clone()
-                .wrap_future_keep_result(Conn::<ClientTypes, _>::new(
-                    lh_copy,
-                    ClientConnData {
-                        _callbacks: Box::new(callbacks),
-                    },
-                    conf.common,
-                    to_write_tx,
-                    to_write_rx,
-                    conn,
-                    peer_addr,
-                    conn_died_error_holder,
-                ))
-                .await?;
+            let conn_data = Conn::<ClientTypes, _>::new(
+                lh_copy,
+                ClientConnData {
+                    _callbacks: Box::new(callbacks),
+                },
+                conf.common,
+                to_write_tx,
+                to_write_rx,
+                async move { Ok(conn) },
+                peer_addr,
+                conn_died_error_holder,
+            )
+            .await?;
             Ok(conn_data.run().await)
         });
 

@@ -11,7 +11,6 @@ use crate::solicit::header::*;
 
 use futures::channel::oneshot;
 use futures::future;
-use futures::FutureExt;
 use futures::TryFutureExt;
 
 use crate::common::types::Types;
@@ -26,7 +25,6 @@ use crate::net::socket::SocketStream;
 
 use crate::common::init_where::InitWhere;
 
-use crate::assert_types::assert_send_future;
 use crate::client_died_error_holder::ConnDiedType;
 use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::Conn;
@@ -57,6 +55,7 @@ use crate::ErrorCode;
 use crate::ServerConf;
 use crate::ServerResponse;
 use crate::ServerTlsOption;
+use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use tokio::runtime::Handle;
@@ -262,11 +261,11 @@ pub struct ServerConn {
 impl ServerConn {
     fn connected<F, I>(
         lh: &Handle,
-        socket: HttpFutureSend<I>,
+        socket: impl Future<Output = crate::Result<I>> + Send,
         peer_addr: AnySocketAddr,
         conf: ServerConf,
         service: Arc<F>,
-    ) -> (ServerConn, HttpFutureSend<()>)
+    ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
         F: ServerHandler,
         I: SocketStream,
@@ -282,30 +281,27 @@ impl ServerConn {
         // TODO: handle error
         //let connect = conn_died_error_holder.wrap_future_keep_result(connect);
 
-        let run = socket.and_then(move |conn| async move {
-            let conn_data = Conn::<ServerTypes, I>::new(
+        let run = async move {
+            match Conn::<ServerTypes, I>::new(
                 lh,
                 ServerConnData { factory: service },
                 conf.common,
                 write_tx_copy,
                 write_rx,
-                conn,
+                socket,
                 peer_addr,
                 conn_died_error_holder,
             )
-            .await?;
+            .await
+            {
+                Ok(conn) => {
+                    conn.run().await;
+                }
+                Err(()) => {}
+            }
+        };
 
-            Ok(conn_data.run().await)
-        });
-
-        let run = assert_send_future(run);
-
-        let future = Box::pin(run.then(|x| {
-            info!("connection end: {:?}", x);
-            future::ready(x)
-        }));
-
-        (ServerConn { write_tx }, future)
+        (ServerConn { write_tx }, run)
     }
 
     pub fn new<S, A>(
@@ -315,7 +311,7 @@ impl ServerConn {
         tls: ServerTlsOption<A>,
         conf: ServerConf,
         service: Arc<S>,
-    ) -> (ServerConn, HttpFutureSend<()>)
+    ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
         S: ServerHandler,
         A: TlsAcceptor,
@@ -323,12 +319,16 @@ impl ServerConn {
         match tls {
             ServerTlsOption::Plain => {
                 let socket = Box::pin(future::ok(socket));
-                ServerConn::connected(lh, socket, peer_addr, conf, service)
+                let (conn, f) = ServerConn::connected(lh, socket, peer_addr, conf, service);
+                let f: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(f);
+                (conn, f)
             }
             ServerTlsOption::Tls(acceptor) => {
-                let socket =
+                let socket: HttpFutureSend<_> =
                     Box::pin(async move { Ok(acceptor.accept_with_socket(socket).await?) });
-                ServerConn::connected(lh, socket, peer_addr, conf, service)
+                let (conn, f) = ServerConn::connected(lh, socket, peer_addr, conf, service);
+                let f: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(f);
+                (conn, Box::pin(f))
             }
         }
     }
@@ -339,7 +339,7 @@ impl ServerConn {
         peer_addr: SocketAddr,
         conf: ServerConf,
         service: Arc<S>,
-    ) -> (ServerConn, HttpFutureSend<()>)
+    ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
         S: ServerHandler,
     {
@@ -360,7 +360,7 @@ impl ServerConn {
         peer_addr: SocketAddr,
         conf: ServerConf,
         f: F,
-    ) -> (ServerConn, HttpFutureSend<()>)
+    ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
         F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
             + Send

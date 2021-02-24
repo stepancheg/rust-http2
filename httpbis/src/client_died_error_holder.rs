@@ -64,7 +64,7 @@ impl<D: DiedType> SomethingDiedErrorHolder<D> {
         D::wrap_error(self.raw_error())
     }
 
-    fn set_once(&self, error: error::Error) {
+    pub fn set_once(&self, error: error::Error) {
         let mut lock = self.error.lock().unwrap();
         if (*lock).is_none() {
             *lock = Some(Arc::new(error));

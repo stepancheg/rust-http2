@@ -345,17 +345,11 @@ where
                     conn_id
                 };
 
-                let future = assert_send_future::<result::Result<()>, _>(future);
-
                 FutureExt::then(future, move |r| {
                     let mut g = state_clone.lock().expect("lock");
                     let removed = g.conns.remove(&conn_id);
                     assert!(removed.is_some());
                     future::ready(r)
-                })
-                .map_err(|e| {
-                    warn!("connection end: {:?}", e);
-                    ()
                 })
             });
         }

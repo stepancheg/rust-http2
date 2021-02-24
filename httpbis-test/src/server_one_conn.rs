@@ -80,7 +80,15 @@ impl ServerOneConn {
                 // TODO: close listening port
                 //drop(listener);
 
-                let future = conn.and_then(move |(conn, peer_addr)| {
+                let future = async move {
+                    let (conn, peer_addr) = match conn.await {
+                        Ok((conn, peer_addr)) => (conn, peer_addr),
+                        Err(e) => {
+                            warn!("accept failed: {}", e);
+                            return;
+                        }
+                    };
+
                     let (conn, future) = ServerConn::new_plain_single_thread_fn(
                         &handle,
                         conn,
@@ -89,19 +97,16 @@ impl ServerOneConn {
                         service,
                     );
                     *conn_for_thread.lock().unwrap() = Some(conn);
-                    future
-                });
+                    future.await
+                };
 
                 let shutdown_rx = shutdown_rx.then(|_| future::ready(()));
-                let future = future.then(|_| future::ready(()));
 
                 let shutdown_rx = assert_send_future::<(), _>(shutdown_rx);
-                let future = assert_send_future::<(), _>(future);
 
                 let shutdown_rx = Box::pin(shutdown_rx);
-                let future = Box::pin(future);
 
-                lp.block_on(future::select(shutdown_rx, future));
+                lp.block_on(future::select(shutdown_rx, Box::pin(future)));
             })
             .expect("spawn");
 

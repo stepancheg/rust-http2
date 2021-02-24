@@ -31,8 +31,8 @@ use std::task::Context;
 
 //pub type HttpFuture<T> = Pin<Box<dyn Future<Output = result::Result<T>>>>;
 
-pub type HttpFutureSend<T> = Pin<Box<dyn Future<Output = result::Result<T>> + Send>>;
-pub type HttpFutureStreamSend<T> = Pin<Box<dyn Stream<Item = result::Result<T>> + Send>>;
+pub type HttpFutureSend<T> = Pin<Box<dyn Future<Output = crate::Result<T>> + Send>>;
+pub type HttpFutureStreamSend<T> = Pin<Box<dyn Stream<Item = crate::Result<T>> + Send>>;
 
 /// Inefficient, but OK because used only in tests
 pub fn recv_raw_frame_sync(read: &mut dyn Read, max_frame_size: u32) -> Result<RawFrame> {
