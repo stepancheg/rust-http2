@@ -281,25 +281,16 @@ impl ServerConn {
         // TODO: handle error
         //let connect = conn_died_error_holder.wrap_future_keep_result(connect);
 
-        let run = async move {
-            match Conn::<ServerTypes, I>::new(
-                lh,
-                ServerConnData { factory: service },
-                conf.common,
-                write_tx_copy,
-                write_rx,
-                socket,
-                peer_addr,
-                conn_died_error_holder,
-            )
-            .await
-            {
-                Ok(conn) => {
-                    conn.run().await;
-                }
-                Err(()) => {}
-            }
-        };
+        let run = Conn::<ServerTypes, I>::new_run(
+            lh,
+            ServerConnData { factory: service },
+            conf.common,
+            write_tx_copy,
+            write_rx,
+            socket,
+            peer_addr,
+            conn_died_error_holder,
+        );
 
         (ServerConn { write_tx }, run)
     }

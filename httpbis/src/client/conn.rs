@@ -20,7 +20,6 @@ use tls_api;
 
 use crate::solicit_async::*;
 
-use crate::assert_types::assert_future_output;
 use crate::assert_types::assert_send_future;
 use crate::client::req::ClientRequest;
 
@@ -260,24 +259,18 @@ impl ClientConn {
 
         let lh_copy = lh.clone();
 
-        let future = async move {
-            let conn_data = Conn::<ClientTypes, _>::new(
-                lh_copy,
-                ClientConnData {
-                    _callbacks: Box::new(callbacks),
-                },
-                conf.common,
-                to_write_tx,
-                to_write_rx,
-                connect,
-                peer_addr,
-                conn_died_error_holder,
-            )
-            .await?;
-            Ok(conn_data.run().await)
-        };
-
-        let future = assert_future_output::<Result<(), ()>, _>(future);
+        let future = Conn::<ClientTypes, _>::new_run(
+            lh_copy,
+            ClientConnData {
+                _callbacks: Box::new(callbacks),
+            },
+            conf.common,
+            to_write_tx,
+            to_write_rx,
+            connect,
+            peer_addr,
+            conn_died_error_holder,
+        );
 
         lh.spawn(future);
 

@@ -144,7 +144,7 @@ where
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
     I: SocketStream,
 {
-    pub async fn new(
+    pub async fn new_run(
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
@@ -153,14 +153,14 @@ where
         socket: impl Future<Output = crate::Result<I>> + Send,
         peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
-    ) -> Result<Self, ()> {
+    ) {
         let mut socket = match socket.await {
             Ok(socket) => socket,
             Err(e) => {
                 // connect failure or TLS handshake failure
                 warn!("create connection for HTTP/2 failed: {}", e);
                 conn_died_error_holder.set_once(e);
-                return Err(());
+                return;
             }
         };
 
@@ -173,7 +173,7 @@ where
         if let Err(e) = T::handshake(&mut socket, handshake_settings_frame).await {
             warn!("HTTP/2 handshake failed: {}", e);
             conn_died_error_holder.set_once(e);
-            return Err(());
+            return;
         }
 
         debug!("HTTP/2 handshake done");
@@ -189,7 +189,7 @@ where
         let framed_read = HttpDecodeRead::new(read);
         let queued_write = QueuedWrite::new(write);
 
-        Ok(Conn {
+        Conn {
             peer_addr,
             conn_died_error_holder,
             specific,
@@ -212,7 +212,9 @@ where
             peer_settings: DEFAULT_SETTINGS,
             our_settings_ack: DEFAULT_SETTINGS,
             our_settings_sent: sent_settings,
-        })
+        }
+        .run()
+        .await
     }
 
     /// Allocate stream id for locally initiated stream
@@ -501,7 +503,7 @@ where
         }
     }
 
-    pub fn run(self) -> impl Future<Output = ()> + Send {
+    fn run(self) -> impl Future<Output = ()> + Send {
         let peer_addr = self.peer_addr.clone();
         let conn_died_error_holder = self.conn_died_error_holder.clone();
         let f = self.run_loop();
