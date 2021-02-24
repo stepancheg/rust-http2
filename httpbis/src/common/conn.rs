@@ -232,19 +232,18 @@ where
 
         let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
 
-        (
-            Self::init(
-                loop_handle,
-                specific,
-                _conf,
-                write_tx.clone(),
-                write_rx,
-                socket,
-                peer_addr,
-                conn_died_error_holder,
-            ),
-            write_tx,
-        )
+        let future = Self::init(
+            loop_handle,
+            specific,
+            _conf,
+            write_tx.clone(),
+            write_rx,
+            socket,
+            peer_addr.clone(),
+            conn_died_error_holder,
+        );
+        let ndc = Arc::new(format!("{} {}", T::CONN_NDC, peer_addr));
+        (log_ndc_future(ndc, future), write_tx)
     }
 
     /// Allocate stream id for locally initiated stream
@@ -534,7 +533,6 @@ where
     }
 
     fn run(self) -> impl Future<Output = ()> + Send {
-        let peer_addr = self.peer_addr.clone();
         let conn_died_error_holder = self.conn_died_error_holder.clone();
         let f = self.run_loop();
         let f = f.then(|r| match r {
@@ -547,8 +545,6 @@ where
                 future::err(e)
             }
         });
-        let f = conn_died_error_holder.wrap_future(f);
-        let ndc = Arc::new(format!("{} {}", T::CONN_NDC, peer_addr));
-        log_ndc_future(ndc, f)
+        conn_died_error_holder.wrap_future(f)
     }
 }
