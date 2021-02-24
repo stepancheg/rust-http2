@@ -20,7 +20,7 @@ impl Ascii {
 
     pub fn from_bytes(bs: Bytes) -> Result<Ascii, (AsciiError, Bytes)> {
         for &b in &bs {
-            if b > i8::max_value() as u8 {
+            if b > i8::MAX as u8 {
                 return Err((AsciiError(()), bs));
             }
         }
