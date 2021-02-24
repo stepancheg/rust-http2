@@ -2,10 +2,10 @@ use crate::client::conn::ClientToWriteMessage;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::stream_handler::ClientResponseStreamHandler;
 use crate::client::stream_handler::ClientResponseStreamHandlerHolder;
-use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
+use crate::death::channel::DeathAwareSender;
 use crate::Response;
 use crate::StreamId;
 

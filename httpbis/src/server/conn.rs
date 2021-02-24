@@ -25,15 +25,12 @@ use crate::net::socket::SocketStream;
 
 use crate::common::init_where::InitWhere;
 
-use crate::client_died_error_holder::ConnDiedType;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn::SideSpecific;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::conn_write::ConnWriteSideCustom;
-use crate::common::death_aware_channel::DeathAwareSender;
-use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::common::sender::CommonSender;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -41,6 +38,9 @@ use crate::common::stream::HttpStreamDataSpecific;
 use crate::common::stream::InMessageStage;
 use crate::common::stream_handler::StreamHandlerInternal;
 use crate::common::stream_map::HttpStreamRef;
+use crate::death::channel::DeathAwareSender;
+use crate::death::channel::ErrorAwareDrop;
+use crate::death::error_holder::ConnDiedType;
 use crate::headers_place::HeadersPlace;
 use crate::misc::any_to_string;
 use crate::req_resp::RequestOrResponse;

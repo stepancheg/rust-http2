@@ -3,8 +3,8 @@ use futures::stream::StreamExt;
 
 use super::*;
 use crate::common::conn_write::CommonToWriteMessage;
-use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::types::Types;
+use crate::death::channel::DeathAwareSender;
 use crate::misc::any_to_string;
 use crate::solicit::stream_id::StreamId;
 use crate::DataOrTrailers;

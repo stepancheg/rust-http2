@@ -1,12 +1,12 @@
-use crate::client_died_error_holder::ConnDiedType;
 use crate::common::client_or_server::ClientOrServer;
 use crate::common::conn::SideSpecific;
 use crate::common::conn_write::CommonToWriteMessage;
-use crate::common::death_aware_channel::ErrorAwareDrop;
 use crate::common::init_where::InitWhere;
 use crate::common::stream::HttpStreamData;
 use crate::common::stream::HttpStreamDataSpecific;
 use crate::common::stream_handler::StreamHandlerInternal;
+use crate::death::channel::ErrorAwareDrop;
+use crate::death::error_holder::ConnDiedType;
 use crate::net::socket::SocketStream;
 use crate::req_resp::RequestOrResponse;
 use crate::solicit::frame::SettingsFrame;

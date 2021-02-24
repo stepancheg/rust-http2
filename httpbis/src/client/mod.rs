@@ -48,15 +48,15 @@ use crate::client::req::ClientRequest;
 use crate::client::stream_handler::ClientStreamCreatedHandler;
 pub use crate::client::tls::ClientTlsOption;
 
-use crate::client_died_error_holder::ClientDiedType;
-use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::common::conn::ConnStateSnapshot;
+use crate::death::error_holder::ClientDiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
 
 use crate::client::resp::ClientResponse;
-use crate::common::death_aware_channel::death_aware_channel;
-use crate::common::death_aware_channel::DeathAwareReceiver;
-use crate::common::death_aware_channel::DeathAwareSender;
-use crate::common::death_aware_channel::ErrorAwareDrop;
+use crate::death::channel::death_aware_channel;
+use crate::death::channel::DeathAwareReceiver;
+use crate::death::channel::DeathAwareSender;
+use crate::death::channel::ErrorAwareDrop;
 use crate::net::unix::SocketAddrUnix;
 use crate::result;
 use crate::solicit::stream_id::StreamId;

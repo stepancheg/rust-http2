@@ -7,7 +7,6 @@ pub(crate) mod conf;
 pub(crate) mod conn;
 pub(crate) mod conn_read;
 pub(crate) mod conn_write;
-pub(crate) mod death_aware_channel;
 pub(crate) mod hash_set_shallow_clone;
 pub(crate) mod increase_in_window;
 pub(crate) mod init_where;

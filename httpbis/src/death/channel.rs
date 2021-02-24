@@ -1,5 +1,5 @@
-use crate::client_died_error_holder::DiedType;
-use crate::client_died_error_holder::SomethingDiedErrorHolder;
+use crate::death::error_holder::DiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
 use futures::channel::mpsc;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::channel::mpsc::UnboundedSender;

@@ -25,16 +25,16 @@ use super::window_size;
 
 pub use crate::resp::Response;
 
-use crate::client_died_error_holder::ConnDiedType;
-use crate::client_died_error_holder::SomethingDiedErrorHolder;
 use crate::codec::http_decode_read::HttpDecodeRead;
 use crate::codec::queued_write::QueuedWrite;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::conn_write::ConnWriteSideCustom;
-use crate::common::death_aware_channel::death_aware_channel;
-use crate::common::death_aware_channel::DeathAwareReceiver;
-use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::init_where::InitWhere;
+use crate::death::channel::death_aware_channel;
+use crate::death::channel::DeathAwareReceiver;
+use crate::death::channel::DeathAwareSender;
+use crate::death::error_holder::ConnDiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::hpack;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::window_size::NonNegativeWindowSize;

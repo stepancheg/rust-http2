@@ -1,6 +1,6 @@
 use crate::common::conn_write::CommonToWriteMessage;
-use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::types::Types;
+use crate::death::channel::DeathAwareSender;
 use crate::result;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::DEFAULT_SETTINGS;

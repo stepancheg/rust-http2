@@ -1,7 +1,7 @@
-use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
+use crate::death::channel::DeathAwareSender;
 use crate::server::conn::ServerToWriteMessage;
 use crate::server::increase_in_window::ServerIncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;

@@ -1,9 +1,9 @@
 use crate::common::conn_write::CommonToWriteMessage;
-use crate::common::death_aware_channel::DeathAwareSender;
 use crate::common::types::Types;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::death::channel::DeathAwareSender;
 use crate::error;
 use crate::result;
 use crate::solicit::stream_id::StreamId;
