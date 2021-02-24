@@ -42,6 +42,12 @@ pub enum ErrorCode {
     Http11Required = 0xd,
 }
 
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
 impl ErrorCode {
     fn try_from(error_code: u32) -> Result<ErrorCode, u32> {
         Ok(match error_code {

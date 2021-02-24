@@ -193,14 +193,17 @@ impl From<Void> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::IoError(_) => write!(f, "Encountered an IO error"),
-            Error::TlsError(_) => write!(f, "Encountered TLS error"),
-            Error::CodeError(_) => write!(f, "Encountered HTTP named error"),
-            Error::RstStreamReceived(_) => write!(f, "Received RST_STREAM from peer"),
+            Error::IoError(e) => write!(f, "IO error: {}", e),
+            Error::TlsError(e) => write!(f, "Encountered TLS error: {}", e),
+            Error::CodeError(e) => write!(f, "Encountered HTTP named error: {}", e),
+            Error::RstStreamReceived(e) => write!(f, "Received RST_STREAM from peer: {}", e),
             Error::InvalidFrame(..) => {
                 write!(f, "Encountered an invalid or unexpected HTTP/2 frame")
             }
-            Error::CompressionError(_) => write!(f, "Encountered an error with HPACK compression"),
+            Error::CompressionError(_) => {
+                // TODO: display
+                write!(f, "Encountered an error with HPACK compression")
+            }
             Error::WindowSizeOverflow => write!(f, "The connection flow control window overflowed"),
             Error::UnknownStreamId => {
                 write!(f, "Attempted an operation with an unknown HTTP/2 stream ID")
@@ -211,13 +214,14 @@ impl fmt::Display for Error {
             Error::MalformedResponse => write!(f, "The received response was malformed"),
             Error::ConnectionTimeout => write!(f, "Connection time out"),
             Error::Shutdown => write!(f, "Local shutdown"),
-            Error::HandlerPanicked(_) => write!(f, "Handler panicked"),
+            Error::HandlerPanicked(e) => write!(f, "Handler panicked: {}", e),
+            // TODO: display
             Error::ParseFrameError(_) => write!(f, "Failed to parse frame"),
-            Error::NotImplemented(_) => write!(f, "Not implemented"),
-            Error::InternalError(_) => write!(f, "Internal error"),
+            Error::NotImplemented(e) => write!(f, "Not implemented: {}", e),
+            Error::InternalError(e) => write!(f, "Internal error: {}", e),
             Error::ClientDied(e) => write!(f, "Client died: {}", e),
             Error::DeathReasonUnknown => write!(f, "Death reason unknown"),
-            Error::ClientPanicked(_) => write!(f, "Client panicked"),
+            Error::ClientPanicked(e) => write!(f, "Client panicked: {}", e),
             Error::ClientCompletedWithoutError => write!(f, "Client completed without error"),
             Error::SendError(_) => write!(f, "Failed to write message to stream"),
             Error::CallerDied => write!(f, "Request caller died"),
