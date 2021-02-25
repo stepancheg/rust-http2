@@ -8,7 +8,6 @@ pub struct ServerHandlerContext {
 }
 
 impl ServerHandlerContext {
-    // TODO: provide access to executor if there's any
     pub fn loop_remote(&self) -> Handle {
         self.loop_handle.clone()
     }

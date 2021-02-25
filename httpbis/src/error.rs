@@ -82,9 +82,6 @@ pub enum Error {
     ClientDiedAndReconnectFailed,
     /// Client controller died.
     ClientControllerDied,
-    /// Channel died.
-    // TODO: meaningless
-    ChannelDied,
     /// Client panicked.
     ClientPanicked(String),
     /// Client completed without error.
@@ -237,7 +234,6 @@ impl fmt::Display for Error {
             ),
             Error::ClientDiedAndReconnectFailed => write!(f, "Client died and reconnect failed"),
             Error::ClientControllerDied => write!(f, "Client controller died"),
-            Error::ChannelDied => write!(f, "Channel died"),
             Error::ConnDied(e) => write!(f, "Conn died: {}", e),
             Error::EofFromStream => write!(f, "EOF from stream"),
             Error::ExpectingContinuationGot(t) => {
