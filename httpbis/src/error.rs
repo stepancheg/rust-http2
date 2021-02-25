@@ -65,9 +65,9 @@ pub enum Error {
     /// Generic internal error.
     // TODO: get rid of it
     InternalError(String),
-    /// Something is not implemented
-    // TODO: implement it
-    NotImplemented(&'static str),
+    /// Received `PUSH_PROMISE`, but we don't implement it
+    /// and explicitly ask not to send it.
+    UnexpectedPushPromise,
     /// User error
     User(String),
     /// Std error
@@ -214,7 +214,11 @@ impl fmt::Display for Error {
             Error::HandlerPanicked(e) => write!(f, "Handler panicked: {}", e),
             // TODO: display
             Error::ParseFrameError(_) => write!(f, "Failed to parse frame"),
-            Error::NotImplemented(e) => write!(f, "Not implemented: {}", e),
+            Error::UnexpectedPushPromise => write!(
+                f,
+                "Received unexpected {} frame",
+                HttpFrameType::PushPromise
+            ),
             Error::InternalError(e) => write!(f, "Internal error: {}", e),
             Error::ClientDied(e) => write!(f, "Client died: {}", e),
             Error::DeathReasonUnknown => write!(f, "Death reason unknown"),
