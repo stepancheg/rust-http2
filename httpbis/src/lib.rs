@@ -87,7 +87,6 @@ mod misc;
 mod resp;
 
 mod death;
-mod exec;
 
 mod log_ndc_future;
 
