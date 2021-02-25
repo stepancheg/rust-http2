@@ -293,10 +293,13 @@ impl ClientConn {
         let addr_struct = addr.socket_addr();
 
         let no_delay = conf.no_delay.unwrap_or(true);
-        let connect = addr.connect_with_timeout(&lh, conf.connect_timeout);
 
         let addr_copy = addr_struct.clone();
+        let lh_copy = lh.clone();
+        let connect_timeout = conf.connect_timeout;
         let connect = async move {
+            let connect = addr.connect_with_timeout(&lh_copy, connect_timeout);
+
             let socket = connect.await?;
 
             info!("connected to {}", addr_copy);

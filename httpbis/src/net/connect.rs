@@ -12,20 +12,20 @@ use crate::AnySocketAddr;
 use futures::TryFutureExt;
 
 pub trait ToClientStream: fmt::Display + Send + Sync + 'static {
-    fn connect(
-        &self,
+    fn connect<'a>(
+        &'a self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>>;
 
     fn socket_addr(&self) -> AnySocketAddr;
 }
 
 impl dyn ToClientStream {
-    pub fn connect_with_timeout(
-        &self,
+    pub fn connect_with_timeout<'a>(
+        &'a self,
         handle: &Handle,
         timeout: Option<Duration>,
-    ) -> Pin<Box<dyn Future<Output = crate::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = crate::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
         match timeout {
             Some(timeout) => {
                 let connect = self.connect(handle);
@@ -42,10 +42,10 @@ impl dyn ToClientStream {
 }
 
 impl ToClientStream for AnySocketAddr {
-    fn connect(
-        &self,
+    fn connect<'a>(
+        &'a self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
