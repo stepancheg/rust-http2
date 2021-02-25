@@ -6,7 +6,6 @@ use std::thread;
 use futures::channel::oneshot;
 use futures::future;
 use futures::future::FutureExt;
-use futures::future::TryFutureExt;
 
 use httpbis;
 use httpbis::for_test::*;
@@ -75,13 +74,12 @@ impl ServerOneConn {
 
                 let handle = lp.handle().clone();
 
-                let conn = listener.accept().map_err(httpbis::Error::from);
-
-                // TODO: close listening port
-                //drop(listener);
-
                 let future = async move {
-                    let (conn, peer_addr) = match conn.await {
+                    let conn = listener.accept().await;
+
+                    drop(listener);
+
+                    let (conn, peer_addr) = match conn {
                         Ok((conn, peer_addr)) => (conn, peer_addr),
                         Err(e) => {
                             warn!("accept failed: {}", e);
