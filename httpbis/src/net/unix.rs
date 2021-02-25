@@ -140,28 +140,23 @@ impl SocketListener for UnixListener {
 
 impl ToClientStream for SocketAddrUnix {
     #[cfg(unix)]
-    fn connect(
-        &self,
+    fn connect<'a>(
+        &'a self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
-        // TODO: async connect
-        let stream = match std::os::unix::net::UnixStream::connect(&self.0) {
-            Ok(stream) => stream,
-            Err(e) => return Box::pin(async { Err(e) }),
-        };
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
         let _g = handle.enter();
-        stream.set_nonblocking(true).unwrap();
-        match UnixStream::from_std(stream) {
-            Ok(stream) => Box::pin(async { Ok(Box::pin(stream) as Pin<Box<dyn SocketStream>>) }),
-            Err(e) => return Box::pin(async { Err(e) }),
-        }
+        Box::pin(async move {
+            let stream = UnixStream::connect(&self.0).await?;
+            let stream: Pin<Box<dyn SocketStream>> = Box::pin(stream);
+            Ok(stream)
+        })
     }
 
     #[cfg(not(unix))]
-    fn connect(
-        &self,
+    fn connect<'a>(
+        &'a self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
         use futures::future;
         Box::pin(future::err(io::Error::new(
             io::ErrorKind::Other,
