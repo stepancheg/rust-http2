@@ -1,19 +1,19 @@
+use std::future::Future;
 use std::io;
 use std::io::Read;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
 use bytes::Bytes;
 
-use std::task::Poll;
-
 use futures::stream::Stream;
-use std::future::Future;
 
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
 
-use crate::error;
-use crate::error::Error;
+use tls_api::AsyncSocket;
 
 use crate::solicit::frame::unpack_header;
 use crate::solicit::frame::FrameIR;
@@ -23,9 +23,6 @@ use crate::solicit::frame::SettingsFrame;
 use crate::solicit::frame::FRAME_HEADER_LEN;
 
 use crate::misc::BsDebug;
-use crate::net::socket::SocketStream;
-use std::pin::Pin;
-use std::task::Context;
 
 //pub type HttpFuture<T> = Pin<Box<dyn Future<Output = crate::Result<T>>>>;
 
@@ -38,7 +35,7 @@ pub fn recv_raw_frame_sync(read: &mut dyn Read, max_frame_size: u32) -> crate::R
     read.read_exact(&mut header_buf)?;
     let header = unpack_header(&header_buf);
     if header.payload_len > max_frame_size {
-        return Err(error::Error::PayloadTooLarge(
+        return Err(crate::Error::PayloadTooLarge(
             header.payload_len,
             max_frame_size,
         ));
@@ -87,7 +84,7 @@ async fn send_settings<W: AsyncWrite + Unpin + Send + 'static>(
     send_frame(conn, settings).await
 }
 
-pub async fn client_handshake<I: SocketStream>(
+pub async fn client_handshake<I: AsyncSocket>(
     conn: &mut I,
     settings: SettingsFrame,
 ) -> crate::Result<()> {
@@ -144,13 +141,13 @@ where
 
                 if count == 0 {
                     let io_error = io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected EOF");
-                    return Poll::Ready(Err(error::Error::from(io_error)));
+                    return Poll::Ready(Err(crate::Error::from(io_error)));
                 }
 
                 let c = buf[0];
 
                 if self.collected.len() == 0 && c == 0x16 {
-                    return Poll::Ready(Err(Error::InvalidFrame(format!(
+                    return Poll::Ready(Err(crate::Error::InvalidFrame(format!(
                         "wrong fitst byte, likely TLS"
                     ))));
                 }
@@ -169,7 +166,7 @@ where
                 }
 
                 if self.collected.len() == PREFACE.len() {
-                    return Poll::Ready(Err(error::Error::InvalidFrame(format!(
+                    return Poll::Ready(Err(crate::Error::InvalidFrame(format!(
                         "wrong preface, likely TLS: {:?}",
                         BsDebug(&self.collected)
                     ))));
@@ -187,7 +184,7 @@ where
     if need_500 {
         conn.write_all(HTTP_1_500_RESPONSE).await?;
 
-        return Err(error::Error::RequestIsMadeUsingHttp1);
+        return Err(crate::Error::RequestIsMadeUsingHttp1);
     }
 
     Ok(())

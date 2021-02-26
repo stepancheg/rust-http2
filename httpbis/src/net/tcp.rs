@@ -17,6 +17,7 @@ use crate::net::listen::ToTokioListener;
 use crate::net::socket::SocketStream;
 use crate::ServerConf;
 use std::pin::Pin;
+use tls_api::AsyncSocket;
 use tokio::runtime::Handle;
 
 impl ToSocketListener for SocketAddr {
@@ -126,5 +127,9 @@ impl SocketStream for TcpStream {
 
     fn peer_addr(&self) -> io::Result<AnySocketAddr> {
         Ok(AnySocketAddr::Inet(TcpStream::peer_addr(self)?))
+    }
+
+    fn into_async_socket(self: Pin<Box<Self>>) -> Pin<Box<dyn AsyncSocket>> {
+        self
     }
 }

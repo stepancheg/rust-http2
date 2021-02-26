@@ -12,11 +12,10 @@ use crate::common::types::Types;
 
 use tokio::net::TcpStream;
 
+use tls_api::AsyncSocket;
 use tls_api::TlsAcceptor;
 
 use crate::solicit_async::*;
-
-use crate::net::socket::SocketStream;
 
 use crate::common::init_where::InitWhere;
 
@@ -84,7 +83,7 @@ type ServerInner<I> = Conn<ServerTypes, I>;
 
 impl<I> ServerInner<I>
 where
-    I: SocketStream,
+    I: AsyncSocket,
 {
     fn new_stream_from_client(
         &mut self,
@@ -188,7 +187,7 @@ impl From<CommonToWriteMessage> for ServerToWriteMessage {
 
 impl<I> ConnWriteSideCustom for Conn<ServerTypes, I>
 where
-    I: SocketStream,
+    I: AsyncSocket,
 {
     type Types = ServerTypes;
 
@@ -201,7 +200,7 @@ where
 
 impl<I> ConnReadSideCustom for Conn<ServerTypes, I>
 where
-    I: SocketStream,
+    I: AsyncSocket,
 {
     type Types = ServerTypes;
 
@@ -259,7 +258,7 @@ impl ServerConn {
     ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
         F: ServerHandler,
-        I: SocketStream,
+        I: AsyncSocket,
     {
         let (future, write_tx, conn_died_error_holder) = Conn::<ServerTypes, I>::new(
             lh.clone(),
@@ -279,7 +278,7 @@ impl ServerConn {
 
     pub fn new<S, A>(
         lh: &Handle,
-        socket: Pin<Box<dyn SocketStream>>,
+        socket: Pin<Box<dyn AsyncSocket>>,
         peer_addr: AnySocketAddr,
         tls: ServerTlsOption<A>,
         conf: ServerConf,

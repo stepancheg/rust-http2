@@ -9,6 +9,7 @@ use crate::AnySocketAddr;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
 
+use tls_api::AsyncSocket;
 use tls_api::TlsConnector;
 
 use tls_api;
@@ -122,7 +123,7 @@ impl From<CommonToWriteMessage> for ClientToWriteMessage {
 
 impl<I> ConnWriteSideCustom for Conn<ClientTypes, I>
 where
-    I: SocketStream,
+    I: AsyncSocket,
 {
     type Types = ClientTypes;
 
@@ -141,7 +142,7 @@ where
 
 impl<I> Conn<ClientTypes, I>
 where
-    I: SocketStream,
+    I: AsyncSocket,
 {
     fn process_start(&mut self, start: ClientStartRequestMessage) -> crate::Result<()> {
         let ClientStartRequestMessage {
@@ -243,7 +244,7 @@ impl ClientConn {
         callbacks: C,
     ) -> Self
     where
-        I: SocketStream,
+        I: AsyncSocket,
         C: ClientConnCallbacks,
     {
         let (future, write_tx, conn_died_error_holder) = Conn::<ClientTypes, _>::new(
@@ -425,7 +426,7 @@ impl ClientInterface for ClientConn {
 
 impl<I> ConnReadSideCustom for Conn<ClientTypes, I>
 where
-    I: SocketStream,
+    I: AsyncSocket,
 {
     type Types = ClientTypes;
 

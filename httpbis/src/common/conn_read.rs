@@ -31,9 +31,9 @@ use crate::solicit_misc::HttpFrameStream;
 use crate::ErrorCode;
 use crate::Headers;
 
-use crate::net::socket::SocketStream;
 use futures::task::Context;
 use std::task::Poll;
+use tls_api::AsyncSocket;
 
 pub(crate) trait ConnReadSideCustom {
     type Types: Types;
@@ -52,7 +52,7 @@ where
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
-    I: SocketStream,
+    I: AsyncSocket,
 {
     /// Recv a frame from the network
     pub fn poll_recv_http_frame(

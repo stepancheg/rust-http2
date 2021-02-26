@@ -335,7 +335,7 @@ where
             handle.spawn({
                 let (conn, future) = ServerConn::new(
                     &handle_clone,
-                    socket,
+                    socket.into_async_socket(),
                     peer_addr,
                     tls.clone(),
                     conf.clone(),

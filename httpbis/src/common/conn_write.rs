@@ -1,3 +1,5 @@
+use std::task::Poll;
+
 use crate::common::conn::Conn;
 use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
@@ -32,8 +34,7 @@ use std::cmp;
 
 use crate::death::error_holder::ConnDiedType;
 use crate::death::oneshot::DeathAwareOneshotSender;
-use crate::net::socket::SocketStream;
-use std::task::Poll;
+use tls_api::AsyncSocket;
 
 pub(crate) trait ConnWriteSideCustom {
     type Types: Types;
@@ -50,7 +51,7 @@ where
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
-    I: SocketStream,
+    I: AsyncSocket,
 {
     fn write_part_data(&mut self, stream_id: StreamId, data: Bytes, end_stream: EndStream) {
         let max_frame_size = self.peer_settings.max_frame_size as usize;

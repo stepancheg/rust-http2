@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::common::client_or_server::ClientOrServer;
 use crate::common::conn::SideSpecific;
 use crate::common::conn_write::CommonToWriteMessage;
@@ -7,12 +10,10 @@ use crate::common::stream::HttpStreamDataSpecific;
 use crate::common::stream_handler::StreamHandlerInternal;
 use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
-use crate::net::socket::SocketStream;
 use crate::req_resp::RequestOrResponse;
 use crate::solicit::frame::SettingsFrame;
 use crate::solicit::stream_id::StreamId;
-use std::future::Future;
-use std::pin::Pin;
+use tls_api::AsyncSocket;
 
 /// Client or server type names for connection and stream
 // Note `Default` and `Clone` are needed only for derive to work
@@ -42,7 +43,7 @@ pub(crate) trait Types: Default + Clone + Unpin + 'static {
         }
     }
 
-    fn handshake<'a, I: SocketStream>(
+    fn handshake<'a, I: AsyncSocket>(
         conn: &'a mut I,
         settings_frame: SettingsFrame,
     ) -> Pin<Box<dyn Future<Output = crate::Result<()>> + Send + 'a>>;

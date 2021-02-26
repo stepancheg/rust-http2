@@ -49,10 +49,10 @@ use futures::stream::Stream;
 use futures::task::Context;
 
 use crate::death::oneshot::DeathAwareOneshotSender;
-use crate::net::socket::SocketStream;
 use std::mem;
 use std::sync::Arc;
 use std::task::Poll;
+use tls_api::AsyncSocket;
 use tokio::io::split;
 use tokio::io::ReadHalf;
 use tokio::io::WriteHalf;
@@ -62,7 +62,7 @@ use tokio::runtime::Handle;
 pub trait SideSpecific: Send + 'static {}
 
 /// HTTP/2 connection state with socket and streams
-pub(crate) struct Conn<T: Types, I: SocketStream> {
+pub(crate) struct Conn<T: Types, I: AsyncSocket> {
     pub peer_addr: AnySocketAddr,
 
     pub conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
@@ -110,7 +110,7 @@ pub(crate) struct Conn<T: Types, I: SocketStream> {
 impl<T, I> Drop for Conn<T, I>
 where
     T: Types,
-    I: SocketStream,
+    I: AsyncSocket,
 {
     fn drop(&mut self) {
         mem::take(&mut self.streams).conn_died(|| self.conn_died_error_holder.error());
@@ -150,7 +150,7 @@ where
     Self: ConnReadSideCustom<Types = T>,
     Self: ConnWriteSideCustom<Types = T>,
     HttpStreamCommon<T>: HttpStreamData<Types = T>,
-    I: SocketStream,
+    I: AsyncSocket,
 {
     async fn init(
         loop_handle: Handle,

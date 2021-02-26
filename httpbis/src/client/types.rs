@@ -5,12 +5,12 @@ use crate::client::conn::ClientToWriteMessage;
 use crate::client::handler::ClientResponseStreamHandlerHolder;
 use crate::common::client_or_server::ClientOrServer;
 use crate::common::types::Types;
-use crate::net::socket::SocketStream;
 use crate::req_resp::RequestOrResponse;
 use crate::solicit::frame::SettingsFrame;
 use crate::solicit_async::client_handshake;
 use std::future::Future;
 use std::pin::Pin;
+use tls_api::AsyncSocket;
 
 #[derive(Clone, Default)]
 pub struct ClientTypes;
@@ -27,7 +27,7 @@ impl Types for ClientTypes {
     const OUT_REQUEST_OR_RESPONSE: RequestOrResponse = RequestOrResponse::Request;
     const CONN_NDC: &'static str = "client conn";
 
-    fn handshake<'a, I: SocketStream>(
+    fn handshake<'a, I: AsyncSocket>(
         conn: &'a mut I,
         settings_frame: SettingsFrame,
     ) -> Pin<Box<dyn Future<Output = crate::Result<()>> + Send + 'a>> {

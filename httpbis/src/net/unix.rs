@@ -19,6 +19,7 @@ use crate::ServerConf;
 use std::fmt;
 use std::path::PathBuf;
 use std::pin::Pin;
+use tls_api::AsyncSocket;
 use tokio::runtime::Handle;
 
 /// Unix socket address, which is filesystem path.
@@ -193,6 +194,10 @@ impl SocketStream for UnixStream {
 
     fn peer_addr(&self) -> io::Result<AnySocketAddr> {
         Ok(AnySocketAddr::from(UnixStream::peer_addr(self)?))
+    }
+
+    fn into_async_socket(self: Pin<Box<Self>>) -> Pin<Box<dyn AsyncSocket>> {
+        self
     }
 }
 
