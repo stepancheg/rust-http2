@@ -22,8 +22,6 @@ pub trait ToClientStream: fmt::Display + Send + Sync + 'static {
                 + 'a,
         >,
     >;
-
-    fn socket_addr(&self) -> AnySocketAddr;
 }
 
 impl dyn ToClientStream {
@@ -68,9 +66,5 @@ impl ToClientStream for AnySocketAddr {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),
         }
-    }
-
-    fn socket_addr(&self) -> AnySocketAddr {
-        self.clone()
     }
 }

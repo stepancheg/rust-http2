@@ -113,10 +113,6 @@ impl ToClientStream for SocketAddr {
         });
         Box::pin(future)
     }
-
-    fn socket_addr(&self) -> AnySocketAddr {
-        AnySocketAddr::Inet(*self)
-    }
 }
 
 impl SocketStream for TcpStream {

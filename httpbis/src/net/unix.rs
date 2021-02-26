@@ -176,10 +176,6 @@ impl ToClientStream for SocketAddrUnix {
             "cannot use unix sockets on non-unix",
         )))
     }
-
-    fn socket_addr(&self) -> AnySocketAddr {
-        AnySocketAddr::Unix(self.clone())
-    }
 }
 
 #[cfg(unix)]
