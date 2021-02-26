@@ -313,11 +313,7 @@ impl Client {
             }
         }
 
-        if let Err(e) =
-            self.start_request_low_level(headers, body, trailers, end_stream, Box::new(Impl { tx }))
-        {
-            return Box::pin(future::err(e));
-        }
+        self.start_request_low_level(headers, body, trailers, end_stream, Box::new(Impl { tx }));
 
         let client_error = self.client_died_error_holder.clone();
         let resp_rx = rx.then(move |r| match r {
@@ -415,7 +411,7 @@ pub trait ClientInterface {
         trailers: Option<Headers>,
         end_stream: bool,
         stream_handler: Box<dyn ClientStreamCreatedHandler>,
-    ) -> result::Result<()>;
+    );
 }
 
 impl ClientInterface for Client {
@@ -426,7 +422,7 @@ impl ClientInterface for Client {
         trailers: Option<Headers>,
         end_stream: bool,
         stream_handler: Box<dyn ClientStreamCreatedHandler>,
-    ) -> result::Result<()> {
+    ) {
         let start = StartRequestMessage {
             headers,
             body,
@@ -436,7 +432,7 @@ impl ClientInterface for Client {
         };
 
         self.controller_tx
-            .unbounded_send(ControllerCommand::StartRequest(start))
+            .unbounded_send_no_result(ControllerCommand::StartRequest(start))
     }
 }
 

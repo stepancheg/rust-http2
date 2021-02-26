@@ -413,7 +413,7 @@ impl ClientInterface for ClientConn {
         trailers: Option<Headers>,
         end_stream: bool,
         stream_handler: Box<dyn ClientStreamCreatedHandler>,
-    ) -> result::Result<()> {
+    ) {
         let start = StartRequestMessage {
             headers,
             body,
@@ -422,11 +422,9 @@ impl ClientInterface for ClientConn {
             stream_handler,
         };
 
-        if let Err((_, e)) = self.start_request_with_resp_sender(start) {
-            return Err(e);
+        if let Err((start, e)) = self.start_request_with_resp_sender(start) {
+            start.stream_handler.error(e);
         }
-
-        Ok(())
     }
 }
 

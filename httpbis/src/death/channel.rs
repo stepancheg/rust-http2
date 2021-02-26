@@ -53,6 +53,14 @@ impl<T: ErrorAwareDrop> DeathAwareSender<T> {
     pub fn unbounded_send(&self, msg: T) -> crate::Result<()> {
         self.unbounded_send_recover(msg).map_err(|(_, e)| e)
     }
+
+    /// Send a message, but call `ErrorAwareDrop` on error.
+    pub fn unbounded_send_no_result(&self, msg: T) {
+        match self.unbounded_send_recover(msg) {
+            Ok(()) => {}
+            Err((msg, e)) => msg.drop_with_error(e),
+        }
+    }
 }
 
 impl<T: ErrorAwareDrop> Stream for DeathAwareReceiver<T> {
