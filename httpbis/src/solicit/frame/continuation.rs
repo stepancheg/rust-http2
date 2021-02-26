@@ -38,7 +38,7 @@ impl Flag for ContinuationFlag {
 /// frame is on the same stream and is a HEADERS, PUSH_PROMISE, or CONTINUATION frame without
 /// the END_HEADERS flag set.
 ///
-/// https://http2.github.io/http2-spec/#CONTINUATION
+/// [Spec](https://http2.github.io/http2-spec/#CONTINUATION).
 #[derive(PartialEq, Clone, Debug)]
 pub struct ContinuationFrame {
     /// The set of flags for the frame, packed into a single byte.
@@ -54,7 +54,7 @@ impl ContinuationFrame {
     pub fn new(fragment: Bytes, stream_id: StreamId) -> ContinuationFrame {
         ContinuationFrame {
             header_fragment: fragment,
-            stream_id: stream_id,
+            stream_id,
             flags: Flags::default(),
         }
     }

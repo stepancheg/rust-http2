@@ -14,6 +14,7 @@ extern crate log;
 
 pub use bytes_ext::buf_get_bytes::BufGetBytes;
 pub use bytes_ext::bytes_deque::BytesDeque;
+pub use client::resp_future::ClientResponseFuture;
 
 pub use crate::client::conf::ClientConf;
 pub use crate::client::req::ClientRequest;
@@ -29,7 +30,6 @@ pub use crate::data_or_trailers::HttpStreamAfterHeaders;
 pub use crate::error::Error;
 pub use crate::message::SimpleHttpMessage;
 pub use crate::net::addr::AnySocketAddr;
-pub use crate::resp::Response;
 pub use crate::result::Result;
 pub use crate::server::conf::ServerAlpn;
 pub use crate::server::conf::ServerConf;
@@ -83,8 +83,6 @@ mod solicit_misc;
 
 mod display_comma_separated;
 mod misc;
-
-mod resp;
 
 mod death;
 

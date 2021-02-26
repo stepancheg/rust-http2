@@ -6,7 +6,7 @@ use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
 use crate::death::channel::DeathAwareSender;
-use crate::Response;
+use crate::ClientResponseFuture;
 use crate::StreamId;
 
 pub struct ClientResponse<'a> {
@@ -17,7 +17,7 @@ pub struct ClientResponse<'a> {
 }
 
 impl<'a> ClientResponse<'a> {
-    pub fn make_stream(self) -> Response {
+    pub fn into_stream(self) -> ClientResponseFuture {
         self.register_stream_handler(|increase_in_window| {
             let (inc_tx, inc_rx) = stream_queue_sync();
             let stream_from_network = StreamFromNetwork {
@@ -25,11 +25,14 @@ impl<'a> ClientResponse<'a> {
                 increase_in_window: increase_in_window.0,
             };
 
-            (inc_tx, Response::from_stream(stream_from_network))
+            (
+                inc_tx,
+                ClientResponseFuture::from_stream(stream_from_network),
+            )
         })
     }
 
-    /// Register synchnous stream handler (callback will be called immediately
+    /// Register synchronous stream handler (callback will be called immediately
     /// when new data arrives). Note that increasing in window size is the handler
     /// responsibility.
     pub fn register_stream_handler<F, H, R>(self, f: F) -> R

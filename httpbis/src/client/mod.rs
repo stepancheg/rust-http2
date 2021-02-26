@@ -1,71 +1,61 @@
-pub(crate) mod conf;
-pub(crate) mod conn;
-pub(crate) mod increase_in_window;
-pub(crate) mod req;
-pub(crate) mod resp;
-pub(crate) mod stream_handler;
-pub(crate) mod tls;
-pub(crate) mod types;
-
+use std::fmt;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::thread;
 
 use bytes::Bytes;
-
 use futures::channel::oneshot;
 use futures::future;
 use futures::future::FutureExt;
 use futures::future::TryFutureExt;
 use futures::stream::StreamExt;
-
 use tls_api::TlsConnector;
 use tls_api::TlsConnectorBuilder;
 use tls_api_stub;
-
-use crate::futures_misc::*;
-
-use crate::error;
-use crate::error::Error;
-use crate::result::Result;
-
-use crate::solicit::header::*;
-use crate::solicit::HttpScheme;
-
-use crate::solicit_async::*;
-
-use crate::net::addr::AnySocketAddr;
-use crate::net::connect::ToClientStream;
+use tokio::runtime::Handle;
+use tokio::runtime::Runtime;
 
 use crate::client::conf::ClientConf;
 use crate::client::conn::ClientConn;
 use crate::client::conn::ClientConnCallbacks;
 use crate::client::conn::StartRequestMessage;
-
 use crate::client::req::ClientRequest;
-
+use crate::client::resp::ClientResponse;
 use crate::client::stream_handler::ClientStreamCreatedHandler;
 pub use crate::client::tls::ClientTlsOption;
-
 use crate::common::conn::ConnStateSnapshot;
-use crate::death::error_holder::ClientDiedType;
-use crate::death::error_holder::SomethingDiedErrorHolder;
-
-use crate::client::resp::ClientResponse;
 use crate::death::channel::death_aware_channel;
 use crate::death::channel::DeathAwareReceiver;
 use crate::death::channel::DeathAwareSender;
 use crate::death::channel::ErrorAwareDrop;
+use crate::death::error_holder::ClientDiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::death::oneshot::death_aware_oneshot;
 use crate::death::oneshot::DeathAwareOneshotSender;
+use crate::error;
+use crate::error::Error;
+use crate::futures_misc::*;
+use crate::net::addr::AnySocketAddr;
+use crate::net::connect::ToClientStream;
 use crate::net::unix::SocketAddrUnix;
 use crate::result;
+use crate::result::Result;
+use crate::solicit::header::*;
 use crate::solicit::stream_id::StreamId;
-use crate::Response;
-use std::fmt;
-use tokio::runtime::Handle;
-use tokio::runtime::Runtime;
+use crate::solicit::HttpScheme;
+use crate::solicit_async::*;
+use crate::ClientResponseFuture;
+
+pub(crate) mod conf;
+pub(crate) mod conn;
+pub(crate) mod increase_in_window;
+pub(crate) mod req;
+pub(crate) mod resp;
+pub mod resp_future;
+pub(crate) mod stream_handler;
+pub(crate) mod tls;
+pub(crate) mod types;
 
 /// Builder for HTTP/2 client.
 ///
@@ -298,11 +288,11 @@ impl Client {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-    ) -> HttpFutureSend<(ClientRequest, Response)> {
+    ) -> HttpFutureSend<(ClientRequest, ClientResponseFuture)> {
         let (tx, rx) = oneshot::channel();
 
         struct Impl {
-            tx: oneshot::Sender<crate::Result<(ClientRequest, Response)>>,
+            tx: oneshot::Sender<crate::Result<(ClientRequest, ClientResponseFuture)>>,
         }
 
         impl ClientStreamCreatedHandler for Impl {
@@ -311,7 +301,7 @@ impl Client {
                 req: ClientRequest,
                 resp: ClientResponse,
             ) -> result::Result<()> {
-                if let Err(_) = self.tx.send(Ok((req, resp.make_stream()))) {
+                if let Err(_) = self.tx.send(Ok((req, resp.into_stream()))) {
                     return Err(error::Error::CallerDied);
                 }
 
@@ -344,15 +334,15 @@ impl Client {
         headers: Headers,
         body: Option<Bytes>,
         trailers: Option<Headers>,
-    ) -> Response {
-        Response::new(
+    ) -> ClientResponseFuture {
+        ClientResponseFuture::new(
             self.start_request(headers, body, trailers, true)
                 .and_then(move |(_sender, response)| response),
         )
     }
 
     /// Start HTTP/2 `GET` request.
-    pub fn start_get(&self, path: &str, authority: &str) -> Response {
+    pub fn start_get(&self, path: &str, authority: &str) -> ClientResponseFuture {
         let headers = Headers::from_vec(vec![
             Header::new(":method", "GET"),
             Header::new(":path", path.to_owned()),
@@ -363,7 +353,7 @@ impl Client {
     }
 
     /// Start HTTP/2 `POST` request.
-    pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> Response {
+    pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture {
         let headers = Headers::from_vec(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path.to_owned()),
@@ -377,7 +367,7 @@ impl Client {
         &self,
         path: &str,
         authority: &str,
-    ) -> HttpFutureSend<(ClientRequest, Response)> {
+    ) -> HttpFutureSend<(ClientRequest, ClientResponseFuture)> {
         let headers = Headers::from_vec(vec![
             Header::new(":method", "POST"),
             Header::new(":path", path.to_owned()),

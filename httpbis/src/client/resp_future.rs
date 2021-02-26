@@ -24,62 +24,68 @@ use std::pin::Pin;
 use std::task::Poll;
 
 /// Convenient wrapper around async HTTP response future/stream
-pub struct Response(pub HttpFutureSend<(Headers, HttpStreamAfterHeaders)>);
+pub struct ClientResponseFuture(pub HttpFutureSend<(Headers, HttpStreamAfterHeaders)>);
 
-impl Response {
+impl ClientResponseFuture {
     // constructors
 
-    pub fn new<F>(future: F) -> Response
+    pub fn new<F>(future: F) -> ClientResponseFuture
     where
         F: Future<Output = result::Result<(Headers, HttpStreamAfterHeaders)>> + Send + 'static,
     {
-        Response(Box::pin(future))
+        ClientResponseFuture(Box::pin(future))
     }
 
-    pub fn headers_and_stream(headers: Headers, stream: HttpStreamAfterHeaders) -> Response {
-        Response::new(future::ok((headers, stream)))
+    pub fn headers_and_stream(
+        headers: Headers,
+        stream: HttpStreamAfterHeaders,
+    ) -> ClientResponseFuture {
+        ClientResponseFuture::new(future::ok((headers, stream)))
     }
 
-    pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> Response
+    pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> ClientResponseFuture
     where
         S: Stream<Item = result::Result<Bytes>> + Send + 'static,
     {
-        Response::headers_and_stream(headers, HttpStreamAfterHeaders::bytes(content))
+        ClientResponseFuture::headers_and_stream(headers, HttpStreamAfterHeaders::bytes(content))
     }
 
     /// Create a response with only headers
-    pub fn headers(headers: Headers) -> Response {
-        Response::headers_and_bytes_stream(headers, stream::empty())
+    pub fn headers(headers: Headers) -> ClientResponseFuture {
+        ClientResponseFuture::headers_and_bytes_stream(headers, stream::empty())
     }
 
     /// Create a response with headers and response body
-    pub fn headers_and_bytes<B: Into<Bytes>>(header: Headers, content: B) -> Response {
-        Response::headers_and_bytes_stream(header, stream::once(future::ok(content.into())))
+    pub fn headers_and_bytes<B: Into<Bytes>>(header: Headers, content: B) -> ClientResponseFuture {
+        ClientResponseFuture::headers_and_bytes_stream(
+            header,
+            stream::once(future::ok(content.into())),
+        )
     }
 
-    pub fn message(message: SimpleHttpMessage) -> Response {
-        Response::headers_and_bytes(message.headers, message.body)
+    pub fn message(message: SimpleHttpMessage) -> ClientResponseFuture {
+        ClientResponseFuture::headers_and_bytes(message.headers, message.body)
     }
 
-    pub fn found_200_plain_text(body: &str) -> Response {
-        Response::message(SimpleHttpMessage::found_200_plain_text(body))
+    pub fn found_200_plain_text(body: &str) -> ClientResponseFuture {
+        ClientResponseFuture::message(SimpleHttpMessage::found_200_plain_text(body))
     }
 
-    pub fn not_found_404() -> Response {
-        Response::headers(Headers::not_found_404())
+    pub fn not_found_404() -> ClientResponseFuture {
+        ClientResponseFuture::headers(Headers::not_found_404())
     }
 
-    pub fn redirect_302(location: &str) -> Response {
+    pub fn redirect_302(location: &str) -> ClientResponseFuture {
         let mut headers = Headers::new_status(302);
         headers.add("location", location);
-        Response::headers(headers)
+        ClientResponseFuture::headers(headers)
     }
 
-    pub fn from_stream<S>(mut stream: S) -> Response
+    pub fn from_stream<S>(mut stream: S) -> ClientResponseFuture
     where
         S: Stream<Item = result::Result<DataOrHeadersWithFlag>> + Unpin + Send + 'static,
     {
-        Response::new(async move {
+        ClientResponseFuture::new(async move {
             // Check that first frame is HEADERS
             let (first, rem) = match stream.try_next().await? {
                 Some(part) => match part.content {
@@ -100,8 +106,8 @@ impl Response {
         })
     }
 
-    pub fn err(err: error::Error) -> Response {
-        Response::new(future::err(err))
+    pub fn err(err: error::Error) -> ClientResponseFuture {
+        ClientResponseFuture::new(future::err(err))
     }
 
     // getters
@@ -140,7 +146,7 @@ impl Response {
     }
 }
 
-impl Future for Response {
+impl Future for ClientResponseFuture {
     type Output = result::Result<(Headers, HttpStreamAfterHeaders)>;
 
     fn poll(
