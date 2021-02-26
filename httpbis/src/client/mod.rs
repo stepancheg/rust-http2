@@ -46,6 +46,7 @@ use crate::solicit::stream_id::StreamId;
 use crate::solicit::HttpScheme;
 use crate::solicit_async::*;
 use crate::ClientResponseFuture;
+use crate::PseudoHeaderName;
 
 pub(crate) mod conf;
 pub(crate) mod conn;
@@ -340,10 +341,10 @@ impl Client {
     /// Start HTTP/2 `GET` request.
     pub fn start_get(&self, path: &str, authority: &str) -> ClientResponseFuture {
         let headers = Headers::from_vec(vec![
-            Header::new(":method", "GET"),
-            Header::new(":path", path.to_owned()),
-            Header::new(":authority", authority.to_owned()),
-            Header::new(":scheme", self.http_scheme.as_bytes()),
+            Header::new(PseudoHeaderName::Method, "GET"),
+            Header::new(PseudoHeaderName::Path, path.to_owned()),
+            Header::new(PseudoHeaderName::Authority, authority.to_owned()),
+            Header::new(PseudoHeaderName::Scheme, self.http_scheme.as_bytes()),
         ]);
         self.start_request_end_stream(headers, None, None)
     }
@@ -351,10 +352,10 @@ impl Client {
     /// Start HTTP/2 `POST` request.
     pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture {
         let headers = Headers::from_vec(vec![
-            Header::new(":method", "POST"),
-            Header::new(":path", path.to_owned()),
-            Header::new(":authority", authority.to_owned()),
-            Header::new(":scheme", self.http_scheme.as_bytes()),
+            Header::new(PseudoHeaderName::Method, "POST"),
+            Header::new(PseudoHeaderName::Path, path.to_owned()),
+            Header::new(PseudoHeaderName::Authority, authority.to_owned()),
+            Header::new(PseudoHeaderName::Scheme, self.http_scheme.as_bytes()),
         ]);
         self.start_request_end_stream(headers, Some(body), None)
     }
@@ -365,10 +366,10 @@ impl Client {
         authority: &str,
     ) -> HttpFutureSend<(ClientRequest, ClientResponseFuture)> {
         let headers = Headers::from_vec(vec![
-            Header::new(":method", "POST"),
-            Header::new(":path", path.to_owned()),
-            Header::new(":authority", authority.to_owned()),
-            Header::new(":scheme", self.http_scheme.as_bytes()),
+            Header::new(PseudoHeaderName::Method, "POST"),
+            Header::new(PseudoHeaderName::Path, path.to_owned()),
+            Header::new(PseudoHeaderName::Authority, authority.to_owned()),
+            Header::new(PseudoHeaderName::Scheme, self.http_scheme.as_bytes()),
         ]);
         self.start_request(headers, None, None, false)
     }
