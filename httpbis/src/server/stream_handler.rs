@@ -12,11 +12,11 @@ pub trait ServerRequestStreamHandler: Send + 'static {
     /// Trailers HEADERS received
     fn trailers(&mut self, trailers: Headers) -> result::Result<()>;
     /// RST_STREAM frame received
-    fn rst(&mut self, error_code: ErrorCode) -> result::Result<()> {
+    fn rst(self: Box<Self>, error_code: ErrorCode) -> result::Result<()> {
         self.error(error::Error::CodeError(error_code))
     }
     /// Any other error
-    fn error(&mut self, error: error::Error) -> result::Result<()>;
+    fn error(self: Box<Self>, error: error::Error) -> result::Result<()>;
 }
 
 pub(crate) struct ServerRequestStreamHandlerHolder(pub(crate) Box<dyn ServerRequestStreamHandler>);
@@ -30,11 +30,11 @@ impl StreamHandlerInternal for ServerRequestStreamHandlerHolder {
         self.0.trailers(trailers)
     }
 
-    fn rst(mut self, error_code: ErrorCode) -> result::Result<()> {
+    fn rst(self, error_code: ErrorCode) -> result::Result<()> {
         self.0.rst(error_code)
     }
 
-    fn error(mut self, error: error::Error) -> result::Result<()> {
+    fn error(self, error: error::Error) -> result::Result<()> {
         self.0.error(error)
     }
 }
