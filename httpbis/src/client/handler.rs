@@ -19,7 +19,7 @@ pub trait ClientHandler: Send + 'static {
     fn error(self: Box<Self>, error: crate::Error);
 }
 
-/// Synchrnous callback of incoming data
+/// Synchronous callback of incoming data
 pub trait ClientResponseStreamHandler: Send + 'static {
     /// Response HEADERS frame received
     fn headers(&mut self, headers: Headers, end_stream: bool) -> crate::Result<()>;
