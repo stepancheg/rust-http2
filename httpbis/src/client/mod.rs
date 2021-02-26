@@ -435,15 +435,8 @@ impl ClientInterface for Client {
             stream_handler,
         };
 
-        if let Err(_) = self
-            .controller_tx
+        self.controller_tx
             .unbounded_send(ControllerCommand::StartRequest(start))
-        {
-            // TODO: cause
-            return Err(error::Error::ClientControllerDied);
-        }
-
-        Ok(())
     }
 }
 
