@@ -236,8 +236,13 @@ pub trait ClientConnCallbacks: Send + 'static {
 impl ClientConn {
     fn spawn_connected<I, C>(
         lh: Handle,
-        connect: impl Future<Output = crate::Result<I>> + Send + 'static,
-        peer_addr: AnySocketAddr,
+        connect: impl Future<
+                Output = crate::Result<(
+                    AnySocketAddr,
+                    impl Future<Output = crate::Result<I>> + Send + 'static,
+                )>,
+            > + Send
+            + 'static,
         conf: ClientConf,
         callbacks: C,
     ) -> Self
@@ -251,8 +256,7 @@ impl ClientConn {
                 _callbacks: Box::new(callbacks),
             },
             conf.common,
-            // TODO
-            future::ok((peer_addr, connect)),
+            connect,
         );
 
         lh.spawn(future);
@@ -312,7 +316,8 @@ impl ClientConn {
             Ok(socket)
         };
 
-        ClientConn::spawn_connected(lh, connect, addr_struct, conf, callbacks)
+        // TODO
+        ClientConn::spawn_connected(lh, future::ok((addr_struct, connect)), conf, callbacks)
     }
 
     pub fn spawn_tls<H, C>(
@@ -346,7 +351,8 @@ impl ClientConn {
                 .map_err(crate::Error::from)
         };
 
-        ClientConn::spawn_connected(lh, tls_conn, addr_struct, conf, callbacks)
+        // TODO
+        ClientConn::spawn_connected(lh, future::ok((addr_struct, tls_conn)), conf, callbacks)
     }
 
     pub(crate) fn start_request_with_resp_sender(
