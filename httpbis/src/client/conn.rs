@@ -34,7 +34,7 @@ use crate::death::channel::DeathAwareSender;
 use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
-use crate::headers_place::HeadersPlace;
+use crate::headers_place::ClientHeadersPlace;
 use crate::net::connect::ToClientStream;
 use crate::net::socket::SocketStream;
 use crate::req_resp::RequestOrResponse;
@@ -450,8 +450,31 @@ where
             .in_message_stage;
 
         let headers_place = match in_message_stage {
-            InMessageStage::Initial => HeadersPlace::Initial,
-            InMessageStage::AfterInitialHeaders => HeadersPlace::Trailing,
+            InMessageStage::Initial => {
+                // TODO: handle error
+                let status = headers.status();
+
+                let status_1xx = status >= 100 && status <= 199;
+
+                match (status_1xx, end_stream) {
+                    (true, EndStream::Yes) => {
+                        warn!("1xx headers and end stream: {}", stream_id);
+                        self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                        return Ok(None);
+                    }
+                    (true, EndStream::No) => ClientHeadersPlace::Initial1Xx,
+                    (false, EndStream::Yes) => ClientHeadersPlace::InitialEndOfStream,
+                    (false, EndStream::No) => ClientHeadersPlace::Initial,
+                }
+            }
+            InMessageStage::AfterInitialHeaders => {
+                if end_stream == EndStream::No {
+                    warn!("headers without end stream after data: {}", stream_id);
+                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
+                    return Ok(None);
+                }
+                ClientHeadersPlace::Trailing
+            }
             InMessageStage::AfterTrailingHeaders => {
                 return Err(crate::Error::InternalError(format!(
                     "closed stream must be handled before"
@@ -459,43 +482,25 @@ where
             }
         };
 
-        if let Err(e) = headers.validate(RequestOrResponse::Response, headers_place) {
+        if let Err(e) = headers.validate(
+            RequestOrResponse::Response,
+            headers_place.to_headers_place(),
+        ) {
             warn!("invalid headers: {:?}: {:?}", e, headers);
             self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
             return Ok(None);
         }
-
-        let status_1xx = match headers_place {
-            HeadersPlace::Initial => {
-                let status = headers.status();
-
-                let status_1xx = status >= 100 && status <= 199;
-                if status_1xx && end_stream == EndStream::Yes {
-                    warn!("1xx headers and end stream: {}", stream_id);
-                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-                    return Ok(None);
-                }
-                status_1xx
-            }
-            HeadersPlace::Trailing => {
-                if end_stream == EndStream::No {
-                    warn!("headers without end stream after data: {}", stream_id);
-                    self.send_rst_stream(stream_id, ErrorCode::ProtocolError)?;
-                    return Ok(None);
-                }
-                false
-            }
-        };
 
         let mut stream = self.streams.get_mut(stream_id).unwrap();
         if let Some(in_rem_content_length) = headers.content_length() {
             stream.stream().in_rem_content_length = Some(in_rem_content_length);
         }
 
-        stream.stream().in_message_stage = match (headers_place, status_1xx) {
-            (HeadersPlace::Initial, false) => InMessageStage::AfterInitialHeaders,
-            (HeadersPlace::Initial, true) => InMessageStage::Initial,
-            (HeadersPlace::Trailing, _) => InMessageStage::AfterTrailingHeaders,
+        stream.stream().in_message_stage = match headers_place {
+            ClientHeadersPlace::Initial1Xx => InMessageStage::Initial,
+            ClientHeadersPlace::Initial => InMessageStage::AfterInitialHeaders,
+            ClientHeadersPlace::InitialEndOfStream => InMessageStage::AfterTrailingHeaders,
+            ClientHeadersPlace::Trailing => InMessageStage::AfterTrailingHeaders,
         };
 
         // Ignore 1xx headers:
@@ -506,23 +511,22 @@ where
         //        by zero or more CONTINUATION frames) containing the message
         //        headers of informational (1xx) HTTP responses (see [RFC7230],
         //        Section 3.2 and [RFC7231], Section 6.2),
-        if !status_1xx {
-            // TODO: reset stream on error
-            match (headers_place, end_stream) {
-                (HeadersPlace::Initial, EndStream::No) => {
-                    if let Some(ref mut response_handler) = stream.stream().peer_tx {
-                        let _ = response_handler.0.headers(headers, false);
-                    }
+        // TODO: reset stream on error
+        match headers_place {
+            ClientHeadersPlace::Initial1Xx => {}
+            ClientHeadersPlace::Initial => {
+                if let Some(ref mut response_handler) = stream.stream().peer_tx {
+                    let _ = response_handler.0.headers(headers, false);
                 }
-                (HeadersPlace::Initial, EndStream::Yes) => {
-                    if let Some(mut response_handler) = stream.stream().peer_tx.take() {
-                        let _ = response_handler.0.headers(headers, true);
-                    }
+            }
+            ClientHeadersPlace::InitialEndOfStream => {
+                if let Some(mut response_handler) = stream.stream().peer_tx.take() {
+                    let _ = response_handler.0.headers(headers, true);
                 }
-                (HeadersPlace::Trailing, _end_stream) => {
-                    if let Some(mut response_handler) = stream.stream().peer_tx.take() {
-                        let _ = response_handler.0.trailers(headers);
-                    }
+            }
+            ClientHeadersPlace::Trailing => {
+                if let Some(mut response_handler) = stream.stream().peer_tx.take() {
+                    let _ = response_handler.0.trailers(headers);
                 }
             }
         }

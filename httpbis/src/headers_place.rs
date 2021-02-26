@@ -8,3 +8,22 @@ pub enum HeadersPlace {
     Initial,
     Trailing,
 }
+
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+pub enum ClientHeadersPlace {
+    Initial1Xx,
+    Initial,
+    InitialEndOfStream,
+    Trailing,
+}
+
+impl ClientHeadersPlace {
+    pub fn to_headers_place(&self) -> HeadersPlace {
+        match self {
+            ClientHeadersPlace::Initial1Xx => HeadersPlace::Initial,
+            ClientHeadersPlace::Initial => HeadersPlace::Initial,
+            ClientHeadersPlace::InitialEndOfStream => HeadersPlace::Initial,
+            ClientHeadersPlace::Trailing => HeadersPlace::Trailing,
+        }
+    }
+}
