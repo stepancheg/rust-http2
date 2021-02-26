@@ -42,7 +42,7 @@ impl<'a> ServerRequest<'a> {
         }
     }
 
-    /// Register synchnous stream handler (callback will be called immediately
+    /// Register synchronous stream handler (callback will be called immediately
     /// when new data arrives). Note that increasing in window size is the handler
     /// responsibility.
     pub fn register_stream_handler<F, H, R>(self, f: F) -> R
