@@ -52,7 +52,7 @@ impl ServerRequestStreamHandler for StreamQueueSyncSender<ServerTypes> {
         }))
     }
 
-    fn trailers(&mut self, trailers: Headers) -> crate::Result<()> {
+    fn trailers(self: Box<Self>, trailers: Headers) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(trailers),
             last: true,
@@ -83,7 +83,7 @@ impl ClientResponseStreamHandler for StreamQueueSyncSender<ClientTypes> {
         }))
     }
 
-    fn trailers(&mut self, trailers: Headers) -> crate::Result<()> {
+    fn trailers(self: Box<Self>, trailers: Headers) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(trailers),
             last: true,

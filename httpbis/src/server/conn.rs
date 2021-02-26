@@ -63,7 +63,7 @@ pub(crate) type ServerStream = HttpStreamCommon<ServerTypes>;
 
 impl ServerStream {
     fn trailers_recvd(&mut self, headers: Headers) {
-        if let Some(ref mut sender) = self.peer_tx {
+        if let Some(sender) = self.peer_tx.take() {
             // TODO: reset on error
             sender.trailers(headers).ok();
         }
