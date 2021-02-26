@@ -273,7 +273,6 @@ impl ServerConn {
             lh.clone(),
             ServerConnData { factory: service },
             conf.common,
-            // TODO
             future::ok((peer_addr, socket)),
         );
 
