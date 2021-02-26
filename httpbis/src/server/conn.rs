@@ -305,8 +305,11 @@ impl ServerConn {
                 (conn, f)
             }
             ServerTlsOption::Tls(acceptor) => {
-                let socket: HttpFutureSend<_> =
-                    Box::pin(async move { Ok(acceptor.accept_with_socket(socket).await?) });
+                let socket: HttpFutureSend<_> = Box::pin(async move {
+                    let tls_stream = acceptor.accept_with_socket(socket).await?;
+                    debug!("TLS handshake done");
+                    Ok(tls_stream)
+                });
                 let (conn, f) = ServerConn::connected(lh, socket, peer_addr, conf, service);
                 let f: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(f);
                 (conn, Box::pin(f))

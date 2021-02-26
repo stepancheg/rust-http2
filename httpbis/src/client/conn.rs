@@ -55,6 +55,7 @@ use crate::client::resp::ClientResponse;
 use crate::death::oneshot::death_aware_oneshot;
 use crate::death::oneshot::DeathAwareOneshotSender;
 use futures::future;
+use futures::TryFutureExt;
 use std::future::Future;
 use tokio::runtime::Handle;
 
@@ -295,8 +296,6 @@ impl ClientConn {
     where
         C: ClientConnCallbacks,
     {
-        let addr_struct = addr.socket_addr();
-
         let no_delay = conf.no_delay.unwrap_or(true);
 
         let lh_copy = lh.clone();
@@ -312,11 +311,10 @@ impl ClientConn {
                 socket.set_tcp_nodelay(no_delay)?;
             }
 
-            Ok(socket)
+            Ok((peer_addr, future::ok(socket)))
         };
 
-        // TODO
-        ClientConn::spawn_connected(lh, future::ok((addr_struct, connect)), conf, callbacks)
+        ClientConn::spawn_connected(lh, connect, conf, callbacks)
     }
 
     pub fn spawn_tls<H, C>(
@@ -331,27 +329,31 @@ impl ClientConn {
         H: ClientConnCallbacks,
         C: TlsConnector + Sync,
     {
-        let addr_struct = addr.socket_addr();
         let domain = domain.to_owned();
         let no_delay = conf.no_delay.unwrap_or(true);
         let lh_copy = lh.clone();
         let connect_timeout = conf.connect_timeout;
-        let tls_conn = async move {
+        let connect = async move {
             let (peer_addr, socket) = addr.connect_with_timeout(&lh_copy, connect_timeout).await?;
             info!("connected to {}", peer_addr);
 
             if socket.is_tcp() {
-                socket.set_tcp_nodelay(no_delay)?;
+                socket
+                    .set_tcp_nodelay(no_delay)
+                    .map_err(crate::Error::from)?;
             }
 
-            connector
-                .connect_with_socket(&domain, socket)
-                .await
-                .map_err(crate::Error::from)
+            Ok((peer_addr, async move {
+                let tls_stream = connector
+                    .connect_with_socket(&domain, socket)
+                    .map_err(crate::Error::from)
+                    .await?;
+                debug!("TLS handshake done");
+                Ok(tls_stream)
+            }))
         };
 
-        // TODO
-        ClientConn::spawn_connected(lh, future::ok((addr_struct, tls_conn)), conf, callbacks)
+        ClientConn::spawn_connected(lh, connect, conf, callbacks)
     }
 
     pub(crate) fn start_request_with_resp_sender(
