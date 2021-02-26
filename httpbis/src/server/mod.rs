@@ -33,7 +33,6 @@ use crate::solicit_async::*;
 use crate::futures_misc::*;
 
 use tls_api::TlsAcceptor;
-use tls_api_stub;
 
 use crate::net::addr::AnySocketAddr;
 use crate::net::listen::ToSocketListener;
@@ -54,11 +53,11 @@ use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
 /// Builder for [`Server`].
-pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
+pub struct ServerBuilder {
     /// Configuration.
     pub conf: ServerConf,
     /// TLS configuration.
-    pub tls: ServerTlsOption<A>,
+    pub tls: ServerTlsOption,
     /// Listen address. This is required.
     pub addr: Option<AnySocketAddr>,
     /// Event loop to spawn server.
@@ -72,26 +71,26 @@ pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     pub service: ServerHandlerPaths,
 }
 
-impl ServerBuilder<tls_api_stub::TlsAcceptor> {
+impl ServerBuilder {
     /// New server builder with defaults.
     ///
     /// Port must be set, other properties are optional.
-    pub fn new_plain() -> ServerBuilder<tls_api_stub::TlsAcceptor> {
+    pub fn new_plain() -> ServerBuilder {
         ServerBuilder::new()
     }
 }
 
 #[cfg(unix)]
-impl ServerBuilder<tls_api_stub::TlsAcceptor> {
+impl ServerBuilder {
     /// New unix domain socket server with defaults
     ///
     /// Addr must be set, other properties are optional.
-    pub fn new_plain_unix() -> ServerBuilder<tls_api_stub::TlsAcceptor> {
-        ServerBuilder::<tls_api_stub::TlsAcceptor>::new()
+    pub fn new_plain_unix() -> ServerBuilder {
+        ServerBuilder::new()
     }
 }
 
-impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
+impl ServerBuilder {
     /// Set port server listens on.
     /// Can be zero to bind on any available port,
     /// which can be later obtained by `Server::local_addr`.
@@ -112,22 +111,20 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     }
 }
 
-impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
+impl ServerBuilder {
     // Set name of unix domain socket
     pub fn set_unix_addr<S: Into<SocketAddrUnix>>(&mut self, addr: S) -> crate::Result<()> {
         self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
     }
-}
 
-impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     /// New server builder with defaults.
     ///
     /// To call this function `ServerBuilder` must be parameterized with TLS acceptor.
     /// If TLS is not needed, `ServerBuilder::new_plain` function can be used.
     ///
     /// Port must be set, other properties are optional.
-    pub fn new() -> ServerBuilder<A> {
+    pub fn new() -> ServerBuilder {
         ServerBuilder {
             conf: ServerConf::new(),
             tls: ServerTlsOption::Plain,
@@ -138,8 +135,8 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
         }
     }
 
-    pub fn set_tls(&mut self, acceptor: A) {
-        self.tls = ServerTlsOption::Tls(Arc::new(acceptor));
+    pub fn set_tls<A: TlsAcceptor>(&mut self, acceptor: A) {
+        self.tls = ServerTlsOption::Tls(Arc::new(acceptor.into_dyn()));
     }
 
     pub fn build(self) -> crate::Result<Server> {
@@ -287,11 +284,11 @@ impl ServerStateSnapshot {
     }
 }
 
-fn spawn_server_event_loop<S, A>(
+fn spawn_server_event_loop<S>(
     handle: Handle,
     mut conn_handles: Vec<Handle>,
     state: Arc<Mutex<ServerState>>,
-    tls: ServerTlsOption<A>,
+    tls: ServerTlsOption,
     listen: Box<dyn ToTokioListener + Send>,
     shutdown_future: ShutdownFuture,
     conf: ServerConf,
@@ -300,7 +297,6 @@ fn spawn_server_event_loop<S, A>(
 ) -> oneshot::Receiver<()>
 where
     S: ServerHandler,
-    A: TlsAcceptor,
 {
     let service = Arc::new(service);
 

@@ -10,7 +10,7 @@ use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
 
 use tls_api::AsyncSocket;
-use tls_api::TlsConnector;
+use tls_api::TlsConnectorBox;
 
 use tls_api;
 
@@ -264,16 +264,15 @@ impl ClientConn {
         }
     }
 
-    pub fn spawn<H, C>(
+    pub fn spawn<H>(
         lh: Handle,
         addr: Pin<Box<dyn ToClientStream + Send>>,
-        tls: ClientTlsOption<C>,
+        tls: ClientTlsOption,
         conf: ClientConf,
         callbacks: H,
     ) -> Self
     where
         H: ClientConnCallbacks,
-        C: TlsConnector + Sync,
     {
         match tls {
             ClientTlsOption::Plain => ClientConn::spawn_plain(lh.clone(), addr, conf, callbacks),
@@ -313,17 +312,16 @@ impl ClientConn {
         ClientConn::spawn_connected(lh, connect, conf, callbacks)
     }
 
-    pub fn spawn_tls<H, C>(
+    pub fn spawn_tls<H>(
         lh: Handle,
         domain: &str,
-        connector: Arc<C>,
+        connector: Arc<TlsConnectorBox>,
         addr: Pin<Box<dyn ToClientStream>>,
         conf: ClientConf,
         callbacks: H,
     ) -> Self
     where
         H: ClientConnCallbacks,
-        C: TlsConnector + Sync,
     {
         let domain = domain.to_owned();
         let no_delay = conf.no_delay.unwrap_or(true);
@@ -341,7 +339,7 @@ impl ClientConn {
 
             Ok((peer_addr, async move {
                 let tls_stream = connector
-                    .connect_with_socket(&domain, socket)
+                    .connect(&domain, socket)
                     .map_err(crate::Error::from)
                     .await?;
                 debug!("TLS handshake done");

@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
-use tls_api::TlsConnector;
+use tls_api::TlsConnectorBox;
 
 use crate::solicit::HttpScheme;
 
-pub enum ClientTlsOption<C: TlsConnector> {
+pub enum ClientTlsOption {
     Plain,
-    Tls(String, Arc<C>), // domain
+    Tls(String, Arc<TlsConnectorBox>), // domain, connector
 }
 
-impl<C: TlsConnector> Clone for ClientTlsOption<C> {
+impl Clone for ClientTlsOption {
     fn clone(&self) -> Self {
         match self {
             &ClientTlsOption::Plain => ClientTlsOption::Plain,
@@ -18,7 +18,7 @@ impl<C: TlsConnector> Clone for ClientTlsOption<C> {
     }
 }
 
-impl<C: TlsConnector> ClientTlsOption<C> {
+impl ClientTlsOption {
     pub fn http_scheme(&self) -> HttpScheme {
         match self {
             &ClientTlsOption::Plain => HttpScheme::Http,

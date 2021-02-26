@@ -13,7 +13,6 @@ use crate::common::types::Types;
 use tokio::net::TcpStream;
 
 use tls_api::AsyncSocket;
-use tls_api::TlsAcceptor;
 
 use crate::solicit_async::*;
 
@@ -276,17 +275,16 @@ impl ServerConn {
         )
     }
 
-    pub fn new<S, A>(
+    pub fn new<S>(
         lh: &Handle,
         socket: Pin<Box<dyn AsyncSocket>>,
         peer_addr: AnySocketAddr,
-        tls: ServerTlsOption<A>,
+        tls: ServerTlsOption,
         conf: ServerConf,
         service: Arc<S>,
     ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
         S: ServerHandler,
-        A: TlsAcceptor,
     {
         match tls {
             ServerTlsOption::Plain => {
@@ -297,7 +295,7 @@ impl ServerConn {
             }
             ServerTlsOption::Tls(acceptor) => {
                 let socket: HttpFutureSend<_> = Box::pin(async move {
-                    let tls_stream = acceptor.accept_with_socket(socket).await?;
+                    let tls_stream = acceptor.accept(socket).await?;
                     debug!("TLS handshake done");
                     Ok(tls_stream)
                 });
@@ -318,7 +316,7 @@ impl ServerConn {
     where
         S: ServerHandler,
     {
-        let no_tls: ServerTlsOption<tls_api_stub::TlsAcceptor> = ServerTlsOption::Plain;
+        let no_tls: ServerTlsOption = ServerTlsOption::Plain;
         ServerConn::new(
             lh,
             Box::pin(socket),

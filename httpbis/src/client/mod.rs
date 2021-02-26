@@ -12,7 +12,6 @@ use futures::future::TryFutureExt;
 use futures::stream::StreamExt;
 use tls_api::TlsConnector;
 use tls_api::TlsConnectorBuilder;
-use tls_api_stub;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
@@ -58,20 +57,18 @@ pub(crate) mod types;
 ///
 /// Client parameters can be specified only during construction,
 /// and later client cannot be reconfigured.
-pub struct ClientBuilder<C: TlsConnector = tls_api_stub::TlsConnector> {
+pub struct ClientBuilder {
     pub event_loop: Option<Handle>,
     pub addr: Option<AnySocketAddr>,
-    pub tls: ClientTlsOption<C>,
+    pub tls: ClientTlsOption,
     pub conf: ClientConf,
 }
 
-impl ClientBuilder<tls_api_stub::TlsConnector> {
-    pub fn new_plain() -> ClientBuilder<tls_api_stub::TlsConnector> {
+impl ClientBuilder {
+    pub fn new_plain() -> ClientBuilder {
         ClientBuilder::new()
     }
-}
 
-impl<C: TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
     pub fn set_addr<S: ToSocketAddrs>(&mut self, addr: S) -> crate::Result<()> {
         // TODO: sync
@@ -87,16 +84,14 @@ impl<C: TlsConnector> ClientBuilder<C> {
     }
 }
 
-impl<C: TlsConnector> ClientBuilder<C> {
+impl ClientBuilder {
     /// Set the addr client connects to.
     pub fn set_unix_addr<A: Into<SocketAddrUnix>>(&mut self, addr: A) -> crate::Result<()> {
         self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
     }
-}
 
-impl<C: TlsConnector> ClientBuilder<C> {
-    pub fn new() -> ClientBuilder<C> {
+    pub fn new() -> ClientBuilder {
         ClientBuilder {
             event_loop: None,
             addr: None,
@@ -105,7 +100,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
         }
     }
 
-    pub fn set_tls(&mut self, host: &str) -> crate::Result<()> {
+    pub fn set_tls<C: tls_api::TlsConnector>(&mut self, host: &str) -> crate::Result<()> {
         let mut tls_connector = C::builder()?;
 
         if C::SUPPORTS_ALPN {
@@ -115,7 +110,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
 
         let tls_connector = tls_connector.build()?;
 
-        let tls_connector = Arc::new(tls_connector);
+        let tls_connector = Arc::new(tls_connector.into_dyn());
         self.tls = ClientTlsOption::Tls(host.to_owned(), tls_connector);
         Ok(())
     }
@@ -245,10 +240,10 @@ impl Client {
         port: u16,
         conf: ClientConf,
     ) -> crate::Result<Client> {
-        let mut client = ClientBuilder::<C>::new();
+        let mut client = ClientBuilder::new();
         client.conf = conf;
         client.set_addr((host, port))?;
-        client.set_tls(host)?;
+        client.set_tls::<C>(host)?;
         client.build()
     }
 
@@ -261,19 +256,10 @@ impl Client {
         client.build()
     }
 
-    /// Create a new client connected to the specified localhost Unix addr using TLS.
-    #[cfg(unix)]
-    pub fn new_tls_unix<C: TlsConnector>(addr: &str, conf: ClientConf) -> crate::Result<Client> {
-        let mut client = ClientBuilder::<C>::new();
-        client.conf = conf;
-        client.set_unix_addr(addr)?;
-        client.build()
-    }
-
     /// Connect to server using plain or TLS protocol depending on `tls` parameter.
-    pub fn new_expl<C: TlsConnector>(
+    pub fn new_expl(
         addr: &SocketAddr,
-        tls: ClientTlsOption<C>,
+        tls: ClientTlsOption,
         conf: ClientConf,
     ) -> crate::Result<Client> {
         let mut client = ClientBuilder::new();
@@ -459,17 +445,17 @@ impl ErrorAwareDrop for ControllerCommand {
     }
 }
 
-struct ControllerState<T: ToClientStream, C: TlsConnector> {
+struct ControllerState<T: ToClientStream> {
     handle: Handle,
     socket_addr: T,
-    tls: ClientTlsOption<C>,
+    tls: ClientTlsOption,
     conf: ClientConf,
     // current connection
     conn: Arc<ClientConn>,
     tx: DeathAwareSender<ControllerCommand>,
 }
 
-impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C> {
+impl<T: ToClientStream + 'static + Clone> ControllerState<T> {
     fn init_conn(&mut self) {
         let conn = ClientConn::spawn(
             self.handle.clone(),
@@ -546,11 +532,11 @@ impl ClientConnCallbacks for CallbacksImpl {
 }
 
 // Event loop entry point
-fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsConnector>(
+fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static>(
     handle: Handle,
     shutdown_future: ShutdownFuture,
     socket_addr: T,
-    tls: ClientTlsOption<C>,
+    tls: ClientTlsOption,
     conf: ClientConf,
     done_tx: oneshot::Sender<()>,
     controller_tx: DeathAwareSender<ControllerCommand>,

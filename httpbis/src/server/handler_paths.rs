@@ -114,14 +114,14 @@ impl ServerHandlerPaths {
     /// struct Files {}
     ///
     /// impl ServerHandler for Root {
-    ///     fn start_request(&self, _context: ServerHandlerContext, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
+    ///     fn start_request(&self, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is root page")?;
     ///         Ok(())
     ///     }
     /// }
     ///
     /// impl ServerHandler for Files {
-    ///     fn start_request(&self, _context: ServerHandlerContext, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
+    ///     fn start_request(&self, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
     ///         resp.send_found_200_plain_text("This is files")?;
     ///         Ok(())
     ///     }

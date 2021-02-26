@@ -70,7 +70,10 @@ fn tls() {
 
     let client: Client = Client::new_expl(
         socket_addr,
-        ClientTlsOption::Tls("localhost".to_owned(), Arc::new(test_tls_connector())),
+        ClientTlsOption::Tls(
+            "localhost".to_owned(),
+            Arc::new(test_tls_connector().into_dyn()),
+        ),
         Default::default(),
     )
     .expect("http client");

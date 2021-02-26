@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use tls_api::TlsAcceptor;
+use tls_api::TlsAcceptorBox;
 
-pub enum ServerTlsOption<A: TlsAcceptor> {
+pub enum ServerTlsOption {
     Plain,
-    Tls(Arc<A>),
+    Tls(Arc<TlsAcceptorBox>),
 }
 
-impl<A: TlsAcceptor> Clone for ServerTlsOption<A> {
+impl Clone for ServerTlsOption {
     fn clone(&self) -> Self {
         match self {
             &ServerTlsOption::Plain => ServerTlsOption::Plain,
