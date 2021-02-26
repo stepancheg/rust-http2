@@ -22,7 +22,7 @@ use crate::client::conn::ClientConnCallbacks;
 use crate::client::conn::StartRequestMessage;
 use crate::client::req::ClientRequest;
 use crate::client::resp::ClientResponse;
-use crate::client::stream_handler::ClientStreamCreatedHandler;
+use crate::client::stream_handler::ClientHandler;
 pub use crate::client::tls::ClientTlsOption;
 use crate::common::conn::ConnStateSnapshot;
 use crate::death::channel::death_aware_channel;
@@ -296,7 +296,7 @@ impl Client {
             tx: oneshot::Sender<crate::Result<(ClientRequest, ClientResponseFuture)>>,
         }
 
-        impl ClientStreamCreatedHandler for Impl {
+        impl ClientHandler for Impl {
             fn request_created(
                 self: Box<Self>,
                 req: ClientRequest,
@@ -411,7 +411,7 @@ pub trait ClientInterface {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<dyn ClientStreamCreatedHandler>,
+        stream_handler: Box<dyn ClientHandler>,
     );
 }
 
@@ -422,7 +422,7 @@ impl ClientInterface for Client {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<dyn ClientStreamCreatedHandler>,
+        stream_handler: Box<dyn ClientHandler>,
     ) {
         let start = StartRequestMessage {
             headers,

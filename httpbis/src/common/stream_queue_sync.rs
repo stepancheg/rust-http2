@@ -91,11 +91,11 @@ impl ClientResponseStreamHandler for StreamQueueSyncSender<ClientTypes> {
         }))
     }
 
-    fn rst(&mut self, error_code: ErrorCode) -> result::Result<()> {
+    fn rst(self: Box<Self>, error_code: ErrorCode) -> result::Result<()> {
         self.send(Err(error::Error::RstStreamReceived(error_code)))
     }
 
-    fn error(&mut self, error: error::Error) -> result::Result<()> {
+    fn error(self: Box<Self>, error: error::Error) -> result::Result<()> {
         self.send(Err(error))
     }
 }

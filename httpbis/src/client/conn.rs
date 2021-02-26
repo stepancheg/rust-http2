@@ -18,7 +18,7 @@ use tls_api;
 use crate::solicit_async::*;
 
 use crate::client::req::ClientRequest;
-use crate::client::stream_handler::ClientStreamCreatedHandler;
+use crate::client::stream_handler::ClientHandler;
 use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
 use crate::common::conn::Conn;
@@ -87,7 +87,7 @@ pub(crate) struct StartRequestMessage {
     pub body: Option<Bytes>,
     pub trailers: Option<Headers>,
     pub end_stream: bool,
-    pub stream_handler: Box<dyn ClientStreamCreatedHandler>,
+    pub stream_handler: Box<dyn ClientHandler>,
 }
 
 pub struct ClientStartRequestMessage {
@@ -412,7 +412,7 @@ impl ClientInterface for ClientConn {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-        stream_handler: Box<dyn ClientStreamCreatedHandler>,
+        stream_handler: Box<dyn ClientHandler>,
     ) {
         let start = StartRequestMessage {
             headers,
