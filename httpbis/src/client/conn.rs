@@ -28,7 +28,6 @@ use crate::common::stream::HttpStreamCommon;
 use crate::common::stream::HttpStreamData;
 use crate::common::stream::HttpStreamDataSpecific;
 use crate::common::stream::InMessageStage;
-use crate::common::stream_handler::StreamHandlerInternal;
 use crate::common::stream_map::HttpStreamRef;
 use crate::data_or_headers::DataOrHeaders;
 use crate::death::channel::DeathAwareSender;
@@ -499,21 +498,32 @@ where
             (HeadersPlace::Trailing, _) => InMessageStage::AfterTrailingHeaders,
         };
 
-        // Ignore 1xx headers
+        // Ignore 1xx headers:
+        // 8.1.  HTTP Request/Response Exchange
+        // ...
+        //    An HTTP message (request or response) consists of:
+        //    1.  for a response only, zero or more HEADERS frames (each followed
+        //        by zero or more CONTINUATION frames) containing the message
+        //        headers of informational (1xx) HTTP responses (see [RFC7230],
+        //        Section 3.2 and [RFC7231], Section 6.2),
         if !status_1xx {
-            if let Some(ref mut response_handler) = stream.stream().peer_tx {
-                // TODO: reset stream on error
-                drop(match headers_place {
-                    HeadersPlace::Initial => response_handler
-                        .0
-                        .headers(headers, end_stream == EndStream::Yes),
-                    HeadersPlace::Trailing => {
-                        assert_eq!(EndStream::Yes, end_stream);
-                        response_handler.trailers(headers)
+            // TODO: reset stream on error
+            match (headers_place, end_stream) {
+                (HeadersPlace::Initial, EndStream::No) => {
+                    if let Some(ref mut response_handler) = stream.stream().peer_tx {
+                        let _ = response_handler.0.headers(headers, false);
                     }
-                });
-            } else {
-                // TODO: reset stream
+                }
+                (HeadersPlace::Initial, EndStream::Yes) => {
+                    if let Some(mut response_handler) = stream.stream().peer_tx.take() {
+                        let _ = response_handler.0.headers(headers, true);
+                    }
+                }
+                (HeadersPlace::Trailing, _end_stream) => {
+                    if let Some(mut response_handler) = stream.stream().peer_tx.take() {
+                        let _ = response_handler.0.trailers(headers);
+                    }
+                }
             }
         }
 
