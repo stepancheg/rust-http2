@@ -95,12 +95,22 @@ impl SocketListener for TcpListener {
 }
 
 impl ToClientStream for SocketAddr {
-    fn connect(
-        &self,
+    fn connect<'a>(
+        &'a self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send>> {
-        let future = TcpStream::connect(self.clone())
-            .map_ok(|stream| Box::pin(stream) as Pin<Box<dyn SocketStream>>);
+    ) -> Pin<
+        Box<
+            dyn Future<Output = io::Result<(AnySocketAddr, Pin<Box<dyn SocketStream>>)>>
+                + Send
+                + 'a,
+        >,
+    > {
+        let future = TcpStream::connect(self.clone()).map_ok(move |stream| {
+            (
+                AnySocketAddr::Inet(*self),
+                Box::pin(stream) as Pin<Box<dyn SocketStream>>,
+            )
+        });
         Box::pin(future)
     }
 

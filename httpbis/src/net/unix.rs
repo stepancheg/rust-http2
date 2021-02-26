@@ -143,12 +143,19 @@ impl ToClientStream for SocketAddrUnix {
     fn connect<'a>(
         &'a self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
+    ) -> Pin<
+        Box<
+            dyn Future<Output = io::Result<(AnySocketAddr, Pin<Box<dyn SocketStream>>)>>
+                + Send
+                + 'a,
+        >,
+    > {
         let _g = handle.enter();
+        let addr = AnySocketAddr::Unix(self.clone());
         Box::pin(async move {
             let stream = UnixStream::connect(&self.0).await?;
             let stream: Pin<Box<dyn SocketStream>> = Box::pin(stream);
-            Ok(stream)
+            Ok((addr, stream))
         })
     }
 
@@ -156,7 +163,13 @@ impl ToClientStream for SocketAddrUnix {
     fn connect<'a>(
         &'a self,
         _handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
+    ) -> Pin<
+        Box<
+            dyn Future<Output = io::Result<(AnySocketAddr, Pin<Box<dyn SocketStream>>)>>
+                + Send
+                + 'a,
+        >,
+    > {
         use futures::future;
         Box::pin(future::err(io::Error::new(
             io::ErrorKind::Other,
@@ -205,8 +218,9 @@ mod test {
         let p = format!("{}/s", dir.path().display());
         let _server = std::os::unix::net::UnixListener::bind(&p).unwrap();
 
-        let client =
-            lp.block_on(async { SocketAddrUnix(PathBuf::from(&p)).connect(&h).await.unwrap() });
+        let client = lp
+            .block_on(async { SocketAddrUnix(PathBuf::from(&p)).connect(&h).await.unwrap() })
+            .1;
 
         assert_eq!(
             AnySocketAddr::Unix(SocketAddrUnix::from(&p)),

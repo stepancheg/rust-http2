@@ -15,7 +15,13 @@ pub trait ToClientStream: fmt::Display + Send + Sync + 'static {
     fn connect<'a>(
         &'a self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>>;
+    ) -> Pin<
+        Box<
+            dyn Future<Output = io::Result<(AnySocketAddr, Pin<Box<dyn SocketStream>>)>>
+                + Send
+                + 'a,
+        >,
+    >;
 
     fn socket_addr(&self) -> AnySocketAddr;
 }
@@ -25,7 +31,13 @@ impl dyn ToClientStream {
         &'a self,
         handle: &Handle,
         timeout: Option<Duration>,
-    ) -> Pin<Box<dyn Future<Output = crate::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
+    ) -> Pin<
+        Box<
+            dyn Future<Output = crate::Result<(AnySocketAddr, Pin<Box<dyn SocketStream>>)>>
+                + Send
+                + 'a,
+        >,
+    > {
         match timeout {
             Some(timeout) => {
                 let connect = self.connect(handle);
@@ -45,7 +57,13 @@ impl ToClientStream for AnySocketAddr {
     fn connect<'a>(
         &'a self,
         handle: &Handle,
-    ) -> Pin<Box<dyn Future<Output = io::Result<Pin<Box<dyn SocketStream>>>> + Send + 'a>> {
+    ) -> Pin<
+        Box<
+            dyn Future<Output = io::Result<(AnySocketAddr, Pin<Box<dyn SocketStream>>)>>
+                + Send
+                + 'a,
+        >,
+    > {
         match self {
             &AnySocketAddr::Inet(ref inet_addr) => inet_addr.connect(handle),
             &AnySocketAddr::Unix(ref unix_addr) => unix_addr.connect(handle),

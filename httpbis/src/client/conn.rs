@@ -299,15 +299,14 @@ impl ClientConn {
 
         let no_delay = conf.no_delay.unwrap_or(true);
 
-        let addr_copy = addr_struct.clone();
         let lh_copy = lh.clone();
         let connect_timeout = conf.connect_timeout;
         let connect = async move {
             let connect = addr.connect_with_timeout(&lh_copy, connect_timeout);
 
-            let socket = connect.await?;
+            let (peer_addr, socket) = connect.await?;
 
-            info!("connected to {}", addr_copy);
+            info!("connected to {}", peer_addr);
 
             if socket.is_tcp() {
                 socket.set_tcp_nodelay(no_delay)?;
@@ -338,8 +337,8 @@ impl ClientConn {
         let lh_copy = lh.clone();
         let connect_timeout = conf.connect_timeout;
         let tls_conn = async move {
-            let socket = addr.connect_with_timeout(&lh_copy, connect_timeout).await?;
-            info!("connected to {}", addr);
+            let (peer_addr, socket) = addr.connect_with_timeout(&lh_copy, connect_timeout).await?;
+            info!("connected to {}", peer_addr);
 
             if socket.is_tcp() {
                 socket.set_tcp_nodelay(no_delay)?;
