@@ -1,5 +1,4 @@
 use crate::common::increase_in_window::IncreaseInWindow;
-use crate::result;
 use crate::server::types::ServerTypes;
 
 pub struct ServerIncreaseInWindow(pub(crate) IncreaseInWindow<ServerTypes>);
@@ -13,15 +12,15 @@ impl ServerIncreaseInWindow {
         self.0.data_frame_processed(size)
     }
 
-    pub fn increase_window(&mut self, inc: u32) -> result::Result<()> {
+    pub fn increase_window(&mut self, inc: u32) -> crate::Result<()> {
         self.0.increase_window(inc)
     }
 
-    pub fn increase_window_auto(&mut self) -> result::Result<()> {
+    pub fn increase_window_auto(&mut self) -> crate::Result<()> {
         self.0.increase_window_auto()
     }
 
-    pub fn increase_window_auto_above(&mut self, above: u32) -> result::Result<()> {
+    pub fn increase_window_auto_above(&mut self, above: u32) -> crate::Result<()> {
         self.0.increase_window_auto_above(above)
     }
 }

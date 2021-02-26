@@ -12,7 +12,6 @@ use crate::common::stream::HttpStreamCommand;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 
-use crate::result;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::DataFlag;
 use crate::solicit::frame::DataFrame;
@@ -42,7 +41,7 @@ pub(crate) trait ConnWriteSideCustom {
     fn process_message(
         &mut self,
         message: <Self::Types as Types>::ToWriteMessage,
-    ) -> result::Result<()>;
+    ) -> crate::Result<()>;
 }
 
 impl<T, I> Conn<T, I>
@@ -146,7 +145,7 @@ where
         None
     }
 
-    pub fn buffer_outg_conn(&mut self) -> result::Result<bool> {
+    pub fn buffer_outg_conn(&mut self) -> crate::Result<bool> {
         let mut updated = false;
 
         // shortcut
@@ -185,7 +184,7 @@ where
     }
 
     /// Sends an SETTINGS Frame with ack set to acknowledge seeing a SETTINGS frame from the peer.
-    pub fn send_ack_settings(&mut self) -> result::Result<()> {
+    pub fn send_ack_settings(&mut self) -> crate::Result<()> {
         let settings = SettingsFrame::new_ack();
         self.send_frame_and_notify(settings);
         Ok(())
@@ -195,7 +194,7 @@ where
         &mut self,
         stream_id: StreamId,
         error_code: ErrorCode,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         let stream = self.streams.get_mut(stream_id);
         if let Some(mut stream) = stream {
             stream.close_outgoing(error_code);
@@ -207,7 +206,7 @@ where
         &mut self,
         stream_id: StreamId,
         part: DataOrHeadersWithFlag,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         let stream = self.streams.get_mut(stream_id);
         if let Some(mut stream) = stream {
             stream.push_back_part(part);
@@ -224,7 +223,7 @@ where
         stream_id: StreamId,
         stream: HttpStreamAfterHeaders,
         out_window: StreamOutWindowReceiver,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         // TODO: spawn in handler
         self.loop_handle.spawn(
             PumpStreamToWrite::<T> {
@@ -238,7 +237,7 @@ where
         Ok(())
     }
 
-    pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> result::Result<()> {
+    pub fn process_common_message(&mut self, common: CommonToWriteMessage) -> crate::Result<()> {
         match common {
             CommonToWriteMessage::StreamEnd(stream_id, error_code) => {
                 self.process_stream_end(stream_id, error_code)
@@ -256,14 +255,14 @@ where
         }
     }
 
-    pub fn send_goaway(&mut self, error_code: ErrorCode) -> result::Result<()> {
+    pub fn send_goaway(&mut self, error_code: ErrorCode) -> crate::Result<()> {
         debug!("requesting to send GOAWAY with code {:?}", error_code);
         let frame = GoawayFrame::new(self.last_peer_stream_id, error_code);
         self.queued_write.queue_goaway(frame);
         Ok(())
     }
 
-    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> result::Result<()> {
+    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> crate::Result<()> {
         self.buffer_outg_conn()?;
         loop {
             match self.queued_write.poll(cx) {

@@ -14,8 +14,6 @@ use tokio::io::AsyncWriteExt;
 
 use crate::error;
 use crate::error::Error;
-use crate::result;
-use crate::result::Result;
 
 use crate::solicit::frame::unpack_header;
 use crate::solicit::frame::FrameIR;
@@ -29,13 +27,13 @@ use crate::net::socket::SocketStream;
 use std::pin::Pin;
 use std::task::Context;
 
-//pub type HttpFuture<T> = Pin<Box<dyn Future<Output = result::Result<T>>>>;
+//pub type HttpFuture<T> = Pin<Box<dyn Future<Output = crate::Result<T>>>>;
 
 pub type HttpFutureSend<T> = Pin<Box<dyn Future<Output = crate::Result<T>> + Send>>;
 pub type HttpFutureStreamSend<T> = Pin<Box<dyn Stream<Item = crate::Result<T>> + Send>>;
 
 /// Inefficient, but OK because used only in tests
-pub fn recv_raw_frame_sync(read: &mut dyn Read, max_frame_size: u32) -> Result<RawFrame> {
+pub fn recv_raw_frame_sync(read: &mut dyn Read, max_frame_size: u32) -> crate::Result<RawFrame> {
     let mut header_buf = [0; FRAME_HEADER_LEN];
     read.read_exact(&mut header_buf)?;
     let header = unpack_header(&header_buf);
@@ -66,7 +64,7 @@ pub fn recv_raw_frame_sync(read: &mut dyn Read, max_frame_size: u32) -> Result<R
 //    )
 //}
 
-pub async fn send_frame<W, F>(write: &mut W, frame: F) -> result::Result<()>
+pub async fn send_frame<W, F>(write: &mut W, frame: F) -> crate::Result<()>
 where
     W: AsyncWrite + Send + Unpin + 'static,
     F: FrameIR,
@@ -85,14 +83,14 @@ static PREFACE: &'static [u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 async fn send_settings<W: AsyncWrite + Unpin + Send + 'static>(
     conn: &mut W,
     settings: SettingsFrame,
-) -> result::Result<()> {
+) -> crate::Result<()> {
     send_frame(conn, settings).await
 }
 
 pub async fn client_handshake<I: SocketStream>(
     conn: &mut I,
     settings: SettingsFrame,
-) -> result::Result<()> {
+) -> crate::Result<()> {
     debug!("send PREFACE");
     conn.write_all(PREFACE).await?;
 
@@ -115,7 +113,7 @@ fn looks_like_http_1(buf: &[u8]) -> bool {
 }
 
 /// Recv HTTP/2 preface, or sent HTTP/1 500 and return error is input looks like HTTP/1 request
-async fn recv_preface_or_handle_http_1<I>(conn: &mut I) -> result::Result<()>
+async fn recv_preface_or_handle_http_1<I>(conn: &mut I) -> crate::Result<()>
 where
     I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -128,7 +126,7 @@ where
     where
         I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        type Output = result::Result<bool>;
+        type Output = crate::Result<bool>;
 
         fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
             loop {
@@ -195,7 +193,7 @@ where
     Ok(())
 }
 
-pub async fn server_handshake<I>(conn: &mut I, settings: SettingsFrame) -> result::Result<()>
+pub async fn server_handshake<I>(conn: &mut I, settings: SettingsFrame) -> crate::Result<()>
 where
     I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {

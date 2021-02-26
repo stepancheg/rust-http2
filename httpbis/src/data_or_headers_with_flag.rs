@@ -5,9 +5,7 @@ use bytes::Bytes;
 
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_trailers::DataOrTrailers;
-use crate::error;
 use crate::misc::any_to_string;
-use crate::result;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::Headers;
 use crate::solicit_async::HttpFutureStreamSend;
@@ -91,7 +89,7 @@ impl DataOrHeadersWithFlagStream {
 
     pub fn new<S>(s: S) -> DataOrHeadersWithFlagStream
     where
-        S: Stream<Item = result::Result<DataOrHeadersWithFlag>> + Send + 'static,
+        S: Stream<Item = crate::Result<DataOrHeadersWithFlag>> + Send + 'static,
     {
         DataOrHeadersWithFlagStream(Box::pin(s))
     }
@@ -102,7 +100,7 @@ impl DataOrHeadersWithFlagStream {
 
     pub fn bytes<S>(bytes: S) -> DataOrHeadersWithFlagStream
     where
-        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
+        S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
     {
         DataOrHeadersWithFlagStream::new(bytes.map_ok(DataOrHeadersWithFlag::intermediate_data))
     }
@@ -150,7 +148,7 @@ impl DataOrHeadersWithFlagStream {
                     let e = any_to_string(e);
                     // TODO: send plain text error if headers weren't sent yet
                     warn!("handler panicked: {}", e);
-                    Err(error::Error::HandlerPanicked(e))
+                    Err(crate::Error::HandlerPanicked(e))
                 }
             })
         }))
@@ -158,7 +156,7 @@ impl DataOrHeadersWithFlagStream {
 }
 
 impl Stream for DataOrHeadersWithFlagStream {
-    type Item = result::Result<DataOrHeadersWithFlag>;
+    type Item = crate::Result<DataOrHeadersWithFlag>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.0).poll_next(cx)

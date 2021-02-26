@@ -33,14 +33,10 @@ use crate::death::error_holder::ClientDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::death::oneshot::death_aware_oneshot;
 use crate::death::oneshot::DeathAwareOneshotSender;
-use crate::error;
-use crate::error::Error;
 use crate::futures_misc::*;
 use crate::net::addr::AnySocketAddr;
 use crate::net::connect::ToClientStream;
 use crate::net::unix::SocketAddrUnix;
-use crate::result;
-use crate::result::Result;
 use crate::solicit::header::*;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::HttpScheme;
@@ -77,14 +73,14 @@ impl ClientBuilder<tls_api_stub::TlsConnector> {
 
 impl<C: TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
-    pub fn set_addr<S: ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
+    pub fn set_addr<S: ToSocketAddrs>(&mut self, addr: S) -> crate::Result<()> {
         // TODO: sync
         let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
         if addrs.is_empty() {
-            return Err(Error::AddrResolvedToEmptyList);
+            return Err(crate::Error::AddrResolvedToEmptyList);
         } else if addrs.len() > 1 {
             // TODO: allow multiple addresses
-            return Err(Error::AddrResolvedToMoreThanOneAddr(addrs));
+            return Err(crate::Error::AddrResolvedToMoreThanOneAddr(addrs));
         }
         self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())
@@ -93,7 +89,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
 
 impl<C: TlsConnector> ClientBuilder<C> {
     /// Set the addr client connects to.
-    pub fn set_unix_addr<A: Into<SocketAddrUnix>>(&mut self, addr: A) -> Result<()> {
+    pub fn set_unix_addr<A: Into<SocketAddrUnix>>(&mut self, addr: A) -> crate::Result<()> {
         self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
     }
@@ -109,7 +105,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
         }
     }
 
-    pub fn set_tls(&mut self, host: &str) -> Result<()> {
+    pub fn set_tls(&mut self, host: &str) -> crate::Result<()> {
         let mut tls_connector = C::builder()?;
 
         if C::SUPPORTS_ALPN {
@@ -124,7 +120,7 @@ impl<C: TlsConnector> ClientBuilder<C> {
         Ok(())
     }
 
-    pub fn build(self) -> Result<Client> {
+    pub fn build(self) -> crate::Result<Client> {
         let client_died_error_holder = SomethingDiedErrorHolder::new();
 
         let addr = self.addr.expect("addr is not specified");
@@ -236,7 +232,7 @@ impl fmt::Debug for Client {
 
 impl Client {
     /// Create a new client connected to the specified host and port without using TLS.
-    pub fn new_plain(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
+    pub fn new_plain(host: &str, port: u16, conf: ClientConf) -> crate::Result<Client> {
         let mut client = ClientBuilder::new_plain();
         client.conf = conf;
         client.set_addr((host, port))?;
@@ -244,7 +240,11 @@ impl Client {
     }
 
     /// Create a new client connected to the specified host and port using TLS.
-    pub fn new_tls<C: TlsConnector>(host: &str, port: u16, conf: ClientConf) -> Result<Client> {
+    pub fn new_tls<C: TlsConnector>(
+        host: &str,
+        port: u16,
+        conf: ClientConf,
+    ) -> crate::Result<Client> {
         let mut client = ClientBuilder::<C>::new();
         client.conf = conf;
         client.set_addr((host, port))?;
@@ -254,7 +254,7 @@ impl Client {
 
     /// Create a new client connected to the specified localhost Unix addr.
     #[cfg(unix)]
-    pub fn new_plain_unix(addr: &str, conf: ClientConf) -> Result<Client> {
+    pub fn new_plain_unix(addr: &str, conf: ClientConf) -> crate::Result<Client> {
         let mut client = ClientBuilder::new_plain();
         client.conf = conf;
         client.set_unix_addr(addr)?;
@@ -263,7 +263,7 @@ impl Client {
 
     /// Create a new client connected to the specified localhost Unix addr using TLS.
     #[cfg(unix)]
-    pub fn new_tls_unix<C: TlsConnector>(addr: &str, conf: ClientConf) -> Result<Client> {
+    pub fn new_tls_unix<C: TlsConnector>(addr: &str, conf: ClientConf) -> crate::Result<Client> {
         let mut client = ClientBuilder::<C>::new();
         client.conf = conf;
         client.set_unix_addr(addr)?;
@@ -275,7 +275,7 @@ impl Client {
         addr: &SocketAddr,
         tls: ClientTlsOption<C>,
         conf: ClientConf,
-    ) -> Result<Client> {
+    ) -> crate::Result<Client> {
         let mut client = ClientBuilder::new();
         client.addr = Some(AnySocketAddr::Inet(addr.clone()));
         client.tls = tls;
@@ -301,9 +301,9 @@ impl Client {
                 self: Box<Self>,
                 req: ClientRequest,
                 resp: ClientResponse,
-            ) -> result::Result<()> {
+            ) -> crate::Result<()> {
                 if let Err(_) = self.tx.send(Ok((req, resp.into_stream()))) {
-                    return Err(error::Error::CallerDied);
+                    return Err(crate::Error::CallerDied);
                 }
 
                 Ok(())
@@ -440,14 +440,14 @@ impl ClientInterface for Client {
 enum ControllerCommand {
     GoAway,
     StartRequest(StartRequestMessage),
-    WaitForConnect(oneshot::Sender<Result<()>>),
+    WaitForConnect(oneshot::Sender<crate::Result<()>>),
     DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ClientDiedType>),
 }
 
 impl ErrorAwareDrop for ControllerCommand {
     type DiedType = ClientDiedType;
 
-    fn drop_with_error(self, error: Error) {
+    fn drop_with_error(self, error: crate::Error) {
         match self {
             ControllerCommand::GoAway => {}
             ControllerCommand::StartRequest(start) => start.stream_handler.error(error),
@@ -503,7 +503,7 @@ impl<T: ToClientStream + 'static + Clone, C: TlsConnector> ControllerState<T, C>
                     self.init_conn();
                     if let Err(tx) = self.conn.wait_for_connect_with_resp_sender(tx) {
                         // TODO: reason
-                        let err = error::Error::ClientDiedAndReconnectFailed;
+                        let err = crate::Error::ClientDiedAndReconnectFailed;
                         // ignore error
                         drop(tx.send(Err(err)));
                     }
@@ -582,7 +582,7 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static, C: TlsCon
         info!("shutdown requested");
         // Must complete with error,
         // so `join` with this future cancels another future.
-        future::err::<(), _>(Error::Shutdown)
+        future::err::<(), _>(crate::Error::Shutdown)
     });
 
     // Wait for either completion of connection (i. e. error)

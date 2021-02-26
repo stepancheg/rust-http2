@@ -1,6 +1,5 @@
 use crate::codec::http_framed_read::HttpFramedJoinContinuationRead;
 use crate::hpack;
-use crate::result;
 use crate::solicit::frame::HeadersDecodedFrame;
 use crate::solicit::frame::HttpFrame;
 use crate::solicit::frame::HttpFrameDecoded;
@@ -36,7 +35,7 @@ impl<R: AsyncRead + Unpin> HttpDecodeRead<R> {
         &mut self,
         cx: &mut Context<'_>,
         max_frame_size: u32,
-    ) -> Poll<result::Result<HttpFrameDecodedOrGoaway>> {
+    ) -> Poll<crate::Result<HttpFrameDecodedOrGoaway>> {
         let frame = match self.framed_read.poll_http_frame(cx, max_frame_size)? {
             Poll::Ready(frame) => frame,
             Poll::Pending => return Poll::Pending,

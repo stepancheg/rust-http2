@@ -1,10 +1,7 @@
 use std::panic;
 use std::sync::Arc;
 
-use crate::error;
-use crate::result;
 use crate::AnySocketAddr;
-use crate::Error;
 
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
@@ -95,15 +92,15 @@ where
         stream_id: StreamId,
         headers: Headers,
         end_stream: EndStream,
-    ) -> result::Result<HttpStreamRef<ServerTypes>> {
+    ) -> crate::Result<HttpStreamRef<ServerTypes>> {
         if ServerTypes::init_where(stream_id) == InitWhere::Locally {
-            return Err(error::Error::InitiatedStreamWithServerIdFromClient(
+            return Err(crate::Error::InitiatedStreamWithServerIdFromClient(
                 stream_id,
             ));
         }
 
         if stream_id <= self.last_peer_stream_id {
-            return Err(error::Error::StreamIdLeExistingStream(
+            return Err(crate::Error::StreamIdLeExistingStream(
                 stream_id,
                 self.last_peer_stream_id,
             ));
@@ -183,7 +180,7 @@ pub(crate) enum ServerToWriteMessage {
 impl ErrorAwareDrop for ServerToWriteMessage {
     type DiedType = ConnDiedType;
 
-    fn drop_with_error(self, _error: Error) {
+    fn drop_with_error(self, _error: crate::Error) {
         // TODO
     }
 }
@@ -200,7 +197,7 @@ where
 {
     type Types = ServerTypes;
 
-    fn process_message(&mut self, message: ServerToWriteMessage) -> result::Result<()> {
+    fn process_message(&mut self, message: ServerToWriteMessage) -> crate::Result<()> {
         match message {
             ServerToWriteMessage::Common(common) => self.process_common_message(common),
         }
@@ -218,7 +215,7 @@ where
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
-    ) -> result::Result<Option<HttpStreamRef<ServerTypes>>> {
+    ) -> crate::Result<Option<HttpStreamRef<ServerTypes>>> {
         let existing_stream = self
             .get_stream_for_headers_maybe_send_error(stream_id)?
             .is_some();
@@ -346,7 +343,7 @@ impl ServerConn {
         f: F,
     ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
-        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
+        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
             + Send
             + Sync
             + 'static,
@@ -355,7 +352,7 @@ impl ServerConn {
 
         impl<F> ServerHandler for HttpServiceFn<F>
         where
-            F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
+            F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
                 + Send
                 + Sync
                 + 'static,
@@ -365,7 +362,7 @@ impl ServerConn {
                 context: ServerHandlerContext,
                 req: ServerRequest,
                 resp: ServerResponse,
-            ) -> result::Result<()> {
+            ) -> crate::Result<()> {
                 (self.0)(context, req, resp)
             }
         }
@@ -380,7 +377,7 @@ impl ServerConn {
         if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(
             CommonToWriteMessage::DumpState(tx),
         )) {
-            return Box::pin(future::err(error::Error::FailedToSendReqToDumpState));
+            return Box::pin(future::err(crate::Error::FailedToSendReqToDumpState));
         }
 
         Box::pin(rx)

@@ -1,7 +1,6 @@
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::types::Types;
 use crate::death::channel::DeathAwareSender;
-use crate::result;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::DEFAULT_SETTINGS;
 
@@ -28,7 +27,7 @@ impl<T: Types> IncreaseInWindow<T> {
         );
     }
 
-    pub fn increase_window(&mut self, inc: u32) -> result::Result<()> {
+    pub fn increase_window(&mut self, inc: u32) -> crate::Result<()> {
         let old_in_window_size = self.in_window_size;
         // TODO: do not panic
         self.in_window_size = self.in_window_size.checked_add(inc).unwrap();
@@ -40,7 +39,7 @@ impl<T: Types> IncreaseInWindow<T> {
         self.to_write_tx.unbounded_send(m.into())
     }
 
-    pub fn increase_window_auto_above(&mut self, above: u32) -> result::Result<()> {
+    pub fn increase_window_auto_above(&mut self, above: u32) -> crate::Result<()> {
         // TODO: overflow check
         if self.in_window_size < above + DEFAULT_SETTINGS.initial_window_size / 2 {
             self.increase_window(DEFAULT_SETTINGS.initial_window_size)
@@ -49,7 +48,7 @@ impl<T: Types> IncreaseInWindow<T> {
         }
     }
 
-    pub fn increase_window_auto(&mut self) -> result::Result<()> {
+    pub fn increase_window_auto(&mut self) -> crate::Result<()> {
         self.increase_window_auto_above(0)
     }
 }

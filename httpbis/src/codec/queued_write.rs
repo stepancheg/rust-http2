@@ -1,5 +1,4 @@
 use crate::codec::http_framed_write::HttpFramedWrite;
-use crate::result;
 use crate::solicit::frame::FrameIR;
 use crate::solicit::frame::GoawayFrame;
 use futures::task::Context;
@@ -47,7 +46,7 @@ impl<W: AsyncWrite + Unpin> QueuedWrite<W> {
         self.framed_write.buffer_frame(frame);
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<crate::Result<()>> {
         self.framed_write.poll_flush(cx)
     }
 

@@ -2,7 +2,6 @@
 
 use std::fmt;
 use std::iter::FromIterator;
-use std::result;
 use std::str;
 use std::str::FromStr;
 
@@ -82,7 +81,7 @@ pub enum HeaderError {
 }
 
 /// Type alias.
-pub type HeaderResult<T> = result::Result<T, HeaderError>;
+pub type HeaderResult<T> = Result<T, HeaderError>;
 
 impl Header {
     /// Create a new `Header` object with exact values of `name` and `value`.

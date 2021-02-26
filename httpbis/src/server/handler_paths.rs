@@ -2,7 +2,6 @@ use std::collections::hash_map;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::result;
 use crate::server::handler::ServerHandler;
 use crate::server::handler::ServerHandlerContext;
 use crate::server::req::ServerRequest;
@@ -140,13 +139,13 @@ impl ServerHandlerPaths {
 
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
     where
-        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
+        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
             + Send
             + Sync
             + 'static,
     {
         impl<
-                F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> result::Result<()>
+                F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
                     + Send
                     + Sync
                     + 'static,
@@ -157,7 +156,7 @@ impl ServerHandlerPaths {
                 context: ServerHandlerContext,
                 req: ServerRequest,
                 resp: ServerResponse,
-            ) -> result::Result<()> {
+            ) -> crate::Result<()> {
                 self(context, req, resp)
             }
         }
@@ -181,7 +180,7 @@ impl ServerHandler for ServerHandlerPaths {
         context: ServerHandlerContext,
         req: ServerRequest,
         mut resp: ServerResponse,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         if let Some(service) = self.find_service(req.headers.path()) {
             info!("invoking user callback for path {}", req.headers.path());
             service.start_request(context, req, resp)

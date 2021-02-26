@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 use std::pin::Pin;
 
-use crate::error;
-use crate::result;
 use crate::AnySocketAddr;
-use crate::Error;
 
 use crate::solicit::frame::GoawayFrame;
 use crate::solicit::frame::HttpFrameType;
@@ -133,7 +130,7 @@ pub struct ConnStateSnapshot {
 impl ErrorAwareDrop for ConnStateSnapshot {
     type DiedType = ConnDiedType;
 
-    fn drop_with_error(self, error: Error) {
+    fn drop_with_error(self, error: crate::Error) {
         drop(error);
     }
 }
@@ -328,18 +325,18 @@ where
     }
 
     /// Internal helper method that decreases the outbound flow control window size.
-    fn _decrease_out_window(&mut self, size: u32) -> result::Result<()> {
+    fn _decrease_out_window(&mut self, size: u32) -> crate::Result<()> {
         // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
         // reach here only after sending a DATA frame, whose payload also cannot be larger than
         // that, but we assert it just in case.
         debug_assert!(size < 0x80000000);
         self.out_window_size
             .try_decrease(size as i32)
-            .map_err(|_| error::Error::WindowSizeOverflow)
+            .map_err(|_| crate::Error::WindowSizeOverflow)
     }
 
     /// Internal helper method that decreases the inbound flow control window size.
-    pub fn decrease_in_window(&mut self, size: u32) -> result::Result<()> {
+    pub fn decrease_in_window(&mut self, size: u32) -> crate::Result<()> {
         // The size by which we decrease the window must be at most 2^31 - 1. We should be able to
         // reach here only after receiving a DATA frame, which would have been validated when
         // parsed from the raw frame to have the correct payload size, but we assert it just in
@@ -348,7 +345,7 @@ where
         let old_in_window_size = self.in_window_size.size();
         self.in_window_size
             .try_decrease_to_non_negative(size as i32)
-            .map_err(|_| error::Error::WindowSizeOverflow)?;
+            .map_err(|_| crate::Error::WindowSizeOverflow)?;
         let new_in_window_size = self.in_window_size.size();
         debug!(
             "decrease conn window: {} -> {}",
@@ -360,7 +357,7 @@ where
     pub fn process_dump_state(
         &mut self,
         sender: DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         // ignore send error, client might be already dead
         drop(sender.send(self.dump_state()));
         Ok(())
@@ -370,7 +367,7 @@ where
         &mut self,
         stream_id: StreamId,
         error_code: ErrorCode,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         // TODO: probably notify handlers
         self.streams.remove_stream(stream_id);
 
@@ -379,7 +376,7 @@ where
         Ok(())
     }
 
-    pub fn send_flow_control_error(&mut self) -> result::Result<()> {
+    pub fn send_flow_control_error(&mut self) -> crate::Result<()> {
         self.send_goaway(ErrorCode::FlowControlError)
     }
 
@@ -407,7 +404,7 @@ where
         &mut self,
         stream_id: StreamId,
         frame_type: HttpFrameType,
-    ) -> result::Result<Option<HttpStreamRef<T>>> {
+    ) -> crate::Result<Option<HttpStreamRef<T>>> {
         let stream_state = self.stream_state(stream_id);
 
         match stream_state {
@@ -494,14 +491,14 @@ where
     pub fn get_stream_for_headers_maybe_send_error(
         &mut self,
         stream_id: StreamId,
-    ) -> result::Result<Option<HttpStreamRef<T>>> {
+    ) -> crate::Result<Option<HttpStreamRef<T>>> {
         self.get_stream_maybe_send_error(stream_id, HttpFrameType::Headers)
     }
 
-    pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> result::Result<()> {
+    pub fn increase_in_window(&mut self, stream_id: StreamId, increase: u32) -> crate::Result<()> {
         if let Some(mut stream) = self.streams.get_mut(stream_id) {
             if let Err(_) = stream.stream().in_window_size.try_increase(increase) {
-                return Err(error::Error::StreamInWindowOverflow(
+                return Err(crate::Error::StreamInWindowOverflow(
                     stream_id,
                     stream.stream().in_window_size.size(),
                     increase,
@@ -517,7 +514,7 @@ where
         Ok(())
     }
 
-    fn poll_next_event(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<LoopEvent<T>>> {
+    fn poll_next_event(&mut self, cx: &mut Context<'_>) -> Poll<crate::Result<LoopEvent<T>>> {
         // Always flush outgoing queue
         self.poll_flush(cx)?;
 
@@ -548,11 +545,11 @@ where
     }
 
     /// Each connection is a single future which polls event and processed them
-    async fn next_event(&mut self) -> result::Result<LoopEvent<T>> {
+    async fn next_event(&mut self) -> crate::Result<LoopEvent<T>> {
         future::poll_fn(|cx| self.poll_next_event(cx)).await
     }
 
-    async fn run_loop(mut self) -> result::Result<()> {
+    async fn run_loop(mut self) -> crate::Result<()> {
         loop {
             let event = self.next_event().await?;
             match event {

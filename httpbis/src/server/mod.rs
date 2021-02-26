@@ -27,7 +27,6 @@ use futures::future::FutureExt;
 use futures::future::TryFutureExt;
 
 use crate::error::Error;
-use crate::result::Result;
 
 use crate::solicit_async::*;
 
@@ -44,7 +43,6 @@ pub use self::tls::ServerTlsOption;
 use crate::assert_types::assert_send_future;
 use crate::common::conn::ConnStateSnapshot;
 use crate::net::unix::SocketAddrUnix;
-use crate::result;
 pub use crate::server::conf::ServerConf;
 pub use crate::server::conn::ServerConn;
 use crate::server::handler::ServerHandler;
@@ -97,7 +95,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     }
 
     /// Set port server listens on.
-    pub fn set_addr<S: ToSocketAddrs>(&mut self, addr: S) -> Result<()> {
+    pub fn set_addr<S: ToSocketAddrs>(&mut self, addr: S) -> crate::Result<()> {
         let addrs: Vec<_> = addr.to_socket_addrs()?.collect();
         if addrs.is_empty() {
             return Err(Error::AddrResolvedToEmptyList);
@@ -111,7 +109,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
 
 impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
     // Set name of unix domain socket
-    pub fn set_unix_addr<S: Into<SocketAddrUnix>>(&mut self, addr: S) -> Result<()> {
+    pub fn set_unix_addr<S: Into<SocketAddrUnix>>(&mut self, addr: S) -> crate::Result<()> {
         self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
     }
@@ -139,7 +137,7 @@ impl<A: tls_api::TlsAcceptor> ServerBuilder<A> {
         self.tls = ServerTlsOption::Tls(Arc::new(acceptor));
     }
 
-    pub fn build(self) -> Result<Server> {
+    pub fn build(self) -> crate::Result<Server> {
         let (alive_tx, alive_rx) = mpsc::channel();
 
         let state: Arc<Mutex<ServerState>> = Default::default();
@@ -252,14 +250,14 @@ impl ServerState {
             .conns
             .iter()
             .map(|(&id, conn)| {
-                assert_send_future::<result::Result<_>, _>(
+                assert_send_future::<crate::Result<_>, _>(
                     conn.dump_state().map_ok(move |state| (id, state)),
                 )
             })
             .collect();
 
         let j = try_join_all(futures);
-        let j = assert_send_future::<result::Result<_>, _>(j);
+        let j = assert_send_future::<crate::Result<_>, _>(j);
 
         Box::pin(j.map_ok(|states| ServerStateSnapshot {
             conns: states.into_iter().collect(),
@@ -367,7 +365,7 @@ where
     // or shutdown signal.
     let done = try_join(loop_run, shutdown_future);
 
-    let done = assert_send_future::<result::Result<_>, _>(done);
+    let done = assert_send_future::<crate::Result<_>, _>(done);
 
     let done = done.then(|_| {
         drop(done_tx.send(()));

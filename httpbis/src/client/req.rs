@@ -4,7 +4,6 @@ use crate::common::sender::CommonSender;
 use crate::common::sender::SendError;
 use crate::common::window_size::StreamDead;
 
-use crate::result;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
@@ -21,7 +20,7 @@ pub struct ClientRequest {
     pub(crate) common: CommonSender<ClientTypes>,
     // need to replace with FnOnce when rust allows it
     pub(crate) drop_callback:
-        Option<Box<dyn FnMut(&mut ClientRequest) -> result::Result<()> + Send>>,
+        Option<Box<dyn FnMut(&mut ClientRequest) -> crate::Result<()> + Send>>,
 }
 
 impl Drop for ClientRequest {
@@ -59,7 +58,7 @@ impl ClientRequest {
 
     pub fn set_drop_callback<F>(&mut self, f: F)
     where
-        F: FnMut(&mut ClientRequest) -> result::Result<()> + Send + 'static,
+        F: FnMut(&mut ClientRequest) -> crate::Result<()> + Send + 'static,
     {
         self.drop_callback = Some(Box::new(f));
     }
@@ -99,7 +98,7 @@ impl ClientRequest {
 
     pub fn pull_bytes_from_stream<S>(&mut self, stream: S) -> Result<(), SendError>
     where
-        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
+        S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
     {
         self.common.pull_bytes_from_stream(stream)
     }

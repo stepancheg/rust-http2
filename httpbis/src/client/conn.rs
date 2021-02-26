@@ -1,11 +1,7 @@
 //! Single client connection
 
-use std::result::Result as std_Result;
 use std::sync::Arc;
 
-use crate::error;
-use crate::error::Error;
-use crate::result;
 use crate::AnySocketAddr;
 
 use crate::solicit::end_stream::EndStream;
@@ -97,14 +93,14 @@ pub struct ClientStartRequestMessage {
 
 pub(crate) enum ClientToWriteMessage {
     Start(ClientStartRequestMessage),
-    WaitForHandshake(oneshot::Sender<result::Result<()>>),
+    WaitForHandshake(oneshot::Sender<crate::Result<()>>),
     Common(CommonToWriteMessage),
 }
 
 impl ErrorAwareDrop for ClientToWriteMessage {
     type DiedType = ConnDiedType;
 
-    fn drop_with_error(self, error: Error) {
+    fn drop_with_error(self, error: crate::Error) {
         match self {
             ClientToWriteMessage::Start(start) => {
                 start.start.stream_handler.error(error);
@@ -131,7 +127,7 @@ where
 {
     type Types = ClientTypes;
 
-    fn process_message(&mut self, message: ClientToWriteMessage) -> result::Result<()> {
+    fn process_message(&mut self, message: ClientToWriteMessage) -> crate::Result<()> {
         match message {
             ClientToWriteMessage::Start(start) => self.process_start(start),
             ClientToWriteMessage::Common(common) => self.process_common_message(common),
@@ -148,7 +144,7 @@ impl<I> Conn<ClientTypes, I>
 where
     I: SocketStream,
 {
-    fn process_start(&mut self, start: ClientStartRequestMessage) -> result::Result<()> {
+    fn process_start(&mut self, start: ClientStartRequestMessage) -> crate::Result<()> {
         let ClientStartRequestMessage {
             start:
                 StartRequestMessage {
@@ -359,7 +355,7 @@ impl ClientConn {
     pub(crate) fn start_request_with_resp_sender(
         &self,
         start: StartRequestMessage,
-    ) -> Result<(), (StartRequestMessage, error::Error)> {
+    ) -> Result<(), (StartRequestMessage, crate::Error)> {
         let client_start = ClientStartRequestMessage {
             start,
             write_tx: self.write_tx.clone(),
@@ -394,8 +390,8 @@ impl ClientConn {
 
     pub fn wait_for_connect_with_resp_sender(
         &self,
-        tx: oneshot::Sender<result::Result<()>>,
-    ) -> std_Result<(), oneshot::Sender<result::Result<()>>> {
+        tx: oneshot::Sender<crate::Result<()>>,
+    ) -> Result<(), oneshot::Sender<crate::Result<()>>> {
         self.write_tx
             .unbounded_send_recover(ClientToWriteMessage::WaitForHandshake(tx))
             .map_err(|(send_message, _)| match send_message {
@@ -439,7 +435,7 @@ where
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
-    ) -> result::Result<Option<HttpStreamRef<ClientTypes>>> {
+    ) -> crate::Result<Option<HttpStreamRef<ClientTypes>>> {
         let existing_stream = self
             .get_stream_for_headers_maybe_send_error(stream_id)?
             .is_some();
@@ -458,7 +454,7 @@ where
             InMessageStage::Initial => HeadersPlace::Initial,
             InMessageStage::AfterInitialHeaders => HeadersPlace::Trailing,
             InMessageStage::AfterTrailingHeaders => {
-                return Err(error::Error::InternalError(format!(
+                return Err(crate::Error::InternalError(format!(
                     "closed stream must be handled before"
                 )));
             }

@@ -9,7 +9,6 @@ use crate::common::stream::InMessageStage;
 use crate::common::stream_map::HttpStreamRef;
 use crate::common::types::Types;
 use crate::error;
-use crate::result;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::DataFrame;
 use crate::solicit::frame::Frame;
@@ -44,7 +43,7 @@ pub(crate) trait ConnReadSideCustom {
         stream_id: StreamId,
         end_stream: EndStream,
         headers: Headers,
-    ) -> result::Result<Option<HttpStreamRef<Self::Types>>>;
+    ) -> crate::Result<Option<HttpStreamRef<Self::Types>>>;
 }
 
 impl<T, I> Conn<T, I>
@@ -59,13 +58,13 @@ where
     pub fn poll_recv_http_frame(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<result::Result<HttpFrameDecodedOrGoaway>> {
+    ) -> Poll<crate::Result<HttpFrameDecodedOrGoaway>> {
         let max_frame_size = self.our_settings_ack.max_frame_size;
 
         self.framed_read.poll_http_frame(cx, max_frame_size)
     }
 
-    fn process_data_frame(&mut self, frame: DataFrame) -> result::Result<Option<HttpStreamRef<T>>> {
+    fn process_data_frame(&mut self, frame: DataFrame) -> crate::Result<Option<HttpStreamRef<T>>> {
         let stream_id = frame.get_stream_id();
 
         self.decrease_in_window(frame.payload_len())?;
@@ -153,7 +152,7 @@ where
         ))
     }
 
-    fn process_ping(&mut self, frame: PingFrame) -> result::Result<()> {
+    fn process_ping(&mut self, frame: PingFrame) -> crate::Result<()> {
         if frame.is_ack() {
             if let Some(opaque_data) = self.ping_sent.take() {
                 if opaque_data == frame.opaque_data {
@@ -175,7 +174,7 @@ where
         }
     }
 
-    fn process_goaway(&mut self, frame: GoawayFrame) -> result::Result<()> {
+    fn process_goaway(&mut self, frame: GoawayFrame) -> crate::Result<()> {
         if let Some(..) = self.goaway_received {
             return Err(error::Error::GoawayAfterGoaway);
         }
@@ -197,7 +196,7 @@ where
     fn process_headers_frame(
         &mut self,
         frame: HeadersDecodedFrame,
-    ) -> result::Result<Option<HttpStreamRef<T>>> {
+    ) -> crate::Result<Option<HttpStreamRef<T>>> {
         let end_stream = if frame.is_end_of_stream() {
             EndStream::Yes
         } else {
@@ -210,18 +209,18 @@ where
     fn process_priority_frame(
         &mut self,
         frame: PriorityFrame,
-    ) -> result::Result<Option<HttpStreamRef<T>>> {
+    ) -> crate::Result<Option<HttpStreamRef<T>>> {
         Ok(self.streams.get_mut(frame.get_stream_id()))
     }
 
-    fn process_settings_ack(&mut self, frame: SettingsFrame) -> result::Result<()> {
+    fn process_settings_ack(&mut self, frame: SettingsFrame) -> crate::Result<()> {
         assert!(frame.is_ack());
 
         self.our_settings_ack = self.our_settings_sent;
         Ok(())
     }
 
-    fn process_settings_req(&mut self, frame: SettingsFrame) -> result::Result<()> {
+    fn process_settings_req(&mut self, frame: SettingsFrame) -> crate::Result<()> {
         assert!(!frame.is_ack());
 
         for setting in frame.settings {
@@ -255,7 +254,7 @@ where
         Ok(())
     }
 
-    fn process_settings(&mut self, frame: SettingsFrame) -> result::Result<()> {
+    fn process_settings(&mut self, frame: SettingsFrame) -> crate::Result<()> {
         if frame.is_ack() {
             self.process_settings_ack(frame)
         } else {
@@ -266,7 +265,7 @@ where
     fn process_stream_window_update_frame(
         &mut self,
         frame: WindowUpdateFrame,
-    ) -> result::Result<Option<HttpStreamRef<T>>> {
+    ) -> crate::Result<Option<HttpStreamRef<T>>> {
         let mut stream =
             match self.get_stream_maybe_send_error(frame.stream_id, HttpFrameType::WindowUpdate)? {
                 Some(s) => s,
@@ -306,7 +305,7 @@ where
         Ok(Some(stream))
     }
 
-    fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> result::Result<()> {
+    fn process_conn_window_update(&mut self, frame: WindowUpdateFrame) -> crate::Result<()> {
         assert_eq!(0, frame.stream_id);
 
         let old_window_size = self.out_window_size.size();
@@ -337,7 +336,7 @@ where
     fn process_rst_stream_frame(
         &mut self,
         frame: RstStreamFrame,
-    ) -> result::Result<Option<HttpStreamRef<T>>> {
+    ) -> crate::Result<Option<HttpStreamRef<T>>> {
         let stream_id = frame.get_stream_id();
         let dropped_data = if let Some(stream) =
             self.get_stream_maybe_send_error(stream_id, HttpFrameType::RstStream)?
@@ -357,7 +356,7 @@ where
         Ok(None)
     }
 
-    fn process_conn_frame(&mut self, frame: HttpFrameConn) -> result::Result<()> {
+    fn process_conn_frame(&mut self, frame: HttpFrameConn) -> crate::Result<()> {
         match frame {
             HttpFrameConn::Settings(f) => self.process_settings(f),
             HttpFrameConn::Ping(f) => self.process_ping(f),
@@ -366,7 +365,7 @@ where
         }
     }
 
-    fn process_stream_frame(&mut self, frame: HttpFrameStream) -> result::Result<()> {
+    fn process_stream_frame(&mut self, frame: HttpFrameStream) -> crate::Result<()> {
         let stream_id = frame.get_stream_id();
         let end_of_stream = frame.is_end_of_stream();
 
@@ -409,7 +408,7 @@ where
         Ok(())
     }
 
-    fn process_http_frame(&mut self, frame: HttpFrameDecoded) -> result::Result<()> {
+    fn process_http_frame(&mut self, frame: HttpFrameDecoded) -> crate::Result<()> {
         if log_enabled!(log::Level::Trace) {
             debug!("received frame: {:?}", frame);
         } else {
@@ -431,7 +430,7 @@ where
         &mut self,
         stream_id: StreamId,
         error_code: ErrorCode,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         if let Some(mut stream) = self.streams.get_mut(stream_id) {
             stream.close_outgoing(error_code);
         } else {
@@ -444,7 +443,7 @@ where
     pub fn process_http_frame_of_goaway(
         &mut self,
         m: HttpFrameDecodedOrGoaway,
-    ) -> result::Result<()> {
+    ) -> crate::Result<()> {
         match m {
             HttpFrameDecodedOrGoaway::Frame(frame) => self.process_http_frame(frame),
             HttpFrameDecodedOrGoaway::_SendRst(stream_id, error_code) => {

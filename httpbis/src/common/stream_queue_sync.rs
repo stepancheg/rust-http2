@@ -13,7 +13,6 @@ use crate::client::types::ClientTypes;
 use crate::common::types::Types;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
-use crate::result;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::types::ServerTypes;
 use crate::ErrorCode;
@@ -35,7 +34,7 @@ pub(crate) struct StreamQueueSyncReceiver<T: Types> {
 }
 
 impl<T: Types> StreamQueueSyncSender<T> {
-    fn send(&self, item: Result<DataOrHeadersWithFlag, error::Error>) -> result::Result<()> {
+    fn send(&self, item: Result<DataOrHeadersWithFlag, error::Error>) -> crate::Result<()> {
         if let Err(_send_error) = self.sender.unbounded_send(item) {
             // TODO: better error
             Err(error::Error::PullStreamDied)
@@ -46,67 +45,67 @@ impl<T: Types> StreamQueueSyncSender<T> {
 }
 
 impl ServerRequestStreamHandler for StreamQueueSyncSender<ServerTypes> {
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
             last: end_stream,
         }))
     }
 
-    fn trailers(&mut self, trailers: Headers) -> result::Result<()> {
+    fn trailers(&mut self, trailers: Headers) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(trailers),
             last: true,
         }))
     }
 
-    fn rst(self: Box<Self>, error_code: ErrorCode) -> result::Result<()> {
+    fn rst(self: Box<Self>, error_code: ErrorCode) -> crate::Result<()> {
         self.send(Err(error::Error::RstStreamReceived(error_code)))
     }
 
-    fn error(self: Box<Self>, error: error::Error) -> result::Result<()> {
+    fn error(self: Box<Self>, error: error::Error) -> crate::Result<()> {
         self.send(Err(error))
     }
 }
 
 impl ClientResponseStreamHandler for StreamQueueSyncSender<ClientTypes> {
-    fn headers(&mut self, headers: Headers, end_stream: bool) -> result::Result<()> {
+    fn headers(&mut self, headers: Headers, end_stream: bool) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
             last: end_stream,
         }))
     }
 
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> result::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
             last: end_stream,
         }))
     }
 
-    fn trailers(&mut self, trailers: Headers) -> result::Result<()> {
+    fn trailers(&mut self, trailers: Headers) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(trailers),
             last: true,
         }))
     }
 
-    fn rst(self: Box<Self>, error_code: ErrorCode) -> result::Result<()> {
+    fn rst(self: Box<Self>, error_code: ErrorCode) -> crate::Result<()> {
         self.send(Err(error::Error::RstStreamReceived(error_code)))
     }
 
-    fn error(self: Box<Self>, error: error::Error) -> result::Result<()> {
+    fn error(self: Box<Self>, error: error::Error) -> crate::Result<()> {
         self.send(Err(error))
     }
 }
 
 impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
-    type Item = result::Result<DataOrHeadersWithFlag>;
+    type Item = crate::Result<DataOrHeadersWithFlag>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<result::Result<DataOrHeadersWithFlag>>> {
+    ) -> Poll<Option<crate::Result<DataOrHeadersWithFlag>>> {
         if self.eof_received {
             return Poll::Ready(None);
         }

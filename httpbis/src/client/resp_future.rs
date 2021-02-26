@@ -17,8 +17,6 @@ use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use crate::data_or_trailers::*;
-use crate::error;
-use crate::result;
 use futures::task::Context;
 use std::pin::Pin;
 use std::task::Poll;
@@ -31,7 +29,7 @@ impl ClientResponseFuture {
 
     pub fn new<F>(future: F) -> ClientResponseFuture
     where
-        F: Future<Output = result::Result<(Headers, HttpStreamAfterHeaders)>> + Send + 'static,
+        F: Future<Output = crate::Result<(Headers, HttpStreamAfterHeaders)>> + Send + 'static,
     {
         ClientResponseFuture(Box::pin(future))
     }
@@ -45,7 +43,7 @@ impl ClientResponseFuture {
 
     pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> ClientResponseFuture
     where
-        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
+        S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
     {
         ClientResponseFuture::headers_and_stream(headers, HttpStreamAfterHeaders::bytes(content))
     }
@@ -83,7 +81,7 @@ impl ClientResponseFuture {
 
     pub fn from_stream<S>(mut stream: S) -> ClientResponseFuture
     where
-        S: Stream<Item = result::Result<DataOrHeadersWithFlag>> + Unpin + Send + 'static,
+        S: Stream<Item = crate::Result<DataOrHeadersWithFlag>> + Unpin + Send + 'static,
     {
         ClientResponseFuture::new(async move {
             // Check that first frame is HEADERS
@@ -93,11 +91,11 @@ impl ClientResponseFuture {
                         (headers, HttpStreamAfterHeaders::from_parts(stream))
                     }
                     DataOrHeaders::Data(..) => {
-                        return Err(error::Error::InvalidFrame("data before headers".to_owned()))
+                        return Err(crate::Error::InvalidFrame("data before headers".to_owned()))
                     }
                 },
                 None => {
-                    return Err(error::Error::InvalidFrame(
+                    return Err(crate::Error::InvalidFrame(
                         "empty response, expecting headers".to_owned(),
                     ))
                 }
@@ -106,7 +104,7 @@ impl ClientResponseFuture {
         })
     }
 
-    pub fn err(err: error::Error) -> ClientResponseFuture {
+    pub fn err(err: crate::Error) -> ClientResponseFuture {
         ClientResponseFuture::new(future::err(err))
     }
 
@@ -140,19 +138,19 @@ impl ClientResponseFuture {
             self.into_stream()
                 .try_fold(SimpleHttpMessage::new(), |mut c, p| {
                     c.add(p);
-                    future::ok::<_, error::Error>(c)
+                    future::ok::<_, crate::Error>(c)
                 }),
         )
     }
 }
 
 impl Future for ClientResponseFuture {
-    type Output = result::Result<(Headers, HttpStreamAfterHeaders)>;
+    type Output = crate::Result<(Headers, HttpStreamAfterHeaders)>;
 
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<result::Result<(Headers, HttpStreamAfterHeaders)>> {
+    ) -> Poll<crate::Result<(Headers, HttpStreamAfterHeaders)>> {
         Pin::new(&mut self.0).poll(cx)
     }
 }

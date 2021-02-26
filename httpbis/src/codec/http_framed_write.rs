@@ -1,4 +1,3 @@
-use crate::result;
 use tokio::io::AsyncWrite;
 
 use crate::codec::write_buffer::WriteBuffer;
@@ -31,7 +30,7 @@ impl<W: AsyncWrite + Unpin> HttpFramedWrite<W> {
         frame.serialize_into(&mut self.buf);
     }
 
-    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<result::Result<()>> {
+    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<crate::Result<()>> {
         loop {
             if !self.buf.has_remaining() {
                 return Poll::Ready(Ok(()));

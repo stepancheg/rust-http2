@@ -1,4 +1,3 @@
-use crate::result;
 use crate::server::req::ServerRequest;
 use crate::ServerResponse;
 use tokio::runtime::Handle;
@@ -28,5 +27,5 @@ pub trait ServerHandler: Send + Sync + 'static {
         context: ServerHandlerContext,
         req: ServerRequest,
         resp: ServerResponse,
-    ) -> result::Result<()>;
+    ) -> crate::Result<()>;
 }

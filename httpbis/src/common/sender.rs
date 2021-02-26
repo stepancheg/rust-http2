@@ -4,8 +4,6 @@ use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::death::channel::DeathAwareSender;
-use crate::error;
-use crate::result;
 use crate::solicit::stream_id::StreamId;
 use crate::ErrorCode;
 use crate::Headers;
@@ -27,7 +25,7 @@ pub enum SenderState {
 
 #[derive(Debug)]
 pub enum SendError {
-    ConnectionDied(Arc<error::Error>),
+    ConnectionDied(Arc<crate::Error>),
     IncorrectState(SenderState),
 }
 
@@ -200,7 +198,7 @@ impl<T: Types> CommonSender<T> {
 
     pub fn pull_bytes_from_stream<S>(&mut self, stream: S) -> Result<(), SendError>
     where
-        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
+        S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
     {
         self.pull_from_stream(HttpStreamAfterHeaders::bytes(stream))
     }

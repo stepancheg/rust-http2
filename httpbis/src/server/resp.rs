@@ -2,7 +2,6 @@ use crate::assert_types::assert_send;
 use crate::common::sender::CommonSender;
 use crate::common::sender::SendError;
 
-use crate::result;
 use crate::server::types::ServerTypes;
 use crate::ErrorCode;
 use crate::Headers;
@@ -21,7 +20,7 @@ pub struct ServerResponse {
     pub(crate) common: CommonSender<ServerTypes>,
     // need to replace with FnOnce when rust allows it
     pub(crate) drop_callback:
-        Option<Box<dyn FnMut(&mut ServerResponse) -> result::Result<()> + Send>>,
+        Option<Box<dyn FnMut(&mut ServerResponse) -> crate::Result<()> + Send>>,
 }
 
 impl Drop for ServerResponse {
@@ -51,7 +50,7 @@ impl ServerResponse {
 
     pub fn set_drop_callback<F>(&mut self, f: F)
     where
-        F: FnMut(&mut ServerResponse) -> result::Result<()> + Send + 'static,
+        F: FnMut(&mut ServerResponse) -> crate::Result<()> + Send + 'static,
     {
         self.drop_callback = Some(Box::new(f));
     }
@@ -90,7 +89,7 @@ impl ServerResponse {
 
     pub fn pull_bytes_from_stream<S>(&mut self, stream: S) -> Result<(), SendError>
     where
-        S: Stream<Item = result::Result<Bytes>> + Send + 'static,
+        S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
     {
         self.common.pull_bytes_from_stream(stream)
     }

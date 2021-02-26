@@ -5,8 +5,6 @@ use std::task::Poll;
 
 use crate::solicit::DEFAULT_SETTINGS;
 
-use crate::result;
-
 use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::Types;
 use crate::common::increase_in_window::IncreaseInWindow;
@@ -23,12 +21,12 @@ pub(crate) struct StreamFromNetwork<T: Types> {
 }
 
 impl<T: Types> Stream for StreamFromNetwork<T> {
-    type Item = result::Result<DataOrHeadersWithFlag>;
+    type Item = crate::Result<DataOrHeadersWithFlag>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<result::Result<DataOrHeadersWithFlag>>> {
+    ) -> Poll<Option<crate::Result<DataOrHeadersWithFlag>>> {
         let part = match Pin::new(&mut self.rx).poll_next(cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
