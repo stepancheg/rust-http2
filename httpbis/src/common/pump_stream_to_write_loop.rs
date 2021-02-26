@@ -9,8 +9,8 @@ use crate::misc::any_to_string;
 use crate::solicit::stream_id::StreamId;
 use crate::DataOrTrailers;
 
+use crate::stream_after_headers::HttpStreamAfterHeaders;
 use crate::ErrorCode;
-use crate::HttpStreamAfterHeaders;
 
 use std::panic::AssertUnwindSafe;
 

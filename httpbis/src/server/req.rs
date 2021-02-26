@@ -6,8 +6,8 @@ use crate::server::conn::ServerToWriteMessage;
 use crate::server::increase_in_window::ServerIncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::stream_handler::ServerRequestStreamHandlerHolder;
+use crate::stream_after_headers::HttpStreamAfterHeaders;
 use crate::Headers;
-use crate::HttpStreamAfterHeaders;
 use crate::StreamId;
 
 pub struct ServerRequest<'a> {

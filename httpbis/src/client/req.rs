@@ -4,9 +4,9 @@ use crate::common::sender::CommonSender;
 use crate::common::sender::SendError;
 use crate::common::window_size::StreamDead;
 
+use crate::stream_after_headers::HttpStreamAfterHeaders;
 use crate::ErrorCode;
 use crate::Headers;
-use crate::HttpStreamAfterHeaders;
 use crate::SenderState;
 use bytes::Bytes;
 use futures::stream::Stream;

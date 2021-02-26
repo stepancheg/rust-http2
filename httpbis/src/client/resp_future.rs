@@ -1,25 +1,23 @@
-use futures::future;
-use futures::TryFutureExt;
-use futures::TryStreamExt;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::Poll;
 
+use bytes::Bytes;
+use futures::future;
 use futures::stream;
 use futures::stream::Stream;
 use futures::stream::StreamExt;
-use std::future::Future;
-
-use bytes::Bytes;
-
-use crate::message::SimpleHttpMessage;
-use crate::solicit::header::Headers;
-use crate::solicit_async::*;
+use futures::task::Context;
+use futures::TryFutureExt;
+use futures::TryStreamExt;
 
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
-use crate::data_or_trailers::*;
-use futures::task::Context;
-use std::pin::Pin;
-use std::task::Poll;
+use crate::message::SimpleHttpMessage;
+use crate::solicit::header::Headers;
+use crate::solicit_async::*;
+use crate::stream_after_headers::HttpStreamAfterHeaders;
 
 /// Convenient wrapper around async HTTP response future/stream
 pub struct ClientResponseFuture(pub HttpFutureSend<(Headers, HttpStreamAfterHeaders)>);

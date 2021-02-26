@@ -14,83 +14,69 @@ extern crate log;
 
 pub use bytes_ext::buf_get_bytes::BufGetBytes;
 pub use bytes_ext::bytes_deque::BytesDeque;
+pub use client::conf::ClientConf;
+pub use client::handler::ClientHandler;
+pub use client::req::ClientRequest;
 pub use client::resp_future::ClientResponseFuture;
-
-pub use crate::client::conf::ClientConf;
-pub use crate::client::handler::ClientHandler;
-pub use crate::client::req::ClientRequest;
-pub use crate::client::tls::ClientTlsOption;
-pub use crate::client::Client;
-pub use crate::client::ClientBuilder;
-pub use crate::client::ClientInterface;
-pub use crate::common::sender::SendError;
-pub use crate::common::sender::SenderState;
-pub use crate::common::window_size::StreamDead;
-pub use crate::data_or_trailers::DataOrTrailers;
-pub use crate::data_or_trailers::HttpStreamAfterHeaders;
-pub use crate::error::Error;
-pub use crate::message::SimpleHttpMessage;
-pub use crate::net::addr::AnySocketAddr;
-pub use crate::result::Result;
-pub use crate::server::conf::ServerAlpn;
-pub use crate::server::conf::ServerConf;
-pub use crate::server::handler::ServerHandler;
-pub use crate::server::handler_paths::ServerHandlerPaths;
-pub use crate::server::increase_in_window::ServerIncreaseInWindow;
-pub use crate::server::req::ServerRequest;
-pub use crate::server::resp::ServerResponse;
-pub use crate::server::stream_handler::ServerRequestStreamHandler;
-pub use crate::server::tls::ServerTlsOption;
-pub use crate::server::Server;
-pub use crate::server::ServerBuilder;
-pub use crate::solicit::error_code::ErrorCode;
-pub use crate::solicit::header::name::HeaderName;
-pub use crate::solicit::header::name::PseudoHeaderName;
-pub use crate::solicit::header::value::HeaderValue;
-pub use crate::solicit::header::Header;
-pub use crate::solicit::header::Headers;
-pub use crate::solicit::stream_id::StreamId;
-pub use crate::solicit::HttpScheme;
-
-mod solicit;
-
-mod error;
-mod result;
-
-mod client;
-mod codec;
-mod server;
+pub use client::tls::ClientTlsOption;
+pub use client::Client;
+pub use client::ClientBuilder;
+pub use client::ClientInterface;
+pub use common::sender::SendError;
+pub use common::sender::SenderState;
+pub use common::window_size::StreamDead;
+pub use data_or_trailers::DataOrTrailers;
+pub use error::Error;
+pub use message::SimpleHttpMessage;
+pub use net::addr::AnySocketAddr;
+pub use result::Result;
+pub use server::conf::ServerAlpn;
+pub use server::conf::ServerConf;
+pub use server::handler::ServerHandler;
+pub use server::handler_paths::ServerHandlerPaths;
+pub use server::increase_in_window::ServerIncreaseInWindow;
+pub use server::req::ServerRequest;
+pub use server::resp::ServerResponse;
+pub use server::stream_handler::ServerRequestStreamHandler;
+pub use server::tls::ServerTlsOption;
+pub use server::Server;
+pub use server::ServerBuilder;
+pub use solicit::error_code::ErrorCode;
+pub use solicit::header::name::HeaderName;
+pub use solicit::header::name::PseudoHeaderName;
+pub use solicit::header::value::HeaderValue;
+pub use solicit::header::Header;
+pub use solicit::header::Headers;
+pub use solicit::stream_id::StreamId;
+pub use solicit::HttpScheme;
+pub use stream_after_headers::HttpStreamAfterHeaders;
 
 mod ascii;
-
+mod assert_types;
+pub(crate) mod bytes_ext;
+mod client;
+mod codec;
 mod common;
-
 mod data_or_headers;
 mod data_or_headers_with_flag;
 mod data_or_trailers;
-mod message;
-
+mod death;
+mod display_comma_separated;
+mod error;
 mod futures_misc;
-
 mod headers_place;
-mod req_resp;
-
-mod assert_types;
-
 mod hpack;
+mod log_ndc_future;
+mod message;
+pub mod misc;
+pub(crate) mod net;
+mod req_resp;
+mod result;
+mod server;
+mod solicit;
 mod solicit_async;
 mod solicit_misc;
-
-mod display_comma_separated;
-mod misc;
-
-mod death;
-
-mod log_ndc_future;
-
-pub(crate) mod net;
-
-pub(crate) mod bytes_ext;
+mod stream_after_headers;
 
 /// Functions used in tests
 #[doc(hidden)]
