@@ -450,8 +450,8 @@ impl ErrorAwareDrop for ControllerCommand {
         match self {
             ControllerCommand::GoAway => {}
             ControllerCommand::StartRequest(start) => start.stream_handler.error(error),
-            ControllerCommand::WaitForConnect(_) => {
-                // TODO
+            ControllerCommand::WaitForConnect(wait) => {
+                let _ = wait.send(Err(error));
             }
             ControllerCommand::DumpState(_) => {}
         }
