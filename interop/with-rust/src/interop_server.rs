@@ -12,7 +12,6 @@ use tls_api::TlsAcceptorBuilder;
 
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
-use httpbis::ServerHandlerContext;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use httpbis_interop::PORT;
@@ -20,12 +19,7 @@ use httpbis_interop::PORT;
 struct Found200 {}
 
 impl ServerHandler for Found200 {
-    fn start_request(
-        &self,
-        _context: ServerHandlerContext,
-        _req: ServerRequest,
-        mut resp: ServerResponse,
-    ) -> httpbis::Result<()> {
+    fn start_request(&self, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
         resp.send_found_200_plain_text("200 200 200")?;
         Ok(())
     }
@@ -34,12 +28,7 @@ impl ServerHandler for Found200 {
 struct Blocks {}
 
 impl ServerHandler for Blocks {
-    fn start_request(
-        &self,
-        _context: ServerHandlerContext,
-        req: ServerRequest,
-        mut resp: ServerResponse,
-    ) -> httpbis::Result<()> {
+    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
         if let Some(captures) = blocks_re.captures(req.headers.path()) {

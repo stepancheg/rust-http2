@@ -8,7 +8,7 @@ use std::task::Poll;
 
 use crate::error;
 
-use crate::client::stream_handler::ClientResponseStreamHandler;
+use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::types::ClientTypes;
 use crate::common::types::Types;
 use crate::data_or_headers::DataOrHeaders;

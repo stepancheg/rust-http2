@@ -8,7 +8,7 @@
 ///
 /// Corresponds to [section 5.1.](http://http2.github.io/http2-spec/#rfc.section.5.1) of the spec.
 ///
-/// ```ignore
+/// ```text
 ///    The lifecycle of a stream is shown in Figure 2.
 ///                            +--------+
 ///                    send PP |        | recv PP

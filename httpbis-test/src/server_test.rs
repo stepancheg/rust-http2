@@ -11,7 +11,6 @@ use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 
 use futures::stream;
-use httpbis::ServerHandlerContext;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use regex::Regex;
@@ -25,12 +24,7 @@ pub struct ServerTest {
 struct Blocks {}
 
 impl ServerHandler for Blocks {
-    fn start_request(
-        &self,
-        _context: ServerHandlerContext,
-        req: ServerRequest,
-        mut resp: ServerResponse,
-    ) -> httpbis::Result<()> {
+    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
         if let Some(captures) = blocks_re.captures(req.headers.path()) {
@@ -54,12 +48,7 @@ impl ServerHandler for Blocks {
 struct Echo {}
 
 impl ServerHandler for Echo {
-    fn start_request(
-        &self,
-        _context: ServerHandlerContext,
-        req: ServerRequest,
-        mut resp: ServerResponse,
-    ) -> httpbis::Result<()> {
+    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
         resp.send_headers(Headers::ok_200())?;
         resp.pull_from_stream(req.make_stream())?;
         Ok(())

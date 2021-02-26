@@ -16,7 +16,6 @@ use httpbis::Client;
 use httpbis::Headers;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
-use httpbis::ServerHandlerContext;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use tokio::runtime::Runtime;
@@ -138,7 +137,6 @@ fn seq_slow() {
     impl ServerHandler for Handler {
         fn start_request(
             &self,
-            _context: ServerHandlerContext,
             _req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {

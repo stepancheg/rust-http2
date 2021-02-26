@@ -53,9 +53,13 @@ use std::fmt;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
+/// Builder for [`Server`].
 pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
+    /// Configuration.
     pub conf: ServerConf,
+    /// TLS configuration.
     pub tls: ServerTlsOption<A>,
+    /// Listen address. This is required.
     pub addr: Option<AnySocketAddr>,
     /// Event loop to spawn server.
     /// If not specified, builder will create new event loop in a new thread.
@@ -64,6 +68,7 @@ pub struct ServerBuilder<A: tls_api::TlsAcceptor = tls_api_stub::TlsAcceptor> {
     /// If empty, listener event loop will be used.
     // TODO: test it
     pub conn_event_loops: Vec<Handle>,
+    /// Path prefix handlers.
     pub service: ServerHandlerPaths,
 }
 
@@ -222,6 +227,9 @@ enum Completion {
     Rx(oneshot::Receiver<()>),
 }
 
+/// HTTP/2 server.
+///
+/// Can be created with [`ServerBuilder`].
 pub struct Server {
     state: Arc<Mutex<ServerState>>,
     local_addr: AnySocketAddr,

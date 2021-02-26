@@ -17,6 +17,7 @@ pub use bytes_ext::bytes_deque::BytesDeque;
 pub use client::resp_future::ClientResponseFuture;
 
 pub use crate::client::conf::ClientConf;
+pub use crate::client::handler::ClientHandler;
 pub use crate::client::req::ClientRequest;
 pub use crate::client::tls::ClientTlsOption;
 pub use crate::client::Client;
@@ -34,7 +35,6 @@ pub use crate::result::Result;
 pub use crate::server::conf::ServerAlpn;
 pub use crate::server::conf::ServerConf;
 pub use crate::server::handler::ServerHandler;
-pub use crate::server::handler::ServerHandlerContext;
 pub use crate::server::handler_paths::ServerHandlerPaths;
 pub use crate::server::increase_in_window::ServerIncreaseInWindow;
 pub use crate::server::req::ServerRequest;

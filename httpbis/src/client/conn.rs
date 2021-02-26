@@ -1,5 +1,7 @@
 //! Single client connection
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::AnySocketAddr;
@@ -13,8 +15,8 @@ use tls_api;
 
 use crate::solicit_async::*;
 
+use crate::client::handler::ClientHandler;
 use crate::client::req::ClientRequest;
-use crate::client::stream_handler::ClientHandler;
 use crate::client::types::ClientTypes;
 use crate::client::ClientInterface;
 use crate::common::conn::Conn;
@@ -44,14 +46,12 @@ use crate::ClientTlsOption;
 use crate::ErrorCode;
 use bytes::Bytes;
 use futures::channel::oneshot;
-use std::pin::Pin;
 
 use crate::client::resp::ClientResponse;
 use crate::death::oneshot::death_aware_oneshot;
 use crate::death::oneshot::DeathAwareOneshotSender;
 use futures::future;
 use futures::TryFutureExt;
-use std::future::Future;
 use tokio::runtime::Handle;
 
 pub struct ClientStreamData {}

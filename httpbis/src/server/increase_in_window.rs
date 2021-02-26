@@ -1,9 +1,11 @@
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::server::types::ServerTypes;
 
+/// Utility to tell the client that serven can receive more data.
 pub struct ServerIncreaseInWindow(pub(crate) IncreaseInWindow<ServerTypes>);
 
 impl ServerIncreaseInWindow {
+    /// Current incoming window size.
     pub fn in_window_size(&self) -> u32 {
         self.0.in_window_size()
     }

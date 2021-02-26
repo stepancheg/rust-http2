@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::server::handler::ServerHandler;
-use crate::server::handler::ServerHandlerContext;
 use crate::server::req::ServerRequest;
 use crate::solicit::header::Headers;
 use crate::ServerResponse;
@@ -139,25 +138,13 @@ impl ServerHandlerPaths {
 
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
     where
-        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(ServerRequest, ServerResponse) -> crate::Result<()> + Send + Sync + 'static,
     {
-        impl<
-                F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
-                    + Send
-                    + Sync
-                    + 'static,
-            > ServerHandler for F
+        impl<F: Fn(ServerRequest, ServerResponse) -> crate::Result<()> + Send + Sync + 'static>
+            ServerHandler for F
         {
-            fn start_request(
-                &self,
-                context: ServerHandlerContext,
-                req: ServerRequest,
-                resp: ServerResponse,
-            ) -> crate::Result<()> {
-                self(context, req, resp)
+            fn start_request(&self, req: ServerRequest, resp: ServerResponse) -> crate::Result<()> {
+                self(req, resp)
             }
         }
 
@@ -175,15 +162,10 @@ impl ServerHandlerPaths {
 }
 
 impl ServerHandler for ServerHandlerPaths {
-    fn start_request(
-        &self,
-        context: ServerHandlerContext,
-        req: ServerRequest,
-        mut resp: ServerResponse,
-    ) -> crate::Result<()> {
+    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> crate::Result<()> {
         if let Some(service) = self.find_service(req.headers.path()) {
             info!("invoking user callback for path {}", req.headers.path());
-            service.start_request(context, req, resp)
+            service.start_request(req, resp)
         } else {
             info!("serving 404 for path {}", req.headers.path());
             drop(resp.send_headers(Headers::not_found_404()));

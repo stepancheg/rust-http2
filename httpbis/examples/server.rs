@@ -1,7 +1,6 @@
 use tls_api::TlsAcceptor;
 use tls_api::TlsAcceptorBuilder as tls_api_TlsAcceptorBuilder;
 
-use httpbis::ServerHandlerContext;
 use httpbis::ServerResponse;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -23,7 +22,6 @@ impl ServiceImpl {
 impl httpbis::ServerHandler for ServiceImpl {
     fn start_request(
         &self,
-        _context: ServerHandlerContext,
         req: httpbis::ServerRequest,
         mut resp: ServerResponse,
     ) -> httpbis::Result<()> {

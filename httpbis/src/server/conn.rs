@@ -42,7 +42,6 @@ use crate::headers_place::HeadersPlace;
 use crate::misc::any_to_string;
 use crate::req_resp::RequestOrResponse;
 use crate::server::handler::ServerHandler;
-use crate::server::handler::ServerHandlerContext;
 use crate::server::req::ServerRequest;
 use crate::server::types::ServerTypes;
 use crate::solicit::stream_id::StreamId;
@@ -132,10 +131,6 @@ where
             drop_callback: None,
         };
 
-        let context = ServerHandlerContext {
-            loop_handle: self.loop_handle.clone(),
-        };
-
         let mut stream_handler = None;
         let invoke_result = {
             let req = ServerRequest {
@@ -148,7 +143,7 @@ where
             };
 
             panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                factory.start_request(context, req, sender)
+                factory.start_request(req, sender)
             }))
         };
 
@@ -343,27 +338,16 @@ impl ServerConn {
         f: F,
     ) -> (ServerConn, impl Future<Output = ()> + Send)
     where
-        F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(ServerRequest, ServerResponse) -> crate::Result<()> + Send + Sync + 'static,
     {
         struct HttpServiceFn<F>(F);
 
         impl<F> ServerHandler for HttpServiceFn<F>
         where
-            F: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> crate::Result<()>
-                + Send
-                + Sync
-                + 'static,
+            F: Fn(ServerRequest, ServerResponse) -> crate::Result<()> + Send + Sync + 'static,
         {
-            fn start_request(
-                &self,
-                context: ServerHandlerContext,
-                req: ServerRequest,
-                resp: ServerResponse,
-            ) -> crate::Result<()> {
-                (self.0)(context, req, resp)
+            fn start_request(&self, req: ServerRequest, resp: ServerResponse) -> crate::Result<()> {
+                (self.0)(req, resp)
             }
         }
 

@@ -1,12 +1,13 @@
+use bytes::Bytes;
+
 use crate::client::resp::ClientResponse;
 use crate::common::stream_handler::StreamHandlerInternal;
 use crate::error;
 use crate::ClientRequest;
 use crate::ErrorCode;
 use crate::Headers;
-use bytes::Bytes;
 
-/// Called once when stream is created
+/// Low-level client response handler.
 pub trait ClientHandler: Send + 'static {
     /// Called when stream is created
     fn request_created(

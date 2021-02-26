@@ -2,7 +2,7 @@ use crate::client::conn::ClientConnData;
 use crate::client::conn::ClientStream;
 use crate::client::conn::ClientStreamData;
 use crate::client::conn::ClientToWriteMessage;
-use crate::client::stream_handler::ClientResponseStreamHandlerHolder;
+use crate::client::handler::ClientResponseStreamHandlerHolder;
 use crate::common::client_or_server::ClientOrServer;
 use crate::common::types::Types;
 use crate::net::socket::SocketStream;

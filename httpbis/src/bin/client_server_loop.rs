@@ -5,7 +5,6 @@ use httpbis::Client;
 use httpbis::Headers;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
-use httpbis::ServerHandlerContext;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
 use std::env;
@@ -43,7 +42,6 @@ fn request() {
     impl ServerHandler for My {
         fn start_request(
             &self,
-            _context: ServerHandlerContext,
             _req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
@@ -87,7 +85,6 @@ fn ping_pong() {
     impl ServerHandler for Echo {
         fn start_request(
             &self,
-            _context: ServerHandlerContext,
             req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {

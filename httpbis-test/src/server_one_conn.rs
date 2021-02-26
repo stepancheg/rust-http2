@@ -32,10 +32,7 @@ struct FromLoop {
 impl ServerOneConn {
     pub fn new_fn<S>(port: u16, service: S) -> Self
     where
-        S: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> httpbis::Result<()>
-            + Send
-            + Sync
-            + 'static,
+        S: Fn(ServerRequest, ServerResponse) -> httpbis::Result<()> + Send + Sync + 'static,
     {
         ServerOneConn::new_fn_impl(port, service)
     }
@@ -43,10 +40,7 @@ impl ServerOneConn {
     #[allow(dead_code)]
     fn new_fn_impl<S>(port: u16, service: S) -> Self
     where
-        S: Fn(ServerHandlerContext, ServerRequest, ServerResponse) -> httpbis::Result<()>
-            + Send
-            + Sync
-            + 'static,
+        S: Fn(ServerRequest, ServerResponse) -> httpbis::Result<()> + Send + Sync + 'static,
     {
         let (from_loop_tx, from_loop_rx) = std::sync::mpsc::channel();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

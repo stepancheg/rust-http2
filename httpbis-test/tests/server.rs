@@ -43,7 +43,7 @@ use tokio::runtime::Runtime;
 fn simple_new() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |_, req, mut resp| {
+    let server = ServerOneConn::new_fn(0, |req, mut resp| {
         resp.send_headers(Headers::ok_200())?;
         resp.pull_from_stream(req.make_stream())?;
         Ok(())
@@ -73,7 +73,7 @@ fn simple_new() {
 fn custom_drop_callback() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |_, _req, mut resp| {
+    let server = ServerOneConn::new_fn(0, |_req, mut resp| {
         resp.set_drop_callback(|resp| Ok(resp.send_internal_error_500("test test")?));
         Err(httpbis::Error::User("my".to_owned()))
     });
@@ -98,7 +98,7 @@ fn custom_drop_callback() {
 fn panic_in_handler() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |_, req, mut resp| {
+    let server = ServerOneConn::new_fn(0, |req, mut resp| {
         if req.headers.path() == "/panic" {
             panic!("requested");
         } else {
@@ -141,7 +141,7 @@ fn panic_in_handler() {
 fn panic_in_stream() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |_, req, mut resp| {
+    let server = ServerOneConn::new_fn(0, |req, mut resp| {
         if req.headers.path() == "/panic" {
             let stream = HttpStreamAfterHeaders::new(
                 stream::iter((0..2).map(|_| {
@@ -205,7 +205,7 @@ fn response_large() {
 
     let large_resp_copy = large_resp.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_, _req, mut resp| {
+    let server = ServerOneConn::new_fn(0, move |_req, mut resp| {
         resp.send_message(SimpleHttpMessage {
             headers: Headers::ok_200(),
             body: BytesDeque::from(large_resp_copy.clone()),
@@ -388,7 +388,7 @@ fn do_not_poll_when_not_enough_window() {
     let polls = Arc::new(AtomicUsize::new(0));
     let polls_copy = polls.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_, _, mut resp| {
+    let server = ServerOneConn::new_fn(0, move |_, mut resp| {
         struct StreamImpl {
             polls: Arc<AtomicUsize>,
         }
@@ -462,7 +462,7 @@ pub fn server_sends_continuation_frame() {
 
     let headers_copy = headers.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_, _req, mut resp| {
+    let server = ServerOneConn::new_fn(0, move |_req, mut resp| {
         resp.send_message(SimpleHttpMessage {
             headers: headers_copy.clone(),
             body: BytesDeque::from("there"),
@@ -543,7 +543,7 @@ fn external_event_loop() {
                 let mut server = ServerBuilder::new_plain();
                 server.event_loop = Some(core.handle().clone());
                 server.set_port(0);
-                server.service.set_service_fn("/", |_, _, mut resp| {
+                server.service.set_service_fn("/", |_, mut resp| {
                     resp.send_found_200_plain_text("aabb")?;
                     Ok(())
                 });

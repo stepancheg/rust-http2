@@ -20,9 +20,9 @@ use crate::client::conf::ClientConf;
 use crate::client::conn::ClientConn;
 use crate::client::conn::ClientConnCallbacks;
 use crate::client::conn::StartRequestMessage;
+use crate::client::handler::ClientHandler;
 use crate::client::req::ClientRequest;
 use crate::client::resp::ClientResponse;
-use crate::client::stream_handler::ClientHandler;
 pub use crate::client::tls::ClientTlsOption;
 use crate::common::conn::ConnStateSnapshot;
 use crate::death::channel::death_aware_channel;
@@ -46,11 +46,11 @@ use crate::PseudoHeaderName;
 
 pub(crate) mod conf;
 pub(crate) mod conn;
+pub(crate) mod handler;
 pub(crate) mod increase_in_window;
 pub(crate) mod req;
 pub(crate) mod resp;
 pub mod resp_future;
-pub(crate) mod stream_handler;
 pub(crate) mod tls;
 pub(crate) mod types;
 

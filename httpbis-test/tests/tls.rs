@@ -49,7 +49,6 @@ fn tls() {
     impl ServerHandler for ServiceImpl {
         fn start_request(
             &self,
-            _context: ServerHandlerContext,
             _req: ServerRequest,
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
