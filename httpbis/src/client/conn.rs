@@ -54,6 +54,7 @@ use std::pin::Pin;
 use crate::client::resp::ClientResponse;
 use crate::death::oneshot::death_aware_oneshot;
 use crate::death::oneshot::DeathAwareOneshotSender;
+use futures::future;
 use std::future::Future;
 use tokio::runtime::Handle;
 
@@ -250,8 +251,8 @@ impl ClientConn {
                 _callbacks: Box::new(callbacks),
             },
             conf.common,
-            connect,
-            peer_addr,
+            // TODO
+            future::ok((peer_addr, connect)),
         );
 
         lh.spawn(future);

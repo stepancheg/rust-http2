@@ -232,8 +232,12 @@ where
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
-        socket: impl Future<Output = crate::Result<I>> + Send,
-        peer_addr: AnySocketAddr,
+        socket: impl Future<
+                Output = crate::Result<(
+                    AnySocketAddr,
+                    impl Future<Output = crate::Result<I>> + Send,
+                )>,
+            > + Send,
     ) -> (
         impl Future<Output = ()> + Send,
         DeathAwareSender<T::ToWriteMessage>,
@@ -243,22 +247,34 @@ where
 
         let (write_tx, write_rx) = death_aware_channel(conn_died_error_holder.clone());
 
-        let future = Self::init(
-            loop_handle,
-            specific,
-            _conf,
-            write_tx.clone(),
-            write_rx,
-            socket,
-            peer_addr.clone(),
-            conn_died_error_holder.clone(),
-        );
-        let ndc = Arc::new(format!("{} {}", T::CONN_NDC, peer_addr));
-        (
-            log_ndc_future(ndc, future),
-            write_tx,
-            conn_died_error_holder,
-        )
+        let write_tx_copy = write_tx.clone();
+        let conn_died_error_holde_copy = conn_died_error_holder.clone();
+        let future = async move {
+            let (peer_addr, socket) = match socket.await {
+                Ok((peer_addr, socket)) => (peer_addr, socket),
+                Err(e) => {
+                    // TODO: connect where
+                    warn!("failed to connect: {}", e);
+                    conn_died_error_holde_copy.set_once(e);
+                    return;
+                }
+            };
+
+            let ndc = Arc::new(format!("{} {}", T::CONN_NDC, peer_addr));
+            let future = Self::init(
+                loop_handle,
+                specific,
+                _conf,
+                write_tx_copy,
+                write_rx,
+                socket,
+                peer_addr,
+                conn_died_error_holde_copy,
+            );
+            let future = log_ndc_future(ndc, future);
+            future.await
+        };
+        (future, write_tx, conn_died_error_holder)
     }
 
     /// Allocate stream id for locally initiated stream
