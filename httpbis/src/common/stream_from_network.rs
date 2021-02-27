@@ -11,6 +11,7 @@ use crate::common::increase_in_window::IncreaseInWindow;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use futures::task::Context;
+use std::convert::TryFrom;
 use std::pin::Pin;
 
 /// Stream that provides data from network.
@@ -39,7 +40,8 @@ impl<T: Types> Stream for StreamFromNetwork<T> {
             ..
         } = part
         {
-            self.increase_in_window.data_frame_processed(b.len() as u32);
+            self.increase_in_window
+                .data_frame_processed(u32::try_from(b.len()).unwrap());
 
             // TODO: use different
             // TODO: increment after process of the frame (i. e. on next poll)
