@@ -20,7 +20,6 @@ use crate::solicit_async::*;
 use crate::client::handler::ClientHandler;
 use crate::client::intf::ClientInternals;
 use crate::client::intf::ClientIntf;
-use crate::client::req::ClientRequest;
 use crate::client::types::ClientTypes;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
@@ -198,12 +197,10 @@ where
                 .in_window_size
                 .size() as u32;
 
-            let req = ClientRequest {
-                common: if end_stream {
-                    CommonSender::new_done(stream_id)
-                } else {
-                    CommonSender::new(stream_id, write_tx, out_window, true)
-                },
+            let req = if end_stream {
+                CommonSender::<ClientTypes>::new_done(stream_id)
+            } else {
+                CommonSender::<ClientTypes>::new(stream_id, write_tx, out_window, true)
             };
 
             let mut handler = None;
@@ -215,7 +212,7 @@ where
                 conn_died: &self.conn_died_error_holder,
             };
 
-            match stream_handler.request_created(req, resp) {
+            match stream_handler.request_created(Box::pin(req), resp) {
                 Err(e) => {
                     warn!("client cancelled request: {:?}", e);
                     // Should be fine to cancel before start, but TODO: check

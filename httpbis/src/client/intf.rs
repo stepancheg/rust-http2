@@ -1,9 +1,9 @@
 use crate::client::resp::ClientResponse;
 use crate::client::resp_future::ClientResponseFuture3;
 use crate::client::resp_future::ClientResponseFutureImpl;
+use crate::common::sink_after_headers::SinkAfterHeadersBox;
 use crate::solicit_async::TryFutureBox;
 use crate::ClientHandler;
-use crate::ClientRequest;
 use crate::Header;
 use crate::Headers;
 use crate::HttpScheme;
@@ -39,17 +39,17 @@ pub trait ClientIntf {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-    ) -> TryFutureBox<(ClientRequest, ClientResponseFutureImpl)> {
+    ) -> TryFutureBox<(SinkAfterHeadersBox, ClientResponseFutureImpl)> {
         let (tx, rx) = oneshot::channel();
 
         struct Impl {
-            tx: oneshot::Sender<crate::Result<(ClientRequest, ClientResponseFutureImpl)>>,
+            tx: oneshot::Sender<crate::Result<(SinkAfterHeadersBox, ClientResponseFutureImpl)>>,
         }
 
         impl ClientHandler for Impl {
             fn request_created(
                 self: Box<Self>,
-                req: ClientRequest,
+                req: SinkAfterHeadersBox,
                 resp: ClientResponse,
             ) -> crate::Result<()> {
                 if let Err(_) = self.tx.send(Ok((req, resp.into_stream()))) {
@@ -120,7 +120,7 @@ pub trait ClientIntf {
         &self,
         path: &str,
         authority: &str,
-    ) -> TryFutureBox<(ClientRequest, ClientResponseFutureImpl)> {
+    ) -> TryFutureBox<(SinkAfterHeadersBox, ClientResponseFutureImpl)> {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "POST"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),

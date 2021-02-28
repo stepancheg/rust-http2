@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-pub trait SinkAfterHeaders: Send + 'static {
+pub trait SinkAfterHeaders: Unpin + Send + 'static {
     fn send_data_impl(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()>;
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<crate::Result<()>>;

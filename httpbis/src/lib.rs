@@ -17,7 +17,6 @@ pub use bytes_ext::bytes_deque::BytesDeque;
 pub use client::conf::ClientConf;
 pub use client::handler::ClientHandler;
 pub use client::intf::ClientIntf;
-pub use client::req::ClientRequest;
 pub use client::tls::ClientTlsOption;
 pub use client::Client;
 pub use client::ClientBuilder;

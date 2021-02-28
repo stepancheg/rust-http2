@@ -1,10 +1,10 @@
 use bytes::Bytes;
 
 use crate::client::resp::ClientResponse;
+use crate::common::sink_after_headers::SinkAfterHeadersBox;
 use crate::common::stream_handler::StreamHandlerInternal;
 use crate::error;
 use crate::solicit::end_stream::EndStream;
-use crate::ClientRequest;
 use crate::ErrorCode;
 use crate::Headers;
 
@@ -13,7 +13,7 @@ pub trait ClientHandler: Send + 'static {
     /// Called when stream is created
     fn request_created(
         self: Box<Self>,
-        req: ClientRequest,
+        req: SinkAfterHeadersBox,
         resp: ClientResponse,
     ) -> crate::Result<()>;
 

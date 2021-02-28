@@ -45,7 +45,6 @@ pub(crate) mod conn;
 pub(crate) mod handler;
 pub(crate) mod increase_in_window;
 pub(crate) mod intf;
-pub(crate) mod req;
 pub(crate) mod resp;
 pub(crate) mod resp_future;
 pub(crate) mod tls;
