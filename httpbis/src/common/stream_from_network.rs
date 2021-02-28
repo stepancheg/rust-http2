@@ -66,9 +66,10 @@ impl<T: Types> StreamFromNetwork<T> {
     }
 
     fn auto_update_in_window_size(&mut self) -> crate::Result<()> {
-        let edge = DEFAULT_SETTINGS.initial_window_size / 2;
+        // TODO: use update default window size
+        let edge = self.auto_in_window_size / 2;
         if self.increase_in_window.in_window_size() < edge {
-            let inc = DEFAULT_SETTINGS.initial_window_size;
+            let inc = self.auto_in_window_size;
             self.increase_in_window.increase_window(inc)?;
         }
         Ok(())
@@ -118,7 +119,6 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
 
         match &part {
             DataOrTrailers::Data(..) => {
-                // TODO: use different
                 // TODO: increment after process of the frame (i. e. on next poll)
                 me.auto_update_in_window_size()?;
             }
