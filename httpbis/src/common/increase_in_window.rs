@@ -18,7 +18,7 @@ impl<T: Types> IncreaseInWindow<T> {
     }
 
     /// Decrement window size when new data frame recevied.
-    pub fn data_frame_processed(&mut self, size: u32) {
+    pub fn data_frame_received(&mut self, size: u32) {
         let old_in_window_size = self.in_window_size;
         self.in_window_size = self.in_window_size.checked_sub(size).unwrap();
         debug!(

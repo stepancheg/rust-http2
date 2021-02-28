@@ -12,7 +12,6 @@ use futures::TryStreamExt;
 
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
-use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use crate::for_test::solicit::end_stream::EndStream;
 use crate::misc::any_to_string;
 use crate::DataOrTrailers;
@@ -95,11 +94,6 @@ impl HttpStreamAfterHeaders {
         self,
     ) -> impl Stream<Item = crate::Result<DataOrHeadersWithFlag>> + Send {
         TryStreamExt::map_ok(self.0, |r| DataOrTrailers::into_part(r))
-    }
-
-    // TODO: drop
-    pub(crate) fn _into_part_stream(self) -> DataOrHeadersWithFlagStream {
-        DataOrHeadersWithFlagStream::new(self.into_flag_stream())
     }
 
     /// Wrap a stream with `catch_unwind` combinator.

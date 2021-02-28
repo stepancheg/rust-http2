@@ -11,7 +11,7 @@ impl ServerIncreaseInWindow {
     }
 
     pub fn data_frame_processed(&mut self, size: u32) {
-        self.0.data_frame_processed(size)
+        self.0.data_frame_received(size)
     }
 
     pub fn increase_window(&mut self, inc: u32) -> crate::Result<()> {

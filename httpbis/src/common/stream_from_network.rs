@@ -21,10 +21,9 @@ pub(crate) struct StreamFromNetwork<T: Types> {
     pub increase_in_window: IncreaseInWindow<T>,
 }
 
-impl<T: Types> Stream for StreamFromNetwork<T> {
-    type Item = crate::Result<DataOrHeadersWithFlag>;
-
-    fn poll_next(
+impl<T: Types> StreamFromNetwork<T> {
+    /// Fetch the next message without increasing the window size.
+    pub fn poll_next_no_auto(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<crate::Result<DataOrHeadersWithFlag>>> {
@@ -35,20 +34,43 @@ impl<T: Types> Stream for StreamFromNetwork<T> {
             Poll::Ready(Some(Ok(part))) => part,
         };
 
-        if let DataOrHeadersWithFlag {
-            content: DataOrHeaders::Data(ref b),
-            ..
-        } = part
-        {
-            self.increase_in_window
-                .data_frame_processed(u32::try_from(b.len()).unwrap());
+        match &part.content {
+            DataOrHeaders::Headers(..) => {}
+            DataOrHeaders::Data(b) => {
+                self.increase_in_window
+                    .data_frame_received(u32::try_from(b.len()).unwrap());
+            }
+        };
 
+        Poll::Ready(Some(Ok(part)))
+    }
+}
+
+impl<T: Types> Stream for StreamFromNetwork<T> {
+    type Item = crate::Result<DataOrHeadersWithFlag>;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<crate::Result<DataOrHeadersWithFlag>>> {
+        let me = self.get_mut();
+        let part = match Pin::new(&mut *me).poll_next_no_auto(cx)? {
+            Poll::Ready(Some(part)) => part,
+            Poll::Ready(None) => return Poll::Ready(None),
+            Poll::Pending => return Poll::Pending,
+        };
+
+        if let DataOrHeadersWithFlag {
+            content: DataOrHeaders::Data(_b),
+            ..
+        } = &part
+        {
             // TODO: use different
             // TODO: increment after process of the frame (i. e. on next poll)
             let edge = DEFAULT_SETTINGS.initial_window_size / 2;
-            if self.increase_in_window.in_window_size() < edge {
+            if me.increase_in_window.in_window_size() < edge {
                 let inc = DEFAULT_SETTINGS.initial_window_size;
-                self.increase_in_window.increase_window(inc)?;
+                me.increase_in_window.increase_window(inc)?;
             }
         }
 
