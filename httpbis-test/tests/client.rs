@@ -325,7 +325,9 @@ pub fn sink_poll() {
 
     assert_eq!(
         Poll::Ready(Ok(())),
-        sender.poll(&mut NopRuntime::new().context())
+        sender
+            .poll(&mut NopRuntime::new().context())
+            .map_err(|_| ())
     );
 
     let b = Bytes::from(vec![1; 65_535]);
@@ -346,7 +348,7 @@ pub fn sink_poll() {
     let rt = Runtime::new().unwrap();
 
     let sender = rt.block_on(future::lazy(move |cx| {
-        assert_eq!(Poll::Pending, sender.poll(cx));
+        assert_eq!(Poll::Pending, sender.poll(cx).map_err(|_| ()));
         future::ok::<_, ()>(sender)
     }));
     let mut sender = rt.block_on(sender).unwrap();
@@ -417,7 +419,9 @@ fn sink_reset_by_peer() {
 
     assert_eq!(
         Poll::Ready(Ok(())),
-        sender.poll(&mut NopRuntime::new().context())
+        sender
+            .poll(&mut NopRuntime::new().context())
+            .map_err(|_| ())
     );
 
     let b = Bytes::from(vec![1; 65_535 * 2]);

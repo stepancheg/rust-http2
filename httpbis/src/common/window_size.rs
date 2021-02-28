@@ -181,25 +181,27 @@ impl StreamOutWindowReceiver {
             .fetch_sub(size as isize, Ordering::SeqCst);
     }
 
-    fn check_conn_closed(&self) -> Result<(), ConnDead> {
+    fn check_conn_closed(&self) -> crate::Result<()> {
         if self.shared.conn.closed.load(Ordering::Relaxed) {
-            Err(ConnDead)
+            // TODO: better error
+            Err(crate::Error::ClientControllerDied)
         } else {
             Ok(())
         }
     }
 
-    fn check_stream_closed(&self) -> Result<(), StreamDead> {
+    fn check_stream_closed(&self) -> crate::Result<()> {
         self.check_conn_closed()?;
 
         if self.shared.closed.load(Ordering::SeqCst) {
-            Err(StreamDead::Stream)
+            // TODO: better error
+            Err(crate::Error::ClientControllerDied)
         } else {
             Ok(())
         }
     }
 
-    fn poll_conn(&self, cx: &mut Context<'_>) -> Poll<Result<(), ConnDead>> {
+    fn poll_conn(&self, cx: &mut Context<'_>) -> Poll<crate::Result<()>> {
         self.check_conn_closed()?;
 
         if self.shared.conn.window_size.load(Ordering::SeqCst) > 0 {
@@ -217,7 +219,7 @@ impl StreamOutWindowReceiver {
         }
     }
 
-    pub fn poll(&self, cx: &mut Context<'_>) -> Poll<Result<(), StreamDead>> {
+    pub fn poll(&self, cx: &mut Context<'_>) -> Poll<crate::Result<()>> {
         self.check_stream_closed()?;
 
         if self.shared.window_size.load(Ordering::SeqCst) <= 0 {
@@ -235,7 +237,7 @@ impl StreamOutWindowReceiver {
         self.poll_conn(cx).map_err(|e| e.into())
     }
 
-    pub async fn poll_f(&self) -> Result<(), StreamDead> {
+    pub async fn poll_f(&self) -> crate::Result<()> {
         future::poll_fn(|cx| self.poll(cx)).await
     }
 }

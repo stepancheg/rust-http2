@@ -8,14 +8,13 @@ use crate::solicit::stream_id::StreamId;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
-use crate::StreamDead;
 use bytes::Bytes;
 use futures::stream::Stream;
 
+use crate::common::sink_after_headers::SinkAfterHeaders;
 use crate::death::error_holder::ConnDiedType;
 use crate::solicit::end_stream::EndStream;
 use futures::task::Context;
-use futures::TryStreamExt;
 use std::sync::Arc;
 use std::task::Poll;
 
@@ -28,6 +27,7 @@ pub enum SenderState {
 
 #[derive(Debug)]
 pub enum SendError {
+    // TODO: drop
     ConnectionDied(Arc<crate::Error>),
     IncorrectState(SenderState),
 }
@@ -69,14 +69,6 @@ impl<T: Types> CommonSender<T> {
         }
     }
 
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), StreamDead>> {
-        match self.state {
-            Some(ref mut state) => state.out_window.poll(cx),
-            // TODO: different error
-            None => Poll::Ready(Ok(())),
-        }
-    }
-
     fn get_can_send(&mut self) -> Result<&mut CanSendData<T>, SendError> {
         match self.state {
             Some(ref mut state) => Ok(state),
@@ -103,33 +95,6 @@ impl<T: Types> CommonSender<T> {
             .write_tx
             .unbounded_send(message.into())
             .map_err(|e| SendError::ConnectionDied(Arc::new(e)))
-    }
-
-    fn send_data_impl(&mut self, data: Bytes, end_stream: EndStream) -> Result<(), SendError> {
-        if self.state() != SenderState::ExpectingBodyOrTrailers {
-            return Err(SendError::IncorrectState(self.state()));
-        }
-        let stream_id = self.stream_id;
-        self.get_can_send()?.out_window.decrease(data.len());
-        self.send_common(CommonToWriteMessage::StreamEnqueue(
-            stream_id,
-            DataOrHeadersWithFlag {
-                content: DataOrHeaders::Data(data),
-                end_stream,
-            },
-        ))?;
-        if end_stream == EndStream::Yes {
-            self.state.take();
-        }
-        Ok(())
-    }
-
-    pub fn send_data(&mut self, data: Bytes) -> Result<(), SendError> {
-        self.send_data_impl(data, EndStream::No)
-    }
-
-    pub fn send_data_end_of_stream(&mut self, data: Bytes) -> Result<(), SendError> {
-        self.send_data_impl(data, EndStream::Yes)
     }
 
     pub fn send_headers(&mut self, headers: Headers) -> Result<(), SendError> {
@@ -163,10 +128,39 @@ impl<T: Types> CommonSender<T> {
         }
         Ok(())
     }
+}
 
-    pub fn send_trailers(&mut self, trailers: Headers) -> Result<(), SendError> {
+impl<T: Types> SinkAfterHeaders for CommonSender<T> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<crate::Result<()>> {
+        match self.state {
+            Some(ref mut state) => state.out_window.poll(cx),
+            // TODO: different error
+            None => Poll::Ready(Ok(())),
+        }
+    }
+
+    fn send_data_impl(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()> {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
-            return Err(SendError::IncorrectState(self.state()));
+            return Err(SendError::IncorrectState(self.state()).into());
+        }
+        let stream_id = self.stream_id;
+        self.get_can_send()?.out_window.decrease(data.len());
+        self.send_common(CommonToWriteMessage::StreamEnqueue(
+            stream_id,
+            DataOrHeadersWithFlag {
+                content: DataOrHeaders::Data(data),
+                end_stream,
+            },
+        ))?;
+        if end_stream == EndStream::Yes {
+            self.state.take();
+        }
+        Ok(())
+    }
+
+    fn send_trailers(&mut self, trailers: Headers) -> crate::Result<()> {
+        if self.state() != SenderState::ExpectingBodyOrTrailers {
+            return Err(SendError::IncorrectState(self.state()).into());
         }
         let stream_id = self.stream_id;
         self.send_common(CommonToWriteMessage::StreamEnqueue(
@@ -180,12 +174,23 @@ impl<T: Types> CommonSender<T> {
         Ok(())
     }
 
-    pub fn pull_from_stream<S: Stream<Item = crate::Result<DataOrTrailers>> + Send + 'static>(
+    fn reset(&mut self, error_code: ErrorCode) -> crate::Result<()> {
+        // TODO: do nothing if stream is explicitly closed
+        let stream_id = self.stream_id;
+        self.send_common(CommonToWriteMessage::StreamEnd(stream_id, error_code))?;
+        self.state.take();
+        Ok(())
+    }
+
+    fn pull_from_stream<S: Stream<Item = crate::Result<DataOrTrailers>> + Send + 'static>(
         &mut self,
         stream: S,
-    ) -> Result<(), SendError> {
+    ) -> crate::Result<()>
+    where
+        Self: Sized,
+    {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
-            return Err(SendError::IncorrectState(self.state()));
+            return Err(SendError::IncorrectState(self.state()).into());
         }
 
         match self.state.take() {
@@ -200,29 +205,10 @@ impl<T: Types> CommonSender<T> {
                         CommonToWriteMessage::Pull(self.stream_id, Box::pin(stream), out_window)
                             .into(),
                     )
-                    .map_err(|e| SendError::ConnectionDied(Arc::new(e)))
+                    .map_err(|e| SendError::ConnectionDied(Arc::new(e)).into())
             }
-            None => Err(SendError::IncorrectState(SenderState::Done)),
+            None => Err(SendError::IncorrectState(SenderState::Done).into()),
         }
-    }
-
-    pub fn pull_bytes_from_stream<S>(&mut self, stream: S) -> Result<(), SendError>
-    where
-        S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
-    {
-        self.pull_from_stream(stream.map_ok(|b| DataOrTrailers::Data(b, EndStream::No)))
-    }
-
-    pub fn reset(&mut self, error_code: ErrorCode) -> Result<(), SendError> {
-        // TODO: do nothing if stream is explicitly closed
-        let stream_id = self.stream_id;
-        self.send_common(CommonToWriteMessage::StreamEnd(stream_id, error_code))?;
-        self.state.take();
-        Ok(())
-    }
-
-    pub fn close(&mut self) -> Result<(), SendError> {
-        self.reset(ErrorCode::NoError)
     }
 }
 

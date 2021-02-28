@@ -23,6 +23,7 @@ pub use client::Client;
 pub use client::ClientBuilder;
 pub use common::sender::SendError;
 pub use common::sender::SenderState;
+pub use common::stream_after_headers::HttpStreamAfterHeaders;
 pub use common::window_size::StreamDead;
 pub use data_or_trailers::DataOrTrailers;
 pub use error::Error;
@@ -48,7 +49,6 @@ pub use solicit::header::Header;
 pub use solicit::header::Headers;
 pub use solicit::stream_id::StreamId;
 pub use solicit::HttpScheme;
-pub use stream_after_headers::HttpStreamAfterHeaders;
 
 mod ascii;
 mod assert_types;
@@ -77,7 +77,6 @@ mod server;
 mod solicit;
 mod solicit_async;
 mod solicit_misc;
-mod stream_after_headers;
 
 /// Functions used in tests
 #[doc(hidden)]

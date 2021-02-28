@@ -30,12 +30,8 @@ impl<T: Types> PumpStreamToWrite<T> {
             // although HEADERS could be sent even when window size is zero or negative.
             match self.out_window.poll_f().await {
                 Ok(()) => {}
-                Err(window_size::StreamDead::Conn) => {
-                    warn!("conn dead");
-                    break;
-                }
-                Err(window_size::StreamDead::Stream) => {
-                    warn!("stream {} dead", self.stream_id);
+                Err(e) => {
+                    warn!("stopping pump, connection dead: {}", e);
                     break;
                 }
             }

@@ -1,4 +1,6 @@
 use crate::common::increase_in_window::IncreaseInWindow;
+use crate::common::stream_after_headers::HttpStreamAfterHeadersBox;
+use crate::common::stream_after_headers::HttpStreamAfterHeadersEmpty;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
 use crate::death::channel::DeathAwareSender;
@@ -8,8 +10,6 @@ use crate::server::conn::ServerToWriteMessage;
 use crate::server::increase_in_window::ServerIncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::stream_handler::ServerRequestStreamHandlerHolder;
-use crate::stream_after_headers::HttpStreamAfterHeadersBox;
-use crate::stream_after_headers::HttpStreamAfterHeadersEmpty;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders;
 use crate::StreamId;
