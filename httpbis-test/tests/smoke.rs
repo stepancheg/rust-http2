@@ -104,7 +104,7 @@ fn seq_long() {
 
     let (headers, parts) = Runtime::new()
         .unwrap()
-        .block_on(client.start_get("/blocks/100000/100", "localhost").0)
+        .block_on(client.start_get("/blocks/100000/100", "localhost"))
         .expect("get");
 
     assert_eq!(200, headers.status());
@@ -173,7 +173,7 @@ fn seq_slow() {
     let rt = Runtime::new().unwrap();
 
     let (headers, resp) = rt
-        .block_on(client.start_get("/gfgfg", "localhost").0)
+        .block_on(client.start_get("/gfgfg", "localhost"))
         .expect("get");
 
     assert_eq!(200, headers.status());

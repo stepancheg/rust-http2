@@ -22,6 +22,8 @@ use crate::client::conn::StartRequestMessage;
 use crate::client::handler::ClientHandler;
 use crate::client::req::ClientRequest;
 use crate::client::resp::ClientResponse;
+use crate::client::resp_future_2::ClientResponseFuture3;
+use crate::client::resp_future_2::ClientResponseFutureImpl;
 pub use crate::client::tls::ClientTlsOption;
 use crate::common::conn::ConnStateSnapshot;
 use crate::death::channel::death_aware_channel;
@@ -40,7 +42,6 @@ use crate::solicit::header::*;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::HttpScheme;
 use crate::solicit_async::*;
-use crate::ClientResponseFuture;
 use crate::PseudoHeaderName;
 
 pub(crate) mod conf;
@@ -49,7 +50,8 @@ pub(crate) mod handler;
 pub(crate) mod increase_in_window;
 pub(crate) mod req;
 pub(crate) mod resp;
-pub mod resp_future;
+pub(crate) mod resp_future;
+pub(crate) mod resp_future_2;
 pub(crate) mod tls;
 pub(crate) mod types;
 
@@ -275,11 +277,11 @@ impl Client {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-    ) -> HttpFutureSend<(ClientRequest, ClientResponseFuture)> {
+    ) -> HttpFutureSend<(ClientRequest, ClientResponseFutureImpl)> {
         let (tx, rx) = oneshot::channel();
 
         struct Impl {
-            tx: oneshot::Sender<crate::Result<(ClientRequest, ClientResponseFuture)>>,
+            tx: oneshot::Sender<crate::Result<(ClientRequest, ClientResponseFutureImpl)>>,
         }
 
         impl ClientHandler for Impl {
@@ -317,15 +319,15 @@ impl Client {
         headers: Headers,
         body: Option<Bytes>,
         trailers: Option<Headers>,
-    ) -> ClientResponseFuture {
-        ClientResponseFuture::new(
+    ) -> ClientResponseFuture3 {
+        ClientResponseFuture3::new(
             self.start_request(headers, body, trailers, true)
                 .and_then(move |(_sender, response)| response),
         )
     }
 
     /// Start HTTP/2 `GET` request.
-    pub fn start_get(&self, path: &str, authority: &str) -> ClientResponseFuture {
+    pub fn start_get(&self, path: &str, authority: &str) -> ClientResponseFuture3 {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "GET"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),
@@ -336,7 +338,7 @@ impl Client {
     }
 
     /// Start HTTP/2 `POST` request.
-    pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture {
+    pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture3 {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "POST"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),
@@ -350,7 +352,7 @@ impl Client {
         &self,
         path: &str,
         authority: &str,
-    ) -> HttpFutureSend<(ClientRequest, ClientResponseFuture)> {
+    ) -> HttpFutureSend<(ClientRequest, ClientResponseFutureImpl)> {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "POST"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),

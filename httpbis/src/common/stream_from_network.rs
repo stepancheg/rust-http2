@@ -47,6 +47,7 @@ impl<T: Types> StreamFromNetwork<T> {
 }
 
 impl<T: Types> Stream for StreamFromNetwork<T> {
+    // TODO: DataOrTrailers
     type Item = crate::Result<DataOrHeadersWithFlag>;
 
     fn poll_next(

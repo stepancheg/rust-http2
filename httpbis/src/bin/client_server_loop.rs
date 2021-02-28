@@ -65,7 +65,7 @@ fn request() {
     forever(|| {
         let (header, body) = Runtime::new()
             .unwrap()
-            .block_on(client.start_get("/any", "localhost").0)
+            .block_on(client.start_get("/any", "localhost"))
             .expect("headers");
         assert_eq!(200, header.status());
 

@@ -231,7 +231,7 @@ pub fn issue_89() {
     server_tester.recv_frame_headers_check(1, true);
 
     server_tester.send_headers(1, Headers::ok_200(), false);
-    let (_, resp1) = rt.block_on(r1.0).unwrap();
+    let (_, resp1) = rt.block_on(r1).unwrap();
     let mut resp1 = resp1.filter_data();
 
     assert_eq!(

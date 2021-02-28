@@ -84,7 +84,7 @@ fn inf_impl(client: Client, still_alive: Arc<AtomicBool>, path: &str, size: usiz
     let rt = Runtime::new().unwrap();
     loop {
         let (headers, resp) = rt
-            .block_on(client.start_get(path, "localhost").0)
+            .block_on(client.start_get(path, "localhost"))
             .expect("get");
 
         assert_eq!(200, headers.status());

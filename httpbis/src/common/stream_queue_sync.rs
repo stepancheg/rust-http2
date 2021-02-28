@@ -25,6 +25,7 @@ use bytes::Bytes;
 use futures::task::Context;
 
 pub(crate) struct StreamQueueSyncSender<T: Types> {
+    // TODO: replace with DataOrTrailers
     sender: UnboundedSender<Result<DataOrHeadersWithFlag, error::Error>>,
     _marker: marker::PhantomData<T>,
 }
@@ -37,7 +38,7 @@ pub(crate) struct StreamQueueSyncReceiver<T: Types> {
 }
 
 impl<T: Types> StreamQueueSyncSender<T> {
-    fn send(&self, item: Result<DataOrHeadersWithFlag, error::Error>) -> crate::Result<()> {
+    pub fn send(&self, item: Result<DataOrHeadersWithFlag, error::Error>) -> crate::Result<()> {
         if let Err(_send_error) = self.sender.unbounded_send(item) {
             Err(error::Error::PullStreamDied)
         } else {

@@ -2,13 +2,11 @@ use crate::client::conn::ClientToWriteMessage;
 use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::handler::ClientResponseStreamHandlerHolder;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
+use crate::client::resp_future_2::ClientResponseFutureImpl;
 use crate::common::increase_in_window::IncreaseInWindow;
-use crate::common::stream_from_network::StreamFromNetwork;
-use crate::common::stream_queue_sync::stream_queue_sync;
 use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
-use crate::ClientResponseFuture;
 use crate::StreamId;
 
 pub struct ClientResponse<'a> {
@@ -20,19 +18,11 @@ pub struct ClientResponse<'a> {
 }
 
 impl<'a> ClientResponse<'a> {
-    pub fn into_stream(self) -> ClientResponseFuture {
+    pub fn into_stream(self) -> ClientResponseFutureImpl {
         let conn_died = self.conn_died.clone();
         self.register_stream_handler(move |increase_in_window| {
-            let (inc_tx, inc_rx) = stream_queue_sync(conn_died);
-            let stream_from_network = StreamFromNetwork {
-                rx: inc_rx,
-                increase_in_window: increase_in_window.0,
-            };
-
-            (
-                inc_tx,
-                ClientResponseFuture::from_stream(stream_from_network),
-            )
+            let (a, b) = ClientResponseFutureImpl::new(increase_in_window, conn_died);
+            (a, b)
         })
     }
 
