@@ -45,7 +45,7 @@ fn simple_new() {
 
     let server = ServerOneConn::new_fn(0, |req, mut resp| {
         resp.send_headers(Headers::ok_200())?;
-        resp.pull_from_stream(req.into_stream())?;
+        resp.pull_from_stream(HttpStreamAfterHeaders::new(req.into_stream().into_stream()))?;
         Ok(())
     });
 

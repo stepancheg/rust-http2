@@ -3,6 +3,8 @@ use futures::stream::StreamExt;
 use futures::stream::TryStreamExt;
 use httpbis::Client;
 use httpbis::Headers;
+use httpbis::HttpStreamAfterHeaders;
+use httpbis::HttpStreamAfterHeaders2;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerRequest;
@@ -89,7 +91,7 @@ fn ping_pong() {
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_headers(Headers::ok_200())?;
-            resp.pull_from_stream(req.into_stream())?;
+            resp.pull_from_stream(HttpStreamAfterHeaders::new(req.into_stream().into_stream()))?;
             Ok(())
         }
     }

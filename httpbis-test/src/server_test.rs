@@ -6,6 +6,8 @@ use bytes::Bytes;
 
 use httpbis;
 use httpbis::Headers;
+use httpbis::HttpStreamAfterHeaders;
+use httpbis::HttpStreamAfterHeaders2;
 use httpbis::Server;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
@@ -50,7 +52,7 @@ struct Echo {}
 impl ServerHandler for Echo {
     fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
         resp.send_headers(Headers::ok_200())?;
-        resp.pull_from_stream(req.into_stream())?;
+        resp.pull_from_stream(HttpStreamAfterHeaders::new(req.into_stream().into_stream()))?;
         Ok(())
     }
 }

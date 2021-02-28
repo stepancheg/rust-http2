@@ -16,7 +16,7 @@ use tls_api::AsyncSocket;
 
 /// Client or server type names for connection and stream
 // Note `Default` and `Clone` are needed only for derive to work
-pub(crate) trait Types: Default + Clone + Unpin + 'static {
+pub(crate) trait Types: Default + Clone + Unpin + Send + 'static {
     type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific: HttpStreamDataSpecific;
     type SideSpecific: SideSpecific;

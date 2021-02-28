@@ -26,6 +26,7 @@ use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit_async::HttpFutureStreamSend;
+use crate::stream_after_headers_2::HttpStreamAfterHeaders2;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
@@ -100,10 +101,7 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
                         let (tx, rx) = stream_queue_sync(conn_died);
                         *self = ClientResponseStreamHandlerImpl::Body(tx);
                         ClientResponseStreamAfterHeaders(ClientStreamAfterHeadersImpl::Pull(
-                            StreamFromNetwork {
-                                rx,
-                                increase_in_window: increase_in_window.0,
-                            },
+                            StreamFromNetwork::new(rx, increase_in_window.0),
                         ))
                     }
                 };

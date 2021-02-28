@@ -8,8 +8,10 @@ use crate::server::conn::ServerToWriteMessage;
 use crate::server::increase_in_window::ServerIncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::stream_handler::ServerRequestStreamHandlerHolder;
-use crate::stream_after_headers::HttpStreamAfterHeaders;
+use crate::stream_after_headers_2::HttpStreamAfterHeader2Box;
+use crate::stream_after_headers_2::HttpStreamAfterHeaders2Empty;
 use crate::Headers;
+use crate::HttpStreamAfterHeaders2;
 use crate::StreamId;
 
 pub struct ServerRequest<'a> {
@@ -26,20 +28,19 @@ pub struct ServerRequest<'a> {
 }
 
 impl<'a> ServerRequest<'a> {
-    pub fn into_stream(self) -> HttpStreamAfterHeaders {
+    pub fn into_stream(self) -> impl HttpStreamAfterHeaders2 {
         if self.end_stream {
-            HttpStreamAfterHeaders::empty()
+            Box::pin(HttpStreamAfterHeaders2Empty)
         } else {
             let conn_died = self.conn_died.clone();
-            self.register_stream_handler(move |increase_in_window| {
-                let (inc_tx, inc_rx) = stream_queue_sync(conn_died);
-                let stream_from_network = StreamFromNetwork {
-                    rx: inc_rx,
-                    increase_in_window: increase_in_window.0,
-                };
+            self.register_stream_handler::<_, _, HttpStreamAfterHeader2Box>(
+                move |increase_in_window| {
+                    let (inc_tx, inc_rx) = stream_queue_sync(conn_died);
+                    let stream_from_network = StreamFromNetwork::new(inc_rx, increase_in_window.0);
 
-                (inc_tx, HttpStreamAfterHeaders::new(stream_from_network))
-            })
+                    (inc_tx, Box::pin(stream_from_network))
+                },
+            )
         }
     }
 
