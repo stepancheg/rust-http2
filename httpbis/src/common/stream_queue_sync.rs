@@ -18,6 +18,7 @@ use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::types::ServerTypes;
+use crate::solicit::end_stream::EndStream;
 use crate::ErrorCode;
 use crate::Headers;
 use bytes::Bytes;
@@ -46,17 +47,17 @@ impl<T: Types> StreamQueueSyncSender<T> {
 }
 
 impl ServerRequestStreamHandler for StreamQueueSyncSender<ServerTypes> {
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
-            last: end_stream,
+            end_stream,
         }))
     }
 
     fn trailers(self: Box<Self>, trailers: Headers) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(trailers),
-            last: true,
+            end_stream: EndStream::Yes,
         }))
     }
 
@@ -70,24 +71,24 @@ impl ServerRequestStreamHandler for StreamQueueSyncSender<ServerTypes> {
 }
 
 impl ClientResponseStreamHandler for StreamQueueSyncSender<ClientTypes> {
-    fn headers(&mut self, headers: Headers, end_stream: bool) -> crate::Result<()> {
+    fn headers(&mut self, headers: Headers, end_stream: EndStream) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
-            last: end_stream,
+            end_stream,
         }))
     }
 
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
-            last: end_stream,
+            end_stream,
         }))
     }
 
     fn trailers(self: Box<Self>, trailers: Headers) -> crate::Result<()> {
         self.send(Ok(DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(trailers),
-            last: true,
+            end_stream: EndStream::Yes,
         }))
     }
 
@@ -124,7 +125,7 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
                 return Poll::Ready(Some(Err(e)));
             }
             Poll::Ready(Some(Ok(part))) => {
-                if part.last {
+                if part.end_stream == EndStream::Yes {
                     self.eof_received = true;
                 }
                 part

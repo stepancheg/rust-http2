@@ -21,47 +21,46 @@ use std::task::Poll;
 #[derive(Debug)]
 pub struct DataOrHeadersWithFlag {
     pub content: DataOrHeaders,
-    /// END_STREAM
-    pub last: bool,
+    pub end_stream: EndStream,
 }
 
 impl DataOrHeadersWithFlag {
     pub fn last_headers(headers: Headers) -> Self {
         DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
-            last: true,
+            end_stream: EndStream::Yes,
         }
     }
 
     pub fn intermediate_headers(headers: Headers) -> Self {
         DataOrHeadersWithFlag {
             content: DataOrHeaders::Headers(headers),
-            last: false,
+            end_stream: EndStream::No,
         }
     }
 
     pub fn intermediate_data(data: Bytes) -> Self {
         DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
-            last: false,
+            end_stream: EndStream::No,
         }
     }
 
     pub fn last_data(data: Bytes) -> Self {
         DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
-            last: true,
+            end_stream: EndStream::Yes,
         }
     }
 
     pub fn into_after_headers(self) -> DataOrTrailers {
-        let DataOrHeadersWithFlag { content, last } = self;
-        match (content, last) {
-            (DataOrHeaders::Data(data), last) => {
-                let end_stream = if last { EndStream::Yes } else { EndStream::No };
-                DataOrTrailers::Data(data, end_stream)
-            }
-            (DataOrHeaders::Headers(headers), _) => DataOrTrailers::Trailers(headers),
+        let DataOrHeadersWithFlag {
+            content,
+            end_stream,
+        } = self;
+        match content {
+            DataOrHeaders::Data(data) => DataOrTrailers::Data(data, end_stream),
+            DataOrHeaders::Headers(headers) => DataOrTrailers::Trailers(headers),
         }
     }
 }
@@ -71,11 +70,11 @@ impl From<DataOrTrailers> for DataOrHeadersWithFlag {
         match d {
             DataOrTrailers::Data(data, end_stream) => DataOrHeadersWithFlag {
                 content: DataOrHeaders::Data(data),
-                last: end_stream == EndStream::Yes,
+                end_stream,
             },
             DataOrTrailers::Trailers(trailers) => DataOrHeadersWithFlag {
                 content: DataOrHeaders::Headers(trailers),
-                last: true,
+                end_stream: EndStream::Yes,
             },
         }
     }
@@ -108,7 +107,7 @@ impl DataOrHeadersWithFlagStream {
     pub fn once(part: DataOrHeaders) -> DataOrHeadersWithFlagStream {
         DataOrHeadersWithFlagStream::new(stream::once(future::ok(DataOrHeadersWithFlag {
             content: part,
-            last: true,
+            end_stream: EndStream::Yes,
         })))
     }
 

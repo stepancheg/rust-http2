@@ -1,4 +1,5 @@
 use crate::common::stream_handler::StreamHandlerInternal;
+use crate::solicit::end_stream::EndStream;
 use crate::ErrorCode;
 use crate::Headers;
 use bytes::Bytes;
@@ -6,7 +7,7 @@ use bytes::Bytes;
 /// Synchronous callback of incoming data
 pub trait ServerRequestStreamHandler: Send + 'static {
     /// DATA frame received
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()>;
+    fn data_frame(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()>;
     /// Trailers HEADERS received
     fn trailers(self: Box<Self>, trailers: Headers) -> crate::Result<()>;
     /// RST_STREAM frame received
@@ -20,7 +21,7 @@ pub trait ServerRequestStreamHandler: Send + 'static {
 pub(crate) struct ServerRequestStreamHandlerHolder(pub(crate) Box<dyn ServerRequestStreamHandler>);
 
 impl StreamHandlerInternal for ServerRequestStreamHandlerHolder {
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()> {
         self.0.data_frame(data, end_stream)
     }
 

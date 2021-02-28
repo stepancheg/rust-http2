@@ -13,6 +13,7 @@ use bytes::Bytes;
 use futures::stream::Stream;
 
 use crate::death::error_holder::ConnDiedType;
+use crate::solicit::end_stream::EndStream;
 use futures::task::Context;
 use std::sync::Arc;
 use std::task::Poll;
@@ -103,7 +104,7 @@ impl<T: Types> CommonSender<T> {
             .map_err(|e| SendError::ConnectionDied(Arc::new(e)))
     }
 
-    fn send_data_impl(&mut self, data: Bytes, last: bool) -> Result<(), SendError> {
+    fn send_data_impl(&mut self, data: Bytes, end_stream: EndStream) -> Result<(), SendError> {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
             return Err(SendError::IncorrectState(self.state()));
         }
@@ -113,32 +114,36 @@ impl<T: Types> CommonSender<T> {
             stream_id,
             DataOrHeadersWithFlag {
                 content: DataOrHeaders::Data(data),
-                last,
+                end_stream,
             },
         ))?;
-        if last {
+        if end_stream == EndStream::Yes {
             self.state.take();
         }
         Ok(())
     }
 
     pub fn send_data(&mut self, data: Bytes) -> Result<(), SendError> {
-        self.send_data_impl(data, false)
+        self.send_data_impl(data, EndStream::No)
     }
 
     pub fn send_data_end_of_stream(&mut self, data: Bytes) -> Result<(), SendError> {
-        self.send_data_impl(data, true)
+        self.send_data_impl(data, EndStream::Yes)
     }
 
     pub fn send_headers(&mut self, headers: Headers) -> Result<(), SendError> {
-        self.send_headers_impl(headers, false)
+        self.send_headers_impl(headers, EndStream::No)
     }
 
     pub fn send_headers_end_of_stream(&mut self, headers: Headers) -> Result<(), SendError> {
-        self.send_headers_impl(headers, true)
+        self.send_headers_impl(headers, EndStream::Yes)
     }
 
-    pub fn send_headers_impl(&mut self, headers: Headers, last: bool) -> Result<(), SendError> {
+    pub fn send_headers_impl(
+        &mut self,
+        headers: Headers,
+        end_stream: EndStream,
+    ) -> Result<(), SendError> {
         if self.state() != SenderState::ExpectingHeaders {
             return Err(SendError::IncorrectState(self.state()));
         }
@@ -147,10 +152,10 @@ impl<T: Types> CommonSender<T> {
             stream_id,
             DataOrHeadersWithFlag {
                 content: DataOrHeaders::Headers(headers),
-                last,
+                end_stream,
             },
         ))?;
-        if last {
+        if end_stream == EndStream::Yes {
             self.state.take();
         } else {
             self.state.as_mut().unwrap().seen_headers = true;
@@ -167,7 +172,7 @@ impl<T: Types> CommonSender<T> {
             stream_id,
             DataOrHeadersWithFlag {
                 content: DataOrHeaders::Headers(trailers),
-                last: true,
+                end_stream: EndStream::Yes,
             },
         ))?;
         self.state = None;

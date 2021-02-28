@@ -514,12 +514,12 @@ where
             ClientHeadersPlace::Initial1Xx => {}
             ClientHeadersPlace::Initial => {
                 if let Some(ref mut response_handler) = stream.stream().peer_tx {
-                    let _ = response_handler.0.headers(headers, false);
+                    let _ = response_handler.0.headers(headers, EndStream::No);
                 }
             }
             ClientHeadersPlace::InitialEndOfStream => {
                 if let Some(mut response_handler) = stream.stream().peer_tx.take() {
-                    let _ = response_handler.0.headers(headers, true);
+                    let _ = response_handler.0.headers(headers, EndStream::Yes);
                 }
             }
             ClientHeadersPlace::Trailing => {

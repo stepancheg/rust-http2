@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::data_or_headers::DataOrHeaders;
 
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::solicit::end_stream::EndStream;
 use crate::solicit::error_code::ErrorCode;
 
 pub fn data_size(content: &DataOrHeaders) -> usize {
@@ -50,7 +51,7 @@ impl StreamQueue {
 
     pub fn push_back_part(&mut self, part: DataOrHeadersWithFlag) {
         self.push_back(part.content);
-        if part.last {
+        if part.end_stream == EndStream::Yes {
             self.close(ErrorCode::NoError);
         }
     }

@@ -22,11 +22,11 @@ impl DataOrTrailers {
         match self {
             DataOrTrailers::Data(data, end_stream) => DataOrHeadersWithFlag {
                 content: DataOrHeaders::Data(data),
-                last: end_stream == EndStream::Yes,
+                end_stream,
             },
             DataOrTrailers::Trailers(headers) => DataOrHeadersWithFlag {
                 content: DataOrHeaders::Headers(headers),
-                last: true,
+                end_stream: EndStream::Yes,
             },
         }
     }

@@ -3,6 +3,7 @@ use bytes::Bytes;
 use crate::client::resp::ClientResponse;
 use crate::common::stream_handler::StreamHandlerInternal;
 use crate::error;
+use crate::solicit::end_stream::EndStream;
 use crate::ClientRequest;
 use crate::ErrorCode;
 use crate::Headers;
@@ -22,9 +23,9 @@ pub trait ClientHandler: Send + 'static {
 /// Synchronous callback of incoming data
 pub trait ClientResponseStreamHandler: Send + 'static {
     /// Response HEADERS frame received
-    fn headers(&mut self, headers: Headers, end_stream: bool) -> crate::Result<()>;
+    fn headers(&mut self, headers: Headers, end_stream: EndStream) -> crate::Result<()>;
     /// DATA frame received
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()>;
+    fn data_frame(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()>;
     /// Trailers HEADERS received
     fn trailers(self: Box<Self>, trailers: Headers) -> crate::Result<()>;
     /// RST_STREAM frame received
@@ -38,7 +39,7 @@ pub(crate) struct ClientResponseStreamHandlerHolder(
 );
 
 impl StreamHandlerInternal for ClientResponseStreamHandlerHolder {
-    fn data_frame(&mut self, data: Bytes, end_stream: bool) -> crate::Result<()> {
+    fn data_frame(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()> {
         self.0.data_frame(data, end_stream)
     }
 

@@ -131,7 +131,9 @@ where
             );
 
             let end_of_stream = frame.is_end_of_stream();
-            stream.stream().data_recvd(frame.data, end_of_stream);
+            stream
+                .stream()
+                .data_recvd(frame.data, EndStream::from_bool(end_of_stream));
             break;
         }
 

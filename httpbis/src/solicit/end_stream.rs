@@ -6,3 +6,12 @@ pub enum EndStream {
     /// The stream should still be kept open
     No,
 }
+
+impl EndStream {
+    pub fn from_bool(end_stream: bool) -> EndStream {
+        match end_stream {
+            true => EndStream::Yes,
+            false => EndStream::No,
+        }
+    }
+}

@@ -27,13 +27,9 @@ pub enum HttpStreamCommand {
 
 impl HttpStreamCommand {
     pub fn from(part: DataOrHeadersWithFlag) -> HttpStreamCommand {
-        let end_stream = match part.last {
-            true => EndStream::Yes,
-            false => EndStream::No,
-        };
         match part.content {
-            DataOrHeaders::Data(data) => HttpStreamCommand::Data(data, end_stream),
-            DataOrHeaders::Headers(headers) => HttpStreamCommand::Headers(headers, end_stream),
+            DataOrHeaders::Data(data) => HttpStreamCommand::Data(data, part.end_stream),
+            DataOrHeaders::Headers(headers) => HttpStreamCommand::Headers(headers, part.end_stream),
         }
     }
 }
@@ -209,7 +205,7 @@ impl<T: Types> HttpStreamCommon<T> {
             }
             return Some(HttpStreamCommand::from(DataOrHeadersWithFlag {
                 content: r,
-                last: last,
+                end_stream: EndStream::from_bool(last),
             }));
         }
 
@@ -247,14 +243,14 @@ impl<T: Types> HttpStreamCommon<T> {
 
         Some(HttpStreamCommand::from(DataOrHeadersWithFlag {
             content: DataOrHeaders::Data(data),
-            last: last,
+            end_stream: EndStream::from_bool(last),
         }))
     }
 
-    pub fn data_recvd(&mut self, data: Bytes, last: bool) {
+    pub fn data_recvd(&mut self, data: Bytes, end_stream: EndStream) {
         if let Some(ref mut response_handler) = self.peer_tx {
             // TODO: reset stream if rx is dead
-            drop(response_handler.data_frame(data, last));
+            drop(response_handler.data_frame(data, end_stream));
         }
     }
 
