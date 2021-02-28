@@ -30,4 +30,11 @@ impl DataOrTrailers {
             },
         }
     }
+
+    pub fn end_stream(&self) -> EndStream {
+        match self {
+            DataOrTrailers::Data(_, end_stream) => *end_stream,
+            DataOrTrailers::Trailers(_) => EndStream::Yes,
+        }
+    }
 }

@@ -120,7 +120,7 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
         match self {
             ClientResponseStreamHandlerImpl::WaitingForHeaders(..) => panic!("incorrect state"),
             ClientResponseStreamHandlerImpl::Body(tx) => {
-                tx.send(Ok(DataOrTrailers::Data(data, end_stream).into_part()))
+                tx.send(Ok(DataOrTrailers::Data(data, end_stream)))
             }
             ClientResponseStreamHandlerImpl::Stone => panic!("incorrect state"),
         }
@@ -130,7 +130,7 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
         match *self {
             ClientResponseStreamHandlerImpl::WaitingForHeaders(..) => panic!("incorrect state"),
             ClientResponseStreamHandlerImpl::Body(tx) => {
-                tx.send(Ok(DataOrTrailers::Trailers(trailers).into_part()))
+                tx.send(Ok(DataOrTrailers::Trailers(trailers)))
             }
             ClientResponseStreamHandlerImpl::Stone => panic!("incorrect state"),
         }
@@ -164,24 +164,22 @@ impl ClientResponseStreamAfterHeaders {
     pub(crate) fn into_flag_stream(
         self,
     ) -> impl Stream<Item = crate::Result<DataOrHeadersWithFlag>> + Send {
-        self
+        self.map_ok(|d| d.into_part())
     }
 
     /// Take only `DATA` frames from the stream
     pub fn filter_data(self) -> HttpFutureStreamSend<Bytes> {
-        Box::pin(
-            self.try_filter_map(|DataOrHeadersWithFlag { content, .. }| {
-                future::ok(match content {
-                    DataOrHeaders::Data(data) => Some(data),
-                    _ => None,
-                })
-            }),
-        )
+        Box::pin(self.try_filter_map(|d| {
+            future::ok(match d {
+                DataOrTrailers::Data(data, _) => Some(data),
+                DataOrTrailers::Trailers(_) => None,
+            })
+        }))
     }
 }
 
 impl Stream for ClientResponseStreamAfterHeaders {
-    type Item = crate::Result<DataOrHeadersWithFlag>;
+    type Item = crate::Result<DataOrTrailers>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match &mut self.get_mut().0 {

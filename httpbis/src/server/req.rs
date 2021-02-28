@@ -38,10 +38,7 @@ impl<'a> ServerRequest<'a> {
                     increase_in_window: increase_in_window.0,
                 };
 
-                (
-                    inc_tx,
-                    HttpStreamAfterHeaders::from_parts(stream_from_network),
-                )
+                (inc_tx, HttpStreamAfterHeaders::new(stream_from_network))
             })
         }
     }
