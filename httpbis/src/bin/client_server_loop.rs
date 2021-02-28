@@ -63,14 +63,19 @@ fn request() {
 
     let rt = Runtime::new().unwrap();
     forever(|| {
-        let (header, body) = rt
-            .block_on(client.start_get("/any", "localhost"))
-            .expect("headers");
-        assert_eq!(200, header.status());
+        rt.block_on(async {
+            let (header, body) = client
+                .start_get("/any", "localhost")
+                .await
+                .expect("headers");
+            assert_eq!(200, header.status());
 
-        // TODO: check content
-        rt.block_on(body.into_stream().try_collect::<Vec<_>>())
-            .expect("body");
+            // TODO: check content
+            body.into_stream()
+                .try_collect::<Vec<_>>()
+                .await
+                .expect("body");
+        })
     });
 }
 
