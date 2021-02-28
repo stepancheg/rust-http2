@@ -296,7 +296,7 @@ impl ServerConn {
                 (conn, f)
             }
             ServerTlsOption::Tls(acceptor) => {
-                let socket: HttpFutureSend<_> = Box::pin(async move {
+                let socket: TryFutureBox<_> = Box::pin(async move {
                     let tls_stream = acceptor.accept(socket).await?;
                     debug!("TLS handshake done");
                     Ok(tls_stream)
@@ -354,7 +354,7 @@ impl ServerConn {
     }
 
     /// For tests
-    pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
+    pub fn dump_state(&self) -> TryFutureBox<ConnStateSnapshot> {
         let (tx, rx) = death_aware_oneshot(self.conn_died_error_holder.clone());
 
         if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(

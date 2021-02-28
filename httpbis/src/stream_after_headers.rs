@@ -7,8 +7,8 @@ use std::task::Poll;
 
 use futures::Stream;
 
-use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::deref_pin::DerefPinMut;
+use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::Headers;
 use bytes::Bytes;
@@ -60,31 +60,26 @@ pub trait HttpStreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     /// of given value when `poll_next` is used.
     fn set_auto_in_window_size(&mut self, window_size: u32) -> crate::Result<()>;
 
-    fn into_stream(self) -> HttpStreamAfterHeadersAsStream<Self>
+    // Utilities
+
+    fn into_stream(self) -> TryStreamBox<DataOrTrailers>
     where
         Self: Sized,
     {
-        HttpStreamAfterHeadersAsStream(self)
+        Box::pin(AsStream(self))
     }
 
-    fn into_stream_with_flag(self) -> HttpStreamAfterHeadersWithFlagAsStream<Self>
+    fn filter_data(self) -> TryStreamBox<Bytes>
     where
         Self: Sized,
     {
-        HttpStreamAfterHeadersWithFlagAsStream(self)
-    }
-
-    fn filter_data(self) -> HttpStreamAfterHeadersDataStream<Self>
-    where
-        Self: Sized,
-    {
-        HttpStreamAfterHeadersDataStream(self)
+        Box::pin(DataStream(self))
     }
 }
 
-pub struct HttpStreamAfterHeadersAsStream<S: HttpStreamAfterHeaders>(S);
+struct AsStream<S: HttpStreamAfterHeaders>(S);
 
-impl<S: HttpStreamAfterHeaders> Stream for HttpStreamAfterHeadersAsStream<S> {
+impl<S: HttpStreamAfterHeaders> Stream for AsStream<S> {
     type Item = crate::Result<DataOrTrailers>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -92,21 +87,9 @@ impl<S: HttpStreamAfterHeaders> Stream for HttpStreamAfterHeadersAsStream<S> {
     }
 }
 
-pub struct HttpStreamAfterHeadersWithFlagAsStream<S: HttpStreamAfterHeaders>(S);
+struct DataStream<S: HttpStreamAfterHeaders>(S);
 
-impl<S: HttpStreamAfterHeaders> Stream for HttpStreamAfterHeadersWithFlagAsStream<S> {
-    type Item = crate::Result<DataOrHeadersWithFlag>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.get_mut().0)
-            .poll_next(cx)
-            .map_ok(|s| s.into_part())
-    }
-}
-
-pub struct HttpStreamAfterHeadersDataStream<S: HttpStreamAfterHeaders>(S);
-
-impl<S: HttpStreamAfterHeaders> Stream for HttpStreamAfterHeadersDataStream<S> {
+impl<S: HttpStreamAfterHeaders> Stream for DataStream<S> {
     type Item = crate::Result<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

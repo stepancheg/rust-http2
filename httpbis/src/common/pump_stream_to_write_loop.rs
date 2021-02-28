@@ -10,7 +10,7 @@ use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
 use crate::misc::any_to_string;
 use crate::solicit::stream_id::StreamId;
-use crate::solicit_async::HttpFutureStreamSend;
+use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 
@@ -20,7 +20,7 @@ pub(crate) struct PumpStreamToWrite<T: Types> {
     pub to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
     pub stream_id: StreamId,
     pub out_window: window_size::StreamOutWindowReceiver,
-    pub stream: HttpFutureStreamSend<DataOrTrailers>,
+    pub stream: TryStreamBox<DataOrTrailers>,
 }
 
 impl<T: Types> PumpStreamToWrite<T> {

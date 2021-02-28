@@ -8,7 +8,7 @@ use crate::data_or_trailers::DataOrTrailers;
 use crate::misc::any_to_string;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::Headers;
-use crate::solicit_async::HttpFutureStreamSend;
+use crate::solicit_async::TryStreamBox;
 use futures::future;
 use futures::stream::StreamExt;
 use futures::stream::TryStreamExt;
@@ -81,7 +81,7 @@ impl From<DataOrTrailers> for DataOrHeadersWithFlag {
 }
 
 /// Stream of DATA of HEADER frames
-pub struct DataOrHeadersWithFlagStream(pub HttpFutureStreamSend<DataOrHeadersWithFlag>);
+pub struct DataOrHeadersWithFlagStream(pub TryStreamBox<DataOrHeadersWithFlag>);
 
 impl DataOrHeadersWithFlagStream {
     // constructors
@@ -121,12 +121,12 @@ impl DataOrHeadersWithFlagStream {
     // getters
 
     /// Create a stream without "last" flag
-    pub fn drop_last_flag(self) -> HttpFutureStreamSend<DataOrHeaders> {
+    pub fn drop_last_flag(self) -> TryStreamBox<DataOrHeaders> {
         Box::pin(self.map_ok(|DataOrHeadersWithFlag { content, .. }| content))
     }
 
     /// Take only `DATA` frames from the stream
-    pub fn filter_data(self) -> HttpFutureStreamSend<Bytes> {
+    pub fn filter_data(self) -> TryStreamBox<Bytes> {
         Box::pin(
             self.try_filter_map(|DataOrHeadersWithFlag { content, .. }| {
                 future::ok(match content {

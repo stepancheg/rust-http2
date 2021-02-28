@@ -24,7 +24,7 @@ use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::solicit::end_stream::EndStream;
-use crate::solicit_async::HttpFutureStreamSend;
+use crate::solicit_async::TryStreamBox;
 use crate::stream_after_headers::HttpStreamAfterHeaders;
 use crate::stream_after_headers::HttpStreamAfterHeadersBox;
 use crate::stream_after_headers::HttpStreamAfterHeadersEmpty;
@@ -169,7 +169,7 @@ impl ClientResponseFuture3 {
 
     // getters
 
-    pub fn into_stream_flag(self) -> HttpFutureStreamSend<DataOrHeadersWithFlag> {
+    pub fn into_stream_flag(self) -> TryStreamBox<DataOrHeadersWithFlag> {
         Box::pin(
             self.0
                 .map_ok(|(headers, rem)| {
@@ -177,14 +177,14 @@ impl ClientResponseFuture3 {
                     let header = stream::once(future::ok(
                         DataOrHeadersWithFlag::intermediate_headers(headers),
                     ));
-                    let rem = rem.into_stream_with_flag();
+                    let rem = rem.into_stream().map_ok(|s| s.into_part());
                     header.chain(rem)
                 })
                 .try_flatten_stream(),
         )
     }
 
-    pub fn into_stream(self) -> HttpFutureStreamSend<DataOrHeaders> {
+    pub fn into_stream(self) -> TryStreamBox<DataOrHeaders> {
         Box::pin(TryStreamExt::map_ok(self.into_stream_flag(), |c| c.content))
     }
 

@@ -269,7 +269,7 @@ impl Client {
 
     /// For tests
     #[doc(hidden)]
-    pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
+    pub fn dump_state(&self) -> TryFutureBox<ConnStateSnapshot> {
         let (tx, rx) = death_aware_oneshot(self.client_died_error_holder.clone());
         // ignore error
         drop(
@@ -280,7 +280,7 @@ impl Client {
     }
 
     /// Create a future which waits for successful connection.
-    pub fn wait_for_connect(&self) -> HttpFutureSend<()> {
+    pub fn wait_for_connect(&self) -> TryFutureBox<()> {
         let (tx, rx) = oneshot::channel();
         // ignore error
         drop(

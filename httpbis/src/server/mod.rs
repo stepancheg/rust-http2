@@ -250,7 +250,7 @@ struct ServerState {
 }
 
 impl ServerState {
-    fn snapshot(&self) -> HttpFutureSend<ServerStateSnapshot> {
+    fn snapshot(&self) -> TryFutureBox<ServerStateSnapshot> {
         let futures: Vec<_> = self
             .conns
             .iter()
@@ -391,7 +391,7 @@ impl Server {
     }
 
     // for tests
-    pub fn dump_state(&self) -> HttpFutureSend<ServerStateSnapshot> {
+    pub fn dump_state(&self) -> TryFutureBox<ServerStateSnapshot> {
         let g = self.state.lock().expect("lock");
         g.snapshot()
     }

@@ -34,7 +34,7 @@ use crate::Headers;
 
 use crate::death::error_holder::ConnDiedType;
 use crate::death::oneshot::DeathAwareOneshotSender;
-use crate::solicit_async::HttpFutureStreamSend;
+use crate::solicit_async::TryStreamBox;
 
 pub(crate) trait ConnWriteSideCustom {
     type Types: Types;
@@ -222,7 +222,7 @@ where
     fn process_stream_pull(
         &mut self,
         stream_id: StreamId,
-        stream: HttpFutureStreamSend<DataOrTrailers>,
+        stream: TryStreamBox<DataOrTrailers>,
         out_window: StreamOutWindowReceiver,
     ) -> crate::Result<()> {
         // TODO: spawn in handler
@@ -287,7 +287,7 @@ pub(crate) enum CommonToWriteMessage {
     StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
     Pull(
         StreamId,
-        HttpFutureStreamSend<DataOrTrailers>,
+        TryStreamBox<DataOrTrailers>,
         StreamOutWindowReceiver,
     ),
     DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>),

@@ -1,7 +1,7 @@
 use crate::client::resp::ClientResponse;
 use crate::client::resp_future::ClientResponseFuture3;
 use crate::client::resp_future::ClientResponseFutureImpl;
-use crate::solicit_async::HttpFutureSend;
+use crate::solicit_async::TryFutureBox;
 use crate::ClientHandler;
 use crate::ClientRequest;
 use crate::Header;
@@ -39,7 +39,7 @@ pub trait ClientIntf {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: bool,
-    ) -> HttpFutureSend<(ClientRequest, ClientResponseFutureImpl)> {
+    ) -> TryFutureBox<(ClientRequest, ClientResponseFutureImpl)> {
         let (tx, rx) = oneshot::channel();
 
         struct Impl {
@@ -120,7 +120,7 @@ pub trait ClientIntf {
         &self,
         path: &str,
         authority: &str,
-    ) -> HttpFutureSend<(ClientRequest, ClientResponseFutureImpl)> {
+    ) -> TryFutureBox<(ClientRequest, ClientResponseFutureImpl)> {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "POST"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),

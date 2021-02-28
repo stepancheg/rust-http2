@@ -418,7 +418,7 @@ impl ClientConn {
 
     /// For tests
     #[doc(hidden)]
-    pub fn _dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
+    pub fn _dump_state(&self) -> TryFutureBox<ConnStateSnapshot> {
         let (tx, rx) = death_aware_oneshot(self.conn_died_error_holder.clone());
 
         self.dump_state_with_resp_sender(tx);
