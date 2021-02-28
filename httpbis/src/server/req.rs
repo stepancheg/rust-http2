@@ -23,7 +23,7 @@ pub struct ServerRequest<'a> {
 }
 
 impl<'a> ServerRequest<'a> {
-    pub fn make_stream(self) -> HttpStreamAfterHeaders {
+    pub fn into_stream(self) -> HttpStreamAfterHeaders {
         if self.end_stream {
             HttpStreamAfterHeaders::empty()
         } else {

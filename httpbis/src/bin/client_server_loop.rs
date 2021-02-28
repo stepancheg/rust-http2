@@ -89,7 +89,7 @@ fn ping_pong() {
             mut resp: ServerResponse,
         ) -> httpbis::Result<()> {
             resp.send_headers(Headers::ok_200())?;
-            resp.pull_from_stream(req.make_stream())?;
+            resp.pull_from_stream(req.into_stream())?;
             Ok(())
         }
     }
