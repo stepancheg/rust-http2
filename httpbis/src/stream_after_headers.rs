@@ -1,17 +1,21 @@
+use std::cmp;
 use std::fmt;
+use std::io;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
+use bytes::Bytes;
 use futures::Stream;
+use tokio::io::AsyncRead;
+use tokio::io::ReadBuf;
 
 use crate::deref_pin::DerefPinMut;
 use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::Headers;
-use bytes::Bytes;
 
 pub trait HttpStreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     /// Fetch the next message without increasing the window size.
@@ -62,6 +66,16 @@ pub trait HttpStreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
 
     // Utilities
 
+    fn into_read(self) -> Pin<Box<dyn AsyncRead + Send + 'static>>
+    where
+        Self: Sized,
+    {
+        Box::pin(AsRead {
+            stream: self,
+            rem: Bytes::new(),
+        })
+    }
+
     fn into_stream(self) -> TryStreamBox<DataOrTrailers>
     where
         Self: Sized,
@@ -94,6 +108,39 @@ impl<S: HttpStreamAfterHeaders> Stream for DataStream<S> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.get_mut().0).poll_data(cx)
+    }
+}
+
+pub struct AsRead<S: HttpStreamAfterHeaders> {
+    stream: S,
+    rem: Bytes,
+}
+
+impl<S: HttpStreamAfterHeaders> AsyncRead for AsRead<S> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf,
+    ) -> Poll<io::Result<()>> {
+        // TODO: untested
+        let me = self.get_mut();
+
+        loop {
+            if !me.rem.is_empty() {
+                let min = cmp::min(me.rem.len(), buf.remaining());
+                buf.put_slice(&me.rem.split_to(min));
+                return Poll::Ready(Ok(()));
+            }
+
+            me.rem = match Pin::new(&mut me.stream)
+                .poll_data(cx)
+                .map_err(Into::<io::Error>::into)?
+            {
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Ready(Some(bytes)) => bytes,
+                Poll::Pending => return Poll::Pending,
+            }
+        }
     }
 }
 

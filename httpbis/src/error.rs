@@ -287,13 +287,22 @@ impl fmt::Display for Error {
     }
 }
 
-impl std_Error for Error {
+impl std::error::Error for Error {
     fn cause(&self) -> Option<&dyn std_Error> {
         match *self {
             Error::IoError(ref e) => Some(e),
             Error::TlsError(ref e) => Some(e),
             Error::StdError(ref e) => Some(Box::deref(e) as &dyn std_Error),
             _ => None,
+        }
+    }
+}
+
+impl Into<io::Error> for Error {
+    fn into(self) -> io::Error {
+        match self {
+            Error::IoError(e) => e,
+            e => io::Error::new(io::ErrorKind::Other, e),
         }
     }
 }
