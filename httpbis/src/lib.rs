@@ -62,6 +62,7 @@ mod data_or_headers;
 mod data_or_headers_with_flag;
 mod data_or_trailers;
 mod death;
+mod debug_undebug;
 mod deref_pin;
 mod display_comma_separated;
 mod error;

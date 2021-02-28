@@ -12,7 +12,7 @@ use std::future::Future;
 use std::pin::Pin;
 use tls_api::AsyncSocket;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub(crate) struct ServerTypes;
 
 impl Types for ServerTypes {

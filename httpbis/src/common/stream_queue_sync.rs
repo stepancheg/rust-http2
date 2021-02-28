@@ -24,6 +24,7 @@ pub(crate) struct StreamQueueSyncSender<T: Types> {
     _marker: marker::PhantomData<T>,
 }
 
+#[derive(Debug)]
 pub(crate) struct StreamQueueSyncReceiver<T: Types> {
     receiver: UnboundedReceiver<Result<DataOrTrailers, crate::Error>>,
     eof_received: bool,

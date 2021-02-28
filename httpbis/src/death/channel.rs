@@ -12,6 +12,7 @@ pub(crate) trait ErrorAwareDrop {
     fn drop_with_error(self, error: crate::Error);
 }
 
+#[derive(Debug)]
 pub(crate) struct DeathAwareSender<T: ErrorAwareDrop, D: DiedType> {
     tx: UnboundedSender<T>,
     conn_died_error_holder: SomethingDiedErrorHolder<D>,

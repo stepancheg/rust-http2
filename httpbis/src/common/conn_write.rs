@@ -281,6 +281,7 @@ where
 
 // Message sent to write loop.
 // Processed while write loop is not handling network I/O.
+#[derive(Debug)]
 pub(crate) enum CommonToWriteMessage {
     IncreaseInWindow(StreamId, u32),
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),

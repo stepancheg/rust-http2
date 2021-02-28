@@ -1,13 +1,13 @@
 //! Single client connection
 
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::AnySocketAddr;
-
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
+use crate::AnySocketAddr;
 
 use tls_api::AsyncSocket;
 use tls_api::TlsConnectorBox;
@@ -86,11 +86,33 @@ pub(crate) struct StartRequestMessage {
     pub stream_handler: Box<dyn ClientHandler>,
 }
 
+impl fmt::Debug for StartRequestMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let StartRequestMessage {
+            headers,
+            body,
+            trailers,
+            end_stream,
+            stream_handler,
+        } = self;
+        let _ = stream_handler;
+        f.debug_struct("StartRequestMessage")
+            .field("headers", headers)
+            .field("body", body)
+            .field("trailers", trailers)
+            .field("end_stream", end_stream)
+            .field("stream_handler", &"...")
+            .finish()
+    }
+}
+
+#[derive(Debug)]
 pub struct ClientStartRequestMessage {
     start: StartRequestMessage,
     write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
 }
 
+#[derive(Debug)]
 pub(crate) enum ClientToWriteMessage {
     Start(ClientStartRequestMessage),
     WaitForHandshake(oneshot::Sender<crate::Result<()>>),

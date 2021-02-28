@@ -6,6 +6,7 @@ use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::Headers;
 
 /// Stream frame content after initial headers
+#[derive(Debug)]
 pub enum DataOrTrailers {
     /// DATA frame
     Data(Bytes, EndStream),

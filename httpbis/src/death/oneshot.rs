@@ -7,6 +7,7 @@ use std::task::Context;
 use std::task::Poll;
 use tokio::sync::oneshot;
 
+#[derive(Debug)]
 pub(crate) struct DeathAwareOneshotSender<T: ErrorAwareDrop, D: DiedType> {
     tx: oneshot::Sender<T>,
     died_error_holder: SomethingDiedErrorHolder<D>,

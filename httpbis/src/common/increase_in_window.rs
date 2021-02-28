@@ -5,6 +5,7 @@ use crate::death::error_holder::ConnDiedType;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::DEFAULT_SETTINGS;
 
+#[derive(Debug)]
 pub(crate) struct IncreaseInWindow<T: Types> {
     pub stream_id: StreamId,
     pub in_window_size: u32,

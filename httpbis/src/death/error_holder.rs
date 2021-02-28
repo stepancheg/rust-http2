@@ -17,9 +17,9 @@ pub(crate) trait DiedType: Default + Clone + Unpin + Send {
     fn wrap_error(e: Arc<crate::Error>) -> crate::Error;
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub(crate) struct ClientDiedType;
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub(crate) struct ConnDiedType;
 
 impl DiedType for ClientDiedType {
@@ -42,7 +42,7 @@ impl DiedType for ConnDiedType {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct SomethingDiedErrorHolder<D: DiedType> {
     error: Arc<Mutex<Option<Arc<error::Error>>>>,
     _marker: marker::PhantomData<D>,

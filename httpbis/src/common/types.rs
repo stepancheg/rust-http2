@@ -12,17 +12,18 @@ use crate::death::channel::ErrorAwareDrop;
 use crate::req_resp::RequestOrResponse;
 use crate::solicit::frame::SettingsFrame;
 use crate::solicit::stream_id::StreamId;
+use std::fmt;
 use tls_api::AsyncSocket;
 
 /// Client or server type names for connection and stream
 // Note `Default` and `Clone` are needed only for derive to work
-pub(crate) trait Types: Default + Clone + Unpin + Send + 'static {
+pub(crate) trait Types: Default + Clone + fmt::Debug + Unpin + Send + 'static {
     type HttpStreamData: HttpStreamData;
     type HttpStreamSpecific: HttpStreamDataSpecific;
     type SideSpecific: SideSpecific;
     type StreamHandlerHolder: StreamHandlerInternal;
     // Message sent to write loop
-    type ToWriteMessage: From<CommonToWriteMessage> + ErrorAwareDrop + Send;
+    type ToWriteMessage: From<CommonToWriteMessage> + ErrorAwareDrop + fmt::Debug + Send;
 
     /// Runtime check if this type is constructed for client or server
     const CLIENT_OR_SERVER: ClientOrServer;

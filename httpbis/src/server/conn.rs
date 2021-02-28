@@ -167,6 +167,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum ServerToWriteMessage {
     Common(CommonToWriteMessage),
 }

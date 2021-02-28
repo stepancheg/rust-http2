@@ -1,3 +1,4 @@
+use std::fmt;
 use std::panic;
 use std::pin::Pin;
 use std::task::Context;
@@ -12,6 +13,7 @@ use futures::TryStreamExt;
 
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::debug_undebug::DebugUndebug;
 use crate::for_test::solicit::end_stream::EndStream;
 use crate::misc::any_to_string;
 use crate::DataOrTrailers;
@@ -26,6 +28,12 @@ use crate::DataOrTrailers;
 pub struct HttpStreamAfterHeaders(
     pub Pin<Box<dyn Stream<Item = crate::Result<DataOrTrailers>> + Send + 'static>>,
 );
+
+impl fmt::Debug for HttpStreamAfterHeaders {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&DebugUndebug(self), f)
+    }
+}
 
 impl HttpStreamAfterHeaders {
     // constructors

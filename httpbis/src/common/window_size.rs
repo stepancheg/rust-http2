@@ -10,9 +10,12 @@ use std::task::Poll;
 use super::atomic_box_option::AtomicBoxOption;
 
 use super::waiters::*;
+use crate::debug_undebug::DebugUndebug;
 use futures::future;
 use futures::task::Context;
+use std::fmt;
 
+#[derive(Debug)]
 struct ConnOutWindowShared {
     window_size: AtomicIsize,
     closed: AtomicBool,
@@ -23,6 +26,23 @@ struct StreamWindowShared {
     task: AtomicBoxOption<std::task::Waker>,
     closed: AtomicBool,
     window_size: AtomicIsize,
+}
+
+impl fmt::Debug for StreamWindowShared {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let StreamWindowShared {
+            conn,
+            task,
+            closed,
+            window_size,
+        } = self;
+        f.debug_struct("StreamWindowShared")
+            .field("conn", conn)
+            .field("task", &DebugUndebug(task))
+            .field("closed", closed)
+            .field("window_size", window_size)
+            .finish()
+    }
 }
 
 pub struct ConnOutWindowSender {
@@ -57,6 +77,15 @@ impl Drop for StreamOutWindowSender {
 pub struct StreamOutWindowReceiver {
     conn_waiter: Waiter,
     shared: Arc<StreamWindowShared>,
+}
+
+impl fmt::Debug for StreamOutWindowReceiver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StreamOutWindowReceiver")
+            .field("conn_waiter", &"...")
+            .field("shared", &self.shared)
+            .finish()
+    }
 }
 
 impl ConnOutWindowSender {

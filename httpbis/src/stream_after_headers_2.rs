@@ -1,12 +1,16 @@
-use crate::deref_pin::DerefPinMut;
-use crate::DataOrTrailers;
-use futures::Stream;
+use std::fmt;
 use std::ops::Deref;
+use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-pub trait HttpStreamAfterHeaders2: Unpin + Send + 'static {
+use futures::Stream;
+
+use crate::deref_pin::DerefPinMut;
+use crate::DataOrTrailers;
+
+pub trait HttpStreamAfterHeaders2: fmt::Debug + Unpin + Send + 'static {
     /// `Stream`-like operation.
     fn poll_next(
         self: Pin<&mut Self>,
@@ -59,6 +63,7 @@ impl<S: HttpStreamAfterHeaders2> Stream for HttpStreamAfterHeadersAsStream<S> {
 
 pub type HttpStreamAfterHeader2Box = Pin<Box<dyn HttpStreamAfterHeaders2>>;
 
+#[derive(Debug)]
 pub(crate) struct HttpStreamAfterHeaders2Empty;
 
 impl HttpStreamAfterHeaders2 for HttpStreamAfterHeaders2Empty {
@@ -89,11 +94,7 @@ impl HttpStreamAfterHeaders2 for HttpStreamAfterHeaders2Empty {
     }
 }
 
-impl<S> HttpStreamAfterHeaders2 for S
-where
-    S: DerefPinMut + Unpin + Send + 'static,
-    <S as Deref>::Target: HttpStreamAfterHeaders2,
-{
+impl HttpStreamAfterHeaders2 for Pin<Box<dyn HttpStreamAfterHeaders2>> {
     fn poll_next(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,

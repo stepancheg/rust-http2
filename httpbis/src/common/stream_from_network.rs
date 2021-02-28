@@ -16,6 +16,7 @@ use std::pin::Pin;
 
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.
+#[derive(Debug)]
 pub(crate) struct StreamFromNetwork<T: Types> {
     rx: StreamQueueSyncReceiver<T>,
     increase_in_window: IncreaseInWindow<T>,
