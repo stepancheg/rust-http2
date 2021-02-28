@@ -18,7 +18,7 @@ use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::Headers;
 
-pub trait HttpStreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
+pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     /// Fetch the next message without increasing the window size.
     ///
     /// This is lower-level operation, might not be needed to be used.
@@ -107,9 +107,9 @@ pub trait HttpStreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     }
 }
 
-struct AsStream<S: HttpStreamAfterHeaders>(S);
+struct AsStream<S: StreamAfterHeaders>(S);
 
-impl<S: HttpStreamAfterHeaders> Stream for AsStream<S> {
+impl<S: StreamAfterHeaders> Stream for AsStream<S> {
     type Item = crate::Result<DataOrTrailers>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -117,9 +117,9 @@ impl<S: HttpStreamAfterHeaders> Stream for AsStream<S> {
     }
 }
 
-struct DataStream<S: HttpStreamAfterHeaders>(S);
+struct DataStream<S: StreamAfterHeaders>(S);
 
-impl<S: HttpStreamAfterHeaders> Stream for DataStream<S> {
+impl<S: StreamAfterHeaders> Stream for DataStream<S> {
     type Item = crate::Result<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -127,12 +127,12 @@ impl<S: HttpStreamAfterHeaders> Stream for DataStream<S> {
     }
 }
 
-pub struct AsRead<S: HttpStreamAfterHeaders> {
+pub struct AsRead<S: StreamAfterHeaders> {
     stream: S,
     rem: Bytes,
 }
 
-impl<S: HttpStreamAfterHeaders> AsyncRead for AsRead<S> {
+impl<S: StreamAfterHeaders> AsyncRead for AsRead<S> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -160,12 +160,12 @@ impl<S: HttpStreamAfterHeaders> AsyncRead for AsRead<S> {
     }
 }
 
-pub type HttpStreamAfterHeadersBox = Pin<Box<dyn HttpStreamAfterHeaders>>;
+pub type StreamAfterHeadersBox = Pin<Box<dyn StreamAfterHeaders>>;
 
 #[derive(Debug)]
 pub(crate) struct HttpStreamAfterHeadersEmpty;
 
-impl HttpStreamAfterHeaders for HttpStreamAfterHeadersEmpty {
+impl StreamAfterHeaders for HttpStreamAfterHeadersEmpty {
     fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<crate::Result<DataOrTrailers>>> {
         Poll::Ready(None)
     }
@@ -198,7 +198,7 @@ impl HttpStreamAfterHeaders for HttpStreamAfterHeadersEmpty {
     }
 }
 
-impl HttpStreamAfterHeaders for Pin<Box<dyn HttpStreamAfterHeaders>> {
+impl StreamAfterHeaders for Pin<Box<dyn StreamAfterHeaders>> {
     fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<crate::Result<DataOrTrailers>>> {
         self.deref_mut().poll_next(_cx)
     }

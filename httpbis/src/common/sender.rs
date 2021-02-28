@@ -9,11 +9,11 @@ use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
 use bytes::Bytes;
-use futures::stream::Stream;
 
 use crate::common::sink_after_headers::SinkAfterHeaders;
 use crate::death::error_holder::ConnDiedType;
 use crate::solicit::end_stream::EndStream;
+use crate::solicit_async::TryStreamBox;
 use futures::task::Context;
 use std::sync::Arc;
 use std::task::Poll;
@@ -182,10 +182,7 @@ impl<T: Types> SinkAfterHeaders for CommonSender<T> {
         Ok(())
     }
 
-    fn pull_from_stream<S: Stream<Item = crate::Result<DataOrTrailers>> + Send + 'static>(
-        &mut self,
-        stream: S,
-    ) -> crate::Result<()>
+    fn pull_from_stream_dyn(&mut self, stream: TryStreamBox<DataOrTrailers>) -> crate::Result<()>
     where
         Self: Sized,
     {
@@ -202,8 +199,7 @@ impl<T: Types> SinkAfterHeaders for CommonSender<T> {
                 // TODO: why client died
                 write_tx
                     .unbounded_send(
-                        CommonToWriteMessage::Pull(self.stream_id, Box::pin(stream), out_window)
-                            .into(),
+                        CommonToWriteMessage::Pull(self.stream_id, stream, out_window).into(),
                     )
                     .map_err(|e| SendError::ConnectionDied(Arc::new(e)).into())
             }

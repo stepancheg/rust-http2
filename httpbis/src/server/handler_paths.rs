@@ -162,14 +162,14 @@ impl ServerHandlerPaths {
 }
 
 impl ServerHandler for ServerHandlerPaths {
-    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> crate::Result<()> {
+    fn start_request(&self, req: ServerRequest, resp: ServerResponse) -> crate::Result<()> {
         if let Some(service) = self.find_service(req.headers.path()) {
             info!("invoking user callback for path {}", req.headers.path());
             service.start_request(req, resp)
         } else {
             info!("serving 404 for path {}", req.headers.path());
-            drop(resp.send_headers(Headers::not_found_404()));
-            drop(resp.close());
+            let mut body = resp.send_headers(Headers::not_found_404())?;
+            body.close()?;
             Ok(())
         }
     }

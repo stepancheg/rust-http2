@@ -43,9 +43,9 @@ use tokio::runtime::Runtime;
 fn simple_new() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |req, mut resp| {
-        resp.send_headers(Headers::ok_200())?;
-        resp.pull_from_stream(req.into_stream().into_stream())?;
+    let server = ServerOneConn::new_fn(0, |req, resp| {
+        let mut sink = resp.send_headers(Headers::ok_200())?;
+        sink.pull_from_stream(req.into_stream().into_stream())?;
         Ok(())
     });
 
@@ -98,7 +98,7 @@ fn custom_drop_callback() {
 fn panic_in_handler() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |req, mut resp| {
+    let server = ServerOneConn::new_fn(0, |req, resp| {
         if req.headers.path() == "/panic" {
             panic!("requested");
         } else {
@@ -141,14 +141,14 @@ fn panic_in_handler() {
 fn panic_in_stream() {
     init_logger();
 
-    let server = ServerOneConn::new_fn(0, |req, mut resp| {
+    let server = ServerOneConn::new_fn(0, |req, resp| {
         if req.headers.path() == "/panic" {
             let stream = stream::iter((0..2).map(|_| {
                 panic!("should reset stream");
             }))
             .map(Ok);
-            resp.send_headers(Headers::ok_200())?;
-            resp.pull_from_stream(stream)?;
+            let mut sink = resp.send_headers(Headers::ok_200())?;
+            sink.pull_from_stream(stream)?;
         } else {
             resp.send_found_200_plain_text("hi there")?;
         }
@@ -203,7 +203,7 @@ fn response_large() {
 
     let large_resp_copy = large_resp.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_req, mut resp| {
+    let server = ServerOneConn::new_fn(0, move |_req, resp| {
         resp.send_message(SimpleHttpMessage {
             headers: Headers::ok_200(),
             body: BytesDeque::from(large_resp_copy.clone()),
@@ -386,7 +386,7 @@ fn do_not_poll_when_not_enough_window() {
     let polls = Arc::new(AtomicUsize::new(0));
     let polls_copy = polls.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_, mut resp| {
+    let server = ServerOneConn::new_fn(0, move |_, resp| {
         struct StreamImpl {
             polls: Arc<AtomicUsize>,
         }
@@ -410,8 +410,8 @@ fn do_not_poll_when_not_enough_window() {
             }
         }
 
-        resp.send_headers(Headers::ok_200())?;
-        resp.pull_bytes_from_stream(StreamImpl {
+        let mut sink = resp.send_headers(Headers::ok_200())?;
+        sink.pull_bytes_from_stream(StreamImpl {
             polls: polls_copy.clone(),
         })?;
 
@@ -460,7 +460,7 @@ pub fn server_sends_continuation_frame() {
 
     let headers_copy = headers.clone();
 
-    let server = ServerOneConn::new_fn(0, move |_req, mut resp| {
+    let server = ServerOneConn::new_fn(0, move |_req, resp| {
         resp.send_message(SimpleHttpMessage {
             headers: headers_copy.clone(),
             body: BytesDeque::from("there"),
@@ -541,7 +541,7 @@ fn external_event_loop() {
                 let mut server = ServerBuilder::new_plain();
                 server.event_loop = Some(core.handle().clone());
                 server.set_port(0);
-                server.service.set_service_fn("/", |_, mut resp| {
+                server.service.set_service_fn("/", |_, resp| {
                     resp.send_found_200_plain_text("aabb")?;
                     Ok(())
                 });

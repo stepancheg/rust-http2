@@ -19,20 +19,20 @@ use tokio::runtime::Runtime;
 
 fn new_server() -> Server {
     let mut server = ServerBuilder::new_plain();
-    server.service.set_service_fn("/200", |_, mut resp| {
+    server.service.set_service_fn("/200", |_, resp| {
         resp.send_found_200_plain_text("hi")?;
         Ok(())
     });
-    server.service.set_service_fn("/inf", |req, mut resp| {
+    server.service.set_service_fn("/inf", |req, resp| {
         let re = Regex::new("/inf/(\\d+)").expect("regex");
         let captures = re.captures(req.headers.path()).expect("captures");
         let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
 
-        resp.send_headers(Headers::ok_200())?;
-        resp.pull_bytes_from_stream(stream::repeat(Bytes::from(vec![17; size as usize])).map(Ok))?;
+        let mut sink = resp.send_headers(Headers::ok_200())?;
+        sink.pull_bytes_from_stream(stream::repeat(Bytes::from(vec![17; size as usize])).map(Ok))?;
         Ok(())
     });
-    server.service.set_service_fn("/bq", |req, mut resp| {
+    server.service.set_service_fn("/bq", |req, resp| {
         let re = Regex::new("/bq/(\\d+)").expect("regex");
         let captures = re.captures(req.headers.path()).expect("captures");
         let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
@@ -50,8 +50,8 @@ fn new_server() -> Server {
             }
         });
 
-        resp.send_headers(Headers::ok_200())?;
-        resp.pull_bytes_from_stream(rx.map(Ok))?;
+        let mut sink = resp.send_headers(Headers::ok_200())?;
+        sink.pull_bytes_from_stream(rx.map(Ok))?;
         Ok(())
     });
     server.set_port(0);

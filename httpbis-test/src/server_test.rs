@@ -6,10 +6,11 @@ use bytes::Bytes;
 
 use httpbis;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::Server;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
+use httpbis::SinkAfterHeaders;
+use httpbis::StreamAfterHeaders;
 
 use futures::stream;
 use httpbis::ServerRequest;
@@ -25,19 +26,19 @@ pub struct ServerTest {
 struct Blocks {}
 
 impl ServerHandler for Blocks {
-    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
+    fn start_request(&self, req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
         if let Some(captures) = blocks_re.captures(req.headers.path()) {
             let size: u32 = captures.get(1).expect("1").as_str().parse().expect("parse");
             let count: u32 = captures.get(2).expect("2").as_str().parse().expect("parse");
-            resp.send_headers(Headers::ok_200())?;
+            let mut sink = resp.send_headers(Headers::ok_200())?;
             let stream = stream::iter(
                 (0..count)
                     .map(move |i| Bytes::from(vec![(i % 0xff) as u8; size as usize]))
                     .map(Ok),
             );
-            resp.pull_bytes_from_stream(stream)?;
+            sink.pull_bytes_from_stream(stream)?;
         } else {
             resp.send_not_found_404("Only /blocks/ here")?;
         }
@@ -49,9 +50,9 @@ impl ServerHandler for Blocks {
 struct Echo {}
 
 impl ServerHandler for Echo {
-    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
-        resp.send_headers(Headers::ok_200())?;
-        resp.pull_from_stream(req.into_stream().into_stream())?;
+    fn start_request(&self, req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
+        let mut sink = resp.send_headers(Headers::ok_200())?;
+        sink.pull_from_stream(req.into_stream().into_stream())?;
         Ok(())
     }
 }

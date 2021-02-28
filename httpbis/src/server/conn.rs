@@ -125,7 +125,12 @@ where
         let factory = self.specific.factory.clone();
 
         let sender = ServerResponse {
-            common: CommonSender::new(stream_id, self.to_write_tx.clone(), out_window, false),
+            common: Some(CommonSender::new(
+                stream_id,
+                self.to_write_tx.clone(),
+                out_window,
+                false,
+            )),
             drop_callback: None,
         };
 

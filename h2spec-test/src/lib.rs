@@ -7,7 +7,7 @@ use httpbis::SimpleHttpMessage;
 pub struct Ok200;
 
 impl ServerHandler for Ok200 {
-    fn start_request(&self, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
+    fn start_request(&self, _req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
         resp.send_message(SimpleHttpMessage::found_200_plain_text("found"))?;
         Ok(())
     }

@@ -14,11 +14,12 @@ use tokio::runtime::Runtime;
 use httpbis::Client;
 use httpbis::ClientIntf;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
+use httpbis::SinkAfterHeaders;
+use httpbis::StreamAfterHeaders;
 
 #[test]
 fn smoke_tcp_socket() {
@@ -135,11 +136,7 @@ fn seq_slow() {
     }
 
     impl ServerHandler for Handler {
-        fn start_request(
-            &self,
-            _req: ServerRequest,
-            mut resp: ServerResponse,
-        ) -> httpbis::Result<()> {
+        fn start_request(&self, _req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
             let rx = self
                 .rx
                 .lock()
@@ -147,8 +144,8 @@ fn seq_slow() {
                 .take()
                 .expect("can be called only once");
             let rx = rx.map(Ok);
-            resp.send_headers(Headers::ok_200())?;
-            resp.pull_bytes_from_stream(rx)?;
+            let mut sink = resp.send_headers(Headers::ok_200())?;
+            sink.pull_bytes_from_stream(rx)?;
             Ok(())
         }
     }

@@ -10,16 +10,19 @@ use regex::Regex;
 use tls_api::TlsAcceptor;
 use tls_api::TlsAcceptorBuilder;
 
+use httpbis::Headers;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
+use httpbis::SinkAfterHeaders;
+
 use httpbis_interop::PORT;
 
 struct Found200 {}
 
 impl ServerHandler for Found200 {
-    fn start_request(&self, _req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
+    fn start_request(&self, _req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
         resp.send_found_200_plain_text("200 200 200")?;
         Ok(())
     }
@@ -28,7 +31,7 @@ impl ServerHandler for Found200 {
 struct Blocks {}
 
 impl ServerHandler for Blocks {
-    fn start_request(&self, req: ServerRequest, mut resp: ServerResponse) -> httpbis::Result<()> {
+    fn start_request(&self, req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
         let blocks_re = Regex::new("^/blocks/(\\d+)/(\\d+)$").expect("regex");
 
         if let Some(captures) = blocks_re.captures(req.headers.path()) {
@@ -37,7 +40,8 @@ impl ServerHandler for Blocks {
             let stream = stream::iter(
                 (0..count).map(move |i| Ok(Bytes::from(vec![(i % 0xff) as u8; size as usize]))),
             );
-            resp.pull_bytes_from_stream(stream)?;
+            let mut sink = resp.send_headers(Headers::ok_200())?;
+            sink.pull_bytes_from_stream(stream)?;
         } else {
             resp.send_not_found_404("expecting /blocks/")?;
         }

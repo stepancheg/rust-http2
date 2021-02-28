@@ -47,11 +47,7 @@ fn tls() {
     struct ServiceImpl {}
 
     impl ServerHandler for ServiceImpl {
-        fn start_request(
-            &self,
-            _req: ServerRequest,
-            mut resp: ServerResponse,
-        ) -> httpbis::Result<()> {
+        fn start_request(&self, _req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
             resp.send_found_200_plain_text("hello")?;
             Ok(())
         }

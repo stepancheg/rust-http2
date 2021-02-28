@@ -15,9 +15,9 @@ use tokio::sync::oneshot;
 use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::types::ClientTypes;
-use crate::common::stream_after_headers::HttpStreamAfterHeaders;
-use crate::common::stream_after_headers::HttpStreamAfterHeadersBox;
 use crate::common::stream_after_headers::HttpStreamAfterHeadersEmpty;
+use crate::common::stream_after_headers::StreamAfterHeaders;
+use crate::common::stream_after_headers::StreamAfterHeadersBox;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
 use crate::common::stream_queue_sync::StreamQueueSyncSender;
@@ -56,7 +56,7 @@ impl ClientResponseFutureImpl {
 }
 
 impl Future for ClientResponseFutureImpl {
-    type Output = crate::Result<(Headers, HttpStreamAfterHeadersBox)>;
+    type Output = crate::Result<(Headers, StreamAfterHeadersBox)>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let me = self.get_mut();
@@ -73,7 +73,7 @@ impl Future for ClientResponseFutureImpl {
 
 struct HeadersReceivedMessage {
     headers: Headers,
-    body: HttpStreamAfterHeadersBox,
+    body: StreamAfterHeadersBox,
 }
 
 enum ClientResponseStreamHandlerImpl {
@@ -94,7 +94,7 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
                 conn_died,
                 increase_in_window,
             ) => {
-                let body: HttpStreamAfterHeadersBox = match end_stream {
+                let body: StreamAfterHeadersBox = match end_stream {
                     EndStream::Yes => Box::pin(HttpStreamAfterHeadersEmpty),
                     EndStream::No => {
                         let (tx, rx) = stream_queue_sync(conn_died);
@@ -149,20 +149,12 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
 }
 
 pub struct ClientResponseFuture3(
-    Pin<
-        Box<
-            dyn Future<Output = crate::Result<(Headers, HttpStreamAfterHeadersBox)>>
-                + Send
-                + 'static,
-        >,
-    >,
+    Pin<Box<dyn Future<Output = crate::Result<(Headers, StreamAfterHeadersBox)>> + Send + 'static>>,
 );
 
 impl ClientResponseFuture3 {
     pub fn new(
-        future: impl Future<Output = crate::Result<(Headers, HttpStreamAfterHeadersBox)>>
-            + Send
-            + 'static,
+        future: impl Future<Output = crate::Result<(Headers, StreamAfterHeadersBox)>> + Send + 'static,
     ) -> ClientResponseFuture3 {
         ClientResponseFuture3(Box::pin(future))
     }
@@ -204,7 +196,7 @@ impl ClientResponseFuture3 {
 }
 
 impl Future for ClientResponseFuture3 {
-    type Output = crate::Result<(Headers, HttpStreamAfterHeadersBox)>;
+    type Output = crate::Result<(Headers, StreamAfterHeadersBox)>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut self.get_mut().0).poll(cx)

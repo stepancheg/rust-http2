@@ -23,7 +23,7 @@ impl httpbis::ServerHandler for ServiceImpl {
     fn start_request(
         &self,
         req: httpbis::ServerRequest,
-        mut resp: ServerResponse,
+        resp: ServerResponse,
     ) -> httpbis::Result<()> {
         println!("starting request: {:?}", req.headers);
 
@@ -54,8 +54,8 @@ impl httpbis::ServerHandler for ServiceImpl {
                 self.counter.load(Ordering::Relaxed)
             );
 
-            resp.send_headers(resp_headers)?;
-            resp.send_data_end_of_stream(page.into())?
+            let mut sink = resp.send_headers(resp_headers)?;
+            sink.send_data_end_of_stream(page.into())?
         }
 
         Ok(())

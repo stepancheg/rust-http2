@@ -4,11 +4,12 @@ use futures::stream::TryStreamExt;
 use httpbis::Client;
 use httpbis::ClientIntf;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
+use httpbis::SinkAfterHeaders;
+use httpbis::StreamAfterHeaders;
 use std::env;
 use std::sync::Arc;
 use std::time::Instant;
@@ -42,11 +43,7 @@ fn request() {
     struct My;
 
     impl ServerHandler for My {
-        fn start_request(
-            &self,
-            _req: ServerRequest,
-            mut resp: ServerResponse,
-        ) -> httpbis::Result<()> {
+        fn start_request(&self, _req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
             resp.send_found_200_plain_text("hello there")?;
             Ok(())
         }
@@ -85,13 +82,9 @@ fn ping_pong() {
     struct Echo;
 
     impl ServerHandler for Echo {
-        fn start_request(
-            &self,
-            req: ServerRequest,
-            mut resp: ServerResponse,
-        ) -> httpbis::Result<()> {
-            resp.send_headers(Headers::ok_200())?;
-            resp.pull_from_stream(req.into_stream().into_stream())?;
+        fn start_request(&self, req: ServerRequest, resp: ServerResponse) -> httpbis::Result<()> {
+            let mut sink = resp.send_headers(Headers::ok_200())?;
+            sink.pull_from_stream(req.into_stream().into_stream())?;
             Ok(())
         }
     }
