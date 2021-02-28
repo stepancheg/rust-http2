@@ -21,8 +21,8 @@ pub struct ServerResponse {
 impl Drop for ServerResponse {
     fn drop(&mut self) {
         if let Some(mut common) = self.common.take() {
-            warn!("sender was not properly finished, invoking custom callback if any",);
             if let Some(drop_callback) = mem::replace(&mut self.drop_callback, None) {
+                warn!("sender was not properly finished, invoking custom callback");
                 match drop_callback() {
                     Err(e) => {
                         warn!("custom callback resulted in error: {}", e);
@@ -32,6 +32,10 @@ impl Drop for ServerResponse {
                         let _ = common.send_data_end_of_stream(message.body.get_bytes());
                     }
                 }
+            } else {
+                // TODO: send 500?
+                // warn!("sender was not properly finished calling reset");
+                // let _ = common.send_headers_end_of_stream(Headers::internal_error_500());
             }
         }
     }

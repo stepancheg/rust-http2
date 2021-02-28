@@ -38,7 +38,6 @@ use crate::solicit::window_size::NonNegativeWindowSize;
 use crate::solicit::window_size::WindowSize;
 use crate::ErrorCode;
 use futures::future;
-use futures::FutureExt;
 
 use crate::common::loop_event::LoopEvent;
 use crate::log_ndc_future::log_ndc_future;
@@ -545,7 +544,7 @@ where
         future::poll_fn(|cx| self.poll_next_event(cx)).await
     }
 
-    async fn run_loop(mut self) -> crate::Result<()> {
+    async fn run_loop(&mut self) -> crate::Result<()> {
         loop {
             let event = self.next_event().await?;
             match event {
@@ -556,19 +555,19 @@ where
         }
     }
 
-    fn run(self) -> impl Future<Output = ()> + Send {
-        let conn_died_error_holder = self.conn_died_error_holder.clone();
-        let f = self.run_loop();
-        let f = f.then(|r| match r {
+    async fn run_loop_handle_error(&mut self) {
+        match self.run_loop().await {
             Ok(()) => {
                 debug!("conn finished");
-                future::ok(())
             }
             Err(e) => {
                 warn!("conn died: {}", e);
-                future::err(e)
+                self.conn_died_error_holder.set_once(e);
             }
-        });
-        conn_died_error_holder.wrap_future(f)
+        }
+    }
+
+    async fn run(mut self) {
+        self.run_loop_handle_error().await
     }
 }
