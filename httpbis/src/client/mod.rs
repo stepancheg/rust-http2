@@ -22,8 +22,8 @@ use crate::client::conn::StartRequestMessage;
 use crate::client::handler::ClientHandler;
 use crate::client::req::ClientRequest;
 use crate::client::resp::ClientResponse;
-use crate::client::resp_future_2::ClientResponseFuture3;
-use crate::client::resp_future_2::ClientResponseFutureImpl;
+use crate::client::resp_future::ClientResponseFuture3;
+use crate::client::resp_future::ClientResponseFutureImpl;
 pub use crate::client::tls::ClientTlsOption;
 use crate::common::conn::ConnStateSnapshot;
 use crate::death::channel::death_aware_channel;
@@ -51,7 +51,6 @@ pub(crate) mod increase_in_window;
 pub(crate) mod req;
 pub(crate) mod resp;
 pub(crate) mod resp_future;
-pub(crate) mod resp_future_2;
 pub(crate) mod tls;
 pub(crate) mod types;
 

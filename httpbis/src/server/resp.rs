@@ -3,7 +3,7 @@ use crate::common::sender::CommonSender;
 use crate::common::sender::SendError;
 
 use crate::server::types::ServerTypes;
-use crate::stream_after_headers::HttpStreamAfterHeaders;
+use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::SenderState;
@@ -83,7 +83,10 @@ impl ServerResponse {
         self.common.send_trailers(trailers)
     }
 
-    pub fn pull_from_stream(&mut self, stream: HttpStreamAfterHeaders) -> Result<(), SendError> {
+    pub fn pull_from_stream<S: Stream<Item = crate::Result<DataOrTrailers>> + Send + 'static>(
+        &mut self,
+        stream: S,
+    ) -> Result<(), SendError> {
         self.common.pull_from_stream(stream)
     }
 

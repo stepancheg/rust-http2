@@ -5,7 +5,6 @@ use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::death::channel::DeathAwareSender;
 use crate::solicit::stream_id::StreamId;
-use crate::stream_after_headers::HttpStreamAfterHeaders;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
@@ -16,6 +15,7 @@ use futures::stream::Stream;
 use crate::death::error_holder::ConnDiedType;
 use crate::solicit::end_stream::EndStream;
 use futures::task::Context;
+use futures::TryStreamExt;
 use std::sync::Arc;
 use std::task::Poll;
 
@@ -210,7 +210,7 @@ impl<T: Types> CommonSender<T> {
     where
         S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
     {
-        self.pull_from_stream(HttpStreamAfterHeaders::bytes(stream))
+        self.pull_from_stream(stream.map_ok(|b| DataOrTrailers::Data(b, EndStream::No)))
     }
 
     pub fn reset(&mut self, error_code: ErrorCode) -> Result<(), SendError> {

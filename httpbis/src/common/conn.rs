@@ -21,8 +21,6 @@ use super::stream_map::*;
 use super::types::*;
 use super::window_size;
 
-pub use crate::client::resp_future::ClientResponseFuture;
-
 use crate::codec::http_decode_read::HttpDecodeRead;
 use crate::codec::queued_write::QueuedWrite;
 use crate::common::conn_read::ConnReadSideCustom;

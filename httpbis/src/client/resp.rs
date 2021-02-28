@@ -2,7 +2,7 @@ use crate::client::conn::ClientToWriteMessage;
 use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::handler::ClientResponseStreamHandlerHolder;
 use crate::client::increase_in_window::ClientIncreaseInWindow;
-use crate::client::resp_future_2::ClientResponseFutureImpl;
+use crate::client::resp_future::ClientResponseFutureImpl;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
