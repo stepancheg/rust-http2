@@ -2,7 +2,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::Poll;
 
-use bytes::Bytes;
 use futures::future;
 use futures::stream;
 use futures::stream::Stream;
@@ -32,51 +31,6 @@ impl ClientResponseFuture {
         ClientResponseFuture(Box::pin(future))
     }
 
-    pub fn headers_and_stream(
-        headers: Headers,
-        stream: HttpStreamAfterHeaders,
-    ) -> ClientResponseFuture {
-        ClientResponseFuture::new(future::ok((headers, stream)))
-    }
-
-    pub fn headers_and_bytes_stream<S>(headers: Headers, content: S) -> ClientResponseFuture
-    where
-        S: Stream<Item = crate::Result<Bytes>> + Send + 'static,
-    {
-        ClientResponseFuture::headers_and_stream(headers, HttpStreamAfterHeaders::bytes(content))
-    }
-
-    /// Create a response with only headers
-    pub fn headers(headers: Headers) -> ClientResponseFuture {
-        ClientResponseFuture::headers_and_bytes_stream(headers, stream::empty())
-    }
-
-    /// Create a response with headers and response body
-    pub fn headers_and_bytes<B: Into<Bytes>>(header: Headers, content: B) -> ClientResponseFuture {
-        ClientResponseFuture::headers_and_bytes_stream(
-            header,
-            stream::once(future::ok(content.into())),
-        )
-    }
-
-    pub fn message(message: SimpleHttpMessage) -> ClientResponseFuture {
-        ClientResponseFuture::headers_and_bytes(message.headers, message.body)
-    }
-
-    pub fn found_200_plain_text(body: &str) -> ClientResponseFuture {
-        ClientResponseFuture::message(SimpleHttpMessage::found_200_plain_text(body))
-    }
-
-    pub fn not_found_404() -> ClientResponseFuture {
-        ClientResponseFuture::headers(Headers::not_found_404())
-    }
-
-    pub fn redirect_302(location: &str) -> ClientResponseFuture {
-        let mut headers = Headers::new_status(302);
-        headers.add("location", location);
-        ClientResponseFuture::headers(headers)
-    }
-
     pub fn from_stream<S>(mut stream: S) -> ClientResponseFuture
     where
         S: Stream<Item = crate::Result<DataOrHeadersWithFlag>> + Unpin + Send + 'static,
@@ -100,10 +54,6 @@ impl ClientResponseFuture {
             };
             Ok((first, rem))
         })
-    }
-
-    pub fn err(err: crate::Error) -> ClientResponseFuture {
-        ClientResponseFuture::new(future::err(err))
     }
 
     // getters
