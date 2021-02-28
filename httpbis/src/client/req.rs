@@ -10,32 +10,12 @@ use crate::SenderState;
 use bytes::Bytes;
 use futures::stream::Stream;
 use futures::task::Context;
-use std::mem;
 use std::task::Poll;
 
 /// Reference to outgoing stream on the client side.
 // NOTE: keep in sync with ServerResponse
 pub struct ClientRequest {
     pub(crate) common: CommonSender<ClientTypes>,
-    // need to replace with FnOnce when rust allows it
-    pub(crate) drop_callback:
-        Option<Box<dyn FnMut(&mut ClientRequest) -> crate::Result<()> + Send>>,
-}
-
-impl Drop for ClientRequest {
-    fn drop(&mut self) {
-        if self.state() != SenderState::Done {
-            warn!(
-                "sender was not properly finished, state: {:?}, invoking custom callback",
-                self.state()
-            );
-            if let Some(mut drop_callback) = mem::replace(&mut self.drop_callback, None) {
-                if let Err(e) = drop_callback(self) {
-                    warn!("custom callback resulted in error: {:?}", e);
-                }
-            }
-        }
-    }
 }
 
 fn _assert_types() {
@@ -45,17 +25,6 @@ fn _assert_types() {
 impl ClientRequest {
     pub fn state(&self) -> SenderState {
         self.common.state()
-    }
-
-    pub fn set_drop_callback<F>(&mut self, f: F)
-    where
-        F: FnMut(&mut ClientRequest) -> crate::Result<()> + Send + 'static,
-    {
-        self.drop_callback = Some(Box::new(f));
-    }
-
-    pub fn clear_drop_callback(&mut self) {
-        self.drop_callback = None;
     }
 
     /// Wait for stream to be ready to accept data.

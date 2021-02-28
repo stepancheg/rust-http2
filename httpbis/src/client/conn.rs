@@ -204,7 +204,6 @@ where
                 } else {
                     CommonSender::new(stream_id, write_tx, out_window, true)
                 },
-                drop_callback: None,
             };
 
             let mut handler = None;
