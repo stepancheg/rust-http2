@@ -188,6 +188,7 @@ where
                 in_window_size,
                 stream_id,
                 to_write_tx: &self.to_write_tx,
+                conn_died: &self.conn_died_error_holder,
             };
 
             match stream_handler.request_created(req, resp) {

@@ -138,6 +138,7 @@ where
                 in_window_size,
                 stream_handler: &mut stream_handler,
                 to_write_tx: &self.to_write_tx,
+                conn_died: &self.conn_died_error_holder,
             };
 
             panic::catch_unwind(panic::AssertUnwindSafe(|| {

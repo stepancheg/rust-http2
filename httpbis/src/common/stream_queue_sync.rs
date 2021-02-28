@@ -1,10 +1,11 @@
-#![allow(dead_code)]
+use std::marker;
+use std::pin::Pin;
+use std::task::Poll;
 
 use futures::channel::mpsc::unbounded;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::channel::mpsc::UnboundedSender;
 use futures::stream::Stream;
-use std::task::Poll;
 
 use crate::error;
 
@@ -13,14 +14,14 @@ use crate::client::types::ClientTypes;
 use crate::common::types::Types;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::death::error_holder::ConnDiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::types::ServerTypes;
 use crate::ErrorCode;
 use crate::Headers;
 use bytes::Bytes;
 use futures::task::Context;
-use std::marker;
-use std::pin::Pin;
 
 pub(crate) struct StreamQueueSyncSender<T: Types> {
     sender: UnboundedSender<Result<DataOrHeadersWithFlag, error::Error>>,
@@ -30,13 +31,13 @@ pub(crate) struct StreamQueueSyncSender<T: Types> {
 pub(crate) struct StreamQueueSyncReceiver<T: Types> {
     receiver: UnboundedReceiver<Result<DataOrHeadersWithFlag, error::Error>>,
     eof_received: bool,
+    conn_died: SomethingDiedErrorHolder<ConnDiedType>,
     _marker: marker::PhantomData<T>,
 }
 
 impl<T: Types> StreamQueueSyncSender<T> {
     fn send(&self, item: Result<DataOrHeadersWithFlag, error::Error>) -> crate::Result<()> {
         if let Err(_send_error) = self.sender.unbounded_send(item) {
-            // TODO: better error
             Err(error::Error::PullStreamDied)
         } else {
             Ok(())
@@ -116,9 +117,7 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
                 // should be impossible, because
                 // callbacks are notified of client death in
                 // `HttpStreamCommon::conn_died`
-                return Poll::Ready(Some(Err(error::Error::InternalError(
-                    "internal error: unexpected EOF".to_owned(),
-                ))));
+                return Poll::Ready(Some(Err(self.conn_died.error())));
             }
             Poll::Ready(Some(Err(e))) => {
                 self.eof_received = true;
@@ -136,8 +135,9 @@ impl<T: Types> Stream for StreamQueueSyncReceiver<T> {
     }
 }
 
-pub(crate) fn stream_queue_sync<T: Types>() -> (StreamQueueSyncSender<T>, StreamQueueSyncReceiver<T>)
-{
+pub(crate) fn stream_queue_sync<T: Types>(
+    conn_died: SomethingDiedErrorHolder<ConnDiedType>,
+) -> (StreamQueueSyncSender<T>, StreamQueueSyncReceiver<T>) {
     let (utx, urx) = unbounded();
 
     let tx = StreamQueueSyncSender {
@@ -147,6 +147,7 @@ pub(crate) fn stream_queue_sync<T: Types>() -> (StreamQueueSyncSender<T>, Stream
     let rx = StreamQueueSyncReceiver {
         receiver: urx,
         eof_received: false,
+        conn_died,
         _marker: marker::PhantomData,
     };
 

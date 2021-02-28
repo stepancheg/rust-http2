@@ -7,6 +7,7 @@ use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
 use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
+use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::ClientResponseFuture;
 use crate::StreamId;
 
@@ -15,12 +16,14 @@ pub struct ClientResponse<'a> {
     pub(crate) in_window_size: u32,
     pub(crate) stream_id: StreamId,
     pub(crate) to_write_tx: &'a DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
+    pub(crate) conn_died: &'a SomethingDiedErrorHolder<ConnDiedType>,
 }
 
 impl<'a> ClientResponse<'a> {
     pub fn into_stream(self) -> ClientResponseFuture {
-        self.register_stream_handler(|increase_in_window| {
-            let (inc_tx, inc_rx) = stream_queue_sync();
+        let conn_died = self.conn_died.clone();
+        self.register_stream_handler(move |increase_in_window| {
+            let (inc_tx, inc_rx) = stream_queue_sync(conn_died);
             let stream_from_network = StreamFromNetwork {
                 rx: inc_rx,
                 increase_in_window: increase_in_window.0,
