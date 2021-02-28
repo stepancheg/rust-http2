@@ -7,18 +7,17 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use bytes::Bytes;
-
 use futures::future;
-
 use futures::stream::StreamExt;
+use tokio::runtime::Runtime;
 
 use httpbis::Client;
 use httpbis::Headers;
+use httpbis::HttpStreamAfterHeaders2;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerRequest;
 use httpbis::ServerResponse;
-use tokio::runtime::Runtime;
 
 #[test]
 fn smoke_tcp_socket() {

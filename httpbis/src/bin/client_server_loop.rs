@@ -74,7 +74,7 @@ fn request() {
         // TODO: check content
         Runtime::new()
             .unwrap()
-            .block_on(body.try_collect::<Vec<_>>())
+            .block_on(body.into_stream().try_collect::<Vec<_>>())
             .expect("body");
     });
 }

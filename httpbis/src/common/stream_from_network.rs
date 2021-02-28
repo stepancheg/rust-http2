@@ -9,9 +9,12 @@ use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::Types;
 use crate::common::increase_in_window::IncreaseInWindow;
 use crate::DataOrTrailers;
+use crate::Headers;
 use crate::HttpStreamAfterHeaders2;
+use bytes::Bytes;
 use futures::task::Context;
 use std::convert::TryFrom;
+use std::mem;
 use std::pin::Pin;
 
 /// Stream that provides data from network.
@@ -21,6 +24,7 @@ pub(crate) struct StreamFromNetwork<T: Types> {
     rx: StreamQueueSyncReceiver<T>,
     increase_in_window: IncreaseInWindow<T>,
     auto_in_window_size: u32,
+    next_frame: Option<DataOrTrailers>,
 }
 
 impl<T: Types> StreamFromNetwork<T> {
@@ -29,7 +33,45 @@ impl<T: Types> StreamFromNetwork<T> {
             rx,
             auto_in_window_size: increase_in_window.in_window_size,
             increase_in_window,
+            next_frame: None,
         }
+    }
+}
+
+impl<T: Types> StreamFromNetwork<T> {
+    fn poll_prefetch(&mut self, cx: &mut Context<'_>) -> Poll<crate::Result<()>> {
+        if self.next_frame.is_some() {
+            return Poll::Ready(Ok(()));
+        }
+
+        let part = match Pin::new(&mut self.rx).poll_next(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(e)),
+            Poll::Ready(None) => return Poll::Ready(Ok(())),
+            Poll::Ready(Some(Ok(part))) => part,
+        };
+
+        match &part {
+            DataOrTrailers::Data(b, _) => {
+                // TODO: increase only when returned
+                self.increase_in_window
+                    .data_frame_received(u32::try_from(b.len()).unwrap());
+            }
+            DataOrTrailers::Trailers(_) => {}
+        }
+
+        self.next_frame = Some(part);
+
+        Poll::Ready(Ok(()))
+    }
+
+    fn auto_update_in_window_size(&mut self) -> crate::Result<()> {
+        let edge = DEFAULT_SETTINGS.initial_window_size / 2;
+        if self.increase_in_window.in_window_size() < edge {
+            let inc = DEFAULT_SETTINGS.initial_window_size;
+            self.increase_in_window.increase_window(inc)?;
+        }
+        Ok(())
     }
 }
 
@@ -52,22 +94,15 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<crate::Result<DataOrTrailers>>> {
-        let part = match Pin::new(&mut self.rx).poll_next(cx) {
+        match self.poll_prefetch(cx)? {
+            Poll::Ready(()) => {}
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
-            Poll::Ready(None) => return Poll::Ready(None),
-            Poll::Ready(Some(Ok(part))) => part,
-        };
-
-        match &part {
-            DataOrTrailers::Data(b, _) => {
-                self.increase_in_window
-                    .data_frame_received(u32::try_from(b.len()).unwrap());
-            }
-            DataOrTrailers::Trailers(_) => {}
         }
 
-        Poll::Ready(Some(Ok(part)))
+        match self.next_frame.take() {
+            None => Poll::Ready(None),
+            Some(f) => Poll::Ready(Some(Ok(f))),
+        }
     }
 
     fn poll_next(
@@ -85,16 +120,49 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
             DataOrTrailers::Data(..) => {
                 // TODO: use different
                 // TODO: increment after process of the frame (i. e. on next poll)
-                let edge = DEFAULT_SETTINGS.initial_window_size / 2;
-                if me.increase_in_window.in_window_size() < edge {
-                    let inc = DEFAULT_SETTINGS.initial_window_size;
-                    me.increase_in_window.increase_window(inc)?;
-                }
+                me.auto_update_in_window_size()?;
             }
             DataOrTrailers::Trailers(..) => {}
         }
 
         Poll::Ready(Some(Ok(part)))
+    }
+
+    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>> {
+        let me = self.get_mut();
+        match me.poll_prefetch(cx)? {
+            Poll::Ready(()) => {}
+            Poll::Pending => return Poll::Pending,
+        }
+        match me.next_frame {
+            Some(DataOrTrailers::Data(..)) => match mem::take(&mut me.next_frame) {
+                Some(DataOrTrailers::Data(bytes, ..)) => {
+                    me.auto_update_in_window_size()?;
+                    // TODO: update window size
+                    Poll::Ready(Some(Ok(bytes)))
+                }
+                _ => unreachable!(),
+            },
+            _ => Poll::Ready(None),
+        }
+    }
+
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<crate::Result<Headers>>> {
+        let me = self.get_mut();
+        match me.poll_prefetch(cx)? {
+            Poll::Ready(()) => {}
+            Poll::Pending => return Poll::Pending,
+        }
+        match me.next_frame {
+            Some(DataOrTrailers::Trailers(..)) => match mem::take(&mut me.next_frame) {
+                Some(DataOrTrailers::Trailers(trailers)) => Poll::Ready(Some(Ok(trailers))),
+                _ => unreachable!(),
+            },
+            _ => Poll::Ready(None),
+        }
     }
 }
 
