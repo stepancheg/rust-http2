@@ -21,8 +21,7 @@ use crate::SimpleHttpMessage;
 pub struct ServerResponse {
     pub(crate) common: CommonSender<ServerTypes>,
     // need to replace with FnOnce when rust allows it
-    pub(crate) drop_callback:
-        Option<Box<dyn FnMut(&mut ServerResponse) -> crate::Result<()> + Send>>,
+    pub(crate) drop_callback: Option<Box<dyn FnOnce() -> crate::Result<SimpleHttpMessage> + Send>>,
 }
 
 impl Drop for ServerResponse {
@@ -32,9 +31,14 @@ impl Drop for ServerResponse {
                 "sender was not properly finished, state: {:?}, invoking custom callback",
                 self.state()
             );
-            if let Some(mut drop_callback) = mem::replace(&mut self.drop_callback, None) {
-                if let Err(e) = drop_callback(self) {
-                    warn!("custom callback resulted in error: {:?}", e);
+            if let Some(drop_callback) = mem::replace(&mut self.drop_callback, None) {
+                match drop_callback() {
+                    Err(e) => {
+                        warn!("custom callback resulted in error: {}", e);
+                    }
+                    Ok(message) => {
+                        let _ = self.send_message(message);
+                    }
                 }
             }
         }
@@ -52,7 +56,7 @@ impl ServerResponse {
 
     pub fn set_drop_callback<F>(&mut self, f: F)
     where
-        F: FnMut(&mut ServerResponse) -> crate::Result<()> + Send + 'static,
+        F: FnOnce() -> crate::Result<SimpleHttpMessage> + Send + 'static,
     {
         self.drop_callback = Some(Box::new(f));
     }

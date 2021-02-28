@@ -74,7 +74,7 @@ fn custom_drop_callback() {
     init_logger();
 
     let server = ServerOneConn::new_fn(0, |_req, mut resp| {
-        resp.set_drop_callback(|resp| Ok(resp.send_internal_error_500("test test")?));
+        resp.set_drop_callback(|| Ok(SimpleHttpMessage::internal_error_500("test test")));
         Err(httpbis::Error::User("my".to_owned()))
     });
 
