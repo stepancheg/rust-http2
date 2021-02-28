@@ -45,7 +45,7 @@ fn simple_new() {
 
     let server = ServerOneConn::new_fn(0, |req, mut resp| {
         resp.send_headers(Headers::ok_200())?;
-        resp.pull_from_stream(HttpStreamAfterHeaders::new(req.into_stream().into_stream()))?;
+        resp.pull_from_stream(req.into_stream().into_stream())?;
         Ok(())
     });
 
@@ -143,12 +143,10 @@ fn panic_in_stream() {
 
     let server = ServerOneConn::new_fn(0, |req, mut resp| {
         if req.headers.path() == "/panic" {
-            let stream = HttpStreamAfterHeaders::new(
-                stream::iter((0..2).map(|_| {
-                    panic!("should reset stream");
-                }))
-                .map(Ok),
-            );
+            let stream = stream::iter((0..2).map(|_| {
+                panic!("should reset stream");
+            }))
+            .map(Ok);
             resp.send_headers(Headers::ok_200())?;
             resp.pull_from_stream(stream)?;
         } else {

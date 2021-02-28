@@ -14,7 +14,7 @@ use crate::common::stream_queue_sync::StreamQueueSyncReceiver;
 use crate::solicit::end_stream::EndStream;
 use crate::DataOrTrailers;
 use crate::Headers;
-use crate::HttpStreamAfterHeaders2;
+use crate::HttpStreamAfterHeaders;
 
 #[derive(Debug)]
 struct DataDontForgetToDecrease(Bytes);
@@ -106,7 +106,7 @@ impl<T: Types> StreamFromNetwork<T> {
     }
 }
 
-impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
+impl<T: Types> HttpStreamAfterHeaders for StreamFromNetwork<T> {
     fn in_window_size(&self) -> u32 {
         self.increase_in_window.in_window_size
     }

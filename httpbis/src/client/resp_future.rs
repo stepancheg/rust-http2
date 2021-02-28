@@ -25,9 +25,9 @@ use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit_async::HttpFutureStreamSend;
-use crate::stream_after_headers_2::HttpStreamAfterHeaders2;
-use crate::stream_after_headers_2::HttpStreamAfterHeaders2Empty;
-use crate::stream_after_headers_2::HttpStreamAfterHeadersBox;
+use crate::stream_after_headers::HttpStreamAfterHeaders;
+use crate::stream_after_headers::HttpStreamAfterHeadersBox;
+use crate::stream_after_headers::HttpStreamAfterHeadersEmpty;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
@@ -95,7 +95,7 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
                 increase_in_window,
             ) => {
                 let body: HttpStreamAfterHeadersBox = match end_stream {
-                    EndStream::Yes => Box::pin(HttpStreamAfterHeaders2Empty),
+                    EndStream::Yes => Box::pin(HttpStreamAfterHeadersEmpty),
                     EndStream::No => {
                         let (tx, rx) = stream_queue_sync(conn_died);
                         *self = ClientResponseStreamHandlerImpl::Body(tx);

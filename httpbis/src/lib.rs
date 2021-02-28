@@ -49,7 +49,6 @@ pub use solicit::header::Headers;
 pub use solicit::stream_id::StreamId;
 pub use solicit::HttpScheme;
 pub use stream_after_headers::HttpStreamAfterHeaders;
-pub use stream_after_headers_2::HttpStreamAfterHeaders2;
 
 mod ascii;
 mod assert_types;
@@ -79,7 +78,6 @@ mod solicit;
 mod solicit_async;
 mod solicit_misc;
 mod stream_after_headers;
-mod stream_after_headers_2;
 
 /// Functions used in tests
 #[doc(hidden)]

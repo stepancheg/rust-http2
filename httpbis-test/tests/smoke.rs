@@ -13,7 +13,7 @@ use tokio::runtime::Runtime;
 
 use httpbis::Client;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders2;
+use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
 use httpbis::ServerRequest;

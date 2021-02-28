@@ -6,7 +6,7 @@ use bytes::Bytes;
 
 use httpbis;
 use httpbis::Headers;
-use httpbis::HttpStreamAfterHeaders2;
+use httpbis::HttpStreamAfterHeaders;
 use httpbis::Server;
 use httpbis::ServerBuilder;
 use httpbis::ServerHandler;
