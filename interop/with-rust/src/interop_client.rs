@@ -11,6 +11,7 @@ use tls_api_openssl::TlsConnector;
 
 use httpbis::Client;
 use httpbis::ClientConf;
+use httpbis::ClientIntf;
 use httpbis::ClientTlsOption;
 
 use httpbis_interop::PORT;

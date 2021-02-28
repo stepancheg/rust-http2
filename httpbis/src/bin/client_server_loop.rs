@@ -2,6 +2,7 @@ use bytes::Bytes;
 use futures::stream::StreamExt;
 use futures::stream::TryStreamExt;
 use httpbis::Client;
+use httpbis::ClientIntf;
 use httpbis::Headers;
 use httpbis::HttpStreamAfterHeaders;
 use httpbis::ServerBuilder;

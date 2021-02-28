@@ -81,6 +81,7 @@ pub enum Error {
     /// Client died, reconnect failed
     ClientDiedAndReconnectFailed,
     /// Client controller died.
+    // TODO: use client died
     ClientControllerDied,
     /// Client panicked.
     ClientPanicked(String),

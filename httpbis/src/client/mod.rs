@@ -20,11 +20,8 @@ use crate::client::conn::ClientConn;
 use crate::client::conn::ClientConnCallbacks;
 use crate::client::conn::StartRequestMessage;
 use crate::client::handler::ClientHandler;
-use crate::client::req::ClientRequest;
-use crate::client::resp::ClientResponse;
-use crate::client::resp_future::ClientResponseFuture3;
-use crate::client::resp_future::ClientResponseFutureImpl;
-pub use crate::client::tls::ClientTlsOption;
+use crate::client::intf::ClientInternals;
+use crate::client::tls::ClientTlsOption;
 use crate::common::conn::ConnStateSnapshot;
 use crate::death::channel::death_aware_channel;
 use crate::death::channel::DeathAwareReceiver;
@@ -40,14 +37,14 @@ use crate::net::connect::ToClientStream;
 use crate::net::unix::SocketAddrUnix;
 use crate::solicit::header::*;
 use crate::solicit::stream_id::StreamId;
-use crate::solicit::HttpScheme;
 use crate::solicit_async::*;
-use crate::PseudoHeaderName;
+use crate::ClientIntf;
 
 pub(crate) mod conf;
 pub(crate) mod conn;
 pub(crate) mod handler;
 pub(crate) mod increase_in_window;
+pub(crate) mod intf;
 pub(crate) mod req;
 pub(crate) mod resp;
 pub(crate) mod resp_future;
@@ -189,7 +186,7 @@ impl ClientBuilder {
         Ok(Client {
             join: Some(join),
             controller_tx,
-            http_scheme,
+            internals: ClientInternals { http_scheme },
             shutdown: shutdown_signal,
             client_died_error_holder,
             addr,
@@ -210,7 +207,7 @@ enum Completion {
 pub struct Client {
     controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
     join: Option<Completion>,
-    http_scheme: HttpScheme,
+    internals: ClientInternals,
     // used only once to send shutdown signal
     shutdown: ShutdownSignal,
     client_died_error_holder: SomethingDiedErrorHolder<ClientDiedType>,
@@ -221,7 +218,7 @@ impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Client")
             .field("addr", &self.addr)
-            .field("http_scheme", &self.http_scheme)
+            .field("http_scheme", &self.internals.http_scheme)
             .finish()
     }
 }
@@ -270,97 +267,6 @@ impl Client {
         client.build()
     }
 
-    pub fn start_request(
-        &self,
-        headers: Headers,
-        body: Option<Bytes>,
-        trailers: Option<Headers>,
-        end_stream: bool,
-    ) -> HttpFutureSend<(ClientRequest, ClientResponseFutureImpl)> {
-        let (tx, rx) = oneshot::channel();
-
-        struct Impl {
-            tx: oneshot::Sender<crate::Result<(ClientRequest, ClientResponseFutureImpl)>>,
-        }
-
-        impl ClientHandler for Impl {
-            fn request_created(
-                self: Box<Self>,
-                req: ClientRequest,
-                resp: ClientResponse,
-            ) -> crate::Result<()> {
-                if let Err(_) = self.tx.send(Ok((req, resp.into_stream()))) {
-                    return Err(crate::Error::CallerDied);
-                }
-
-                Ok(())
-            }
-
-            fn error(self: Box<Self>, error: crate::Error) {
-                let _ = self.tx.send(Err(error));
-            }
-        }
-
-        self.start_request_low_level(headers, body, trailers, end_stream, Box::new(Impl { tx }));
-
-        let client_error = self.client_died_error_holder.clone();
-        let resp_rx = rx.then(move |r| match r {
-            Ok(Ok(r)) => future::ok(r),
-            Ok(Err(e)) => future::err(e),
-            Err(oneshot::Canceled) => future::err(client_error.error()),
-        });
-
-        Box::pin(resp_rx)
-    }
-
-    pub fn start_request_end_stream(
-        &self,
-        headers: Headers,
-        body: Option<Bytes>,
-        trailers: Option<Headers>,
-    ) -> ClientResponseFuture3 {
-        ClientResponseFuture3::new(
-            self.start_request(headers, body, trailers, true)
-                .and_then(move |(_sender, response)| response),
-        )
-    }
-
-    /// Start HTTP/2 `GET` request.
-    pub fn start_get(&self, path: &str, authority: &str) -> ClientResponseFuture3 {
-        let headers = Headers::from_vec(vec![
-            Header::new(PseudoHeaderName::Method, "GET"),
-            Header::new(PseudoHeaderName::Path, path.to_owned()),
-            Header::new(PseudoHeaderName::Authority, authority.to_owned()),
-            Header::new(PseudoHeaderName::Scheme, self.http_scheme.as_bytes()),
-        ]);
-        self.start_request_end_stream(headers, None, None)
-    }
-
-    /// Start HTTP/2 `POST` request.
-    pub fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture3 {
-        let headers = Headers::from_vec(vec![
-            Header::new(PseudoHeaderName::Method, "POST"),
-            Header::new(PseudoHeaderName::Path, path.to_owned()),
-            Header::new(PseudoHeaderName::Authority, authority.to_owned()),
-            Header::new(PseudoHeaderName::Scheme, self.http_scheme.as_bytes()),
-        ]);
-        self.start_request_end_stream(headers, Some(body), None)
-    }
-
-    pub fn start_post_sink(
-        &self,
-        path: &str,
-        authority: &str,
-    ) -> HttpFutureSend<(ClientRequest, ClientResponseFutureImpl)> {
-        let headers = Headers::from_vec(vec![
-            Header::new(PseudoHeaderName::Method, "POST"),
-            Header::new(PseudoHeaderName::Path, path.to_owned()),
-            Header::new(PseudoHeaderName::Authority, authority.to_owned()),
-            Header::new(PseudoHeaderName::Scheme, self.http_scheme.as_bytes()),
-        ]);
-        self.start_request(headers, None, None, false)
-    }
-
     /// For tests
     #[doc(hidden)]
     pub fn dump_state(&self) -> HttpFutureSend<ConnStateSnapshot> {
@@ -390,19 +296,7 @@ impl Client {
     }
 }
 
-pub trait ClientInterface {
-    /// Start HTTP/2 request.
-    fn start_request_low_level(
-        &self,
-        headers: Headers,
-        body: Option<Bytes>,
-        trailers: Option<Headers>,
-        end_stream: bool,
-        stream_handler: Box<dyn ClientHandler>,
-    );
-}
-
-impl ClientInterface for Client {
+impl ClientIntf for Client {
     fn start_request_low_level(
         &self,
         headers: Headers,
@@ -421,6 +315,10 @@ impl ClientInterface for Client {
 
         self.controller_tx
             .unbounded_send_no_result(ControllerCommand::StartRequest(start))
+    }
+
+    fn internals(&self) -> &ClientInternals {
+        &self.internals
     }
 }
 

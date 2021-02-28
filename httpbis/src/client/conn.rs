@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::header::*;
 use crate::AnySocketAddr;
+use crate::HttpScheme;
 
 use tls_api::AsyncSocket;
 use tls_api::TlsConnectorBox;
@@ -17,9 +18,10 @@ use tls_api;
 use crate::solicit_async::*;
 
 use crate::client::handler::ClientHandler;
+use crate::client::intf::ClientInternals;
+use crate::client::intf::ClientIntf;
 use crate::client::req::ClientRequest;
 use crate::client::types::ClientTypes;
-use crate::client::ClientInterface;
 use crate::common::conn::Conn;
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn::SideSpecific;
@@ -72,6 +74,7 @@ pub struct ClientConnData {
 impl SideSpecific for ClientConnData {}
 
 pub struct ClientConn {
+    internals: ClientInternals,
     write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
     pub(crate) conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
@@ -261,6 +264,7 @@ impl ClientConn {
                 )>,
             > + Send
             + 'static,
+        internals: ClientInternals,
         conf: ClientConf,
         callbacks: C,
     ) -> Self
@@ -281,6 +285,7 @@ impl ClientConn {
 
         ClientConn {
             write_tx,
+            internals,
             conn_died_error_holder,
         }
     }
@@ -296,16 +301,25 @@ impl ClientConn {
         H: ClientConnCallbacks,
     {
         match tls {
-            ClientTlsOption::Plain => ClientConn::spawn_plain(lh.clone(), addr, conf, callbacks),
-            ClientTlsOption::Tls(domain, connector) => {
-                ClientConn::spawn_tls(lh.clone(), &domain, connector, addr, conf, callbacks)
+            ClientTlsOption::Plain => {
+                ClientConn::spawn_plain(lh.clone(), addr, HttpScheme::Http, conf, callbacks)
             }
+            ClientTlsOption::Tls(domain, connector) => ClientConn::spawn_tls(
+                lh.clone(),
+                &domain,
+                connector,
+                addr,
+                HttpScheme::Https,
+                conf,
+                callbacks,
+            ),
         }
     }
 
     pub fn spawn_plain<C>(
         lh: Handle,
         addr: Pin<Box<dyn ToClientStream>>,
+        http_scheme: HttpScheme,
         conf: ClientConf,
         callbacks: C,
     ) -> Self
@@ -330,7 +344,9 @@ impl ClientConn {
             Ok((peer_addr, future::ok(socket)))
         };
 
-        ClientConn::spawn_connected(lh, connect, conf, callbacks)
+        let internals = ClientInternals { http_scheme };
+
+        ClientConn::spawn_connected(lh, connect, internals, conf, callbacks)
     }
 
     pub fn spawn_tls<H>(
@@ -338,6 +354,7 @@ impl ClientConn {
         domain: &str,
         connector: Arc<TlsConnectorBox>,
         addr: Pin<Box<dyn ToClientStream>>,
+        http_scheme: HttpScheme,
         conf: ClientConf,
         callbacks: H,
     ) -> Self
@@ -368,7 +385,9 @@ impl ClientConn {
             }))
         };
 
-        ClientConn::spawn_connected(lh, connect, conf, callbacks)
+        let internals = ClientInternals { http_scheme };
+
+        ClientConn::spawn_connected(lh, connect, internals, conf, callbacks)
     }
 
     pub(crate) fn start_request_with_resp_sender(
@@ -420,7 +439,7 @@ impl ClientConn {
     }
 }
 
-impl ClientInterface for ClientConn {
+impl ClientIntf for ClientConn {
     fn start_request_low_level(
         &self,
         headers: Headers,
@@ -440,6 +459,10 @@ impl ClientInterface for ClientConn {
         if let Err((start, e)) = self.start_request_with_resp_sender(start) {
             start.stream_handler.error(e);
         }
+    }
+
+    fn internals(&self) -> &ClientInternals {
+        &self.internals
     }
 }
 

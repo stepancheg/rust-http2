@@ -1,3 +1,4 @@
+use httpbis::ClientIntf;
 use std::env;
 use std::process;
 use tokio::runtime::Runtime;
