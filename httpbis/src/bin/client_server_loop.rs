@@ -61,17 +61,15 @@ fn request() {
     )
     .expect("client");
 
+    let rt = Runtime::new().unwrap();
     forever(|| {
-        let (header, body) = Runtime::new()
-            .unwrap()
+        let (header, body) = rt
             .block_on(client.start_get("/any", "localhost"))
             .expect("headers");
         assert_eq!(200, header.status());
 
         // TODO: check content
-        Runtime::new()
-            .unwrap()
-            .block_on(body.into_stream().try_collect::<Vec<_>>())
+        rt.block_on(body.into_stream().try_collect::<Vec<_>>())
             .expect("body");
     });
 }
