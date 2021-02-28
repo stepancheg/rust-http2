@@ -8,11 +8,12 @@ use std::task::Context;
 use std::task::Poll;
 
 use bytes::Bytes;
+use futures::future;
+use futures::Future;
 use futures::Stream;
 use tokio::io::AsyncRead;
 use tokio::io::ReadBuf;
 
-use crate::deref_pin::DerefPinMut;
 use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::Headers;
@@ -22,29 +23,23 @@ pub trait HttpStreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     ///
     /// This is lower-level operation, might not be needed to be used.
     fn poll_next_no_auto(
-        self: Pin<&mut Self>,
+        &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<crate::Result<DataOrTrailers>>>;
 
     /// `Stream`-like operation.
-    fn poll_next(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<DataOrTrailers>>>;
+    fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<DataOrTrailers>>>;
 
     /// Poll `DATA` frame from the stream.
     ///
     /// Note when this operation returns `None`, trailers can still be fetched
     /// with [`poll_trailers`].
-    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>>;
+    fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>>;
 
     /// Poll trailing `HEADERS` frame from the stream.
     ///
     /// This operation returns `None` if not all `DATA` frames fetched yet.
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<Headers>>>;
+    fn poll_trailers(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Headers>>>;
 
     /// Current effective Window size known to the caller. This is a sum of:
     ///
@@ -65,6 +60,27 @@ pub trait HttpStreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     fn set_auto_in_window_size(&mut self, window_size: u32) -> crate::Result<()>;
 
     // Utilities
+
+    /// Fetch next frame.
+    fn next<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = crate::Result<Option<DataOrTrailers>>> + 'a>> {
+        Box::pin(future::poll_fn(move |cx| self.poll_next(cx)?.map(Ok)))
+    }
+
+    /// Fetch next `DATA`.
+    fn next_data<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = crate::Result<Option<Bytes>>> + 'a>> {
+        Box::pin(future::poll_fn(move |cx| self.poll_data(cx)?.map(Ok)))
+    }
+
+    /// Fetch trailers. This returns `None` if not all `DATA` frames processed.
+    fn next_trailers<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = crate::Result<Option<Headers>>> + 'a>> {
+        Box::pin(future::poll_fn(move |cx| self.poll_trailers(cx)?.map(Ok)))
+    }
 
     fn into_read(self) -> Pin<Box<dyn AsyncRead + Send + 'static>>
     where
@@ -150,10 +166,7 @@ pub type HttpStreamAfterHeadersBox = Pin<Box<dyn HttpStreamAfterHeaders>>;
 pub(crate) struct HttpStreamAfterHeadersEmpty;
 
 impl HttpStreamAfterHeaders for HttpStreamAfterHeadersEmpty {
-    fn poll_next(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<DataOrTrailers>>> {
+    fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<crate::Result<DataOrTrailers>>> {
         Poll::Ready(None)
     }
 
@@ -170,33 +183,24 @@ impl HttpStreamAfterHeaders for HttpStreamAfterHeadersEmpty {
     }
 
     fn poll_next_no_auto(
-        self: Pin<&mut Self>,
+        &mut self,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<crate::Result<DataOrTrailers>>> {
         Poll::Ready(None)
     }
 
-    fn poll_data(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<Bytes>>> {
+    fn poll_data(&mut self, _cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>> {
         Poll::Ready(None)
     }
 
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<Headers>>> {
+    fn poll_trailers(&mut self, _cx: &mut Context<'_>) -> Poll<Option<crate::Result<Headers>>> {
         Poll::Ready(None)
     }
 }
 
 impl HttpStreamAfterHeaders for Pin<Box<dyn HttpStreamAfterHeaders>> {
-    fn poll_next(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<DataOrTrailers>>> {
-        self.deref_pin().poll_next(_cx)
+    fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<crate::Result<DataOrTrailers>>> {
+        self.deref_mut().poll_next(_cx)
     }
 
     fn in_window_size(&self) -> u32 {
@@ -212,20 +216,17 @@ impl HttpStreamAfterHeaders for Pin<Box<dyn HttpStreamAfterHeaders>> {
     }
 
     fn poll_next_no_auto(
-        self: Pin<&mut Self>,
+        &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<crate::Result<DataOrTrailers>>> {
-        self.deref_pin().poll_next_no_auto(cx)
+        self.deref_mut().poll_next_no_auto(cx)
     }
 
-    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>> {
-        self.deref_pin().poll_data(cx)
+    fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>> {
+        self.deref_mut().poll_data(cx)
     }
 
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<Headers>>> {
-        self.deref_pin().poll_trailers(cx)
+    fn poll_trailers(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Headers>>> {
+        self.deref_mut().poll_trailers(cx)
     }
 }

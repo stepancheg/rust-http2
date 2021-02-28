@@ -122,7 +122,7 @@ impl<T: Types> HttpStreamAfterHeaders for StreamFromNetwork<T> {
 
     /// Fetch the next message without increasing the window size.
     fn poll_next_no_auto(
-        mut self: Pin<&mut Self>,
+        &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<crate::Result<DataOrTrailers>>> {
         match self.poll_prefetch(cx)? {
@@ -136,12 +136,8 @@ impl<T: Types> HttpStreamAfterHeaders for StreamFromNetwork<T> {
         }
     }
 
-    fn poll_next(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<DataOrTrailers>>> {
-        let me = self.get_mut();
-        let part = match Pin::new(&mut *me).poll_next_no_auto(cx)? {
+    fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<DataOrTrailers>>> {
+        let part = match self.poll_next_no_auto(cx)? {
             Poll::Ready(Some(part)) => part,
             Poll::Ready(None) => return Poll::Ready(None),
             Poll::Pending => return Poll::Pending,
@@ -150,7 +146,7 @@ impl<T: Types> HttpStreamAfterHeaders for StreamFromNetwork<T> {
         match &part {
             DataOrTrailers::Data(..) => {
                 // TODO: consider incrementing after processing of the frame (i. e. on next poll)
-                me.auto_update_in_window_size()?;
+                self.auto_update_in_window_size()?;
             }
             DataOrTrailers::Trailers(..) => {}
         }
@@ -158,18 +154,17 @@ impl<T: Types> HttpStreamAfterHeaders for StreamFromNetwork<T> {
         Poll::Ready(Some(Ok(part)))
     }
 
-    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>> {
-        let me = self.get_mut();
-        match me.poll_prefetch(cx)? {
+    fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>> {
+        match self.poll_prefetch(cx)? {
             Poll::Ready(()) => {}
             Poll::Pending => return Poll::Pending,
         }
-        match me.next_frame {
+        match self.next_frame {
             Some(DataOrTrailersDontForgetToDecrease::Data(..)) => {
-                match mem::take(&mut me.next_frame) {
+                match mem::take(&mut self.next_frame) {
                     Some(DataOrTrailersDontForgetToDecrease::Data(bytes, ..)) => {
-                        let bytes = bytes.into_inner(&mut me.increase_in_window);
-                        me.auto_update_in_window_size()?;
+                        let bytes = bytes.into_inner(&mut self.increase_in_window);
+                        self.auto_update_in_window_size()?;
                         Poll::Ready(Some(Ok(bytes)))
                     }
                     _ => unreachable!(),
@@ -179,18 +174,14 @@ impl<T: Types> HttpStreamAfterHeaders for StreamFromNetwork<T> {
         }
     }
 
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<crate::Result<Headers>>> {
-        let me = self.get_mut();
-        match me.poll_prefetch(cx)? {
+    fn poll_trailers(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Headers>>> {
+        match self.poll_prefetch(cx)? {
             Poll::Ready(()) => {}
             Poll::Pending => return Poll::Pending,
         }
-        match me.next_frame {
+        match self.next_frame {
             Some(DataOrTrailersDontForgetToDecrease::Trailers(..)) => {
-                match mem::take(&mut me.next_frame) {
+                match mem::take(&mut self.next_frame) {
                     Some(DataOrTrailersDontForgetToDecrease::Trailers(trailers)) => {
                         Poll::Ready(Some(Ok(trailers)))
                     }
