@@ -54,7 +54,7 @@ pub trait HttpStreamAfterHeaders2: fmt::Debug + Unpin + Send + 'static {
     /// Note this operation might be expensive, because each invocation sends a `WINDOW_UPDATE`
     /// frame. You probably might want to use default or update the default with
     /// [`set_auto_in_window_size`].
-    fn increase_window(&mut self, delta: u32) -> crate::Result<()>;
+    fn inc_in_window(&mut self, delta: u32) -> crate::Result<()>;
 
     /// Window will be increased each time current window size drops below the half
     /// of given value when `poll_next` is used.
@@ -131,7 +131,7 @@ impl HttpStreamAfterHeaders2 for HttpStreamAfterHeaders2Empty {
         0
     }
 
-    fn increase_window(&mut self, _delta: u32) -> crate::Result<()> {
+    fn inc_in_window(&mut self, _delta: u32) -> crate::Result<()> {
         Ok(())
     }
 
@@ -173,8 +173,8 @@ impl HttpStreamAfterHeaders2 for Pin<Box<dyn HttpStreamAfterHeaders2>> {
         self.deref().in_window_size()
     }
 
-    fn increase_window(&mut self, delta: u32) -> crate::Result<()> {
-        self.deref_mut().increase_window(delta)
+    fn inc_in_window(&mut self, delta: u32) -> crate::Result<()> {
+        self.deref_mut().inc_in_window(delta)
     }
 
     fn set_auto_in_window_size(&mut self, window_size: u32) -> crate::Result<()> {

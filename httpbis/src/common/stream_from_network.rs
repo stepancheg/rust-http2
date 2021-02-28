@@ -1,21 +1,61 @@
 #![allow(dead_code)]
 
-use futures::stream::Stream;
+use std::mem;
+use std::pin::Pin;
 use std::task::Poll;
 
-use crate::solicit::DEFAULT_SETTINGS;
+use bytes::Bytes;
+use futures::stream::Stream;
+use futures::task::Context;
 
-use super::stream_queue_sync::StreamQueueSyncReceiver;
 use super::types::Types;
 use crate::common::increase_in_window::IncreaseInWindow;
+use crate::common::stream_queue_sync::StreamQueueSyncReceiver;
+use crate::solicit::end_stream::EndStream;
 use crate::DataOrTrailers;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders2;
-use bytes::Bytes;
-use futures::task::Context;
-use std::convert::TryFrom;
-use std::mem;
-use std::pin::Pin;
+
+#[derive(Debug)]
+struct DataDontForgetToDecrease(Bytes);
+
+impl DataDontForgetToDecrease {
+    fn into_inner<T: Types>(self, increase_in_window: &mut IncreaseInWindow<T>) -> Bytes {
+        increase_in_window.data_frame_received(self.0.len());
+        self.0
+    }
+}
+
+#[derive(Debug)]
+enum DataOrTrailersDontForgetToDecrease {
+    Data(DataDontForgetToDecrease, EndStream),
+    Trailers(Headers),
+}
+
+impl DataOrTrailersDontForgetToDecrease {
+    fn new(data_or_trailers: DataOrTrailers) -> DataOrTrailersDontForgetToDecrease {
+        match data_or_trailers {
+            DataOrTrailers::Data(bytes, end_stream) => DataOrTrailersDontForgetToDecrease::Data(
+                DataDontForgetToDecrease(bytes),
+                end_stream,
+            ),
+            DataOrTrailers::Trailers(trailers) => {
+                DataOrTrailersDontForgetToDecrease::Trailers(trailers)
+            }
+        }
+    }
+
+    fn into_inner<T: Types>(self, increase_in_window: &mut IncreaseInWindow<T>) -> DataOrTrailers {
+        match self {
+            DataOrTrailersDontForgetToDecrease::Data(bytes, end_of_stream) => {
+                DataOrTrailers::Data(bytes.into_inner(increase_in_window), end_of_stream)
+            }
+            DataOrTrailersDontForgetToDecrease::Trailers(trailers) => {
+                DataOrTrailers::Trailers(trailers)
+            }
+        }
+    }
+}
 
 /// Stream that provides data from network.
 /// Most importantly, it increases WINDOW.
@@ -24,7 +64,7 @@ pub(crate) struct StreamFromNetwork<T: Types> {
     rx: StreamQueueSyncReceiver<T>,
     increase_in_window: IncreaseInWindow<T>,
     auto_in_window_size: u32,
-    next_frame: Option<DataOrTrailers>,
+    next_frame: Option<DataOrTrailersDontForgetToDecrease>,
 }
 
 impl<T: Types> StreamFromNetwork<T> {
@@ -44,23 +84,13 @@ impl<T: Types> StreamFromNetwork<T> {
             return Poll::Ready(Ok(()));
         }
 
-        let part = match Pin::new(&mut self.rx).poll_next(cx) {
+        let part = match Pin::new(&mut self.rx).poll_next(cx)? {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(e)),
             Poll::Ready(None) => return Poll::Ready(Ok(())),
-            Poll::Ready(Some(Ok(part))) => part,
+            Poll::Ready(Some(part)) => part,
         };
 
-        match &part {
-            DataOrTrailers::Data(b, _) => {
-                // TODO: increase only when returned
-                self.increase_in_window
-                    .data_frame_received(u32::try_from(b.len()).unwrap());
-            }
-            DataOrTrailers::Trailers(_) => {}
-        }
-
-        self.next_frame = Some(part);
+        self.next_frame = Some(DataOrTrailersDontForgetToDecrease::new(part));
 
         Poll::Ready(Ok(()))
     }
@@ -81,7 +111,7 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
         self.increase_in_window.in_window_size
     }
 
-    fn increase_window(&mut self, inc: u32) -> crate::Result<()> {
+    fn inc_in_window(&mut self, inc: u32) -> crate::Result<()> {
         self.increase_in_window.increase_window(inc)
     }
 
@@ -102,7 +132,7 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
 
         match self.next_frame.take() {
             None => Poll::Ready(None),
-            Some(f) => Poll::Ready(Some(Ok(f))),
+            Some(f) => Poll::Ready(Some(Ok(f.into_inner(&mut self.increase_in_window)))),
         }
     }
 
@@ -119,7 +149,7 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
 
         match &part {
             DataOrTrailers::Data(..) => {
-                // TODO: increment after process of the frame (i. e. on next poll)
+                // TODO: consider incrementing after processing of the frame (i. e. on next poll)
                 me.auto_update_in_window_size()?;
             }
             DataOrTrailers::Trailers(..) => {}
@@ -135,14 +165,16 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
             Poll::Pending => return Poll::Pending,
         }
         match me.next_frame {
-            Some(DataOrTrailers::Data(..)) => match mem::take(&mut me.next_frame) {
-                Some(DataOrTrailers::Data(bytes, ..)) => {
-                    me.auto_update_in_window_size()?;
-                    // TODO: update window size
-                    Poll::Ready(Some(Ok(bytes)))
+            Some(DataOrTrailersDontForgetToDecrease::Data(..)) => {
+                match mem::take(&mut me.next_frame) {
+                    Some(DataOrTrailersDontForgetToDecrease::Data(bytes, ..)) => {
+                        let bytes = bytes.into_inner(&mut me.increase_in_window);
+                        me.auto_update_in_window_size()?;
+                        Poll::Ready(Some(Ok(bytes)))
+                    }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
+            }
             _ => Poll::Ready(None),
         }
     }
@@ -157,10 +189,14 @@ impl<T: Types> HttpStreamAfterHeaders2 for StreamFromNetwork<T> {
             Poll::Pending => return Poll::Pending,
         }
         match me.next_frame {
-            Some(DataOrTrailers::Trailers(..)) => match mem::take(&mut me.next_frame) {
-                Some(DataOrTrailers::Trailers(trailers)) => Poll::Ready(Some(Ok(trailers))),
-                _ => unreachable!(),
-            },
+            Some(DataOrTrailersDontForgetToDecrease::Trailers(..)) => {
+                match mem::take(&mut me.next_frame) {
+                    Some(DataOrTrailersDontForgetToDecrease::Trailers(trailers)) => {
+                        Poll::Ready(Some(Ok(trailers)))
+                    }
+                    _ => unreachable!(),
+                }
+            }
             _ => Poll::Ready(None),
         }
     }

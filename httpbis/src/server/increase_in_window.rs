@@ -10,7 +10,7 @@ impl ServerIncreaseInWindow {
         self.0.in_window_size()
     }
 
-    pub fn data_frame_processed(&mut self, size: u32) {
+    pub fn data_frame_processed(&mut self, size: usize) {
         self.0.data_frame_received(size)
     }
 

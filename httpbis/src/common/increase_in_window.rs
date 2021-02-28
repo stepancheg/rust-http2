@@ -4,6 +4,7 @@ use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit::DEFAULT_SETTINGS;
+use std::convert::TryFrom;
 
 #[derive(Debug)]
 pub(crate) struct IncreaseInWindow<T: Types> {
@@ -20,7 +21,8 @@ impl<T: Types> IncreaseInWindow<T> {
     }
 
     /// Decrement window size when new data frame recevied.
-    pub fn data_frame_received(&mut self, size: u32) {
+    pub fn data_frame_received(&mut self, size: usize) {
+        let size = u32::try_from(size).unwrap();
         let old_in_window_size = self.in_window_size;
         self.in_window_size = self.in_window_size.checked_sub(size).unwrap();
         debug!(
