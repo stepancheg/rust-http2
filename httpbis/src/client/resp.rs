@@ -6,6 +6,7 @@ use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
 use crate::death::channel::DeathAwareSender;
+use crate::death::error_holder::ConnDiedType;
 use crate::ClientResponseFuture;
 use crate::StreamId;
 
@@ -13,7 +14,7 @@ pub struct ClientResponse<'a> {
     pub(crate) stream_handler: &'a mut Option<ClientResponseStreamHandlerHolder>,
     pub(crate) in_window_size: u32,
     pub(crate) stream_id: StreamId,
-    pub(crate) to_write_tx: &'a DeathAwareSender<ClientToWriteMessage>,
+    pub(crate) to_write_tx: &'a DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
 }
 
 impl<'a> ClientResponse<'a> {

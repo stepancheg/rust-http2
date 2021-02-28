@@ -207,7 +207,7 @@ enum Completion {
 /// in `ClientBuilder`). When connection fails (because of network error
 /// or protocol error) client is reconnected.
 pub struct Client {
-    controller_tx: DeathAwareSender<ControllerCommand>,
+    controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
     join: Option<Completion>,
     http_scheme: HttpScheme,
     // used only once to send shutdown signal
@@ -431,8 +431,6 @@ enum ControllerCommand {
 }
 
 impl ErrorAwareDrop for ControllerCommand {
-    type DiedType = ClientDiedType;
-
     fn drop_with_error(self, error: crate::Error) {
         match self {
             ControllerCommand::GoAway => {}
@@ -452,7 +450,7 @@ struct ControllerState<T: ToClientStream> {
     conf: ClientConf,
     // current connection
     conn: Arc<ClientConn>,
-    tx: DeathAwareSender<ControllerCommand>,
+    tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
 }
 
 impl<T: ToClientStream + 'static + Clone> ControllerState<T> {
@@ -511,7 +509,7 @@ impl<T: ToClientStream + 'static + Clone> ControllerState<T> {
         }
     }
 
-    async fn run(mut self, mut rx: DeathAwareReceiver<ControllerCommand>) {
+    async fn run(mut self, mut rx: DeathAwareReceiver<ControllerCommand, ClientDiedType>) {
         loop {
             match rx.next().await {
                 None => return,
@@ -522,7 +520,7 @@ impl<T: ToClientStream + 'static + Clone> ControllerState<T> {
 }
 
 struct CallbacksImpl {
-    tx: DeathAwareSender<ControllerCommand>,
+    tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
 }
 
 impl ClientConnCallbacks for CallbacksImpl {
@@ -539,8 +537,8 @@ fn spawn_client_event_loop<T: ToClientStream + Send + Clone + 'static>(
     tls: ClientTlsOption,
     conf: ClientConf,
     done_tx: oneshot::Sender<()>,
-    controller_tx: DeathAwareSender<ControllerCommand>,
-    controller_rx: DeathAwareReceiver<ControllerCommand>,
+    controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
+    controller_rx: DeathAwareReceiver<ControllerCommand, ClientDiedType>,
     client_died_error_holder: SomethingDiedErrorHolder<ClientDiedType>,
 ) {
     let http_conn = ClientConn::spawn(

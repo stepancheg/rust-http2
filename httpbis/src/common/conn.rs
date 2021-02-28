@@ -70,7 +70,7 @@ pub(crate) struct Conn<T: Types, I: AsyncSocket> {
     /// Client or server specific data
     pub specific: T::SideSpecific,
     /// Messages to be sent to write loop
-    pub to_write_tx: DeathAwareSender<T::ToWriteMessage>,
+    pub to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
     /// Reactor we are using
     pub loop_handle: Handle,
     /// Known streams
@@ -97,7 +97,7 @@ pub(crate) struct Conn<T: Types, I: AsyncSocket> {
     pub queued_write: QueuedWrite<WriteHalf<I>>,
     /// The HPACK encoder used to encode headers before sending them on this connection.
     pub encoder: hpack::Encoder,
-    pub write_rx: DeathAwareReceiver<T::ToWriteMessage>,
+    pub write_rx: DeathAwareReceiver<T::ToWriteMessage, ConnDiedType>,
 
     /// Last known peer settings
     pub peer_settings: HttpSettings,
@@ -128,8 +128,6 @@ pub struct ConnStateSnapshot {
 }
 
 impl ErrorAwareDrop for ConnStateSnapshot {
-    type DiedType = ConnDiedType;
-
     fn drop_with_error(self, error: crate::Error) {
         drop(error);
     }
@@ -156,8 +154,8 @@ where
         loop_handle: Handle,
         specific: T::SideSpecific,
         _conf: CommonConf,
-        to_write_tx: DeathAwareSender<T::ToWriteMessage>,
-        write_rx: DeathAwareReceiver<T::ToWriteMessage>,
+        to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
+        write_rx: DeathAwareReceiver<T::ToWriteMessage, ConnDiedType>,
         socket: impl Future<Output = crate::Result<I>> + Send,
         peer_addr: AnySocketAddr,
         conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
@@ -237,7 +235,7 @@ where
             > + Send,
     ) -> (
         impl Future<Output = ()> + Send,
-        DeathAwareSender<T::ToWriteMessage>,
+        DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
         SomethingDiedErrorHolder<ConnDiedType>,
     ) {
         let conn_died_error_holder = SomethingDiedErrorHolder::new();

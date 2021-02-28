@@ -171,10 +171,10 @@ pub(crate) enum ServerToWriteMessage {
 }
 
 impl ErrorAwareDrop for ServerToWriteMessage {
-    type DiedType = ConnDiedType;
-
     fn drop_with_error(self, _error: crate::Error) {
-        // TODO
+        match self {
+            ServerToWriteMessage::Common(_) => {}
+        }
     }
 }
 
@@ -243,7 +243,7 @@ where
 }
 
 pub struct ServerConn {
-    write_tx: DeathAwareSender<ServerToWriteMessage>,
+    write_tx: DeathAwareSender<ServerToWriteMessage, ConnDiedType>,
     conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
 

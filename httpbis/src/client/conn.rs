@@ -72,7 +72,7 @@ pub struct ClientConnData {
 impl SideSpecific for ClientConnData {}
 
 pub struct ClientConn {
-    write_tx: DeathAwareSender<ClientToWriteMessage>,
+    write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
     pub(crate) conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
 }
 
@@ -88,7 +88,7 @@ pub(crate) struct StartRequestMessage {
 
 pub struct ClientStartRequestMessage {
     start: StartRequestMessage,
-    write_tx: DeathAwareSender<ClientToWriteMessage>,
+    write_tx: DeathAwareSender<ClientToWriteMessage, ConnDiedType>,
 }
 
 pub(crate) enum ClientToWriteMessage {
@@ -98,8 +98,6 @@ pub(crate) enum ClientToWriteMessage {
 }
 
 impl ErrorAwareDrop for ClientToWriteMessage {
-    type DiedType = ConnDiedType;
-
     fn drop_with_error(self, error: crate::Error) {
         match self {
             ClientToWriteMessage::Start(start) => {

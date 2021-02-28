@@ -9,22 +9,20 @@ use std::task::Context;
 use std::task::Poll;
 
 pub(crate) trait ErrorAwareDrop {
-    type DiedType: DiedType;
-
     fn drop_with_error(self, error: crate::Error);
 }
 
-pub(crate) struct DeathAwareSender<T: ErrorAwareDrop> {
+pub(crate) struct DeathAwareSender<T: ErrorAwareDrop, D: DiedType> {
     tx: UnboundedSender<T>,
-    conn_died_error_holder: SomethingDiedErrorHolder<T::DiedType>,
+    conn_died_error_holder: SomethingDiedErrorHolder<D>,
 }
 
-pub(crate) struct DeathAwareReceiver<T: ErrorAwareDrop> {
+pub(crate) struct DeathAwareReceiver<T: ErrorAwareDrop, D: DiedType> {
     rx: UnboundedReceiver<T>,
-    conn_died_error_holder: SomethingDiedErrorHolder<T::DiedType>,
+    conn_died_error_holder: SomethingDiedErrorHolder<D>,
 }
 
-impl<T: ErrorAwareDrop> Drop for DeathAwareReceiver<T> {
+impl<T: ErrorAwareDrop, D: DiedType> Drop for DeathAwareReceiver<T, D> {
     fn drop(&mut self) {
         self.rx.close();
 
@@ -34,7 +32,7 @@ impl<T: ErrorAwareDrop> Drop for DeathAwareReceiver<T> {
     }
 }
 
-impl<T: ErrorAwareDrop> Clone for DeathAwareSender<T> {
+impl<T: ErrorAwareDrop, D: DiedType> Clone for DeathAwareSender<T, D> {
     fn clone(&self) -> Self {
         DeathAwareSender {
             tx: self.tx.clone(),
@@ -43,7 +41,7 @@ impl<T: ErrorAwareDrop> Clone for DeathAwareSender<T> {
     }
 }
 
-impl<T: ErrorAwareDrop> DeathAwareSender<T> {
+impl<T: ErrorAwareDrop, D: DiedType> DeathAwareSender<T, D> {
     pub fn unbounded_send_recover(&self, msg: T) -> Result<(), (T, crate::Error)> {
         self.tx
             .unbounded_send(msg)
@@ -63,7 +61,7 @@ impl<T: ErrorAwareDrop> DeathAwareSender<T> {
     }
 }
 
-impl<T: ErrorAwareDrop> Stream for DeathAwareReceiver<T> {
+impl<T: ErrorAwareDrop, D: DiedType> Stream for DeathAwareReceiver<T, D> {
     type Item = T;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
@@ -71,9 +69,9 @@ impl<T: ErrorAwareDrop> Stream for DeathAwareReceiver<T> {
     }
 }
 
-pub(crate) fn death_aware_channel<T: ErrorAwareDrop>(
-    conn_died_error_holder: SomethingDiedErrorHolder<T::DiedType>,
-) -> (DeathAwareSender<T>, DeathAwareReceiver<T>) {
+pub(crate) fn death_aware_channel<T: ErrorAwareDrop, D: DiedType>(
+    conn_died_error_holder: SomethingDiedErrorHolder<D>,
+) -> (DeathAwareSender<T, D>, DeathAwareReceiver<T, D>) {
     let (tx, rx) = mpsc::unbounded();
     let tx = DeathAwareSender {
         tx,

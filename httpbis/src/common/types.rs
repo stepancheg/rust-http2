@@ -9,7 +9,6 @@ use crate::common::stream::HttpStreamData;
 use crate::common::stream::HttpStreamDataSpecific;
 use crate::common::stream_handler::StreamHandlerInternal;
 use crate::death::channel::ErrorAwareDrop;
-use crate::death::error_holder::ConnDiedType;
 use crate::req_resp::RequestOrResponse;
 use crate::solicit::frame::SettingsFrame;
 use crate::solicit::stream_id::StreamId;
@@ -23,7 +22,7 @@ pub(crate) trait Types: Default + Clone + Unpin + 'static {
     type SideSpecific: SideSpecific;
     type StreamHandlerHolder: StreamHandlerInternal;
     // Message sent to write loop
-    type ToWriteMessage: From<CommonToWriteMessage> + ErrorAwareDrop<DiedType = ConnDiedType> + Send;
+    type ToWriteMessage: From<CommonToWriteMessage> + ErrorAwareDrop + Send;
 
     /// Runtime check if this type is constructed for client or server
     const CLIENT_OR_SERVER: ClientOrServer;
