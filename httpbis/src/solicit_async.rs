@@ -24,10 +24,8 @@ use crate::solicit::frame::FRAME_HEADER_LEN;
 
 use crate::misc::BsDebug;
 
-//pub type HttpFuture<T> = Pin<Box<dyn Future<Output = crate::Result<T>>>>;
-
-pub type HttpFutureSend<T> = Pin<Box<dyn Future<Output = crate::Result<T>> + Send>>;
-pub type HttpFutureStreamSend<T> = Pin<Box<dyn Stream<Item = crate::Result<T>> + Send>>;
+pub type HttpFutureSend<T> = Pin<Box<dyn Future<Output = crate::Result<T>> + Send + 'static>>;
+pub type HttpFutureStreamSend<T> = Pin<Box<dyn Stream<Item = crate::Result<T>> + Send + 'static>>;
 
 /// Inefficient, but OK because used only in tests
 pub fn recv_raw_frame_sync(read: &mut dyn Read, max_frame_size: u32) -> crate::Result<RawFrame> {

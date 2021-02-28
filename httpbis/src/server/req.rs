@@ -8,8 +8,8 @@ use crate::server::conn::ServerToWriteMessage;
 use crate::server::increase_in_window::ServerIncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::stream_handler::ServerRequestStreamHandlerHolder;
-use crate::stream_after_headers_2::HttpStreamAfterHeader2Box;
 use crate::stream_after_headers_2::HttpStreamAfterHeaders2Empty;
+use crate::stream_after_headers_2::HttpStreamAfterHeadersBox;
 use crate::Headers;
 use crate::HttpStreamAfterHeaders2;
 use crate::StreamId;
@@ -33,7 +33,7 @@ impl<'a> ServerRequest<'a> {
             Box::pin(HttpStreamAfterHeaders2Empty)
         } else {
             let conn_died = self.conn_died.clone();
-            self.register_stream_handler::<_, _, HttpStreamAfterHeader2Box>(
+            self.register_stream_handler::<_, _, HttpStreamAfterHeadersBox>(
                 move |increase_in_window| {
                     let (inc_tx, inc_rx) = stream_queue_sync(conn_died);
                     let stream_from_network = StreamFromNetwork::new(inc_rx, increase_in_window.0);

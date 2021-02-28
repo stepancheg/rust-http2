@@ -114,7 +114,7 @@ impl<S: HttpStreamAfterHeaders2> Stream for HttpStreamAfterHeadersDataStream<S> 
     }
 }
 
-pub type HttpStreamAfterHeader2Box = Pin<Box<dyn HttpStreamAfterHeaders2>>;
+pub type HttpStreamAfterHeadersBox = Pin<Box<dyn HttpStreamAfterHeaders2>>;
 
 #[derive(Debug)]
 pub(crate) struct HttpStreamAfterHeaders2Empty;

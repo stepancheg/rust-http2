@@ -1,3 +1,5 @@
+use std::panic::AssertUnwindSafe;
+
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
 
@@ -5,15 +7,12 @@ use super::*;
 use crate::common::conn_write::CommonToWriteMessage;
 use crate::common::types::Types;
 use crate::death::channel::DeathAwareSender;
+use crate::death::error_holder::ConnDiedType;
 use crate::misc::any_to_string;
 use crate::solicit::stream_id::StreamId;
+use crate::solicit_async::HttpFutureStreamSend;
 use crate::DataOrTrailers;
-
-use crate::stream_after_headers::HttpStreamAfterHeaders;
 use crate::ErrorCode;
-
-use crate::death::error_holder::ConnDiedType;
-use std::panic::AssertUnwindSafe;
 
 /// Poll the stream and enqueues frames
 pub(crate) struct PumpStreamToWrite<T: Types> {
@@ -21,7 +20,7 @@ pub(crate) struct PumpStreamToWrite<T: Types> {
     pub to_write_tx: DeathAwareSender<T::ToWriteMessage, ConnDiedType>,
     pub stream_id: StreamId,
     pub out_window: window_size::StreamOutWindowReceiver,
-    pub stream: HttpStreamAfterHeaders,
+    pub stream: HttpFutureStreamSend<DataOrTrailers>,
 }
 
 impl<T: Types> PumpStreamToWrite<T> {

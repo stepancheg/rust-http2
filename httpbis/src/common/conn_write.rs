@@ -1,19 +1,22 @@
+use std::cmp;
+use std::fmt;
 use std::task::Poll;
 
+use bytes::Bytes;
+use futures::task::Context;
+use tls_api::AsyncSocket;
+
 use crate::common::conn::Conn;
-use crate::common::stream::HttpStreamCommon;
-use crate::common::stream::HttpStreamData;
-use crate::common::types::Types;
-
-use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
-
 use crate::common::conn::ConnStateSnapshot;
 use crate::common::conn_read::ConnReadSideCustom;
 use crate::common::pump_stream_to_write_loop::PumpStreamToWrite;
 use crate::common::stream::HttpStreamCommand;
+use crate::common::stream::HttpStreamCommon;
+use crate::common::stream::HttpStreamData;
+use crate::common::types::Types;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
-
+use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit::frame::DataFlag;
 use crate::solicit::frame::DataFrame;
@@ -25,16 +28,13 @@ use crate::solicit::frame::HttpFrame;
 use crate::solicit::frame::RstStreamFrame;
 use crate::solicit::frame::SettingsFrame;
 use crate::solicit::stream_id::StreamId;
-use crate::stream_after_headers::HttpStreamAfterHeaders;
+use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
-use bytes::Bytes;
-use futures::task::Context;
-use std::cmp;
 
 use crate::death::error_holder::ConnDiedType;
 use crate::death::oneshot::DeathAwareOneshotSender;
-use tls_api::AsyncSocket;
+use crate::solicit_async::HttpFutureStreamSend;
 
 pub(crate) trait ConnWriteSideCustom {
     type Types: Types;
@@ -222,7 +222,7 @@ where
     fn process_stream_pull(
         &mut self,
         stream_id: StreamId,
-        stream: HttpStreamAfterHeaders,
+        stream: HttpFutureStreamSend<DataOrTrailers>,
         out_window: StreamOutWindowReceiver,
     ) -> crate::Result<()> {
         // TODO: spawn in handler
@@ -281,11 +281,20 @@ where
 
 // Message sent to write loop.
 // Processed while write loop is not handling network I/O.
-#[derive(Debug)]
 pub(crate) enum CommonToWriteMessage {
     IncreaseInWindow(StreamId, u32),
     StreamEnqueue(StreamId, DataOrHeadersWithFlag),
     StreamEnd(StreamId, ErrorCode), // send when user provided handler completed the stream
-    Pull(StreamId, HttpStreamAfterHeaders, StreamOutWindowReceiver),
+    Pull(
+        StreamId,
+        HttpFutureStreamSend<DataOrTrailers>,
+        StreamOutWindowReceiver,
+    ),
     DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>),
+}
+
+impl fmt::Debug for CommonToWriteMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("CommonToWriteMessage").field(&"...").finish()
+    }
 }

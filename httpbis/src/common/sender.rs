@@ -6,6 +6,7 @@ use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::death::channel::DeathAwareSender;
 use crate::solicit::stream_id::StreamId;
 use crate::stream_after_headers::HttpStreamAfterHeaders;
+use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::StreamDead;
@@ -179,8 +180,10 @@ impl<T: Types> CommonSender<T> {
         Ok(())
     }
 
-    // TODO: explicit executor parameter
-    pub fn pull_from_stream(&mut self, stream: HttpStreamAfterHeaders) -> Result<(), SendError> {
+    pub fn pull_from_stream<S: Stream<Item = crate::Result<DataOrTrailers>> + Send + 'static>(
+        &mut self,
+        stream: S,
+    ) -> Result<(), SendError> {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
             return Err(SendError::IncorrectState(self.state()));
         }
@@ -194,7 +197,8 @@ impl<T: Types> CommonSender<T> {
                 // TODO: why client died
                 write_tx
                     .unbounded_send(
-                        CommonToWriteMessage::Pull(self.stream_id, stream, out_window).into(),
+                        CommonToWriteMessage::Pull(self.stream_id, Box::pin(stream), out_window)
+                            .into(),
                     )
                     .map_err(|e| SendError::ConnectionDied(Arc::new(e)))
             }
