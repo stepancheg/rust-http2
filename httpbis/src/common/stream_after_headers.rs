@@ -7,13 +7,16 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
+use bytes::BufMut;
 use bytes::Bytes;
+use bytes::BytesMut;
 use futures::future;
 use futures::Future;
 use futures::Stream;
 use tokio::io::AsyncRead;
 use tokio::io::ReadBuf;
 
+use crate::solicit_async::TryFutureBox;
 use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::Headers;
@@ -71,7 +74,7 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     /// Fetch next `DATA`.
     fn next_data<'a>(
         &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = crate::Result<Option<Bytes>>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = crate::Result<Option<Bytes>>> + Send + 'a>> {
         Box::pin(future::poll_fn(move |cx| self.poll_data(cx)?.map(Ok)))
     }
 
@@ -104,6 +107,24 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
         Self: Sized,
     {
         Box::pin(DataStream(self))
+    }
+
+    fn collect_data(mut self) -> TryFutureBox<Bytes>
+    where
+        Self: Sized,
+    {
+        Box::pin(async move {
+            let mut r = BytesMut::new();
+            loop {
+                match self.next_data().await? {
+                    None => return Ok(r.freeze()),
+                    Some(b) => {
+                        // TODO: figure out how to efficiently extend from Bytes
+                        r.put_slice(&b)
+                    }
+                }
+            }
+        })
     }
 }
 

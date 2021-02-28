@@ -1,6 +1,5 @@
 use bytes::Bytes;
 use futures::stream::StreamExt;
-use futures::stream::TryStreamExt;
 use httpbis::Client;
 use httpbis::ClientIntf;
 use httpbis::Headers;
@@ -70,11 +69,8 @@ fn request() {
                 .expect("headers");
             assert_eq!(200, header.status());
 
-            // TODO: check content
-            body.into_stream()
-                .try_collect::<Vec<_>>()
-                .await
-                .expect("body");
+            let body = body.collect_data().await.expect("body");
+            assert_eq!(&b"hello there"[..], &body[..]);
         })
     });
 }
