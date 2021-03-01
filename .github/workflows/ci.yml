@@ -10,6 +10,13 @@ jobs:
     name: linux stable
     runs-on: ubuntu-latest
     steps:
+      - name: cargo cache
+        uses: actions/cache@v2
+        with:
+          path:
+            - /.cargo/registry
+            - ~/.cargo/git
+          key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
       - name: Install toolchain
@@ -37,6 +44,13 @@ jobs:
     name: macos stable
     runs-on: macos-latest
     steps:
+      - name: cargo cache
+        uses: actions/cache@v2
+        with:
+          path:
+            - /.cargo/registry
+            - ~/.cargo/git
+          key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
       - name: Install toolchain
@@ -62,6 +76,13 @@ jobs:
     env:
       VCPKGRS_DYNAMIC: "1"
     steps:
+      - name: cargo cache
+        uses: actions/cache@v2
+        with:
+          path:
+            - /.cargo/registry
+            - ~/.cargo/git
+          key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
       - name: Install toolchain
@@ -79,6 +100,13 @@ jobs:
     name: linux beta
     runs-on: ubuntu-latest
     steps:
+      - name: cargo cache
+        uses: actions/cache@v2
+        with:
+          path:
+            - /.cargo/registry
+            - ~/.cargo/git
+          key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
       - name: Install toolchain
@@ -106,6 +134,13 @@ jobs:
     name: linux nightly
     runs-on: ubuntu-latest
     steps:
+      - name: cargo cache
+        uses: actions/cache@v2
+        with:
+          path:
+            - /.cargo/registry
+            - ~/.cargo/git
+          key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
       - name: Install toolchain
@@ -133,6 +168,13 @@ jobs:
     name: h2spec
     runs-on: ubuntu-latest
     steps:
+      - name: cargo cache
+        uses: actions/cache@v2
+        with:
+          path:
+            - /.cargo/registry
+            - ~/.cargo/git
+          key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
       - name: Install h2spec
