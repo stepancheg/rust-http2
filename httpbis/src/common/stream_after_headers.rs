@@ -30,13 +30,13 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
         cx: &mut Context<'_>,
     ) -> Poll<Option<crate::Result<DataOrTrailers>>>;
 
-    /// `Stream`-like operation.
+    /// Fetch next frame and auto-update in window.
     fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<DataOrTrailers>>>;
 
     /// Poll `DATA` frame from the stream.
     ///
     /// Note when this operation returns `None`, trailers can still be fetched
-    /// with [`poll_trailers`].
+    /// with [`poll_trailers`](Self::poll_trailers).
     fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Option<crate::Result<Bytes>>>;
 
     /// Poll trailing `HEADERS` frame from the stream.
@@ -55,7 +55,7 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     ///
     /// Note this operation might be expensive, because each invocation sends a `WINDOW_UPDATE`
     /// frame. You probably might want to use default or update the default with
-    /// [`set_auto_in_window_size`].
+    /// [`set_auto_in_window_size`](Self::set_auto_in_window_size).
     fn inc_in_window(&mut self, delta: u32) -> crate::Result<()>;
 
     /// Window will be increased each time current window size drops below the half
