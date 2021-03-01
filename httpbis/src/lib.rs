@@ -39,6 +39,7 @@ pub use server::stream_handler::ServerRequestStreamHandler;
 pub use server::tls::ServerTlsOption;
 pub use server::Server;
 pub use server::ServerBuilder;
+pub use solicit::end_stream::EndStream;
 pub use solicit::error_code::ErrorCode;
 pub use solicit::header::name::HeaderName;
 pub use solicit::header::name::PseudoHeaderName;

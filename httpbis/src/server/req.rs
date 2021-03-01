@@ -10,6 +10,7 @@ use crate::server::conn::ServerToWriteMessage;
 use crate::server::increase_in_window::ServerIncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::stream_handler::ServerRequestStreamHandlerHolder;
+use crate::EndStream;
 use crate::Headers;
 use crate::StreamAfterHeaders;
 use crate::StreamId;
@@ -19,7 +20,7 @@ pub struct ServerRequest<'a> {
     /// Request headers.
     pub headers: Headers,
     /// True if requests ends with headers (no body).
-    pub end_stream: bool,
+    pub end_stream: EndStream,
     pub(crate) stream_id: StreamId,
     /// Stream in window size at the moment of request start
     pub(crate) in_window_size: u32,
@@ -31,16 +32,19 @@ pub struct ServerRequest<'a> {
 impl<'a> ServerRequest<'a> {
     /// Convert a request into a pullable stream.
     pub fn into_stream(self) -> impl StreamAfterHeaders {
-        if self.end_stream {
-            Box::pin(HttpStreamAfterHeadersEmpty)
-        } else {
-            let conn_died = self.conn_died.clone();
-            self.register_stream_handler::<_, _, StreamAfterHeadersBox>(move |increase_in_window| {
-                let (inc_tx, inc_rx) = stream_queue_sync(conn_died);
-                let stream_from_network = StreamFromNetwork::new(inc_rx, increase_in_window.0);
-
-                (inc_tx, Box::pin(stream_from_network))
-            })
+        match self.end_stream {
+            EndStream::Yes => Box::pin(HttpStreamAfterHeadersEmpty),
+            EndStream::No => {
+                let conn_died = self.conn_died.clone();
+                self.register_stream_handler::<_, _, StreamAfterHeadersBox>(
+                    move |increase_in_window| {
+                        let (inc_tx, inc_rx) = stream_queue_sync(conn_died);
+                        let stream_from_network =
+                            StreamFromNetwork::new(inc_rx, increase_in_window.0);
+                        (inc_tx, Box::pin(stream_from_network))
+                    },
+                )
+            }
         }
     }
 

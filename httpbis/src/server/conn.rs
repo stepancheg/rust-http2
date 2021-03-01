@@ -138,7 +138,7 @@ where
         let invoke_result = {
             let req = ServerRequest {
                 headers,
-                end_stream: end_stream == EndStream::Yes,
+                end_stream,
                 stream_id,
                 in_window_size,
                 stream_handler: &mut stream_handler,
