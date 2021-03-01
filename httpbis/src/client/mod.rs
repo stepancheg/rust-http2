@@ -43,7 +43,6 @@ use crate::ClientIntf;
 pub(crate) mod conf;
 pub(crate) mod conn;
 pub(crate) mod handler;
-pub(crate) mod increase_in_window;
 pub(crate) mod intf;
 pub(crate) mod resp;
 pub(crate) mod resp_future;

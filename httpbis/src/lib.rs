@@ -32,7 +32,7 @@ pub use server::conf::ServerAlpn;
 pub use server::conf::ServerConf;
 pub use server::handler::ServerHandler;
 pub use server::handler_paths::ServerHandlerPaths;
-pub use server::increase_in_window::ServerIncreaseInWindow;
+pub use common::increase_in_window::IncreaseInWindow;
 pub use server::req::ServerRequest;
 pub use server::resp::ServerResponse;
 pub use server::stream_handler::ServerRequestStreamHandler;

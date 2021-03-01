@@ -13,7 +13,6 @@ use futures::TryStreamExt;
 use tokio::sync::oneshot;
 
 use crate::client::handler::ClientResponseStreamHandler;
-use crate::client::increase_in_window::ClientIncreaseInWindow;
 use crate::client::types::ClientTypes;
 use crate::common::stream_after_headers::HttpStreamAfterHeadersEmpty;
 use crate::common::stream_after_headers::StreamAfterHeaders;
@@ -28,10 +27,11 @@ use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit_async::TryStreamBox;
-use crate::DataOrTrailers;
+use crate::{DataOrTrailers};
 use crate::ErrorCode;
 use crate::Headers;
 use crate::SimpleHttpMessage;
+use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 
 pub struct ClientResponseFutureImpl {
     rx: oneshot::Receiver<crate::Result<HeadersReceivedMessage>>,
@@ -40,7 +40,7 @@ pub struct ClientResponseFutureImpl {
 
 impl ClientResponseFutureImpl {
     pub(crate) fn new(
-        increase_in_window: ClientIncreaseInWindow,
+        increase_in_window: IncreaseInWindowCommon<ClientTypes>,
         conn_died: SomethingDiedErrorHolder<ConnDiedType>,
     ) -> (impl ClientResponseStreamHandler, ClientResponseFutureImpl) {
         let (tx, rx) = oneshot::channel();
@@ -80,7 +80,7 @@ enum ClientResponseStreamHandlerImpl {
     WaitingForHeaders(
         oneshot::Sender<crate::Result<HeadersReceivedMessage>>,
         SomethingDiedErrorHolder<ConnDiedType>,
-        ClientIncreaseInWindow,
+        IncreaseInWindowCommon<ClientTypes>,
     ),
     Body(StreamQueueSyncSender<ClientTypes>),
     Stone,
@@ -99,7 +99,7 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
                     EndStream::No => {
                         let (tx, rx) = stream_queue_sync(conn_died);
                         *self = ClientResponseStreamHandlerImpl::Body(tx);
-                        Box::pin(StreamFromNetwork::new(rx, increase_in_window.0))
+                        Box::pin(StreamFromNetwork::new(rx, increase_in_window))
                     }
                 };
                 match tx.send(Ok(HeadersReceivedMessage { headers, body })) {

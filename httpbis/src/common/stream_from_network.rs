@@ -9,7 +9,7 @@ use futures::stream::Stream;
 use futures::task::Context;
 
 use super::types::Types;
-use crate::common::increase_in_window::IncreaseInWindow;
+use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 use crate::common::stream_queue_sync::StreamQueueSyncReceiver;
 use crate::solicit::end_stream::EndStream;
 use crate::DataOrTrailers;
@@ -20,7 +20,7 @@ use crate::StreamAfterHeaders;
 struct DataDontForgetToDecrease(Bytes);
 
 impl DataDontForgetToDecrease {
-    fn into_inner<T: Types>(self, increase_in_window: &mut IncreaseInWindow<T>) -> Bytes {
+    fn into_inner<T: Types>(self, increase_in_window: &mut IncreaseInWindowCommon<T>) -> Bytes {
         increase_in_window.data_frame_received(self.0.len());
         self.0
     }
@@ -45,7 +45,7 @@ impl DataOrTrailersDontForgetToDecrease {
         }
     }
 
-    fn into_inner<T: Types>(self, increase_in_window: &mut IncreaseInWindow<T>) -> DataOrTrailers {
+    fn into_inner<T: Types>(self, increase_in_window: &mut IncreaseInWindowCommon<T>) -> DataOrTrailers {
         match self {
             DataOrTrailersDontForgetToDecrease::Data(bytes, end_of_stream) => {
                 DataOrTrailers::Data(bytes.into_inner(increase_in_window), end_of_stream)
@@ -62,13 +62,13 @@ impl DataOrTrailersDontForgetToDecrease {
 #[derive(Debug)]
 pub(crate) struct StreamFromNetwork<T: Types> {
     rx: StreamQueueSyncReceiver<T>,
-    increase_in_window: IncreaseInWindow<T>,
+    increase_in_window: IncreaseInWindowCommon<T>,
     auto_in_window_size: u32,
     next_frame: Option<DataOrTrailersDontForgetToDecrease>,
 }
 
 impl<T: Types> StreamFromNetwork<T> {
-    pub fn new(rx: StreamQueueSyncReceiver<T>, increase_in_window: IncreaseInWindow<T>) -> Self {
+    pub fn new(rx: StreamQueueSyncReceiver<T>, increase_in_window: IncreaseInWindowCommon<T>) -> Self {
         StreamFromNetwork {
             rx,
             auto_in_window_size: increase_in_window.in_window_size,

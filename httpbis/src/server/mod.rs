@@ -1,56 +1,49 @@
-pub mod conf;
-pub mod conn;
-pub mod handler;
-pub mod handler_paths;
-pub(crate) mod increase_in_window;
-pub mod req;
-pub mod resp;
-pub(crate) mod stream_handler;
-pub mod tls;
-pub(crate) mod types;
-
-use futures::future::try_join_all;
 use std::collections::HashMap;
-
+use std::fmt;
 use std::net::ToSocketAddrs;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::sync::Mutex;
 use std::thread;
 
-use tls_api;
-
 use futures::channel::oneshot;
 use futures::future;
-use futures::future::try_join;
 use futures::future::FutureExt;
+use futures::future::try_join;
+use futures::future::try_join_all;
 use futures::future::TryFutureExt;
-
-use crate::error::Error;
-
-use crate::solicit_async::*;
-
-use crate::futures_misc::*;
-
+use rand::Rng;
+use rand::thread_rng;
+use tls_api;
 use tls_api::TlsAcceptor;
+use tokio::runtime::Handle;
+use tokio::runtime::Runtime;
 
+use crate::assert_types::assert_send_future;
+use crate::common::conn::ConnStateSnapshot;
+use crate::error::Error;
+use crate::futures_misc::*;
 use crate::net::addr::AnySocketAddr;
 use crate::net::listen::ToSocketListener;
 use crate::net::listen::ToTokioListener;
-
-pub use self::tls::ServerTlsOption;
-use crate::assert_types::assert_send_future;
-use crate::common::conn::ConnStateSnapshot;
 use crate::net::unix::SocketAddrUnix;
 pub use crate::server::conf::ServerConf;
 pub use crate::server::conn::ServerConn;
 use crate::server::handler::ServerHandler;
 use crate::server::handler_paths::ServerHandlerPaths;
-use rand::thread_rng;
-use rand::Rng;
-use std::fmt;
-use tokio::runtime::Handle;
-use tokio::runtime::Runtime;
+use crate::solicit_async::*;
+
+pub use self::tls::ServerTlsOption;
+
+pub mod conf;
+pub mod conn;
+pub mod handler;
+pub mod handler_paths;
+pub mod req;
+pub mod resp;
+pub(crate) mod stream_handler;
+pub mod tls;
+pub(crate) mod types;
 
 /// Builder for [`Server`].
 pub struct ServerBuilder {
