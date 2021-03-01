@@ -22,7 +22,7 @@ jobs:
               with:
                   command: test
                   args: --all --all-targets -- --test-threads=1
-              timeout-minutes: 5
+              timeout-minutes: 10
             - name: cargo test --doc
               uses: actions-rs/cargo@v1
               with:
@@ -49,7 +49,7 @@ jobs:
               with:
                   command: test
                   args: --all --all-targets -- --test-threads=1
-              timeout-minutes: 5
+              timeout-minutes: 10
             - name: cargo test --doc
               uses: actions-rs/cargo@v1
               with:
@@ -91,7 +91,7 @@ jobs:
               with:
                   command: test
                   args: --all --all-targets -- --test-threads=1
-              timeout-minutes: 5
+              timeout-minutes: 10
             - name: cargo test --doc
               uses: actions-rs/cargo@v1
               with:
@@ -118,7 +118,7 @@ jobs:
               with:
                   command: test
                   args: --all --all-targets -- --test-threads=1
-              timeout-minutes: 5
+              timeout-minutes: 10
             - name: cargo test --doc
               uses: actions-rs/cargo@v1
               with:

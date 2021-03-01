@@ -59,7 +59,7 @@ fn steps(os: Os, channel: RustToolchain) -> Vec<Step> {
                 &format!("cargo test"),
                 "--all --all-targets -- --test-threads=1",
             )
-            .with_timeout_minutes(5),
+            .with_timeout_minutes(10),
         );
         // `--all-targets` does not include doctests
         // https://github.com/rust-lang/cargo/issues/6669
