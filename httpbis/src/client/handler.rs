@@ -9,6 +9,10 @@ use crate::ErrorCode;
 use crate::Headers;
 
 /// Low-level client response handler.
+///
+/// This is a parameter to
+/// [`start_request_low_level`](crate::ClientIntf::start_request_low_level) operation,
+/// rarely needed to be used directly.
 pub trait ClientHandler: Send + 'static {
     /// Called when stream is created
     fn request_created(

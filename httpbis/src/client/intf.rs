@@ -3,6 +3,7 @@ use crate::client::resp_future::ClientResponseFutureImpl;
 use crate::common::sink_after_headers::SinkAfterHeadersBox;
 use crate::solicit_async::TryFutureBox;
 use crate::ClientHandler;
+use crate::EndStream;
 use crate::Header;
 use crate::Headers;
 use crate::HttpScheme;
@@ -32,7 +33,7 @@ pub trait ClientIntf {
         headers: Headers,
         body: Option<Bytes>,
         trailers: Option<Headers>,
-        end_stream: bool,
+        end_stream: EndStream,
         stream_handler: Box<dyn ClientHandler>,
     );
 
@@ -45,7 +46,7 @@ pub trait ClientIntf {
         headers: Headers,
         body: Option<Bytes>,
         trailers: Option<Headers>,
-        end_stream: bool,
+        end_stream: EndStream,
     ) -> TryFutureBox<(SinkAfterHeadersBox, ClientResponseFutureImpl)> {
         let (tx, rx) = oneshot::channel();
 
@@ -90,7 +91,7 @@ pub trait ClientIntf {
         trailers: Option<Headers>,
     ) -> TryFutureBox<(Headers, StreamAfterHeadersBox)> {
         Box::pin(
-            self.start_request(headers, body, trailers, true)
+            self.start_request(headers, body, trailers, EndStream::Yes)
                 .and_then(move |(_sender, response)| response),
         )
     }
@@ -181,6 +182,6 @@ pub trait ClientIntf {
                 self.internals().http_scheme.as_bytes(),
             ),
         ]);
-        self.start_request(headers, None, None, false)
+        self.start_request(headers, None, None, EndStream::No)
     }
 }

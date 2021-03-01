@@ -84,7 +84,7 @@ pub(crate) struct StartRequestMessage {
     pub headers: Headers,
     pub body: Option<Bytes>,
     pub trailers: Option<Headers>,
-    pub end_stream: bool,
+    pub end_stream: EndStream,
     pub stream_handler: Box<dyn ClientHandler>,
 }
 
@@ -191,10 +191,11 @@ where
                 .in_window_size
                 .size() as u32;
 
-            let req = if end_stream {
-                CommonSender::<ClientTypes>::new_done(stream_id)
-            } else {
-                CommonSender::<ClientTypes>::new(stream_id, write_tx, out_window, true)
+            let req = match end_stream {
+                EndStream::Yes => CommonSender::<ClientTypes>::new_done(stream_id),
+                EndStream::No => {
+                    CommonSender::<ClientTypes>::new(stream_id, write_tx, out_window, true)
+                }
             };
 
             let mut handler = None;
@@ -226,7 +227,7 @@ where
                     if let Some(trailers) = trailers {
                         stream.push_back(DataOrHeaders::Headers(trailers));
                     }
-                    if end_stream {
+                    if end_stream == EndStream::Yes {
                         stream.close_outgoing(ErrorCode::NoError);
                     }
                 }
@@ -435,7 +436,7 @@ impl ClientIntf for ClientConn {
         headers: Headers,
         body: Option<Bytes>,
         trailers: Option<Headers>,
-        end_stream: bool,
+        end_stream: EndStream,
         stream_handler: Box<dyn ClientHandler>,
     ) {
         let start = StartRequestMessage {

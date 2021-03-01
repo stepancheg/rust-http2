@@ -39,6 +39,7 @@ use crate::solicit::header::*;
 use crate::solicit::stream_id::StreamId;
 use crate::solicit_async::*;
 use crate::ClientIntf;
+use crate::EndStream;
 
 pub(crate) mod conf;
 pub(crate) mod conn;
@@ -314,7 +315,7 @@ impl ClientIntf for Client {
         headers: Headers,
         body: Option<Bytes>,
         trailers: Option<Headers>,
-        end_stream: bool,
+        end_stream: EndStream,
         stream_handler: Box<dyn ClientHandler>,
     ) {
         let start = StartRequestMessage {
