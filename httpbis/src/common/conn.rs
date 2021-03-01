@@ -29,7 +29,6 @@ use crate::common::init_where::InitWhere;
 use crate::death::channel::death_aware_channel;
 use crate::death::channel::DeathAwareReceiver;
 use crate::death::channel::DeathAwareSender;
-use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::hpack;
@@ -45,7 +44,7 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::task::Context;
 
-use crate::death::oneshot::DeathAwareOneshotSender;
+use crate::death::oneshot_no_content_drop::DeathAwareOneshotNoContentDropSender;
 use std::mem;
 use std::sync::Arc;
 use std::task::Poll;
@@ -122,12 +121,6 @@ pub struct ConnStateSnapshot {
     pub pump_out_window_size: isize,
     pub out_buf_bytes: usize,
     pub streams: HashMap<StreamId, HttpStreamStateSnapshot>,
-}
-
-impl ErrorAwareDrop for ConnStateSnapshot {
-    fn drop_with_error(self, error: crate::Error) {
-        drop(error);
-    }
 }
 
 impl ConnStateSnapshot {
@@ -351,7 +344,7 @@ where
 
     pub fn process_dump_state(
         &mut self,
-        sender: DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>,
+        sender: DeathAwareOneshotNoContentDropSender<ConnStateSnapshot, ConnDiedType>,
     ) -> crate::Result<()> {
         // ignore send error, client might be already dead
         drop(sender.send(self.dump_state()));

@@ -35,7 +35,7 @@ use crate::Headers;
 
 use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
-use crate::death::oneshot::DeathAwareOneshotSender;
+use crate::death::oneshot_no_content_drop::DeathAwareOneshotNoContentDropSender;
 use crate::solicit_async::TryStreamBox;
 
 pub(crate) trait ConnWriteSideCustom {
@@ -292,7 +292,7 @@ pub(crate) enum CommonToWriteMessage {
         TryStreamBox<DataOrTrailers>,
         StreamOutWindowReceiver,
     ),
-    DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>),
+    DumpState(DeathAwareOneshotNoContentDropSender<ConnStateSnapshot, ConnDiedType>),
 }
 
 impl ErrorAwareDrop for CommonToWriteMessage {

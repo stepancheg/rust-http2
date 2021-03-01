@@ -29,8 +29,8 @@ use crate::death::channel::DeathAwareSender;
 use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ClientDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
-use crate::death::oneshot::death_aware_oneshot;
-use crate::death::oneshot::DeathAwareOneshotSender;
+use crate::death::oneshot_no_content_drop::death_aware_oneshot_no_content_drop;
+use crate::death::oneshot_no_content_drop::DeathAwareOneshotNoContentDropSender;
 use crate::futures_misc::*;
 use crate::net::addr::AnySocketAddr;
 use crate::net::connect::ToClientStream;
@@ -269,7 +269,7 @@ impl Client {
     /// For tests
     #[doc(hidden)]
     pub fn dump_state(&self) -> TryFutureBox<ConnStateSnapshot> {
-        let (tx, rx) = death_aware_oneshot(self.client_died_error_holder.clone());
+        let (tx, rx) = death_aware_oneshot_no_content_drop(self.client_died_error_holder.clone());
         // ignore error
         drop(
             self.controller_tx
@@ -325,7 +325,7 @@ enum ControllerCommand {
     GoAway,
     StartRequest(StartRequestMessage),
     WaitForConnect(oneshot::Sender<crate::Result<()>>),
-    DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ClientDiedType>),
+    DumpState(DeathAwareOneshotNoContentDropSender<ConnStateSnapshot, ClientDiedType>),
 }
 
 impl ErrorAwareDrop for ControllerCommand {
@@ -393,11 +393,11 @@ impl<T: ToClientStream + 'static + Clone> ControllerState<T> {
             }
             ControllerCommand::DumpState(tx) => {
                 let (conn_tx, conn_rx) =
-                    death_aware_oneshot(self.conn.conn_died_error_holder.clone());
+                    death_aware_oneshot_no_content_drop(self.conn.conn_died_error_holder.clone());
                 self.conn.dump_state_with_resp_sender(conn_tx);
                 self.handle.spawn(async move {
                     match conn_rx.await {
-                        Ok(snapshot) => tx.send(snapshot),
+                        Ok(snapshot) => drop(tx.send(snapshot)),
                         Err(_) => {
                             // TODO: pass it
                         }

@@ -35,7 +35,7 @@ use crate::death::channel::DeathAwareSender;
 use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
-use crate::death::oneshot::death_aware_oneshot;
+use crate::death::oneshot_no_content_drop::death_aware_oneshot_no_content_drop;
 use crate::headers_place::HeadersPlace;
 use crate::misc::any_to_string;
 use crate::req_resp::RequestOrResponse;
@@ -360,7 +360,7 @@ impl ServerConn {
 
     /// For tests
     pub fn dump_state(&self) -> TryFutureBox<ConnStateSnapshot> {
-        let (tx, rx) = death_aware_oneshot(self.conn_died_error_holder.clone());
+        let (tx, rx) = death_aware_oneshot_no_content_drop(self.conn_died_error_holder.clone());
 
         if let Err(_) = self.write_tx.unbounded_send(ServerToWriteMessage::Common(
             CommonToWriteMessage::DumpState(tx),

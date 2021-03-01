@@ -50,8 +50,8 @@ use bytes::Bytes;
 use futures::channel::oneshot;
 
 use crate::client::resp::ClientResponse;
-use crate::death::oneshot::death_aware_oneshot;
-use crate::death::oneshot::DeathAwareOneshotSender;
+use crate::death::oneshot_no_content_drop::death_aware_oneshot_no_content_drop;
+use crate::death::oneshot_no_content_drop::DeathAwareOneshotNoContentDropSender;
 use futures::future;
 use futures::TryFutureExt;
 use tokio::runtime::Handle;
@@ -399,7 +399,7 @@ impl ClientConn {
 
     pub(crate) fn dump_state_with_resp_sender(
         &self,
-        tx: DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>,
+        tx: DeathAwareOneshotNoContentDropSender<ConnStateSnapshot, ConnDiedType>,
     ) {
         let message = ClientToWriteMessage::Common(CommonToWriteMessage::DumpState(tx));
         // ignore error
@@ -409,7 +409,7 @@ impl ClientConn {
     /// For tests
     #[doc(hidden)]
     pub fn _dump_state(&self) -> TryFutureBox<ConnStateSnapshot> {
-        let (tx, rx) = death_aware_oneshot(self.conn_died_error_holder.clone());
+        let (tx, rx) = death_aware_oneshot_no_content_drop(self.conn_died_error_holder.clone());
 
         self.dump_state_with_resp_sender(tx);
 
