@@ -1,8 +1,26 @@
 #[derive(Clone)]
 pub enum Yaml {
     String(String),
+    Int(i64),
     List(Vec<Yaml>),
     Map(Vec<(String, Yaml)>),
+    Bool(bool),
+}
+
+impl Yaml {
+    pub fn to_yaml_rust(&self) -> yaml_rust::Yaml {
+        match self {
+            Yaml::String(s) => yaml_rust::Yaml::String(s.clone()),
+            Yaml::List(l) => yaml_rust::Yaml::Array(l.iter().map(|i| i.to_yaml_rust()).collect()),
+            Yaml::Map(m) => yaml_rust::Yaml::Hash(
+                m.iter()
+                    .map(|(k, v)| (yaml_rust::Yaml::String(k.clone()), v.to_yaml_rust()))
+                    .collect(),
+            ),
+            Yaml::Int(i) => yaml_rust::Yaml::Integer(*i),
+            Yaml::Bool(b) => yaml_rust::Yaml::Boolean(*b),
+        }
+    }
 }
 
 impl From<&Yaml> for Yaml {
@@ -26,6 +44,12 @@ impl From<&str> for Yaml {
 impl From<&&str> for Yaml {
     fn from(s: &&str) -> Self {
         Yaml::String((*s).to_owned())
+    }
+}
+
+impl From<bool> for Yaml {
+    fn from(b: bool) -> Self {
+        Yaml::Bool(b)
     }
 }
 
@@ -57,77 +81,18 @@ impl Yaml {
 #[derive(Default)]
 pub struct YamlWriter {
     pub buffer: String,
-    indent: u32,
-    minus: MinusState,
-}
-
-#[derive(Eq, PartialEq)]
-enum MinusState {
-    No,
-    Yes,
-    Already,
-}
-
-impl Default for MinusState {
-    fn default() -> Self {
-        MinusState::No
-    }
 }
 
 impl YamlWriter {
     pub fn write_line(&mut self, line: &str) {
-        if line.is_empty() {
-            self.buffer.push_str("\n");
-        } else {
-            for _ in 0..self.indent {
-                self.buffer.push_str("    ");
-            }
-
-            match self.minus {
-                MinusState::No => {}
-                MinusState::Yes => {
-                    self.buffer.push_str("- ");
-                    self.minus = MinusState::Already;
-                }
-                MinusState::Already => {
-                    self.buffer.push_str("  ");
-                }
-            }
-
-            self.buffer.push_str(line);
-            self.buffer.push_str("\n");
-        }
+        self.buffer.push_str(line);
+        self.buffer.push_str("\n");
     }
 
     pub fn write_yaml(&mut self, yaml: &Yaml) {
-        match yaml {
-            Yaml::String(s) => {
-                self.write_line(s);
-            }
-            Yaml::List(l) => {
-                for x in l {
-                    assert!(self.minus == MinusState::No);
-                    self.minus = MinusState::Yes;
-                    self.write_yaml(x);
-                    assert!(self.minus != MinusState::No);
-                    self.minus = MinusState::No;
-                }
-            }
-            Yaml::Map(m) => {
-                for (k, v) in m {
-                    match v {
-                        Yaml::String(v) => {
-                            self.write_line(&format!("{}: {}", k, v));
-                        }
-                        _ => {
-                            self.write_line(&format!("{}:", k));
-                            self.indent += 1;
-                            self.write_yaml(v);
-                            self.indent -= 1;
-                        }
-                    }
-                }
-            }
-        }
+        yaml_rust::emitter::YamlEmitter::new(&mut self.buffer)
+            .compact()
+            .dump(&yaml.to_yaml_rust())
+            .unwrap();
     }
 }

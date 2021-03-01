@@ -28,9 +28,9 @@ pub fn rust_install_toolchain(channel: RustToolchain) -> Step {
         "Install toolchain",
         "actions-rs/toolchain@v1",
         Yaml::map(vec![
-            ("profile", "minimal"),
-            ("toolchain", &format!("{}", channel)),
-            ("override", "true"),
+            ("profile", Yaml::from("minimal")),
+            ("toolchain", Yaml::from(format!("{}", channel))),
+            ("override", Yaml::from(true)),
         ]),
     )
 }

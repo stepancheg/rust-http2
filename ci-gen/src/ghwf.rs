@@ -121,7 +121,7 @@ impl Into<Yaml> for Step {
             entries.push(("env", Yaml::map(env)));
         }
         if let Some(timeout_minutes) = timeout_minutes {
-            entries.push(("timeout-minutes", Yaml::String(timeout_minutes.to_string())));
+            entries.push(("timeout-minutes", Yaml::Int(timeout_minutes as i64)));
         }
         Yaml::map(entries)
     }
