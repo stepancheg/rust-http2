@@ -127,8 +127,8 @@ impl ErrorAwareDrop for ClientToWriteMessage {
             ClientToWriteMessage::Start(start) => {
                 start.start.stream_handler.error(error);
             }
-            ClientToWriteMessage::WaitForHandshake(_) => {
-                // TODO: error
+            ClientToWriteMessage::WaitForHandshake(wait) => {
+                let _ = wait.send(Err(error));
             }
             ClientToWriteMessage::Common(_) => {
                 // TODO: error
