@@ -54,3 +54,14 @@ pub fn cargo_build(name: &str, args: &str) -> Step {
 pub fn cargo_doc(name: &str, args: &str) -> Step {
     cargo(name, "doc", args)
 }
+
+pub fn cargo_cache() -> Step {
+    // https://github.com/actions/cache/blob/main/examples.md#rust---cargo
+    Step::uses_with("cargo cache", "actions/cache@v2", Yaml::map(
+        vec![
+            // TODO: also cache `target` directory
+            ("path", Yaml::list(vec!["/.cargo/registry", "~/.cargo/git"])),
+            ("key", Yaml::string("${{ runner.os }}-cargo")),
+        ],
+    ))
+}

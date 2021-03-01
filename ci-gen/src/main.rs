@@ -1,4 +1,4 @@
-use crate::actions::cargo_build;
+use crate::actions::{cargo_build, cargo_cache};
 use crate::actions::cargo_doc;
 use crate::actions::cargo_test;
 use crate::actions::checkout_sources;
@@ -36,7 +36,8 @@ const WINDOWS: Os = Os {
 };
 
 fn steps(os: Os, channel: RustToolchain) -> Vec<Step> {
-    let mut r = vec![];
+    let mut r = Vec::new();
+    r.push(cargo_cache());
     r.push(checkout_sources());
     r.push(rust_install_toolchain(channel));
 
@@ -73,6 +74,25 @@ fn steps(os: Os, channel: RustToolchain) -> Vec<Step> {
     r
 }
 
+fn h2spec_test_job() -> Job {
+    Job {
+        id: format!("h2spec"),
+        name: format!("h2spec"),
+        runs_on: LINUX.ghwf.to_owned(),
+        steps: vec![
+            cargo_cache(),
+            checkout_sources(),
+            Step::run("Install h2spec", "ci/install-h2spec.sh"),
+            cargo_build("Build h2spec test", "--manifest-path h2spec-test/Cargo.toml --bin the_test"),
+            Step::run(
+                "Run h2spec test",
+                "PATH=\"$(pwd):$PATH\" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test",
+            ).with_timeout_minutes(5)
+        ],
+        ..Default::default()
+    }
+}
+
 fn jobs() -> Yaml {
     let mut r = Vec::new();
     for &channel in &[
@@ -100,21 +120,7 @@ fn jobs() -> Yaml {
         }
     }
 
-    r.push(Job {
-        id: format!("h2spec"),
-        name: format!("h2spec"),
-        runs_on: LINUX.ghwf.to_owned(),
-        steps: vec![
-            checkout_sources(),
-            Step::run("Install h2spec", "ci/install-h2spec.sh"),
-            cargo_build("Build h2spec test", "--manifest-path h2spec-test/Cargo.toml --bin the_test"),
-            Step::run(
-                "Run h2spec test",
-                "PATH=\"$(pwd):$PATH\" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test",
-            ).with_timeout_minutes(5)
-        ],
-        ..Default::default()
-    });
+    r.push(h2spec_test_job());
 
     Yaml::map(r.into_iter().map(Job::into))
 }
