@@ -1,6 +1,6 @@
+use crate::client::types::ClientTypes;
 use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 use crate::server::types::ServerTypes;
-use crate::client::types::ClientTypes;
 
 enum Impl {
     Client(IncreaseInWindowCommon<ClientTypes>),

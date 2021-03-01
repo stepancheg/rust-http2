@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::net::ToSocketAddrs;
-use std::sync::Arc;
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
 use futures::channel::oneshot;
 use futures::future;
-use futures::future::FutureExt;
 use futures::future::try_join;
 use futures::future::try_join_all;
+use futures::future::FutureExt;
 use futures::future::TryFutureExt;
-use rand::Rng;
 use rand::thread_rng;
+use rand::Rng;
 use tls_api;
 use tls_api::TlsAcceptor;
 use tokio::runtime::Handle;

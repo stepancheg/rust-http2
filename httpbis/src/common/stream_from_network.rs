@@ -45,7 +45,10 @@ impl DataOrTrailersDontForgetToDecrease {
         }
     }
 
-    fn into_inner<T: Types>(self, increase_in_window: &mut IncreaseInWindowCommon<T>) -> DataOrTrailers {
+    fn into_inner<T: Types>(
+        self,
+        increase_in_window: &mut IncreaseInWindowCommon<T>,
+    ) -> DataOrTrailers {
         match self {
             DataOrTrailersDontForgetToDecrease::Data(bytes, end_of_stream) => {
                 DataOrTrailers::Data(bytes.into_inner(increase_in_window), end_of_stream)
@@ -68,7 +71,10 @@ pub(crate) struct StreamFromNetwork<T: Types> {
 }
 
 impl<T: Types> StreamFromNetwork<T> {
-    pub fn new(rx: StreamQueueSyncReceiver<T>, increase_in_window: IncreaseInWindowCommon<T>) -> Self {
+    pub fn new(
+        rx: StreamQueueSyncReceiver<T>,
+        increase_in_window: IncreaseInWindowCommon<T>,
+    ) -> Self {
         StreamFromNetwork {
             rx,
             auto_in_window_size: increase_in_window.in_window_size,

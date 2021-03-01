@@ -2,12 +2,13 @@ use crate::client::conn::ClientToWriteMessage;
 use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::handler::ClientResponseStreamHandlerHolder;
 use crate::client::resp_future::ClientResponseFutureImpl;
+use crate::client::types::ClientTypes;
 use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
-use crate::{StreamId, IncreaseInWindow};
-use crate::client::types::ClientTypes;
+use crate::IncreaseInWindow;
+use crate::StreamId;
 
 pub struct ClientResponse<'a> {
     pub(crate) stream_handler: &'a mut Option<ClientResponseStreamHandlerHolder>,
@@ -27,9 +28,9 @@ impl<'a> ClientResponse<'a> {
     }
 
     fn register_stream_handler_internal<F, H, R>(self, f: F) -> R
-        where
-            F: FnOnce(IncreaseInWindowCommon<ClientTypes>) -> (H, R),
-            H: ClientResponseStreamHandler,
+    where
+        F: FnOnce(IncreaseInWindowCommon<ClientTypes>) -> (H, R),
+        H: ClientResponseStreamHandler,
     {
         assert!(self.stream_handler.is_none());
         let increase_window = IncreaseInWindowCommon {

@@ -1,3 +1,4 @@
+use crate::common::increase_in_window::IncreaseInWindow;
 use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 use crate::common::stream_after_headers::HttpStreamAfterHeadersEmpty;
 use crate::common::stream_after_headers::StreamAfterHeadersBox;
@@ -7,14 +8,13 @@ use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::server::conn::ServerToWriteMessage;
-use crate::common::increase_in_window::IncreaseInWindow;
 use crate::server::stream_handler::ServerRequestStreamHandler;
 use crate::server::stream_handler::ServerRequestStreamHandlerHolder;
+use crate::server::types::ServerTypes;
 use crate::EndStream;
 use crate::Headers;
 use crate::StreamAfterHeaders;
 use crate::StreamId;
-use crate::server::types::ServerTypes;
 
 /// A request object provided to the server callback.
 pub struct ServerRequest<'a> {
@@ -53,9 +53,9 @@ impl<'a> ServerRequest<'a> {
     /// when new data arrives). Note that increasing in window size is the handler
     /// responsibility.
     fn register_stream_handler_internal<F, H, R>(self, f: F) -> R
-        where
-            F: FnOnce(IncreaseInWindowCommon<ServerTypes>) -> (H, R),
-            H: ServerRequestStreamHandler,
+    where
+        F: FnOnce(IncreaseInWindowCommon<ServerTypes>) -> (H, R),
+        H: ServerRequestStreamHandler,
     {
         assert!(self.stream_handler.is_none());
         let increase_window = IncreaseInWindowCommon {

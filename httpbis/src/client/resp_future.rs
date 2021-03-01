@@ -14,6 +14,7 @@ use tokio::sync::oneshot;
 
 use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::types::ClientTypes;
+use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 use crate::common::stream_after_headers::HttpStreamAfterHeadersEmpty;
 use crate::common::stream_after_headers::StreamAfterHeaders;
 use crate::common::stream_after_headers::StreamAfterHeadersBox;
@@ -27,11 +28,10 @@ use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::solicit::end_stream::EndStream;
 use crate::solicit_async::TryStreamBox;
-use crate::{DataOrTrailers};
+use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
 use crate::SimpleHttpMessage;
-use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 
 pub struct ClientResponseFutureImpl {
     rx: oneshot::Receiver<crate::Result<HeadersReceivedMessage>>,
