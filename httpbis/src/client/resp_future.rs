@@ -4,34 +4,23 @@ use std::task::Context;
 use std::task::Poll;
 
 use bytes::Bytes;
-use futures::future;
-use futures::stream;
 use futures::Future;
-use futures::StreamExt;
-use futures::TryFutureExt;
-use futures::TryStreamExt;
 use tokio::sync::oneshot;
 
 use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::types::ClientTypes;
 use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 use crate::common::stream_after_headers::HttpStreamAfterHeadersEmpty;
-use crate::common::stream_after_headers::StreamAfterHeaders;
 use crate::common::stream_after_headers::StreamAfterHeadersBox;
 use crate::common::stream_from_network::StreamFromNetwork;
 use crate::common::stream_queue_sync::stream_queue_sync;
 use crate::common::stream_queue_sync::StreamQueueSyncSender;
-use crate::data_or_headers::DataOrHeaders;
-use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
-use crate::data_or_headers_with_flag::DataOrHeadersWithFlagStream;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
 use crate::solicit::end_stream::EndStream;
-use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
-use crate::SimpleHttpMessage;
 
 pub struct ClientResponseFutureImpl {
     rx: oneshot::Receiver<crate::Result<HeadersReceivedMessage>>,
@@ -158,41 +147,6 @@ impl ClientResponseFuture3 {
         future: impl Future<Output = crate::Result<(Headers, StreamAfterHeadersBox)>> + Send + 'static,
     ) -> ClientResponseFuture3 {
         ClientResponseFuture3(Box::pin(future))
-    }
-
-    // getters
-
-    pub fn into_stream_flag(self) -> TryStreamBox<DataOrHeadersWithFlag> {
-        Box::pin(
-            self.0
-                .map_ok(|(headers, rem)| {
-                    // NOTE: flag may be wrong for first item
-                    let header = stream::once(future::ok(
-                        DataOrHeadersWithFlag::intermediate_headers(headers),
-                    ));
-                    let rem = rem.into_stream().map_ok(|s| s.into_part());
-                    header.chain(rem)
-                })
-                .try_flatten_stream(),
-        )
-    }
-
-    pub fn into_stream(self) -> TryStreamBox<DataOrHeaders> {
-        Box::pin(TryStreamExt::map_ok(self.into_stream_flag(), |c| c.content))
-    }
-
-    pub fn into_part_stream(self) -> DataOrHeadersWithFlagStream {
-        DataOrHeadersWithFlagStream::new(self.into_stream_flag())
-    }
-
-    pub fn collect(self) -> impl Future<Output = crate::Result<SimpleHttpMessage>> + 'static {
-        Box::pin(
-            self.into_stream()
-                .try_fold(SimpleHttpMessage::new(), |mut c, p| {
-                    c.add(p);
-                    future::ok::<_, crate::Error>(c)
-                }),
-        )
     }
 }
 

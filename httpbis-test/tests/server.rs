@@ -214,11 +214,7 @@ fn response_large() {
     // TODO: rewrite with TCP
     let client = Client::new_plain(BIND_HOST, server.port(), Default::default()).expect("connect");
     let resp = rt
-        .block_on(
-            client
-                .start_post("/foobar", "localhost", Bytes::from(&b""[..]))
-                .collect(),
-        )
+        .block_on(client.start_post_collect("/foobar", "localhost", Bytes::from(&b""[..])))
         .expect("wait");
     assert_eq!(large_resp.len(), resp.body.len());
     assert_eq!(
@@ -569,7 +565,7 @@ fn external_event_loop() {
     for port in ports {
         let client = Client::new_plain(BIND_HOST, port, ClientConf::new()).expect("client");
         let resp = rt
-            .block_on(client.start_get("/", "localhost").collect())
+            .block_on(client.start_get_collect("/", "localhost"))
             .expect("ok");
         assert_eq!(&b"aabb"[..], resp.body.get_bytes());
     }

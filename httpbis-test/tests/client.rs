@@ -32,10 +32,7 @@ fn stream_count() {
 
     assert_eq!(0, client.conn_state().streams.len());
 
-    let req = client
-        .start_post("/foobar", "localhost", Bytes::from(&b"xxyy"[..]))
-        .collect();
-
+    let resp = client.start_post_collect("/foobar", "localhost", Bytes::from(&b"xxyy"[..]));
     let headers = server_tester.recv_frame_headers_check(1, false);
     assert_eq!("POST", headers.get(":method"));
     assert_eq!("/foobar", headers.get(":path"));
@@ -51,7 +48,7 @@ fn stream_count() {
 
     let rt = Runtime::new().unwrap();
 
-    let message = rt.block_on(req).expect("r");
+    let message = rt.block_on(resp).expect("r");
     assert_eq!((b"aabb"[..]).to_owned(), message.body.get_bytes());
 
     let state: ConnStateSnapshot = client.conn_state();
@@ -64,7 +61,7 @@ fn rst_is_error() {
 
     let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
-    let req = client.start_get("/fgfg", "localhost").collect();
+    let req = client.start_get_collect("/fgfg", "localhost");
 
     let get = server_tester.recv_message(1);
     assert_eq!("GET", get.headers.method());
@@ -90,7 +87,7 @@ fn handle_1xx_headers() {
 
     let (mut server_tester, client) = HttpConnTester::new_server_with_client_xchg();
 
-    let req = client.start_get("/fgfg", "localhost").collect();
+    let req = client.start_get_collect("/fgfg", "localhost");
 
     let get = server_tester.recv_message(1);
     assert_eq!("GET", get.headers.method());
@@ -129,7 +126,7 @@ fn client_call_dropped() {
     let rt = Runtime::new().unwrap();
 
     {
-        let req = client.start_get("/fgfg", "localhost").collect();
+        let req = client.start_get_collect("/fgfg", "localhost");
         server_tester.recv_message(3);
         server_tester.send_headers(3, Headers::ok_200(), true);
         let resp = rt.block_on(req).expect("OK");
@@ -151,7 +148,7 @@ fn reconnect_on_disconnect() {
     let rt = Runtime::new().unwrap();
 
     {
-        let req = client.start_get("/111", "localhost").collect();
+        let req = client.start_get_collect("/111", "localhost");
         server_tester.recv_message(1);
         server_tester.send_headers(1, Headers::ok_200(), true);
         let resp = rt.block_on(req).expect("OK");
@@ -167,7 +164,7 @@ fn reconnect_on_disconnect() {
     }
 
     {
-        let req = client.start_get("/222", "localhost").collect();
+        let req = client.start_get_collect("/222", "localhost");
 
         let mut server_tester = server.accept();
         server_tester.recv_preface();
@@ -191,7 +188,7 @@ fn reconnect_on_goaway() {
     {
         let mut server_tester = server.accept_xchg();
 
-        let req = client.start_get("/111", "localhost").collect();
+        let req = client.start_get_collect("/111", "localhost");
         server_tester.recv_message(1);
         server_tester.send_headers(1, Headers::ok_200(), true);
         let resp = rt.block_on(req).expect("OK");
@@ -209,7 +206,7 @@ fn reconnect_on_goaway() {
 
         rt.block_on(connect).expect("connect");
 
-        let req = client.start_get("/111", "localhost").collect();
+        let req = client.start_get_collect("/111", "localhost");
 
         server_tester.recv_message(1);
         server_tester.send_headers(1, Headers::ok_200(), true);
@@ -290,11 +287,8 @@ fn external_event_loop() {
 
     for client in rx.recv().expect("rx") {
         info!("client.start_get...");
-        let get = client.start_get("/echo", "localhost");
-        assert_eq!(
-            200,
-            rt.block_on(get.collect()).expect("get").headers.status()
-        );
+        let get = client.start_get_collect("/echo", "localhost");
+        assert_eq!(200, rt.block_on(get).expect("get").headers.status());
         info!("client.start_get done.");
     }
 
@@ -470,7 +464,7 @@ fn connection_refused() {
     let client = Client::new_plain(BIND_HOST, 1, ClientConf::default()).unwrap();
 
     let err = rt
-        .block_on(async { client.start_get("/test", "localhost").collect().await })
+        .block_on(async { client.start_get_collect("/test", "localhost").await })
         .err()
         .unwrap();
     match err {

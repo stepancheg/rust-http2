@@ -8,6 +8,8 @@ use crate::Header;
 use crate::Headers;
 use crate::HttpScheme;
 use crate::PseudoHeaderName;
+use crate::SimpleHttpMessage;
+use crate::StreamAfterHeaders;
 use bytes::Bytes;
 use futures::channel::oneshot;
 use futures::future;
@@ -108,6 +110,19 @@ pub trait ClientIntf {
         self.start_request_end_stream(headers, None, None)
     }
 
+    /// Start HTTP/2 `GET` request returning the full message.
+    fn start_get_collect(&self, path: &str, authority: &str) -> TryFutureBox<SimpleHttpMessage> {
+        let future = self.start_get(path, authority);
+        Box::pin(async move {
+            let (headers, body) = future.await?;
+            let body = body.collect_data().await?;
+            Ok(SimpleHttpMessage {
+                headers,
+                body: body.into(),
+            })
+        })
+    }
+
     /// Start HTTP/2 `POST` request with given request body.
     fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture3 {
         let headers = Headers::from_vec(vec![
@@ -120,6 +135,24 @@ pub trait ClientIntf {
             ),
         ]);
         self.start_request_end_stream(headers, Some(body), None)
+    }
+
+    /// Start HTTP/2 `POST` request returning the full message.
+    fn start_post_collect(
+        &self,
+        path: &str,
+        authority: &str,
+        body: Bytes,
+    ) -> TryFutureBox<SimpleHttpMessage> {
+        let future = self.start_post(path, authority, body);
+        Box::pin(async move {
+            let (headers, body) = future.await?;
+            let body = body.collect_data().await?;
+            Ok(SimpleHttpMessage {
+                headers,
+                body: body.into(),
+            })
+        })
     }
 
     /// Start `POST` request.

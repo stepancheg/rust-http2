@@ -24,7 +24,7 @@ use tokio::runtime::Runtime;
 fn not_found(client: Client) {
     let rt = Runtime::new().unwrap();
     let r = rt
-        .block_on(client.start_get("/404", "localhost").collect())
+        .block_on(client.start_get_collect("/404", "localhost"))
         .expect("get");
     assert_eq!(404, r.headers.status());
 }
@@ -32,7 +32,7 @@ fn not_found(client: Client) {
 fn found(client: Client) {
     let rt = Runtime::new().unwrap();
     let r = rt
-        .block_on(client.start_get("/200", "localhost").collect())
+        .block_on(client.start_get_collect("/200", "localhost"))
         .expect("get");
     assert_eq!(200, r.headers.status());
     assert_eq!(BytesDeque::from("200 200 200"), r.body);

@@ -74,7 +74,7 @@ fn get_200(client: Client, still_alive: Arc<AtomicBool>) {
     loop {
         still_alive.store(true, Ordering::SeqCst);
         let r = rt
-            .block_on(client.start_get("/200", "localhost").collect())
+            .block_on(client.start_get_collect("/200", "localhost"))
             .expect("get");
         assert_eq!(200, r.headers.status());
     }

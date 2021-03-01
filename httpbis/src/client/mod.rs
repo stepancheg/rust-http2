@@ -212,8 +212,10 @@ enum Completion {
 /// Asynchronous HTTP/2 client.
 ///
 /// Client connects to the single server address (which must be specified
-/// in `ClientBuilder`). When connection fails (because of network error
+/// in [`ClientBuilder`]). When connection fails (because of network error
 /// or protocol error) client is reconnected.
+///
+/// Client operation are provided by [`ClientIntf`] trait which is implemented by this type.
 pub struct Client {
     controller_tx: DeathAwareSender<ControllerCommand, ClientDiedType>,
     join: Option<Completion>,

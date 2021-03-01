@@ -32,7 +32,7 @@ fn smoke_tcp_socket() {
 
     let mut futures = Vec::new();
     for _ in 0..10 {
-        futures.push(client.start_get("/blocks/200000/5", "localhost").collect());
+        futures.push(client.start_get_collect("/blocks/200000/5", "localhost"));
     }
 
     let r = Runtime::new()
@@ -59,7 +59,7 @@ fn smoke_unix_domain_sockets() {
 
     let mut futures = Vec::new();
     for _ in 0..10 {
-        futures.push(client.start_get("/blocks/200000/5", "localhost").collect());
+        futures.push(client.start_get_collect("/blocks/200000/5", "localhost"));
     }
 
     let r = Runtime::new()
@@ -82,7 +82,7 @@ fn parallel_large() {
 
     let mut futures = Vec::new();
     for _ in 0..50 {
-        futures.push(client.start_get("/blocks/100000/5", "localhost").collect());
+        futures.push(client.start_get_collect("/blocks/100000/5", "localhost"));
     }
 
     let r = Runtime::new()

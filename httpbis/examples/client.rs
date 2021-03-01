@@ -28,7 +28,7 @@ fn main() {
             .expect("client");
 
     let resp = rt
-        .block_on(client.start_get(url.path(), host).collect())
+        .block_on(client.start_get_collect(url.path(), host))
         .expect("execute request");
 
     print!("{}", resp.dump());
