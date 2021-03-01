@@ -169,12 +169,10 @@ impl<S: StreamAfterHeaders> AsyncRead for AsRead<S> {
                 return Poll::Ready(Ok(()));
             }
 
-            me.rem = match Pin::new(&mut me.stream)
-                .poll_data(cx)
-                .map_err(Into::<io::Error>::into)?
-            {
+            me.rem = match Pin::new(&mut me.stream).poll_data(cx) {
+                Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(e.into())),
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
-                Poll::Ready(Some(bytes)) => bytes,
+                Poll::Ready(Some(Ok(bytes))) => bytes,
                 Poll::Pending => return Poll::Pending,
             }
         }
