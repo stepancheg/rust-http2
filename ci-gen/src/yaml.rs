@@ -91,7 +91,6 @@ impl YamlWriter {
 
     pub fn write_yaml(&mut self, yaml: &Yaml) {
         yaml_rust::emitter::YamlEmitter::new(&mut self.buffer)
-            .compact()
             .dump(&yaml.to_yaml_rust())
             .unwrap();
     }
