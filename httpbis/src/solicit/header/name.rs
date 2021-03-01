@@ -1,7 +1,6 @@
 use crate::ascii::Ascii;
 use crate::req_resp::RequestOrResponse;
 use crate::solicit::header::HeaderError;
-use crate::solicit::header::HeaderResult;
 use bytes::Bytes;
 use bytes::BytesMut;
 use std::fmt;
@@ -37,7 +36,7 @@ impl PseudoHeaderName {
     }
 
     /// Parse header name.
-    pub fn parse(value: &[u8]) -> HeaderResult<PseudoHeaderName> {
+    pub fn parse(value: &[u8]) -> Result<PseudoHeaderName, HeaderError> {
         match value {
             b":method" => Ok(PseudoHeaderName::Method),
             b":scheme" => Ok(PseudoHeaderName::Scheme),
@@ -328,6 +327,7 @@ impl HeaderName {
     /// # extern crate bytes;
     /// # use httpbis::*;
     /// # use bytes::*;
+    /// # use httpbis::HeaderName;
     /// assert!(HeaderName::new_validate(Bytes::from(":method")).is_ok());
     /// assert!(HeaderName::new_validate(Bytes::from("Content-Type")).is_err());
     /// ```

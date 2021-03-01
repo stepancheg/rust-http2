@@ -80,15 +80,12 @@ pub enum HeaderError {
     TeCanOnlyContainTrailer,
 }
 
-/// Type alias.
-pub type HeaderResult<T> = Result<T, HeaderError>;
-
 impl Header {
     /// Create a new `Header` object with exact values of `name` and `value`.
     ///
     /// This function performs header validation, in particular,
     /// header name must be lower case.
-    pub fn new_validate(name: Bytes, value: Bytes) -> HeaderResult<Header> {
+    pub fn new_validate(name: Bytes, value: Bytes) -> Result<Header, HeaderError> {
         let name = HeaderName::new_validate(name).map_err(|(e, _)| e)?;
         Ok(Header {
             name,
@@ -158,7 +155,7 @@ impl Header {
     }
 
     /// Validate header as request or response header.
-    pub fn validate(&self, req_or_resp: RequestOrResponse) -> HeaderResult<()> {
+    pub fn validate(&self, req_or_resp: RequestOrResponse) -> Result<(), HeaderError> {
         if let Some(h) = self.pseudo_header_name() {
             if h.req_or_resp() != req_or_resp {
                 return Err(HeaderError::UnexpectedPseudoHeader(h));
@@ -293,7 +290,7 @@ impl Headers {
         &self,
         req_or_resp: RequestOrResponse,
         headers_place: HeadersPlace,
-    ) -> HeaderResult<()> {
+    ) -> Result<(), HeaderError> {
         let mut pseudo_headers_met = PseudoHeaderNameSet::new();
 
         for header in self.pseudo_headers() {
