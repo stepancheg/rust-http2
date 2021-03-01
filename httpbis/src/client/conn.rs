@@ -124,15 +124,9 @@ pub(crate) enum ClientToWriteMessage {
 impl ErrorAwareDrop for ClientToWriteMessage {
     fn drop_with_error(self, error: crate::Error) {
         match self {
-            ClientToWriteMessage::Start(start) => {
-                start.start.stream_handler.error(error);
-            }
-            ClientToWriteMessage::WaitForHandshake(wait) => {
-                let _ = wait.send(Err(error));
-            }
-            ClientToWriteMessage::Common(_) => {
-                // TODO: error
-            }
+            ClientToWriteMessage::Start(start) => start.start.stream_handler.error(error),
+            ClientToWriteMessage::WaitForHandshake(wait) => drop(wait.send(Err(error))),
+            ClientToWriteMessage::Common(common) => common.drop_with_error(error),
         }
     }
 }

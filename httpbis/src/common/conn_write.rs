@@ -29,9 +29,11 @@ use crate::solicit::frame::RstStreamFrame;
 use crate::solicit::frame::SettingsFrame;
 use crate::solicit::stream_id::StreamId;
 use crate::DataOrTrailers;
+use crate::Error;
 use crate::ErrorCode;
 use crate::Headers;
 
+use crate::death::channel::ErrorAwareDrop;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::oneshot::DeathAwareOneshotSender;
 use crate::solicit_async::TryStreamBox;
@@ -291,6 +293,19 @@ pub(crate) enum CommonToWriteMessage {
         StreamOutWindowReceiver,
     ),
     DumpState(DeathAwareOneshotSender<ConnStateSnapshot, ConnDiedType>),
+}
+
+impl ErrorAwareDrop for CommonToWriteMessage {
+    fn drop_with_error(self, error: Error) {
+        let _ = error;
+        match self {
+            CommonToWriteMessage::IncreaseInWindow(_, _) => {}
+            CommonToWriteMessage::StreamEnqueue(_, _) => {}
+            CommonToWriteMessage::StreamEnd(_, _) => {}
+            CommonToWriteMessage::Pull(_, _, _) => {}
+            CommonToWriteMessage::DumpState(_) => {}
+        }
+    }
 }
 
 impl fmt::Debug for CommonToWriteMessage {
