@@ -1,5 +1,4 @@
 use crate::client::resp::ClientResponse;
-use crate::client::resp_future::ClientResponseFuture3;
 use crate::client::resp_future::ClientResponseFutureImpl;
 use crate::common::sink_after_headers::SinkAfterHeadersBox;
 use crate::solicit_async::TryFutureBox;
@@ -10,6 +9,7 @@ use crate::HttpScheme;
 use crate::PseudoHeaderName;
 use crate::SimpleHttpMessage;
 use crate::StreamAfterHeaders;
+use crate::StreamAfterHeadersBox;
 use bytes::Bytes;
 use futures::channel::oneshot;
 use futures::future;
@@ -88,15 +88,19 @@ pub trait ClientIntf {
         headers: Headers,
         body: Option<Bytes>,
         trailers: Option<Headers>,
-    ) -> ClientResponseFuture3 {
-        ClientResponseFuture3::new(
+    ) -> TryFutureBox<(Headers, StreamAfterHeadersBox)> {
+        Box::pin(
             self.start_request(headers, body, trailers, true)
                 .and_then(move |(_sender, response)| response),
         )
     }
 
     /// Start HTTP/2 `GET` request.
-    fn start_get(&self, path: &str, authority: &str) -> ClientResponseFuture3 {
+    fn start_get(
+        &self,
+        path: &str,
+        authority: &str,
+    ) -> TryFutureBox<(Headers, StreamAfterHeadersBox)> {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "GET"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),
@@ -124,7 +128,12 @@ pub trait ClientIntf {
     }
 
     /// Start HTTP/2 `POST` request with given request body.
-    fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture3 {
+    fn start_post(
+        &self,
+        path: &str,
+        authority: &str,
+        body: Bytes,
+    ) -> TryFutureBox<(Headers, StreamAfterHeadersBox)> {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "POST"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),

@@ -136,24 +136,3 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
         }
     }
 }
-
-/// TODO: erase
-pub struct ClientResponseFuture3(
-    Pin<Box<dyn Future<Output = crate::Result<(Headers, StreamAfterHeadersBox)>> + Send + 'static>>,
-);
-
-impl ClientResponseFuture3 {
-    pub fn new(
-        future: impl Future<Output = crate::Result<(Headers, StreamAfterHeadersBox)>> + Send + 'static,
-    ) -> ClientResponseFuture3 {
-        ClientResponseFuture3(Box::pin(future))
-    }
-}
-
-impl Future for ClientResponseFuture3 {
-    type Output = crate::Result<(Headers, StreamAfterHeadersBox)>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Pin::new(&mut self.get_mut().0).poll(cx)
-    }
-}
