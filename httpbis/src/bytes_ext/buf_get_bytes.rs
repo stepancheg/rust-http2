@@ -52,6 +52,7 @@ pub trait BufGetBytes: Buf {
         ret.freeze()
     }
 
+    /// Collect the content to `Bytes` until the end of buf.
     fn to_bytes(&mut self) -> Bytes {
         self.get_bytes(self.remaining())
     }

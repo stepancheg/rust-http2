@@ -31,6 +31,7 @@ impl<T: Types> IncreaseInWindow<T> {
         );
     }
 
+    /// Notify peer to increase in window.
     pub fn increase_window(&mut self, inc: u32) -> crate::Result<()> {
         let old_in_window_size = self.in_window_size;
         // TODO: do not panic

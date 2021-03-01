@@ -2,8 +2,11 @@ use std::sync::Arc;
 
 use tls_api::TlsAcceptorBox;
 
+/// Server TLS configuration.
 pub enum ServerTlsOption {
+    /// Non-TLS server.
     Plain,
+    /// TLS server configuration.
     Tls(Arc<TlsAcceptorBox>),
 }
 

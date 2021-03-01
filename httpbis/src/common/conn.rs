@@ -113,7 +113,9 @@ where
     }
 }
 
+/// Connection state. This is used in tests.
 #[derive(Debug, Clone)]
+#[doc(hidden)]
 pub struct ConnStateSnapshot {
     pub peer_addr: AnySocketAddr,
     pub in_window_size: i32,
@@ -124,6 +126,11 @@ pub struct ConnStateSnapshot {
 }
 
 impl ConnStateSnapshot {
+    /// Get single stream snapshot from connection stapshot.
+    ///
+    /// # Panics
+    ///
+    /// If connection has zero or more than one streams.
     pub fn single_stream(&self) -> (u32, &HttpStreamStateSnapshot) {
         let mut iter = self.streams.iter();
         let (&id, stream) = iter.next().expect("no streams");

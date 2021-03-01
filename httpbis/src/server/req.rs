@@ -14,10 +14,11 @@ use crate::Headers;
 use crate::StreamAfterHeaders;
 use crate::StreamId;
 
+/// A request object provided to the server callback.
 pub struct ServerRequest<'a> {
-    /// Request headers
+    /// Request headers.
     pub headers: Headers,
-    /// True if requests ends with headers
+    /// True if requests ends with headers (no body).
     pub end_stream: bool,
     pub(crate) stream_id: StreamId,
     /// Stream in window size at the moment of request start
@@ -28,6 +29,7 @@ pub struct ServerRequest<'a> {
 }
 
 impl<'a> ServerRequest<'a> {
+    /// Convert a request into a pullable stream.
     pub fn into_stream(self) -> impl StreamAfterHeaders {
         if self.end_stream {
             Box::pin(HttpStreamAfterHeadersEmpty)

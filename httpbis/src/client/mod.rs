@@ -55,15 +55,35 @@ pub(crate) mod types;
 /// Client parameters can be specified only during construction,
 /// and later client cannot be reconfigured.
 pub struct ClientBuilder {
+    /// Which event loop to use. If not specified, new even loop will be spawned.
     pub event_loop: Option<Handle>,
+    /// Server address. This is mandatory.
+    ///
+    /// Can be configured with [`set_addr`](ClientBuilder::set_addr) operation.
     pub addr: Option<AnySocketAddr>,
+    /// TLS configuration.
     pub tls: ClientTlsOption,
+    /// Client configuration.
     pub conf: ClientConf,
 }
 
 impl ClientBuilder {
+    /// New non-TLS client.
     pub fn new_plain() -> ClientBuilder {
         ClientBuilder::new()
+    }
+
+    /// New client.
+    ///
+    /// Configured to not use TLS by default.
+    /// Use [`set_tls`](ClientBuilder::set_tls) to configure TLS.
+    pub fn new() -> ClientBuilder {
+        ClientBuilder {
+            event_loop: None,
+            addr: None,
+            tls: ClientTlsOption::Plain,
+            conf: ClientConf::new(),
+        }
     }
 
     /// Set the addr client connects to.
@@ -79,24 +99,15 @@ impl ClientBuilder {
         self.addr = Some(AnySocketAddr::Inet(addrs.into_iter().next().unwrap()));
         Ok(())
     }
-}
 
-impl ClientBuilder {
     /// Set the addr client connects to.
     pub fn set_unix_addr<A: Into<SocketAddrUnix>>(&mut self, addr: A) -> crate::Result<()> {
         self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
     }
 
-    pub fn new() -> ClientBuilder {
-        ClientBuilder {
-            event_loop: None,
-            addr: None,
-            tls: ClientTlsOption::Plain,
-            conf: ClientConf::new(),
-        }
-    }
-
+    /// Configure using given TLS connector with default options
+    /// (e.g. no custom server certificates).
     pub fn set_tls<C: tls_api::TlsConnector>(&mut self, host: &str) -> crate::Result<()> {
         let mut tls_connector = C::builder()?;
 
@@ -112,6 +123,7 @@ impl ClientBuilder {
         Ok(())
     }
 
+    /// Finish the client construction.
     pub fn build(self) -> crate::Result<Client> {
         let client_died_error_holder = SomethingDiedErrorHolder::new();
 

@@ -10,18 +10,24 @@ impl ServerIncreaseInWindow {
         self.0.in_window_size()
     }
 
+    /// Decrement window size when new data frame recevied.
     pub fn data_frame_processed(&mut self, size: usize) {
         self.0.data_frame_received(size)
     }
 
+    /// Notify peer to increase in window.
     pub fn increase_window(&mut self, inc: u32) -> crate::Result<()> {
         self.0.increase_window(inc)
     }
 
+    /// Auto-increase in window.
+    // TODO: drop this operation.
     pub fn increase_window_auto(&mut self) -> crate::Result<()> {
         self.0.increase_window_auto()
     }
 
+    /// Auto-increase in window above specified limit.
+    // TODO: drop this operation.
     pub fn increase_window_auto_above(&mut self, above: u32) -> crate::Result<()> {
         self.0.increase_window_auto_above(above)
     }

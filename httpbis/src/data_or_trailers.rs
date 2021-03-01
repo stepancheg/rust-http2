@@ -15,10 +15,12 @@ pub enum DataOrTrailers {
 }
 
 impl DataOrTrailers {
+    /// Create a part with data and [`EndStream::No`].
     pub fn intermediate_data(data: Bytes) -> Self {
         DataOrTrailers::Data(data, EndStream::No)
     }
 
+    /// Create a part with flag.
     pub fn into_part(self) -> DataOrHeadersWithFlag {
         match self {
             DataOrTrailers::Data(data, end_stream) => DataOrHeadersWithFlag {
@@ -32,6 +34,7 @@ impl DataOrTrailers {
         }
     }
 
+    /// Is this end of stream?
     pub fn end_stream(&self) -> EndStream {
         match self {
             DataOrTrailers::Data(_, end_stream) => *end_stream,

@@ -39,7 +39,9 @@ pub struct DroppedData {
     pub size: usize,
 }
 
+/// State of HTTP/2 stream for test.
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[doc(hidden)]
 pub struct HttpStreamStateSnapshot {
     pub state: StreamState,
     pub out_window_size: i32,

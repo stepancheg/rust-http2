@@ -3,10 +3,12 @@ use std::fmt;
 use std::io;
 use std::net::SocketAddr;
 
-// Any socket address: TCP or Unix
+/// Any socket address: TCP or Unix
 #[derive(Clone, Debug, PartialEq)]
 pub enum AnySocketAddr {
+    /// IP socket address.
     Inet(SocketAddr),
+    /// Unix socket address.
     Unix(SocketAddrUnix),
 }
 

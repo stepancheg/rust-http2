@@ -1,35 +1,28 @@
+use std::task::Poll;
+
+use bytes::Bytes;
+use futures::task::Context;
+
 use crate::common::conn_write::CommonToWriteMessage;
+use crate::common::sink_after_headers::SinkAfterHeaders;
 use crate::common::types::Types;
 use crate::common::window_size::StreamOutWindowReceiver;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 use crate::death::channel::DeathAwareSender;
+use crate::death::error_holder::ConnDiedType;
+use crate::solicit::end_stream::EndStream;
 use crate::solicit::stream_id::StreamId;
+use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::ErrorCode;
 use crate::Headers;
-use bytes::Bytes;
-
-use crate::common::sink_after_headers::SinkAfterHeaders;
-use crate::death::error_holder::ConnDiedType;
-use crate::solicit::end_stream::EndStream;
-use crate::solicit_async::TryStreamBox;
-use futures::task::Context;
-use std::sync::Arc;
-use std::task::Poll;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
-pub enum SenderState {
+pub(crate) enum SenderState {
     ExpectingHeaders,
     ExpectingBodyOrTrailers,
     Done,
-}
-
-#[derive(Debug)]
-pub enum SendError {
-    // TODO: drop
-    ConnectionDied(Arc<crate::Error>),
-    IncorrectState(SenderState),
 }
 
 struct CanSendData<T: Types> {
@@ -69,10 +62,10 @@ impl<T: Types> CommonSender<T> {
         }
     }
 
-    fn get_can_send(&mut self) -> Result<&mut CanSendData<T>, SendError> {
+    fn get_can_send(&mut self) -> crate::Result<&mut CanSendData<T>> {
         match self.state {
             Some(ref mut state) => Ok(state),
-            None => Err(SendError::IncorrectState(SenderState::Done)),
+            None => Err(crate::Error::CannotSendClosedLocal),
         }
     }
 
@@ -89,19 +82,15 @@ impl<T: Types> CommonSender<T> {
         }
     }
 
-    pub fn send_common(&mut self, message: CommonToWriteMessage) -> Result<(), SendError> {
-        // TODO: why client died?
-        self.get_can_send()?
-            .write_tx
-            .unbounded_send(message.into())
-            .map_err(|e| SendError::ConnectionDied(Arc::new(e)))
+    pub fn send_common(&mut self, message: CommonToWriteMessage) -> crate::Result<()> {
+        self.get_can_send()?.write_tx.unbounded_send(message.into())
     }
 
-    pub fn send_headers(&mut self, headers: Headers) -> Result<(), SendError> {
+    pub fn send_headers(&mut self, headers: Headers) -> crate::Result<()> {
         self.send_headers_impl(headers, EndStream::No)
     }
 
-    pub fn send_headers_end_of_stream(&mut self, headers: Headers) -> Result<(), SendError> {
+    pub fn send_headers_end_of_stream(&mut self, headers: Headers) -> crate::Result<()> {
         self.send_headers_impl(headers, EndStream::Yes)
     }
 
@@ -109,9 +98,12 @@ impl<T: Types> CommonSender<T> {
         &mut self,
         headers: Headers,
         end_stream: EndStream,
-    ) -> Result<(), SendError> {
+    ) -> crate::Result<()> {
         if self.state() != SenderState::ExpectingHeaders {
-            return Err(SendError::IncorrectState(self.state()));
+            return Err(crate::Error::InternalError(format!(
+                "Cannot send headers in state {:?}",
+                self.state()
+            )));
         }
         let stream_id = self.stream_id;
         self.send_common(CommonToWriteMessage::StreamEnqueue(
@@ -141,7 +133,7 @@ impl<T: Types> SinkAfterHeaders for CommonSender<T> {
 
     fn send_data_impl(&mut self, data: Bytes, end_stream: EndStream) -> crate::Result<()> {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
-            return Err(SendError::IncorrectState(self.state()).into());
+            return Err(crate::Error::CannotSendClosedLocal);
         }
         let stream_id = self.stream_id;
         self.get_can_send()?.out_window.decrease(data.len());
@@ -160,7 +152,7 @@ impl<T: Types> SinkAfterHeaders for CommonSender<T> {
 
     fn send_trailers(&mut self, trailers: Headers) -> crate::Result<()> {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
-            return Err(SendError::IncorrectState(self.state()).into());
+            return Err(crate::Error::CannotSendClosedLocal);
         }
         let stream_id = self.stream_id;
         self.send_common(CommonToWriteMessage::StreamEnqueue(
@@ -187,7 +179,7 @@ impl<T: Types> SinkAfterHeaders for CommonSender<T> {
         Self: Sized,
     {
         if self.state() != SenderState::ExpectingBodyOrTrailers {
-            return Err(SendError::IncorrectState(self.state()).into());
+            return Err(crate::Error::CannotSendClosedLocal);
         }
 
         match self.state.take() {
@@ -195,15 +187,10 @@ impl<T: Types> SinkAfterHeaders for CommonSender<T> {
                 write_tx,
                 out_window,
                 ..
-            }) => {
-                // TODO: why client died
-                write_tx
-                    .unbounded_send(
-                        CommonToWriteMessage::Pull(self.stream_id, stream, out_window).into(),
-                    )
-                    .map_err(|e| SendError::ConnectionDied(Arc::new(e)).into())
-            }
-            None => Err(SendError::IncorrectState(SenderState::Done).into()),
+            }) => write_tx.unbounded_send(
+                CommonToWriteMessage::Pull(self.stream_id, stream, out_window).into(),
+            ),
+            None => Err(crate::Error::CannotSendClosedLocal),
         }
     }
 }

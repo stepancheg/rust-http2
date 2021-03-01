@@ -1,26 +1,21 @@
 use std::error::Error as std_Error;
 use std::fmt;
 use std::io;
+use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use crate::assert_types::*;
-
-use crate::hpack::decoder::DecoderError;
-
 use tls_api;
+use tokio::time::Timeout;
+use void::Void;
 
-use crate::common::sender::SendError;
+use crate::assert_types::*;
 use crate::display_comma_separated::DisplayCommaSeparated;
 use crate::solicit::error_code::ErrorCode;
 use crate::solicit::frame::HttpFrameType;
 use crate::solicit::frame::ParseFrameError;
 use crate::solicit::frame::RawHttpFrameType;
-use crate::StreamDead;
 use crate::StreamId;
-use std::net::SocketAddr;
-use tokio::time::Timeout;
-use void::Void;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
 /// connection.
@@ -31,6 +26,8 @@ pub enum Error {
     IoError(io::Error),
     /// TLS error.
     TlsError(tls_api::Error),
+    /// Unspecified error.
+    OtherError(Box<dyn std::error::Error + Send + Sync + 'static>),
     /// Error code error.
     CodeError(ErrorCode),
     /// `RST_STREAM` received.
@@ -41,10 +38,6 @@ pub enum Error {
     AddrResolvedToMoreThanOneAddr(Vec<SocketAddr>),
     /// The HTTP/2 connection received an invalid HTTP/2 frame
     InvalidFrame(String),
-    /// The HPACK decoder was unable to decode a header chunk and raised an error.
-    /// Any decoder error is fatal to the HTTP/2 connection as it means that the decoder contexts
-    /// will be out of sync.
-    CompressionError(DecoderError),
     /// Indicates that the local peer has discovered an overflow in the size of one of the
     /// connection flow control window, which is a connection error.
     WindowSizeOverflow,
@@ -63,7 +56,6 @@ pub enum Error {
     /// Failed to parse frame.
     ParseFrameError(ParseFrameError),
     /// Generic internal error.
-    // TODO: get rid of it
     InternalError(String),
     /// Received `PUSH_PROMISE`, but we don't implement it
     /// and explicitly ask not to send it.
@@ -87,10 +79,6 @@ pub enum Error {
     ClientPanicked(String),
     /// Client completed without error.
     ClientCompletedWithoutError,
-    /// Send failed.
-    SendError(SendError),
-    /// Stream dead.
-    StreamDead(StreamDead),
     /// Called died.
     CallerDied,
     /// End of stream.
@@ -134,6 +122,8 @@ pub enum Error {
     RequestIsMadeUsingHttp1,
     /// Listen address is not specified.
     ListenAddrNotSpecified,
+    /// Cannot send anything to sink, request is closed.
+    CannotSendClosedLocal,
 }
 
 fn _assert_error_sync_send() {
@@ -167,18 +157,6 @@ impl From<ParseFrameError> for Error {
     }
 }
 
-impl From<SendError> for Error {
-    fn from(e: SendError) -> Self {
-        Error::SendError(e)
-    }
-}
-
-impl From<StreamDead> for Error {
-    fn from(e: StreamDead) -> Self {
-        Error::StreamDead(e)
-    }
-}
-
 impl From<Void> for Error {
     fn from(v: Void) -> Self {
         match v {}
@@ -191,13 +169,10 @@ impl fmt::Display for Error {
             Error::IoError(e) => write!(f, "IO error: {}", e),
             Error::TlsError(e) => write!(f, "Encountered TLS error: {}", e),
             Error::CodeError(e) => write!(f, "Encountered HTTP named error: {}", e),
+            Error::OtherError(e) => write!(f, "{}", e),
             Error::RstStreamReceived(e) => write!(f, "Received RST_STREAM from peer: {}", e),
             Error::InvalidFrame(..) => {
                 write!(f, "Encountered an invalid or unexpected HTTP/2 frame")
-            }
-            Error::CompressionError(_) => {
-                // TODO: display
-                write!(f, "Encountered an error with HPACK compression")
             }
             Error::WindowSizeOverflow => write!(f, "The connection flow control window overflowed"),
             Error::UnknownStreamId => {
@@ -222,9 +197,7 @@ impl fmt::Display for Error {
             Error::DeathReasonUnknown => write!(f, "Death reason unknown"),
             Error::ClientPanicked(e) => write!(f, "Client panicked: {}", e),
             Error::ClientCompletedWithoutError => write!(f, "Client completed without error"),
-            Error::SendError(_) => write!(f, "Failed to write message to stream"),
             Error::CallerDied => write!(f, "Request caller died"),
-            Error::StreamDead(_) => write!(f, "Stream dead"),
             Error::StdError(e) => write!(f, "{}", e),
             Error::User(e) => write!(f, "User error: {}", e),
             Error::AddrResolvedToEmptyList => write!(f, "Address resolved to empty list"),
@@ -283,6 +256,9 @@ impl fmt::Display for Error {
             Error::PayloadTooLarge(_, _) => write!(f, "Payload too large"),
             Error::RequestIsMadeUsingHttp1 => write!(f, "Request is made using HTTP/1"),
             Error::ListenAddrNotSpecified => write!(f, "Listen addr not specified"),
+            Error::CannotSendClosedLocal => {
+                write!(f, "Cannot send to the sink: the stream is closed-local")
+            }
         }
     }
 }

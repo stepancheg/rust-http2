@@ -249,6 +249,7 @@ where
     }
 }
 
+/// Server connection.
 pub struct ServerConn {
     write_tx: DeathAwareSender<ServerToWriteMessage, ConnDiedType>,
     conn_died_error_holder: SomethingDiedErrorHolder<ConnDiedType>,
@@ -282,6 +283,7 @@ impl ServerConn {
         )
     }
 
+    /// New server connection from given connected socket which is not TLS-negotiated yet.
     pub fn new<S>(
         lh: &Handle,
         socket: Pin<Box<dyn AsyncSocket>>,
@@ -313,6 +315,7 @@ impl ServerConn {
         }
     }
 
+    /// New server connection from plain (non-TLS) socket.
     pub fn new_plain_single_thread<S>(
         lh: &Handle,
         socket: TcpStream,
@@ -334,6 +337,7 @@ impl ServerConn {
         )
     }
 
+    /// New server connection with server handler as function.
     pub fn new_plain_single_thread_fn<F>(
         lh: &Handle,
         socket: TcpStream,

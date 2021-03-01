@@ -17,6 +17,7 @@ pub const CONTINUATION_FRAME_TYPE: u8 = 0x9;
 
 /// An enum representing the flags that a `ContinuationFrame` can have.
 #[derive(Clone, PartialEq, Debug, Copy)]
+#[doc(hidden)]
 pub enum ContinuationFlag {
     EndHeaders = 0x4,
 }

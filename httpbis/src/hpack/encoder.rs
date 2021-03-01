@@ -12,7 +12,7 @@ use crate::hpack::static_table::StaticTable;
 use crate::hpack::HeaderValueFound;
 use bytes::BytesMut;
 
-pub trait EncodeBuf {
+pub(crate) trait EncodeBuf {
     fn write_all(&mut self, bytes: &[u8]);
 
     fn reserve(&mut self, additional: usize) {
@@ -54,7 +54,7 @@ impl EncodeBuf for BytesMut {
 /// and overwritten by the integer's representation (in other words, only the first
 /// `8 - prefix_size` bits from the `leading_bits` octet are reflected in the first octet
 /// emitted by the function.
-pub fn encode_integer_into<W: EncodeBuf>(
+pub(crate) fn encode_integer_into<W: EncodeBuf>(
     mut value: usize,
     prefix_size: u8,
     leading_bits: u8,
@@ -134,7 +134,7 @@ impl Encoder {
         encoded
     }
 
-    pub fn encode<'b, I>(&mut self, headers: I) -> Bytes
+    pub(crate) fn _encode<'b, I>(&mut self, headers: I) -> Bytes
     where
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
     {
@@ -147,7 +147,7 @@ impl Encoder {
     /// Error at any point, this error is propagated out. Any changes to the internal state of the
     /// encoder will not be rolled back, though, so care should be taken to ensure that the paired
     /// decoder also ends up seeing the same state updates or that their pairing is cancelled.
-    pub fn encode_into<'b, I, W>(&mut self, headers: I, writer: &mut W)
+    pub(crate) fn encode_into<'b, I, W>(&mut self, headers: I, writer: &mut W)
     where
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
         W: EncodeBuf,

@@ -17,6 +17,7 @@ pub trait ClientHandler: Send + 'static {
         resp: ClientResponse,
     ) -> crate::Result<()>;
 
+    /// Could not start request (e. g. because of connection failure).
     fn error(self: Box<Self>, error: crate::Error);
 }
 

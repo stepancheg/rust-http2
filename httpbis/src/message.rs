@@ -4,10 +4,12 @@ use crate::bytes_ext::bytes_deque::BytesDeque;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
 
-/// Simple HTTP message is headers and body.
+/// Simple HTTP message is headers and body (no trailers).
 #[derive(Default)]
 pub struct SimpleHttpMessage {
+    /// Message headers.
     pub headers: Headers,
+    /// Message body.
     pub body: BytesDeque,
 }
 
@@ -26,6 +28,7 @@ impl SimpleHttpMessage {
         )
     }
 
+    /// Construct HTTP message from a stream of message parts.
     pub fn from_parts<I>(iter: I) -> SimpleHttpMessage
     where
         I: IntoIterator<Item = DataOrHeadersWithFlag>,
@@ -33,6 +36,7 @@ impl SimpleHttpMessage {
         SimpleHttpMessage::from_part_content(iter.into_iter().map(|c| c.content))
     }
 
+    /// Construct HTTP message from a stream of message parts.
     pub fn from_part_content<I>(iter: I) -> SimpleHttpMessage
     where
         I: IntoIterator<Item = DataOrHeaders>,

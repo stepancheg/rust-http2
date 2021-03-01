@@ -136,6 +136,7 @@ impl ServerHandlerPaths {
         self.root.add_service(path, service);
     }
 
+    /// Set service with service implementation provided as a function rather than interface.
     pub fn set_service_fn<F>(&mut self, path: &str, service: F)
     where
         F: Fn(ServerRequest, ServerResponse) -> crate::Result<()> + Send + Sync + 'static,
@@ -151,7 +152,8 @@ impl ServerHandlerPaths {
         self.set_service(path, Arc::new(service))
     }
 
-    pub fn remove_service(&mut self, path: &str) -> Option<Arc<dyn ServerHandler>> {
+    #[allow(dead_code)]
+    fn remove_service(&mut self, path: &str) -> Option<Arc<dyn ServerHandler>> {
         assert!(path.starts_with("/"));
         self.root.remove_service(path)
     }

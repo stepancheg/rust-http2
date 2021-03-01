@@ -112,7 +112,7 @@ impl ServerBuilder {
 }
 
 impl ServerBuilder {
-    // Set name of unix domain socket
+    /// Listen on Unix socket.
     pub fn set_unix_addr<S: Into<SocketAddrUnix>>(&mut self, addr: S) -> crate::Result<()> {
         self.addr = Some(AnySocketAddr::Unix(addr.into()));
         Ok(())
@@ -135,10 +135,12 @@ impl ServerBuilder {
         }
     }
 
+    /// Set TLS acceptor for the server. If not called, server will be non-TLS.
     pub fn set_tls<A: TlsAcceptor>(&mut self, acceptor: A) {
         self.tls = ServerTlsOption::Tls(Arc::new(acceptor.into_dyn()));
     }
 
+    /// Construct a server.
     pub fn build(self) -> crate::Result<Server> {
         let (alive_tx, alive_rx) = mpsc::channel();
 
@@ -382,15 +384,17 @@ where
 }
 
 impl Server {
+    /// Listen address.
     pub fn local_addr(&self) -> &AnySocketAddr {
         &self.local_addr
     }
 
+    /// Is server still alive.
     pub fn is_alive(&self) -> bool {
         self.alive_rx.try_recv() != Err(mpsc::TryRecvError::Disconnected)
     }
 
-    // for tests
+    #[doc(hidden)]
     pub fn dump_state(&self) -> TryFutureBox<ServerStateSnapshot> {
         let g = self.state.lock().expect("lock");
         g.snapshot()

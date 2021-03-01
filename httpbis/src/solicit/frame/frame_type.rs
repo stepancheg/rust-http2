@@ -58,15 +58,25 @@ impl HttpFrameType {
 pub struct RawHttpFrameType(pub u8);
 
 impl RawHttpFrameType {
+    /// `DATA` frame type.
     pub const DATA: RawHttpFrameType = RawHttpFrameType(DATA_FRAME_TYPE);
+    /// `HEADERS` frame type.
     pub const HEADERS: RawHttpFrameType = RawHttpFrameType(HEADERS_FRAME_TYPE);
+    /// `PRIORITY` frame type.
     pub const PRIORITY: RawHttpFrameType = RawHttpFrameType(PRIORITY_FRAME_TYPE);
+    /// `RST_STREAM` frame type.
     pub const RST_STREAM: RawHttpFrameType = RawHttpFrameType(RST_STREAM_FRAME_TYPE);
+    /// `SETTINGS` frame type.
     pub const SETTINGS: RawHttpFrameType = RawHttpFrameType(SETTINGS_FRAME_TYPE);
+    /// `PUSH_PROMISE` frame type.
     pub const PUSH_PROMISE: RawHttpFrameType = RawHttpFrameType(PUSH_PROMISE_FRAME_TYPE);
+    /// `PING` frame type.
     pub const PING: RawHttpFrameType = RawHttpFrameType(PING_FRAME_TYPE);
+    /// `GOAWAY` frame type.
     pub const GOAWAY: RawHttpFrameType = RawHttpFrameType(GOAWAY_FRAME_TYPE);
+    /// `WINDOW_UPDATE` frame type.
     pub const WINDOW_UPDATE: RawHttpFrameType = RawHttpFrameType(WINDOW_UPDATE_FRAME_TYPE);
+    /// `CONTINUATION` frame type.
     pub const CONTINUATION: RawHttpFrameType = RawHttpFrameType(CONTINUATION_FRAME_TYPE);
 
     fn known(&self) -> Result<HttpFrameType, u8> {

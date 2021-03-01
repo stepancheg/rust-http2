@@ -176,6 +176,7 @@ pub enum IntegerDecodingError {
 /// Represents all errors that can be encountered while decoding an octet
 /// string.
 #[derive(PartialEq, Copy, Clone, Debug)]
+#[doc(hidden)]
 pub enum StringDecodingError {
     NotEnoughOctets,
     HuffmanDecoderError(HuffmanDecoderError),
@@ -184,6 +185,7 @@ pub enum StringDecodingError {
 /// Represents all errors that can be encountered while performing the decoding
 /// of an HPACK header set.
 #[derive(PartialEq, Copy, Clone, Debug)]
+#[doc(hidden)] // used in tests
 pub enum DecoderError {
     HeaderIndexOutOfBounds,
     IntegerDecodingError(IntegerDecodingError),
@@ -196,6 +198,7 @@ pub enum DecoderError {
 }
 
 /// The result returned by the `decode` method of the `Decoder`.
+#[doc(hidden)]
 pub type DecoderResult = Result<Vec<(Bytes, Bytes)>, DecoderError>;
 
 /// Decodes headers encoded using HPACK.
@@ -257,7 +260,11 @@ impl Decoder {
     ///
     /// If an error is encountered during the decoding of any header, decoding halts and the
     /// appropriate error is returned as the `Err` variant of the `Result`.
-    pub fn decode_with_cb<F>(&mut self, mut buf: Bytes, mut cb: F) -> Result<(), DecoderError>
+    pub(crate) fn decode_with_cb<F>(
+        &mut self,
+        mut buf: Bytes,
+        mut cb: F,
+    ) -> Result<(), DecoderError>
     where
         F: FnMut(Bytes, Bytes),
     {
@@ -337,6 +344,7 @@ impl Decoder {
     /// The buffer should represent the entire block that should be decoded.
     /// For example, in HTTP/2, all continuation frames need to be concatenated
     /// to a single buffer before passing them to the decoder.
+    #[doc(hidden)] // used in tests
     pub fn decode(&mut self, buf: Bytes) -> DecoderResult {
         let mut header_list = Vec::new();
 
@@ -346,7 +354,7 @@ impl Decoder {
     }
 
     #[cfg(test)]
-    pub fn decode_for_test<B>(&mut self, buf: B) -> DecoderResult
+    pub(crate) fn decode_for_test<B>(&mut self, buf: B) -> DecoderResult
     where
         B: AsRef<[u8]>,
     {

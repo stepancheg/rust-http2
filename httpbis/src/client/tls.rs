@@ -4,8 +4,11 @@ use tls_api::TlsConnectorBox;
 
 use crate::solicit::HttpScheme;
 
+/// Client TLS setup.
 pub enum ClientTlsOption {
+    /// Non-TLS connection.
     Plain,
+    /// Connection with configured TLS connector.
     Tls(String, Arc<TlsConnectorBox>), // domain, connector
 }
 
@@ -19,7 +22,8 @@ impl Clone for ClientTlsOption {
 }
 
 impl ClientTlsOption {
-    pub fn http_scheme(&self) -> HttpScheme {
+    /// HTTP scheme for the connector.
+    pub(crate) fn http_scheme(&self) -> HttpScheme {
         match self {
             &ClientTlsOption::Plain => HttpScheme::Http,
             &ClientTlsOption::Tls(..) => HttpScheme::Https,

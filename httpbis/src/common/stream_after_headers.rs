@@ -21,6 +21,9 @@ use crate::solicit_async::TryStreamBox;
 use crate::DataOrTrailers;
 use crate::Headers;
 
+/// An interface to fetch data from HTTP/2 stream after headers received.
+///
+/// This is provided to user as server request or client response.
 pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
     /// Fetch the next message without increasing the window size.
     ///
@@ -85,6 +88,7 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
         Box::pin(future::poll_fn(move |cx| self.poll_trailers(cx)?.map(Ok)))
     }
 
+    /// Expose the stream as `AsyncRead`.
     fn into_read(self) -> Pin<Box<dyn AsyncRead + Send + 'static>>
     where
         Self: Sized,
@@ -95,6 +99,9 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
         })
     }
 
+    /// For certain reason it's hard to implement `Stream` interface
+    /// directly by `StreamAfterHeaders`, and this function provides
+    /// this stream as futures `Stream`.
     fn into_stream(self) -> TryStreamBox<DataOrTrailers>
     where
         Self: Sized,
@@ -102,6 +109,8 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
         Box::pin(AsStream(self))
     }
 
+    /// Convert into a `Stream` which only returns `DATA` frames
+    /// and ignores trailing `HEADERS` frame.
     fn filter_data(self) -> TryStreamBox<Bytes>
     where
         Self: Sized,
@@ -109,6 +118,7 @@ pub trait StreamAfterHeaders: fmt::Debug + Unpin + Send + 'static {
         Box::pin(DataStream(self))
     }
 
+    /// Convert into a future which returns the response body bytes.
     fn collect_data(mut self) -> TryFutureBox<Bytes>
     where
         Self: Sized,
@@ -179,6 +189,7 @@ impl<S: StreamAfterHeaders> AsyncRead for AsRead<S> {
     }
 }
 
+/// An alias for stream.
 pub type StreamAfterHeadersBox = Pin<Box<dyn StreamAfterHeaders>>;
 
 #[derive(Debug)]

@@ -20,6 +20,9 @@ pub struct ClientInternals {
     pub(crate) http_scheme: HttpScheme,
 }
 
+/// Client operations.
+///
+/// The main implementation of this interface is [`Client`](crate::Client).
 pub trait ClientIntf {
     /// Start HTTP/2 request.
     fn start_request_low_level(
@@ -31,8 +34,10 @@ pub trait ClientIntf {
         stream_handler: Box<dyn ClientHandler>,
     );
 
+    #[doc(hidden)]
     fn internals(&self) -> &ClientInternals;
 
+    /// Start a request, return a future resolved when request started.
     fn start_request(
         &self,
         headers: Headers,
@@ -75,6 +80,7 @@ pub trait ClientIntf {
         Box::pin(resp_rx)
     }
 
+    /// Start request without request body (e. g. `GET` request).
     fn start_request_end_stream(
         &self,
         headers: Headers,
@@ -102,7 +108,7 @@ pub trait ClientIntf {
         self.start_request_end_stream(headers, None, None)
     }
 
-    /// Start HTTP/2 `POST` request.
+    /// Start HTTP/2 `POST` request with given request body.
     fn start_post(&self, path: &str, authority: &str, body: Bytes) -> ClientResponseFuture3 {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "POST"),
@@ -116,6 +122,9 @@ pub trait ClientIntf {
         self.start_request_end_stream(headers, Some(body), None)
     }
 
+    /// Start `POST` request.
+    ///
+    /// This operation returns a sink which can be used to supply request body.
     fn start_post_sink(
         &self,
         path: &str,

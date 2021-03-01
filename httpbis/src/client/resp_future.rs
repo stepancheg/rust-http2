@@ -148,6 +148,7 @@ impl ClientResponseStreamHandler for ClientResponseStreamHandlerImpl {
     }
 }
 
+/// TODO: erase
 pub struct ClientResponseFuture3(
     Pin<Box<dyn Future<Output = crate::Result<(Headers, StreamAfterHeadersBox)>> + Send + 'static>>,
 );

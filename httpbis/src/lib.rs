@@ -1,6 +1,5 @@
 #![deny(broken_intra_doc_links)]
-// TODO: add docs
-//#![deny(missing_docs)]
+#![deny(missing_docs)]
 
 //! Asynchnous HTTP/2 client and server implementation.
 //!
@@ -20,13 +19,10 @@ pub use client::intf::ClientIntf;
 pub use client::tls::ClientTlsOption;
 pub use client::Client;
 pub use client::ClientBuilder;
-pub use common::sender::SendError;
-pub use common::sender::SenderState;
 pub use common::sink_after_headers::SinkAfterHeaders;
 pub use common::sink_after_headers::SinkAfterHeadersBox;
 pub use common::stream_after_headers::StreamAfterHeaders;
 pub use common::stream_after_headers::StreamAfterHeadersBox;
-pub use common::window_size::StreamDead;
 pub use data_or_trailers::DataOrTrailers;
 pub use error::Error;
 pub use message::SimpleHttpMessage;
@@ -71,7 +67,7 @@ mod headers_place;
 mod hpack;
 mod log_ndc_future;
 mod message;
-pub mod misc;
+mod misc;
 pub(crate) mod net;
 mod req_resp;
 mod result;
