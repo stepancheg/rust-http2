@@ -1,4 +1,5 @@
-use crate::actions::{cargo_build, cargo_cache};
+use crate::actions::cargo_build;
+use crate::actions::cargo_cache;
 use crate::actions::cargo_doc;
 use crate::actions::cargo_test;
 use crate::actions::checkout_sources;

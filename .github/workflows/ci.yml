@@ -13,9 +13,7 @@ jobs:
       - name: cargo cache
         uses: actions/cache@v2
         with:
-          path:
-            - /.cargo/registry
-            - ~/.cargo/git
+          path: "/.cargo/registry\n~/.cargo/git\n"
           key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -47,9 +45,7 @@ jobs:
       - name: cargo cache
         uses: actions/cache@v2
         with:
-          path:
-            - /.cargo/registry
-            - ~/.cargo/git
+          path: "/.cargo/registry\n~/.cargo/git\n"
           key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -79,9 +75,7 @@ jobs:
       - name: cargo cache
         uses: actions/cache@v2
         with:
-          path:
-            - /.cargo/registry
-            - ~/.cargo/git
+          path: "/.cargo/registry\n~/.cargo/git\n"
           key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -103,9 +97,7 @@ jobs:
       - name: cargo cache
         uses: actions/cache@v2
         with:
-          path:
-            - /.cargo/registry
-            - ~/.cargo/git
+          path: "/.cargo/registry\n~/.cargo/git\n"
           key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -137,9 +129,7 @@ jobs:
       - name: cargo cache
         uses: actions/cache@v2
         with:
-          path:
-            - /.cargo/registry
-            - ~/.cargo/git
+          path: "/.cargo/registry\n~/.cargo/git\n"
           key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -171,9 +161,7 @@ jobs:
       - name: cargo cache
         uses: actions/cache@v2
         with:
-          path:
-            - /.cargo/registry
-            - ~/.cargo/git
+          path: "/.cargo/registry\n~/.cargo/git\n"
           key: "${{ runner.os }}-cargo"
       - name: Checkout sources
         uses: actions/checkout@v2
