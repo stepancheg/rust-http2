@@ -1,5 +1,10 @@
+use bytes::Bytes;
+use futures::channel::oneshot;
+use futures::future;
+use futures::FutureExt;
+use futures::TryFutureExt;
+
 use crate::client::resp::ClientResponse;
-use crate::client::resp_future::ClientResponseFutureImpl;
 use crate::common::sink_after_headers::SinkAfterHeadersBox;
 use crate::solicit_async::TryFutureBox;
 use crate::ClientHandler;
@@ -11,11 +16,6 @@ use crate::PseudoHeaderName;
 use crate::SimpleHttpMessage;
 use crate::StreamAfterHeaders;
 use crate::StreamAfterHeadersBox;
-use bytes::Bytes;
-use futures::channel::oneshot;
-use futures::future;
-use futures::FutureExt;
-use futures::TryFutureExt;
 
 #[doc(hidden)]
 #[derive(Clone, Debug)]
@@ -47,11 +47,19 @@ pub trait ClientIntf {
         body: Option<Bytes>,
         trailers: Option<Headers>,
         end_stream: EndStream,
-    ) -> TryFutureBox<(SinkAfterHeadersBox, ClientResponseFutureImpl)> {
+    ) -> TryFutureBox<(
+        SinkAfterHeadersBox,
+        TryFutureBox<(Headers, StreamAfterHeadersBox)>,
+    )> {
         let (tx, rx) = oneshot::channel();
 
         struct Impl {
-            tx: oneshot::Sender<crate::Result<(SinkAfterHeadersBox, ClientResponseFutureImpl)>>,
+            tx: oneshot::Sender<
+                crate::Result<(
+                    SinkAfterHeadersBox,
+                    TryFutureBox<(Headers, StreamAfterHeadersBox)>,
+                )>,
+            >,
         }
 
         impl ClientHandler for Impl {
@@ -60,7 +68,7 @@ pub trait ClientIntf {
                 req: SinkAfterHeadersBox,
                 resp: ClientResponse,
             ) -> crate::Result<()> {
-                if let Err(_) = self.tx.send(Ok((req, resp.into_stream()))) {
+                if let Err(_) = self.tx.send(Ok((req, Box::pin(resp.into_stream())))) {
                     return Err(crate::Error::CallerDied);
                 }
 
@@ -172,7 +180,10 @@ pub trait ClientIntf {
         &self,
         path: &str,
         authority: &str,
-    ) -> TryFutureBox<(SinkAfterHeadersBox, ClientResponseFutureImpl)> {
+    ) -> TryFutureBox<(
+        SinkAfterHeadersBox,
+        TryFutureBox<(Headers, StreamAfterHeadersBox)>,
+    )> {
         let headers = Headers::from_vec(vec![
             Header::new(PseudoHeaderName::Method, "POST"),
             Header::new(PseudoHeaderName::Path, path.to_owned()),

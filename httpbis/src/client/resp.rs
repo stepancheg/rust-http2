@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use crate::client::conn::ClientToWriteMessage;
 use crate::client::handler::ClientResponseStreamHandler;
 use crate::client::handler::ClientResponseStreamHandlerHolder;
@@ -7,7 +9,9 @@ use crate::common::increase_in_window_common::IncreaseInWindowCommon;
 use crate::death::channel::DeathAwareSender;
 use crate::death::error_holder::ConnDiedType;
 use crate::death::error_holder::SomethingDiedErrorHolder;
+use crate::Headers;
 use crate::IncreaseInWindow;
+use crate::StreamAfterHeadersBox;
 use crate::StreamId;
 
 pub struct ClientResponse<'a> {
@@ -19,7 +23,9 @@ pub struct ClientResponse<'a> {
 }
 
 impl<'a> ClientResponse<'a> {
-    pub fn into_stream(self) -> ClientResponseFutureImpl {
+    pub fn into_stream(
+        self,
+    ) -> impl Future<Output = crate::Result<(Headers, StreamAfterHeadersBox)>> {
         let conn_died = self.conn_died.clone();
         self.register_stream_handler_internal(move |increase_in_window| {
             let (a, b) = ClientResponseFutureImpl::new(increase_in_window, conn_died);
