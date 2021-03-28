@@ -1,10 +1,11 @@
-use crate::BufGetBytes;
+use std::cmp;
+use std::io::IoSlice;
+
+use crate::bytes_ext::buf_get_bytes::BufGetBytes;
 use bytes::Buf;
 use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
-use std::cmp;
-use std::io::IoSlice;
 
 /// Zeroes `Buf`
 #[derive(Clone, Copy, Default)]

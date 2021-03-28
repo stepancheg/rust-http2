@@ -1,12 +1,14 @@
-use crate::BufGetBytes;
-use bytes::Buf;
-use bytes::Bytes;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::io::IoSlice;
 use std::mem;
 use std::ops::Deref;
 use std::ops::DerefMut;
+
+use bytes::Buf;
+use bytes::Bytes;
+
+use crate::bytes_ext::buf_get_bytes::BufGetBytes;
 
 #[derive(Debug)]
 pub(crate) struct BufVecDeque<B: Buf> {
