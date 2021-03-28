@@ -1,8 +1,11 @@
-use crate::solicit::header::*;
+use bytes::BufMut;
+use bytes::Bytes;
+use bytes::BytesMut;
 
-use crate::bytes_ext::bytes_deque::BytesDeque;
 use crate::data_or_headers::DataOrHeaders;
 use crate::data_or_headers_with_flag::DataOrHeadersWithFlag;
+use crate::solicit::header::*;
+use std::mem;
 
 /// Simple HTTP message is headers and body (no trailers).
 #[derive(Default)]
@@ -10,7 +13,7 @@ pub struct SimpleHttpMessage {
     /// Message headers.
     pub headers: Headers,
     /// Message body.
-    pub body: BytesDeque,
+    pub body: Bytes,
 }
 
 impl SimpleHttpMessage {
@@ -24,7 +27,7 @@ impl SimpleHttpMessage {
         format!(
             "{}\n{}",
             self.headers.dump(),
-            String::from_utf8_lossy(&self.body.get_bytes())
+            String::from_utf8_lossy(&self.body)
         )
     }
 
@@ -52,7 +55,7 @@ impl SimpleHttpMessage {
     pub fn not_found_404(message: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::not_found_404(),
-            body: BytesDeque::copy_from_slice(message.as_bytes()),
+            body: Bytes::copy_from_slice(message.as_bytes()),
         }
     }
 
@@ -60,7 +63,7 @@ impl SimpleHttpMessage {
     pub fn internal_error_500(message: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::internal_error_500(),
-            body: BytesDeque::copy_from_slice(message.as_bytes()),
+            body: Bytes::copy_from_slice(message.as_bytes()),
         }
     }
 
@@ -68,7 +71,7 @@ impl SimpleHttpMessage {
     pub fn found_200_plain_text(body: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::ok_200(),
-            body: BytesDeque::copy_from_slice(body.as_bytes()),
+            body: Bytes::copy_from_slice(body.as_bytes()),
         }
     }
 
@@ -76,7 +79,7 @@ impl SimpleHttpMessage {
     pub fn redirect_302(location: &str) -> SimpleHttpMessage {
         SimpleHttpMessage {
             headers: Headers::redirect_302(location),
-            body: BytesDeque::new(),
+            body: Bytes::new(),
         }
     }
 
@@ -87,7 +90,10 @@ impl SimpleHttpMessage {
                 self.headers.extend(headers);
             }
             DataOrHeaders::Data(data) => {
-                self.body.extend(data);
+                let mut body: BytesMut =
+                    BytesMut::from(mem::replace(&mut self.body, Bytes::new()).as_ref());
+                body.put(data);
+                self.body = body.freeze();
             }
         }
     }

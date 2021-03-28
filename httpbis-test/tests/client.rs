@@ -49,7 +49,7 @@ fn stream_count() {
     let rt = Runtime::new().unwrap();
 
     let message = rt.block_on(resp).expect("r");
-    assert_eq!((b"aabb"[..]).to_owned(), message.body.get_bytes());
+    assert_eq!(&b"aabb"[..], message.body.as_ref());
 
     let state: ConnStateSnapshot = client.conn_state();
     assert_eq!(0, state.streams.len(), "{:?}", state);

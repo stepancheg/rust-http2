@@ -475,7 +475,7 @@ impl HttpConnTester {
                 }
                 HttpFrame::Data(data_frame) => {
                     let end_of_stream = data_frame.is_end_of_stream();
-                    r.body.extend(data_frame.data);
+                    r.body.extend_from_slice(&data_frame.data);
                     end_of_stream
                 }
                 frame => panic!("expecting HEADERS or DATA, got: {:?}", frame),

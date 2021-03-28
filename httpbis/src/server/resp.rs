@@ -28,7 +28,7 @@ impl Drop for ServerResponse {
                     }
                     Ok(message) => {
                         let _ = common.send_headers(message.headers);
-                        let _ = common.send_data_end_of_stream(message.body.get_bytes());
+                        let _ = common.send_data_end_of_stream(message.body);
                     }
                 }
             } else {
@@ -74,7 +74,7 @@ impl ServerResponse {
     /// Send headers, then send the message body, then close the response.
     pub fn send_message(self, message: SimpleHttpMessage) -> crate::Result<()> {
         let mut sink = self.send_headers(message.headers)?;
-        sink.send_data_end_of_stream(message.body.into_bytes())?;
+        sink.send_data_end_of_stream(message.body)?;
         Ok(())
     }
 

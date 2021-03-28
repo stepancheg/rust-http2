@@ -16,9 +16,9 @@ use httpbis::ClientTlsOption;
 
 use httpbis_interop::PORT;
 
+use bytes::Bytes;
 use clap::App;
 use clap::Arg;
-use httpbis::BytesDeque;
 use tokio::runtime::Runtime;
 
 fn not_found(client: Client) {
@@ -35,7 +35,7 @@ fn found(client: Client) {
         .block_on(client.start_get_collect("/200", "localhost"))
         .expect("get");
     assert_eq!(200, r.headers.status());
-    assert_eq!(BytesDeque::from("200 200 200"), r.body);
+    assert_eq!(Bytes::from("200 200 200"), r.body);
 }
 
 const TESTS: &'static [(&'static str, fn(Client))] = &[("not_found", not_found), ("found", found)];

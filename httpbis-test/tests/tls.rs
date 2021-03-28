@@ -78,5 +78,5 @@ fn tls() {
         .block_on(client.start_get_collect("/hi", "localhost"))
         .unwrap();
     assert_eq!(200, resp.headers.status());
-    assert_eq!(&b"hello"[..], resp.body.get_bytes());
+    assert_eq!(&b"hello"[..], resp.body.as_ref());
 }
