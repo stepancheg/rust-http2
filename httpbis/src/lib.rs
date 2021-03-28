@@ -12,7 +12,6 @@
 extern crate log;
 
 pub use bytes_ext::buf_get_bytes::BufGetBytes;
-pub use bytes_ext::bytes_deque::BytesDeque;
 pub use client::conf::ClientConf;
 pub use client::handler::ClientHandler;
 pub use client::intf::ClientIntf;
