@@ -177,3 +177,31 @@ jobs:
         run: "PATH=\"$(pwd):$PATH\" cargo run --manifest-path h2spec-test/Cargo.toml --bin the_test"
         shell: bash
         timeout-minutes: 5
+  rustfmt-check:
+    name: rustfmt check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+      - name: cargo fmt check
+        run: cargo fmt -- --check
+        shell: bash
+  super-linter:
+    name: super-linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: super-linter
+        uses: github/super-linter@v3
+        env:
+          VALIDATE_ALL_CODEBASE: "false"
+          DEFAULT_BRANCH: master
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          VALIDATE_JSCPD: "false"
+          VALIDATE_PROTOBUF: "false"
+          VALIDATE_RUST_2015: "false"
+          VALIDATE_RUST_2018: "false"
+          VALIDATE_RUST_CLIPPY: "false"
