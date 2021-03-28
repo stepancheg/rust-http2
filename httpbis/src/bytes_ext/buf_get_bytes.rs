@@ -16,16 +16,6 @@ use std::io::Cursor;
 pub trait BufGetBytes: Buf {
     /// Consumes requested number of bytes from `self`.
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// use bytes::Buf;
-    /// use httpbis::BufGetBytes;
-    ///
-    /// let bytes = (&b"hello world"[..]).get_bytes(5);
-    /// assert_eq!(&bytes[..], &b"hello"[..]);
-    /// ```
-    ///
     /// # Panics
     ///
     /// This function panics if there is not enough remaining data in `self`.
