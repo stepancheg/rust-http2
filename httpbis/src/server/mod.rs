@@ -16,6 +16,7 @@ use rand::thread_rng;
 use rand::Rng;
 use tls_api;
 use tls_api::TlsAcceptor;
+use tls_api::TlsAcceptorBox;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
@@ -130,7 +131,12 @@ impl ServerBuilder {
 
     /// Set TLS acceptor for the server. If not called, server will be non-TLS.
     pub fn set_tls<A: TlsAcceptor>(&mut self, acceptor: A) {
-        self.tls = ServerTlsOption::Tls(Arc::new(acceptor.into_dyn()));
+        self.set_tls_dyn(acceptor.into_dyn())
+    }
+
+    /// Set TLS acceptor for the server. If not called, server will be non-TLS.
+    pub fn set_tls_dyn(&mut self, acceptor: TlsAcceptorBox) {
+        self.tls = ServerTlsOption::Tls(Arc::new(acceptor));
     }
 
     /// Construct a server.

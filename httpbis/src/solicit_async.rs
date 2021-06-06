@@ -24,7 +24,9 @@ use crate::solicit::frame::FRAME_HEADER_LEN;
 
 use crate::misc::BsDebug;
 
+/// Type alias.
 pub type TryFutureBox<T> = Pin<Box<dyn Future<Output = crate::Result<T>> + Send + 'static>>;
+/// Type alias.
 pub type TryStreamBox<T> = Pin<Box<dyn Stream<Item = crate::Result<T>> + Send + 'static>>;
 
 /// Inefficient, but OK because used only in tests

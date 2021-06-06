@@ -11,6 +11,7 @@
 #[macro_use]
 extern crate log;
 
+pub use bytes_ext::buf_get_bytes::BufGetBytes;
 pub use client::conf::ClientConf;
 pub use client::handler::ClientHandler;
 pub use client::intf::ClientIntf;
@@ -46,6 +47,8 @@ pub use solicit::header::Header;
 pub use solicit::header::Headers;
 pub use solicit::stream_id::StreamId;
 pub use solicit::HttpScheme;
+pub use solicit_async::TryFutureBox;
+pub use solicit_async::TryStreamBox;
 
 mod ascii;
 mod assert_types;

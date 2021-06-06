@@ -12,6 +12,7 @@ use futures::future::TryFutureExt;
 use futures::stream::StreamExt;
 use tls_api::TlsConnector;
 use tls_api::TlsConnectorBuilder;
+use tls_api::TlsConnectorType;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
@@ -108,19 +109,29 @@ impl ClientBuilder {
 
     /// Configure using given TLS connector with default options
     /// (e.g. no custom server certificates).
-    pub fn set_tls<C: tls_api::TlsConnector>(&mut self, host: &str) -> crate::Result<()> {
-        let mut tls_connector = C::builder()?;
+    pub fn set_tls_dyn(
+        &mut self,
+        host: &str,
+        connector: &'static dyn TlsConnectorType,
+    ) -> crate::Result<()> {
+        let mut tls_connector = connector.builder()?;
 
-        if C::SUPPORTS_ALPN {
+        if connector.supports_alpn() {
             // TODO: check negotiated protocol after connect
             tls_connector.set_alpn_protocols(&[b"h2"])?;
         }
 
         let tls_connector = tls_connector.build()?;
 
-        let tls_connector = Arc::new(tls_connector.into_dyn());
+        let tls_connector = Arc::new(tls_connector);
         self.tls = ClientTlsOption::Tls(host.to_owned(), tls_connector);
         Ok(())
+    }
+
+    /// Configure using given TLS connector with default options
+    /// (e.g. no custom server certificates).
+    pub fn set_tls<C: tls_api::TlsConnector>(&mut self, host: &str) -> crate::Result<()> {
+        self.set_tls_dyn(host, C::TYPE_DYN)
     }
 
     /// Finish the client construction.

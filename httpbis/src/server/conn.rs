@@ -137,6 +137,7 @@ where
         let mut stream_handler = None;
         let invoke_result = {
             let req = ServerRequest {
+                loop_handle: &self.loop_handle,
                 headers,
                 end_stream,
                 stream_id,

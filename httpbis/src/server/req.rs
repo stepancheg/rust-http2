@@ -15,9 +15,11 @@ use crate::EndStream;
 use crate::Headers;
 use crate::StreamAfterHeaders;
 use crate::StreamId;
+use tokio::runtime::Handle;
 
 /// A request object provided to the server callback.
 pub struct ServerRequest<'a> {
+    pub(crate) loop_handle: &'a Handle,
     /// Request headers.
     pub headers: Headers,
     /// True if requests ends with headers (no body).
@@ -31,6 +33,11 @@ pub struct ServerRequest<'a> {
 }
 
 impl<'a> ServerRequest<'a> {
+    /// Get a loop handle.
+    pub fn loop_handle(&self) -> Handle {
+        self.loop_handle.clone()
+    }
+
     /// Convert a request into a pullable stream.
     pub fn into_stream(self) -> impl StreamAfterHeaders {
         match self.end_stream {

@@ -23,7 +23,7 @@ impl Clone for ClientTlsOption {
 
 impl ClientTlsOption {
     /// HTTP scheme for the connector.
-    pub(crate) fn http_scheme(&self) -> HttpScheme {
+    pub fn http_scheme(&self) -> HttpScheme {
         match self {
             &ClientTlsOption::Plain => HttpScheme::Http,
             &ClientTlsOption::Tls(..) => HttpScheme::Https,
