@@ -1,3 +1,4 @@
+use std::cmp;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
 use std::io::IoSlice;
@@ -7,6 +8,7 @@ use std::ops::DerefMut;
 
 use bytes::Buf;
 use bytes::Bytes;
+use bytes::BytesMut;
 
 use crate::bytes_ext::buf_get_bytes::BufGetBytes;
 
@@ -117,8 +119,8 @@ impl<B: Buf> Buf for BufVecDeque<B> {
     fn copy_to_bytes(&mut self, cnt: usize) -> Bytes {
         assert!(cnt <= self.remaining());
 
-        match self.deque.front_mut() {
-            Some(front) if front.remaining() >= cnt => {
+        if let Some(front) = self.deque.front_mut() {
+            if front.remaining() >= cnt {
                 let r = if front.remaining() == cnt {
                     let mut front = self.deque.pop_front().unwrap();
                     front.copy_to_bytes(cnt)
@@ -127,33 +129,31 @@ impl<B: Buf> Buf for BufVecDeque<B> {
                 };
 
                 self.len -= cnt;
-                r
+                return r;
             }
-            Some(_) => self.take(cnt).copy_to_bytes(cnt),
-            None => Bytes::new(),
         }
+
+        let mut bytes = BytesMut::with_capacity(cnt);
+        while bytes.len() < cnt {
+            let need = cnt - bytes.len();
+            let front = self.deque.front_mut().unwrap();
+            let copy = cmp::min(front.chunk().len(), need);
+            bytes.extend_from_slice(&front.chunk()[..copy]);
+            front.advance(copy);
+            if !front.has_remaining() {
+                let front = self.deque.pop_front().unwrap();
+                assert!(!front.has_remaining());
+            }
+            self.len -= copy;
+        }
+        assert_eq!(bytes.len(), cnt);
+        bytes.freeze()
     }
 }
 
 impl<B: BufGetBytes> BufGetBytes for BufVecDeque<B> {
     fn get_bytes(&mut self, cnt: usize) -> Bytes {
-        assert!(cnt <= self.remaining());
-
-        match self.deque.front_mut() {
-            Some(front) if front.remaining() >= cnt => {
-                let r = if front.remaining() == cnt {
-                    let mut front = self.deque.pop_front().unwrap();
-                    front.get_bytes(cnt)
-                } else {
-                    front.get_bytes(cnt)
-                };
-
-                self.len -= cnt;
-                r
-            }
-            Some(_) => self.take(cnt).copy_to_bytes(cnt),
-            None => Bytes::new(),
-        }
+        self.copy_to_bytes(cnt)
     }
 }
 
