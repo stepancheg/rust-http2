@@ -4,6 +4,7 @@
 
 - Update tokio to 1.2
 - Update tls-api to 0.6
+- Use `thiserror` internally
 
 ## [0.9.1] - 2020-06-21
 
