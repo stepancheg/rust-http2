@@ -3,7 +3,7 @@
 ## [0.10] - Unreleased
 
 - Update tokio to 1.2
-- Update tls-api to 0.5
+- Update tls-api to 0.6
 
 ## [0.9.1] - 2020-06-21
 
