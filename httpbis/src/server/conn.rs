@@ -305,7 +305,10 @@ impl ServerConn {
             }
             ServerTlsOption::Tls(acceptor) => {
                 let socket: TryFutureBox<_> = Box::pin(async move {
-                    let tls_stream = acceptor.accept(socket).await?;
+                    let tls_stream = acceptor
+                        .accept(socket)
+                        .await
+                        .map_err(crate::Error::TlsError)?;
                     debug!("TLS handshake done");
                     Ok(tls_stream)
                 });

@@ -369,7 +369,7 @@ impl ClientConn {
             Ok((peer_addr, async move {
                 let tls_stream = connector
                     .connect(&domain, socket)
-                    .map_err(crate::Error::from)
+                    .map_err(crate::Error::TlsError)
                     .await?;
                 debug!("TLS handshake done");
                 Ok(tls_stream)

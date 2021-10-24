@@ -1,128 +1,120 @@
-use std::error::Error as std_Error;
-use std::fmt;
 use std::io;
 use std::net::SocketAddr;
-use std::ops::Deref;
 use std::sync::Arc;
 
-use tls_api;
 use tokio::time::Timeout;
 use void::Void;
 
 use crate::assert_types::*;
-use crate::display_comma_separated::DisplayCommaSeparated;
 use crate::solicit::error_code::ErrorCode;
-use crate::solicit::frame::HttpFrameType;
 use crate::solicit::frame::ParseFrameError;
 use crate::solicit::frame::RawHttpFrameType;
 use crate::StreamId;
 
 /// An enum representing errors that can arise when performing operations involving an HTTP/2
 /// connection.
-#[derive(Debug)]
-#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+#[allow(missing_docs)]
 pub enum Error {
-    /// The underlying IO layer raised an error
-    IoError(io::Error),
-    /// TLS error.
-    TlsError(tls_api::Error),
-    /// Unspecified error.
-    OtherError(Box<dyn std::error::Error + Send + Sync + 'static>),
-    /// Error code error.
+    #[error("I/O error: {0}")]
+    IoError(#[source] io::Error),
+    #[error("tls-api layer error: {0}")]
+    TlsError(#[source] anyhow::Error),
+    #[error("HTTP/2 error code: {0}")]
     CodeError(ErrorCode),
-    /// `RST_STREAM` received.
+    #[error("RST_STREAM received")]
     RstStreamReceived(ErrorCode),
-    /// Address resolved to empty list.
+    #[error("Address resolved to empty list")]
     AddrResolvedToEmptyList,
-    /// Address resolved to more than one address.
+    #[error("Address resolved to more than one address")]
     AddrResolvedToMoreThanOneAddr(Vec<SocketAddr>),
-    /// The HTTP/2 connection received an invalid HTTP/2 frame
+    #[error("The HTTP/2 connection received an invalid HTTP/2 frame")]
     InvalidFrame(String),
     /// Indicates that the local peer has discovered an overflow in the size of one of the
     /// connection flow control window, which is a connection error.
+    #[error("Window size overflow")]
     WindowSizeOverflow,
-    /// Unknown stream id.
+    #[error("Unknown stream id")]
     UnknownStreamId,
-    /// Cannot connect.
+    #[error("Cannot connect")]
     UnableToConnect,
-    /// Malformed response.
+    #[error("Malformed response")]
     MalformedResponse,
-    /// Connection timed out.
+    #[error("Connection timed out")]
     ConnectionTimeout,
-    /// Shutdown of local client or server
+    #[error("Shutdown of local client or server")]
     Shutdown,
-    /// Request handler panicked.
+    #[error("Request handler panicked")]
     HandlerPanicked(String),
-    /// Failed to parse frame.
+    #[error("Failed to parse frame")]
     ParseFrameError(ParseFrameError),
-    /// Generic internal error.
+    #[error("Internal error: {0}")]
     InternalError(String),
     /// Received `PUSH_PROMISE`, but we don't implement it
     /// and explicitly ask not to send it.
+    #[error("Unexpected PUSH_PROMISE")]
     UnexpectedPushPromise,
-    /// User error
+    #[error("User error: {0}")]
     User(String),
-    /// Std error
-    StdError(Box<dyn std_Error + Sync + Send + 'static>),
-    /// Client/connection died, but reason is not known
+    #[error("Client/connection died, reason unknown")]
     DeathReasonUnknown,
-    /// Client died
+    #[error("Client died: {0}")]
     ClientDied(Arc<Error>),
-    /// Connection died.
+    #[error("Connection died: {0}")]
     ConnDied(Arc<Error>),
-    /// Client died, reconnect failed
+    #[error("Client died and reconnect failed")]
     ClientDiedAndReconnectFailed,
-    /// Client controller died.
     // TODO: use client died
+    #[error("Client controller died")]
     ClientControllerDied,
-    /// Client panicked.
+    #[error("Client panicked: {0}")]
     ClientPanicked(String),
-    /// Client completed without error.
+    #[error("Client completed without error")]
     ClientCompletedWithoutError,
-    /// Called died.
+    #[error("Caller died")]
     CallerDied,
-    /// End of stream.
+    #[error("EOF from stream")]
     // TODO: meaningless
     EofFromStream,
-    /// Expecting `CONTINUATION` frame.
+    #[error("Expecting CONTINUATION frame, got {0}")]
     // TODO: move to separate error type
     ExpectingContinuationGot(RawHttpFrameType),
-    /// Expecting `CONTINUATION` frame with different stream id.
+    #[error("Expecting CONTINUATION frame with different stream id")]
     ExpectingContinuationGotDifferentStreamId(StreamId, StreamId),
-    /// `CONTINUATION` frame without headers.
+    #[error("CONTINUATION frame without headers")]
     ContinuationFrameWithoutHeaders,
-    /// Wrong stream id.
+    #[error("Initiated stream with server id from client: {0}")]
     InitiatedStreamWithServerIdFromClient(StreamId),
-    /// Wrong stream id.
+    #[error("Stream id {0} client less than existing stream id {0}")]
     StreamIdLeExistingStream(StreamId, StreamId),
-    /// Failed to send request to dump state.
+    #[error("Failed to send request to dump state")]
     // TODO: reason
     FailedToSendReqToDumpState,
-    /// Stream id windows overflow.
+    #[error("Stream {0} window overflow")]
     StreamInWindowOverflow(StreamId, i32, u32),
-    /// Connection in windows overflow.
+    #[error("Connection window overflow")]
     ConnInWindowOverflow(i32, u32),
-    /// Ping response wrong payload.
+    #[error("Ping response wrong payload")]
     PingAckOpaqueDataMismatch(u64, u64),
-    /// Goaway after goaway.
+    #[error("GOAWAY after GOAWAY")]
     GoawayAfterGoaway,
-    /// Got `SETTINGS` ack without `SETTINGS` sent.
+    #[error("Got SETTINGS ack without SETTINGS sent")]
     SettingsAckWithoutSettingsSent,
-    /// `GOAWAY`
+    #[error("GOAWAY")]
     // TODO: explain
     Goaway,
-    /// Received `GOAWAY`
+    #[error("GOAWAY received")]
     GoawayReceived,
-    /// Stream died.
+    #[error("Stream died")]
     // TODO: explain
     PullStreamDied,
-    /// Payload too large.
+    #[error("Payload too large")]
     PayloadTooLarge(u32, u32),
-    /// Request is made using HTTP/1
+    #[error("Request is made using HTTP/1")]
     RequestIsMadeUsingHttp1,
-    /// Listen address is not specified.
+    #[error("Listen address is not specified")]
     ListenAddrNotSpecified,
-    /// Cannot send anything to sink, request is closed.
+    #[error("Cannot send anything to sink, request is closed")]
     CannotSendClosedLocal,
 }
 
@@ -136,12 +128,6 @@ fn _assert_error_sync_send() {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IoError(err)
-    }
-}
-
-impl From<tls_api::Error> for Error {
-    fn from(error: tls_api::Error) -> Error {
-        Error::TlsError(error)
     }
 }
 
@@ -160,117 +146,6 @@ impl From<ParseFrameError> for Error {
 impl From<Void> for Error {
     fn from(v: Void) -> Self {
         match v {}
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::IoError(e) => write!(f, "IO error: {}", e),
-            Error::TlsError(e) => write!(f, "Encountered TLS error: {}", e),
-            Error::CodeError(e) => write!(f, "Encountered HTTP named error: {}", e),
-            Error::OtherError(e) => write!(f, "{}", e),
-            Error::RstStreamReceived(e) => write!(f, "Received RST_STREAM from peer: {}", e),
-            Error::InvalidFrame(..) => {
-                write!(f, "Encountered an invalid or unexpected HTTP/2 frame")
-            }
-            Error::WindowSizeOverflow => write!(f, "The connection flow control window overflowed"),
-            Error::UnknownStreamId => {
-                write!(f, "Attempted an operation with an unknown HTTP/2 stream ID")
-            }
-            Error::UnableToConnect => {
-                write!(f, "An error attempting to establish an HTTP/2 connection")
-            }
-            Error::MalformedResponse => write!(f, "The received response was malformed"),
-            Error::ConnectionTimeout => write!(f, "Connection time out"),
-            Error::Shutdown => write!(f, "Local shutdown"),
-            Error::HandlerPanicked(e) => write!(f, "Handler panicked: {}", e),
-            // TODO: display
-            Error::ParseFrameError(_) => write!(f, "Failed to parse frame"),
-            Error::UnexpectedPushPromise => write!(
-                f,
-                "Received unexpected {} frame",
-                HttpFrameType::PushPromise
-            ),
-            Error::InternalError(e) => write!(f, "Internal error: {}", e),
-            Error::ClientDied(e) => write!(f, "Client died: {}", e),
-            Error::DeathReasonUnknown => write!(f, "Death reason unknown"),
-            Error::ClientPanicked(e) => write!(f, "Client panicked: {}", e),
-            Error::ClientCompletedWithoutError => write!(f, "Client completed without error"),
-            Error::CallerDied => write!(f, "Request caller died"),
-            Error::StdError(e) => write!(f, "{}", e),
-            Error::User(e) => write!(f, "User error: {}", e),
-            Error::AddrResolvedToEmptyList => write!(f, "Address resolved to empty list"),
-            Error::AddrResolvedToMoreThanOneAddr(a) => write!(
-                f,
-                "Address resolved to more than one address: {}",
-                DisplayCommaSeparated(&a[..])
-            ),
-            Error::ClientDiedAndReconnectFailed => write!(f, "Client died and reconnect failed"),
-            Error::ClientControllerDied => write!(f, "Client controller died"),
-            Error::ConnDied(e) => write!(f, "Conn died: {}", e),
-            Error::EofFromStream => write!(f, "EOF from stream"),
-            Error::ExpectingContinuationGot(t) => {
-                write!(f, "Expecting {} got {}", HttpFrameType::Continuation, t)
-            }
-            Error::ExpectingContinuationGotDifferentStreamId(_, _) => write!(
-                f,
-                "Expecting {} got different stream id",
-                HttpFrameType::Continuation
-            ),
-            Error::ContinuationFrameWithoutHeaders => write!(
-                f,
-                "{} frame without {}",
-                HttpFrameType::Continuation,
-                HttpFrameType::Headers
-            ),
-            Error::InitiatedStreamWithServerIdFromClient(stream_id) => write!(
-                f,
-                "Initiated stream with server id from client: {}",
-                stream_id
-            ),
-            Error::StreamIdLeExistingStream(_, _) => write!(f, "Stream id <= existing stream"),
-            Error::FailedToSendReqToDumpState => write!(f, "Failed to send request to dump state"),
-            Error::StreamInWindowOverflow(stream_id, _, _) => {
-                write!(f, "Stream {} in windows overflow", stream_id)
-            }
-            Error::ConnInWindowOverflow(_, _) => write!(f, "Conn in windows overflow"),
-            Error::PingAckOpaqueDataMismatch(_, _) => {
-                write!(f, "{} ack opaque data mismatch", HttpFrameType::Ping)
-            }
-            Error::GoawayAfterGoaway => write!(
-                f,
-                "{} after {}",
-                HttpFrameType::Goaway,
-                HttpFrameType::Goaway
-            ),
-            Error::SettingsAckWithoutSettingsSent => write!(
-                f,
-                "{} ack without {} sent",
-                HttpFrameType::Settings,
-                HttpFrameType::Settings
-            ),
-            Error::Goaway => write!(f, "{}", HttpFrameType::Goaway),
-            Error::GoawayReceived => write!(f, "{} received", HttpFrameType::Goaway),
-            Error::PullStreamDied => write!(f, "Pull stream died"),
-            Error::PayloadTooLarge(_, _) => write!(f, "Payload too large"),
-            Error::RequestIsMadeUsingHttp1 => write!(f, "Request is made using HTTP/1"),
-            Error::ListenAddrNotSpecified => write!(f, "Listen addr not specified"),
-            Error::CannotSendClosedLocal => {
-                write!(f, "Cannot send to the sink: the stream is closed-local")
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn cause(&self) -> Option<&dyn std_Error> {
-        match *self {
-            Error::IoError(ref e) => Some(e),
-            Error::TlsError(ref e) => Some(e),
-            Error::StdError(ref e) => Some(Box::deref(e) as &dyn std_Error),
-            _ => None,
-        }
     }
 }
 

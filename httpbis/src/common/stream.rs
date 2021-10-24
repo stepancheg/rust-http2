@@ -62,7 +62,7 @@ pub enum InMessageStage {
 /// Note the state must be kept in sync with other fields,
 /// thus sometimes this object must be manipulated with `HttpStreamRef`.
 pub(crate) struct HttpStreamCommon<T: Types> {
-    pub specific: T::HttpStreamSpecific,
+    pub _specific: T::HttpStreamSpecific,
     pub state: StreamState,
     pub out_window_size: WindowSize,
     pub in_window_size: NonNegativeWindowSize,
@@ -85,7 +85,7 @@ impl<T: Types> HttpStreamCommon<T> {
         specific: T::HttpStreamSpecific,
     ) -> HttpStreamCommon<T> {
         HttpStreamCommon {
-            specific,
+            _specific: specific,
             state: StreamState::Open,
             in_window_size: NonNegativeWindowSize::new(in_window_size as i32),
             out_window_size: WindowSize::new(out_window_size as i32),

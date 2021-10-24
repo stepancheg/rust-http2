@@ -21,10 +21,10 @@ futures            = "0.3.1"
 # , "rt-threaded"
 tokio = { version = "1.2.0", features = ["net"] }
 
-tls-api            = "0.5.0"
-tls-api-native-tls = "0.5.0"
-tls-api-openssl    = "0.5.0"
-test-cert-gen      = "0.5.0"
+tls-api            = "0.6.0"
+tls-api-native-tls = "0.6.0"
+tls-api-openssl    = "0.6.0"
+test-cert-gen      = "0.6.0"
 
 regex              = "0.2"
 url                = "1"

@@ -11,7 +11,6 @@ use futures::future::FutureExt;
 use futures::future::TryFutureExt;
 use futures::stream::StreamExt;
 use tls_api::TlsConnector;
-use tls_api::TlsConnectorBuilder;
 use tls_api::TlsConnectorType;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
@@ -114,14 +113,16 @@ impl ClientBuilder {
         host: &str,
         connector: &'static dyn TlsConnectorType,
     ) -> crate::Result<()> {
-        let mut tls_connector = connector.builder()?;
+        let mut tls_connector = connector.builder().map_err(crate::Error::TlsError)?;
 
         if connector.supports_alpn() {
             // TODO: check negotiated protocol after connect
-            tls_connector.set_alpn_protocols(&[b"h2"])?;
+            tls_connector
+                .set_alpn_protocols(&[b"h2"])
+                .map_err(crate::Error::TlsError)?;
         }
 
-        let tls_connector = tls_connector.build()?;
+        let tls_connector = tls_connector.build().map_err(crate::Error::TlsError)?;
 
         let tls_connector = Arc::new(tls_connector);
         self.tls = ClientTlsOption::Tls(host.to_owned(), tls_connector);

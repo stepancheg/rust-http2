@@ -18,17 +18,19 @@ log-ndc         = "0.3.*"
 futures         = "0.3.1"
 tokio = { version = "1.2.0", features = ["io-util", "net", "time", "rt"] }
 tokio-util = { version = "0.6.3", features = ["io"] }
-tls-api         = "0.5.0"
-tls-api-stub    = "0.5.0"
+tls-api         = "0.6.0"
+tls-api-stub    = "0.6.0"
 void            = "1"
-net2 = "0.2"
-bytes = "1.0.1"
-rand = "~0.5"
+net2            = "0.2"
+bytes           = "1.0.1"
+rand            = "~0.5"
+anyhow          = "1.0.44"
+thiserror       = "1.0.30"
 
 [dev-dependencies]
 test-cert-gen = "0.1.0"
 
-tls-api-openssl = "0.5.0"
+tls-api-openssl = "0.6.0"
 url             = "1"
 
 tempdir         = "0.3"
